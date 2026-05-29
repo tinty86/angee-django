@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# uv
+# uv.lock is committed — do not ignore it
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# Django
+*.sqlite3
+media/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Angee runtime (generated — committed in production consumers, ignored in examples)
+examples/*/src/runtime/
+
+# Angee workspace data (local dev state, never committed)
+.angee/
+.angee/data/
+.angee/workspaces/
+
+# Claude Code session state
+.claude/scheduled_tasks.lock
+.claude/projects/
+.claude/worktrees/
+
+# Playwright scratch
+.playwright-mcp/
+test-results/
+playwright-report/
+
+# Storybook scratch logs
+packages/storybook-host/*.log
+packages/storybook-host/storybook-static/
+packages/storybook-host/public/__angee/
+
+# Editor swap / backup files
+*.swp
+*.swo
+*~
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+*.code-workspace
+*.tsbuildinfo
+
+/.copier-answers.yml
