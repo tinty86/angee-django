@@ -211,6 +211,7 @@ work in this repository. It sits above the language-specific rules:
 - **[Frontend Guidelines](frontend/guidelines.md)** — TypeScript, React, and the
   rendered experience.
 - **[The Opinionated Stack](stack.md)** — which library owns which concern.
+- **[Glossary](glossary.md)** — shared vocabulary (composer, host, addon, seams…).
 - **[AGENTS.md](../AGENTS.md)** — root rules and how the framework composes.
 
 Follow this process first, then apply the relevant language-specific guidelines

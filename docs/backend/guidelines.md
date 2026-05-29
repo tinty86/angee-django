@@ -22,10 +22,9 @@ hand-rolling a concern. Python dependency setup belongs in `pyproject.toml` and
 - `runtime/`, generated schemas, migrations, and codegen stubs are output.
   Change the source, not the artifact.
 - REBAC is structural. Reads scope through the model manager; writes check the
-  instance. No bypass without an audited `sudo` or system context.
+  instance.
 - GraphQL is auto-generated from models. Handwritten `graphql/` code is
   overrides-only for real virtual operations or non-model types.
-- REST must not mirror GraphQL. If a browser or agent can use GraphQL, it should.
 - Use symbolic model references across addon boundaries; avoid import cycles.
 - Build output must be byte-deterministic.
 
