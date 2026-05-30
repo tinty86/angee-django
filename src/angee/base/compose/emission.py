@@ -475,8 +475,6 @@ def _runtime_init_source(labels: list[str]) -> str:
     )
 
 
-
-
 def _resource_manifest(
     addons: tuple[BaseAddonConfig, ...],
 ) -> list[dict[str, str]]:

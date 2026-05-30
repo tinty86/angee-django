@@ -127,6 +127,16 @@ dev` there runs that example against the framework.
 angee dev            # from the repo root — runs the examples/notes-angee stack
 ```
 
+`angee dev` is for bringing the long-running stack up. To run a one-shot Django
+management command against the example — composing the runtime, making
+migrations, inspecting resources — drive its `manage.py` through `uv` from the
+repository root, never by `cd`-ing into the project:
+
+```sh
+uv run examples/notes-angee/manage.py angee build --no-apply   # compose runtime
+uv run examples/notes-angee/manage.py angee_resources diff     # inspect resources
+```
+
 For an isolated branch, create a workspace and run the stack inside it. `angee
 dev` walks up to the nearest `.angee`, so it works from the workspace root too.
 

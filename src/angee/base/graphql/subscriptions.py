@@ -232,9 +232,7 @@ def _redact(
     ]
     if isinstance(values, Mapping):
         redacted["changed_values"] = {
-            name: value
-            for name, value in values.items()
-            if name not in denied
+            name: value for name, value in values.items() if name not in denied
         }
     return redacted
 

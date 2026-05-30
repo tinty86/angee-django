@@ -63,6 +63,4 @@ class NotesVersioningTests(TransactionTestCase):
         self.assertEqual(result.data["deleteNote"]["totalDeletedCount"], 1)
         self.assertFalse(result.data["deleteNote"]["hasBlockers"])
         with system_context(reason="test"):
-            self.assertFalse(
-                Note.objects.filter(sqid=self.note.sqid).exists()
-            )
+            self.assertFalse(Note.objects.filter(sqid=self.note.sqid).exists())

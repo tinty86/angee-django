@@ -66,15 +66,30 @@ def crud(
         namespace[attr] = field
 
     if create is not None:
-        add("create", node, strawberry_django.mutations.create(
-            create, permission_classes=permission_classes))
+        add(
+            "create",
+            node,
+            strawberry_django.mutations.create(
+                create, permission_classes=permission_classes
+            ),
+        )
     if update is not None:
-        add("update", node, strawberry_django.mutations.update(
-            update, permission_classes=permission_classes))
+        add(
+            "update",
+            node,
+            strawberry_django.mutations.update(
+                update, permission_classes=permission_classes
+            ),
+        )
     if delete:
-        add("delete", DeletePreview, strawberry.mutation(
-            resolver=_delete_resolver(_model(node)),
-            permission_classes=permission_classes))
+        add(
+            "delete",
+            DeletePreview,
+            strawberry.mutation(
+                resolver=_delete_resolver(_model(node)),
+                permission_classes=permission_classes,
+            ),
+        )
 
     if not annotations:
         raise ImproperlyConfigured(

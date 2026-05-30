@@ -176,9 +176,7 @@ def test_resources_dry_run_does_not_persist(tmp_path: Path) -> None:
         name = "tests.dry_addon"
         label = "dry_addon"
         resources: ClassVar[dict[object, object]] = {
-            Resource.Tier.MASTER: (
-                "resources/master/010_base.dryuser.csv",
-            ),
+            Resource.Tier.MASTER: ("resources/master/010_base.dryuser.csv",),
         }
 
     module = ModuleType(DryConfig.name)
@@ -278,8 +276,7 @@ def _resource_file_config(tmp_path: Path) -> BaseAddonConfig:
     resource_root = tmp_path / "resources" / "master"
     resource_root.mkdir(parents=True)
     (resource_root / "010_base.importuser.csv").write_text(
-        "_xref,username,first_name\n"
-        "user_alice,alice,Alice\n",
+        "_xref,username,first_name\nuser_alice,alice,Alice\n",
         encoding="utf-8",
     )
     (resource_root / "020_base.importnote.yaml").write_text(

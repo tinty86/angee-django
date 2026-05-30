@@ -153,8 +153,7 @@ class ResourceEntry:
         parts = stem.split(".")
         if len(parts) != 2 or not all(parts):
             raise ImproperlyConfigured(
-                f"{self.display} must declare model or use "
-                "[NNN_]app.model.ext"
+                f"{self.display} must declare model or use [NNN_]app.model.ext"
             )
         return f"{parts[0]}.{parts[1]}"
 

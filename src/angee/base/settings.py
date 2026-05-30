@@ -91,7 +91,7 @@ def compose_defaults(
         "REBAC_ALLOW_SUDO": True,
         "MIGRATION_MODULES": {
             **dict(migration_modules or {}),
-            **_migration_modules(addon_configs, runtime_module),
+            **_migration_modules((BaseConfig, *addon_configs), runtime_module),
         },
         "STATIC_URL": static_url,
     }

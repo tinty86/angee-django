@@ -165,9 +165,7 @@ def test_binary_entry_is_not_implemented(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ResourceLoadError, match="binary resources are not"):
-        Resource._default_manager.validate_addons(
-            (config,), tiers=["master"]
-        )
+        Resource._default_manager.validate_addons((config,), tiers=["master"])
 
 
 def test_fetch_url_rejects_non_http_scheme() -> None:
