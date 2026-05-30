@@ -40,14 +40,14 @@ class Command(BaseCommand):
             required=True,
         )
         validate = resource_commands.add_parser("validate")
-        validate.add_argument("tier", choices=Resource.Tier.values())
+        validate.add_argument("tier", choices=Resource.Tier.values)
         validate.set_defaults(handler=self._handle_resources_validate)
         load = resource_commands.add_parser("load")
-        load.add_argument("tier", choices=Resource.Tier.values())
+        load.add_argument("tier", choices=Resource.Tier.values)
         load.add_argument("--allow-non-dev", action="store_true")
         load.set_defaults(handler=self._handle_resources_load)
         diff = resource_commands.add_parser("diff")
-        diff.add_argument("tier", choices=Resource.Tier.values())
+        diff.add_argument("tier", choices=Resource.Tier.values)
         diff.set_defaults(handler=self._handle_resources_diff)
 
     def handle(self, *args: Any, **options: Any) -> None:

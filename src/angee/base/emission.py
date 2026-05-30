@@ -9,18 +9,20 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.db import models
 
-from angee.base.apps import BaseAddonConfig, ModelExtension
+from angee.base.apps import BaseAddonConfig
 from angee.base.discovery import discover_addons
+from angee.base.mixins import AngeeModel
 from angee.base.rebac import sync_permissions, write_permissions
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class BuildResult:
     """Summary of a build command."""
 
@@ -47,18 +49,20 @@ def emit_runtime(
     """Emit runtime modules and optionally apply migrations."""
 
     discovered = discover_addons() if addons is None else addons
+    extensions = _extensions_for(discovered)
+    _check_field_collisions(discovered, extensions)
     runtime_dir = Path(settings.ANGEE_RUNTIME_DIR)
     if check:
-        _check_runtime(runtime_dir, discovered)
+        _check_runtime(runtime_dir, discovered, extensions)
         return BuildResult(
-            emitted=_emitted_count(discovered),
+            emitted=len(_runtime_labels(discovered)),
             applied=False,
             checked=True,
         )
 
     labels = _runtime_labels(discovered)
     _reset_runtime_dir(runtime_dir, active_labels=labels)
-    _emit_sources(runtime_dir, discovered)
+    _emit_sources(runtime_dir, discovered, extensions)
     _import_runtime_models(labels)
     Path(settings.ANGEE_DATA_DIR).mkdir(parents=True, exist_ok=True)
     if labels:
@@ -90,12 +94,13 @@ def clean_runtime() -> None:
 def _check_runtime(
     runtime_dir: Path,
     addons: tuple[BaseAddonConfig, ...],
+    extensions: dict[str, tuple[type[models.Model], ...]],
 ) -> None:
     """Emit to a temporary tree and compare generated source files."""
 
     with tempfile.TemporaryDirectory() as raw_tmp:
         expected_dir = Path(raw_tmp) / "runtime"
-        _emit_sources(expected_dir, addons)
+        _emit_sources(expected_dir, addons, extensions)
         expected = set(_generated_source_files(expected_dir))
         actual = (
             set(_generated_source_files(runtime_dir))
@@ -118,13 +123,14 @@ def _check_runtime(
 
 
 def _emit_sources(
-    runtime_dir: Path, addons: tuple[BaseAddonConfig, ...]
+    runtime_dir: Path,
+    addons: tuple[BaseAddonConfig, ...],
+    extensions: dict[str, tuple[type[models.Model], ...]],
 ) -> None:
     """Write deterministic runtime source files."""
 
     runtime_dir.mkdir(parents=True, exist_ok=True)
     labels = _runtime_labels(addons)
-    extensions = _extensions_for(addons)
     for addon in addons:
         if addon.model_classes:
             _emit_addon(runtime_dir, addon, extensions)
@@ -175,29 +181,35 @@ def _models_source(
         "",
     ]
     imports: list[str] = []
-    model_plans: list[
-        tuple[type[models.Model], tuple[tuple[type[models.Model], str], ...]]
+    render_plans: list[
+        tuple[
+            type[AngeeModel],
+            str,
+            tuple[tuple[type[models.Model], str], ...],
+        ]
     ] = []
-    for model_class in addon.model_classes:
-        target = f"{addon.label}.{model_class._meta.model_name}"
-        model_extensions = extensions.get(target, ())
-        imports.extend(
-            _class_import(model_class, f"Abstract{model_class.__name__}")
-        )
+    for raw_model in addon.model_classes:
+        model_class = cast(type[AngeeModel], raw_model)
+        source_alias = _source_alias(model_class)
+        imports.extend(_class_import(model_class, source_alias))
         aliased_extensions: list[tuple[type[models.Model], str]] = []
-        for index, extension in enumerate(model_extensions, start=1):
+        target_extensions = extensions.get(
+            model_class.get_composition_label(), ()
+        )
+        for index, extension in enumerate(target_extensions, start=1):
             alias = f"{model_class.__name__}Extension{index}"
             aliased_extensions.append((extension, alias))
             imports.extend(_class_import(extension, alias))
-        model_plans.append((model_class, tuple(aliased_extensions)))
+        render_plans.append(
+            (model_class, source_alias, tuple(aliased_extensions))
+        )
     lines.extend(sorted(set(imports)))
     lines.append("")
-    for model_class, aliased_model_extensions in model_plans:
-        abstract_name = f"Abstract{model_class.__name__}"
+    for model_class, source_alias, aliased_model_extensions in render_plans:
         meta_name = f"_{model_class.__name__}Meta"
         base_names = [
             alias for _extension, alias in aliased_model_extensions
-        ] + [abstract_name]
+        ] + [source_alias]
         meta_lines = [
             "        abstract = False",
             f'        app_label = "{addon.label}"',
@@ -207,7 +219,7 @@ def _models_source(
             meta_lines.append(f"        db_table = {db_table}")
         lines.extend(
             [
-                f"{meta_name} = getattr({abstract_name}, 'Meta', object)",
+                f"{meta_name} = getattr({source_alias}, 'Meta', object)",
                 "",
                 f"class {model_class.__name__}({', '.join(base_names)}):",
                 f'    """Concrete {model_class.__name__} model."""',
@@ -218,6 +230,12 @@ def _models_source(
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _source_alias(model_class: type[models.Model]) -> str:
+    """Return the import alias used for the root abstract source model."""
+
+    return f"Abstract{model_class.__name__}"
 
 
 def _class_import(model_class: type[models.Model], alias: str) -> list[str]:
@@ -240,25 +258,55 @@ def _db_table_source(model_class: type[models.Model]) -> str | None:
     return None
 
 
+def _check_field_collisions(
+    addons: tuple[BaseAddonConfig, ...],
+    extensions: dict[str, tuple[type[models.Model], ...]],
+) -> None:
+    """Fail before Django silently chooses one directly declared field."""
+
+    for addon in addons:
+        for raw_model in addon.model_classes:
+            model_class = cast(type[AngeeModel], raw_model)
+            composition_label = model_class.get_composition_label()
+            owners: dict[str, type[models.Model]] = {}
+            bases = (*extensions.get(composition_label, ()), model_class)
+            for base in bases:
+                source_model = cast(type[AngeeModel], base)
+                field_names = source_model.get_declared_composition_fields()
+                for field_name in field_names:
+                    previous = owners.setdefault(field_name, base)
+                    if previous is base:
+                        continue
+                    previous_model = cast(type[AngeeModel], previous)
+                    raise ImproperlyConfigured(
+                        f"{composition_label} composes field "
+                        f"{field_name!r} from both "
+                        f"{previous_model.get_model_reference()} and "
+                        f"{source_model.get_model_reference()}"
+                    )
+
+
 def _extensions_for(
     addons: tuple[BaseAddonConfig, ...],
 ) -> dict[str, tuple[type[models.Model], ...]]:
     """Group model extension bases by normalized target label."""
 
     known_targets = {
-        f"{addon.label}.{model_class._meta.model_name}"
+        cast(type[AngeeModel], model_class).get_composition_label()
         for addon in addons
         for model_class in addon.model_classes
     }
     grouped: dict[str, list[type[models.Model]]] = {}
     for extension in _all_extensions(addons):
-        if extension.target not in known_targets:
+        target = cast(type[AngeeModel], extension).get_extension_target()
+        if target is None:
+            continue
+        if target not in known_targets:
             raise ImproperlyConfigured(
-                f"{extension.model_class.__module__}."
-                f"{extension.model_class.__name__} extends unknown model "
-                f"{extension.target!r}"
+                f"{extension.__module__}.{extension.__name__} extends "
+                f"unknown model {target!r}"
             )
-        grouped.setdefault(extension.target, []).append(extension.model_class)
+        grouped.setdefault(target, []).append(extension)
     return {
         target: tuple(sorted(classes, key=lambda cls: cls._meta.object_name))
         for target, classes in grouped.items()
@@ -267,7 +315,7 @@ def _extensions_for(
 
 def _all_extensions(
     addons: tuple[BaseAddonConfig, ...],
-) -> tuple[ModelExtension, ...]:
+) -> tuple[type[models.Model], ...]:
     """Flatten extension contributions from all addons."""
 
     return tuple(
@@ -279,12 +327,6 @@ def _runtime_labels(addons: tuple[BaseAddonConfig, ...]) -> list[str]:
     """Return addon labels that emit at least one concrete model."""
 
     return [addon.label for addon in addons if addon.model_classes]
-
-
-def _emitted_count(addons: tuple[BaseAddonConfig, ...]) -> int:
-    """Return the number of addons that emit model modules."""
-
-    return len(_runtime_labels(addons))
 
 
 def _runtime_init_source(labels: list[str]) -> str:
@@ -312,9 +354,12 @@ def _resource_manifest(
 ) -> list[dict[str, str]]:
     """Return resource entries for the generated manifest."""
 
+    from angee.base.models import Resource
+
     entries: list[dict[str, str]] = []
     for addon in addons:
-        for tier, paths in addon.get_resource_manifest().items():
+        manifest = Resource.get_manifest(addon)
+        for tier, paths in manifest.items():
             for path in paths:
                 entries.append(
                     {

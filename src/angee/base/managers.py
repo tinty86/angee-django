@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -18,6 +18,7 @@ from django.core.exceptions import (
     ValidationError,
 )
 from django.db import models, transaction
+from django.db.models.utils import make_model_tuple
 
 from angee.base.mixins import AngeeModel
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from angee.base.apps import BaseAddonConfig
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ResourceEntry:
     """One declared resource file."""
 
@@ -40,6 +41,12 @@ class ResourceEntry:
 
     absolute_path: Path
     """Resolved file path on disk."""
+
+    _resource_rows: tuple[ResourceRow, ...] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def read_rows(self) -> list[dict[str, Any]]:
         """Read this YAML or CSV resource file."""
@@ -82,8 +89,84 @@ class ResourceEntry:
             )
         return str(raw)
 
+    def read_resource_rows(self) -> tuple[ResourceRow, ...]:
+        """Return parsed resource rows from this file."""
 
-@dataclass(frozen=True, slots=True)
+        if self._resource_rows is None:
+            self._resource_rows = tuple(
+                ResourceRow.from_payload(self, row, index=index)
+                for index, row in enumerate(self.read_rows())
+            )
+        return self._resource_rows
+
+
+@dataclass(slots=True)
+class ResourceRow:
+    """One parsed row from an addon resource file."""
+
+    entry: ResourceEntry
+    """Resource file that declared this row."""
+
+    model_label: str
+    """Dotted model label targeted by this row."""
+
+    fields: dict[str, Any]
+    """Field values declared for the target model."""
+
+    ledger_xref: str
+    """Stable ledger key for this row."""
+
+    content_hash: str
+    """Stable hash of the field payload."""
+
+    @classmethod
+    def from_payload(
+        cls,
+        entry: ResourceEntry,
+        payload: dict[str, Any],
+        *,
+        index: int,
+    ) -> ResourceRow:
+        """Return a parsed resource row from one YAML or CSV payload."""
+
+        fields = cls._fields_for_payload(payload)
+        xref = str(payload.get("xref") or "")
+        return cls(
+            entry=entry,
+            model_label=entry.model_label_for(payload),
+            fields=fields,
+            ledger_xref=xref or f"row:{index}",
+            content_hash=cls._content_hash(fields),
+        )
+
+    @staticmethod
+    def _fields_for_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        """Return model fields from a row with optional nested ``fields``."""
+
+        if "fields" in payload:
+            fields = payload["fields"]
+            if not isinstance(fields, dict):
+                raise ImproperlyConfigured(
+                    "resource row fields must be a mapping"
+                )
+            return dict(fields)
+        return {
+            key: value
+            for key, value in payload.items()
+            if key not in {"model", "xref"}
+        }
+
+    @staticmethod
+    def _content_hash(fields: dict[str, Any]) -> str:
+        """Return a stable hash for resource field values."""
+
+        payload = json.dumps(
+            fields, sort_keys=True, default=str, separators=(",", ":")
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+
+@dataclass(slots=True)
 class ValidationResult:
     """Counts returned by resource validation."""
 
@@ -94,7 +177,7 @@ class ValidationResult:
     """Number of rows parsed."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class LoadResult:
     """Counts returned by a resource load."""
 
@@ -108,7 +191,15 @@ class LoadResult:
 class ResourceQuerySet(models.QuerySet[Any]):
     """QuerySet API for resource ledger operations."""
 
-    def entries(
+    def get_manifest(
+        self,
+        addon: BaseAddonConfig,
+    ) -> dict[str, tuple[str, ...]]:
+        """Return resource paths declared by one addon."""
+
+        return self.model.get_manifest(addon)
+
+    def get_entries(
         self,
         *,
         tier: object | None = None,
@@ -122,14 +213,15 @@ class ResourceQuerySet(models.QuerySet[Any]):
         tiers = self._tiers(tier)
         entries: list[ResourceEntry] = []
         for addon in discovered:
+            manifest = self.get_manifest(addon)
             for active_tier in tiers:
-                for relative in addon.get_resource_paths(active_tier):
+                for relative in manifest[active_tier]:
                     entries.append(
                         ResourceEntry(
                             addon=addon,
                             tier=active_tier,
                             relative_path=relative,
-                            absolute_path=addon.resolve_resource_path(relative),
+                            absolute_path=Path(addon.path) / relative,
                         )
                     )
         return tuple(entries)
@@ -144,12 +236,12 @@ class ResourceQuerySet(models.QuerySet[Any]):
 
         checked_files = 0
         checked_rows = 0
-        for entry in self.entries(tier=tier, addons=addons):
-            rows = entry.read_rows()
+        for entry in self.get_entries(tier=tier, addons=addons):
+            rows = entry.read_resource_rows()
             checked_files += 1
             checked_rows += len(rows)
             for row in rows:
-                self._model_for_label(entry.model_label_for(row))
+                self._model_for_label(row.model_label)
         return ValidationResult(
             checked_files=checked_files,
             checked_rows=checked_rows,
@@ -172,15 +264,14 @@ class ResourceQuerySet(models.QuerySet[Any]):
                 "angee resources load demo requires DEBUG or --allow-non-dev"
             )
 
-        self.validate_tier(tier=active_tier, addons=addons)
+        rows = self._validated_rows(tier=active_tier, addons=addons)
         loaded = 0
         skipped = 0
         with transaction.atomic():
-            for entry in self.entries(tier=active_tier, addons=addons):
-                for index, row in enumerate(entry.read_rows()):
-                    changed = self._load_row(entry, row, index=index)
-                    loaded += int(changed)
-                    skipped += int(not changed)
+            for row in rows:
+                changed = self._load_row(row)
+                loaded += int(changed)
+                skipped += int(not changed)
         return LoadResult(loaded=loaded, skipped=skipped)
 
     def diff_tier(self, *, tier: object) -> str:
@@ -188,10 +279,10 @@ class ResourceQuerySet(models.QuerySet[Any]):
 
         active_tier = self._tier_value(tier)
         lines = [f"tier: {active_tier}"]
-        for entry in self.entries(tier=active_tier):
+        for entry in self.get_entries(tier=active_tier):
             lines.append(
                 f"{entry.addon.name}:{entry.relative_path}: "
-                f"{len(entry.read_rows())} rows"
+                f"{len(entry.read_resource_rows())} rows"
             )
         return "\n".join(lines)
 
@@ -199,7 +290,7 @@ class ResourceQuerySet(models.QuerySet[Any]):
         """Return all resource tiers or one normalized tier."""
 
         if tier is None:
-            return self.model.Tier.values()
+            return tuple(self.model.Tier.values)
         return (self._tier_value(tier),)
 
     def _tier_value(self, tier: object) -> str:
@@ -207,37 +298,49 @@ class ResourceQuerySet(models.QuerySet[Any]):
 
         return self.model.Tier.from_value(tier)
 
-    def _load_row(
-        self, entry: ResourceEntry, row: dict[str, Any], *, index: int
-    ) -> bool:
+    def _validated_rows(
+        self,
+        *,
+        tier: object,
+        addons: tuple[BaseAddonConfig, ...] | None,
+    ) -> tuple[ResourceRow, ...]:
+        """Return parsed rows after model labels have been validated."""
+
+        rows: list[ResourceRow] = []
+        for entry in self.get_entries(tier=tier, addons=addons):
+            for row in entry.read_resource_rows():
+                self._model_for_label(row.model_label)
+                rows.append(row)
+        return tuple(rows)
+
+    def _load_row(self, row: ResourceRow) -> bool:
         """Create or update one row and its ledger entry."""
 
-        model_label = entry.model_label_for(row)
-        model = self._model_for_label(model_label)
-        fields = self._fields_for_row(row)
-        xref = str(row.get("xref") or "")
-        ledger_xref = xref or f"row:{index}"
-        content_hash = self._content_hash(fields)
+        model = self._model_for_label(row.model_label)
         ledger = self.model._default_manager.filter(
-            source_addon=entry.addon.name,
-            source_path=entry.relative_path,
-            xref=ledger_xref,
-            target_model=model_label,
+            source_addon=row.entry.addon.name,
+            source_path=row.entry.relative_path,
+            xref=row.ledger_xref,
+            target_model=row.model_label,
         ).first()
-        if ledger and ledger.content_hash == content_hash and ledger.target_id:
+        if (
+            ledger
+            and ledger.content_hash == row.content_hash
+            and ledger.target_id
+        ):
             if model.from_public_id(ledger.target_id) is not None:
                 return False
-        values = self._coerce_values(model, fields)
+        values = self._coerce_values(model, row.fields)
         obj = self._upsert_object(model, values, ledger=ledger)
         self.model._default_manager.update_or_create(
-            source_addon=entry.addon.name,
-            source_path=entry.relative_path,
-            xref=ledger_xref,
-            target_model=model_label,
+            source_addon=row.entry.addon.name,
+            source_path=row.entry.relative_path,
+            xref=row.ledger_xref,
+            target_model=row.model_label,
             defaults={
-                "content_hash": content_hash,
+                "content_hash": row.content_hash,
                 "target_id": obj.public_id,
-                "tier": entry.tier,
+                "tier": row.entry.tier,
             },
         )
         return True
@@ -245,7 +348,12 @@ class ResourceQuerySet(models.QuerySet[Any]):
     def _model_for_label(self, label: str) -> type[AngeeModel]:
         """Resolve an Angee model label through Django's app registry."""
 
-        app_label, _, model_name = label.partition(".")
+        try:
+            app_label, model_name = make_model_tuple(label)
+        except ValueError as exc:
+            raise ImproperlyConfigured(
+                f"Invalid model label {label!r}"
+            ) from exc
         if not app_label or not model_name:
             raise ImproperlyConfigured(f"Invalid model label {label!r}")
         try:
@@ -257,22 +365,6 @@ class ResourceQuerySet(models.QuerySet[Any]):
                 f"{label} must inherit AngeeModel to load resources"
             )
         return cast(type[AngeeModel], model)
-
-    def _fields_for_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Return model fields from a row with optional nested ``fields``."""
-
-        if "fields" in row:
-            fields = row["fields"]
-            if not isinstance(fields, dict):
-                raise ImproperlyConfigured(
-                    "resource row fields must be a mapping"
-                )
-            return dict(fields)
-        return {
-            key: value
-            for key, value in row.items()
-            if key not in {"model", "xref"}
-        }
 
     def _coerce_values(
         self,
@@ -310,8 +402,7 @@ class ResourceQuerySet(models.QuerySet[Any]):
             return field.to_python(value)
         except ValidationError as exc:
             raise ImproperlyConfigured(
-                f"{field.model._meta.label}.{field.name} "
-                f"cannot load {value!r}"
+                f"{field.model._meta.label}.{field.name} cannot load {value!r}"
             ) from exc
 
     def _upsert_object(
@@ -335,14 +426,6 @@ class ResourceQuerySet(models.QuerySet[Any]):
                 )
                 return cast(AngeeModel, obj)
         return cast(AngeeModel, model._base_manager.create(**values))
-
-    def _content_hash(self, fields: dict[str, Any]) -> str:
-        """Return a stable hash for resource field values."""
-
-        payload = json.dumps(
-            fields, sort_keys=True, default=str, separators=(",", ":")
-        )
-        return hashlib.sha256(payload.encode()).hexdigest()
 
 
 ResourceManager = models.Manager.from_queryset(ResourceQuerySet)

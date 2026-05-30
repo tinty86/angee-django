@@ -30,7 +30,7 @@ ALLOWED_KEYS = frozenset(SEQUENCE_KEYS)
 
 
 @dataclass(slots=True)
-class CollectedSchemaConfig:
+class SchemaContributions:
     """Native Strawberry contributions collected for one schema name."""
 
     query: list[Any] = field(default_factory=list)
@@ -72,7 +72,7 @@ def build_schema(
     strawberry = importlib.import_module("strawberry")
     tools = importlib.import_module("strawberry.tools")
 
-    collected = collect_schema_config(schema_name, addons)
+    collected = collect_schema_contributions(schema_name, addons)
     if not collected.query:
         raise ImproperlyConfigured(
             f"GraphQL schema {schema_name!r} has no query root"
@@ -104,13 +104,13 @@ def build_schema(
     )
 
 
-def collect_schema_config(
+def collect_schema_contributions(
     schema_name: str,
     addons: Iterable[BaseAddonConfig] | None = None,
-) -> CollectedSchemaConfig:
+) -> SchemaContributions:
     """Collect native Strawberry classes exported for ``schema_name``."""
 
-    collected = CollectedSchemaConfig()
+    collected = SchemaContributions()
     discovered = discover_addons() if addons is None else tuple(addons)
     for addon in discovered:
         module = addon.get_graphql_module()
@@ -145,17 +145,19 @@ def _schema_entry(
     """Return one schema entry from an addon's ``schemas`` export."""
 
     if not isinstance(schemas, Mapping):
-        raise TypeError(f"{module.__name__}.schemas must be a mapping")
+        raise ImproperlyConfigured(
+            f"{module.__name__}.schemas must be a mapping"
+        )
     entry = schemas.get(schema_name)
     if entry is None:
         return None
     if not isinstance(entry, Mapping):
-        raise TypeError(
+        raise ImproperlyConfigured(
             f"{module.__name__}.schemas[{schema_name!r}] must be a mapping"
         )
     unknown = set(entry) - ALLOWED_KEYS
     if unknown:
-        raise TypeError(
+        raise ImproperlyConfigured(
             f"{module.__name__}.schemas[{schema_name!r}] has unknown keys: "
             + ", ".join(sorted(unknown))
         )
@@ -173,7 +175,7 @@ def _as_sequence(
     if value is None:
         return ()
     if isinstance(value, set | frozenset):
-        raise TypeError(
+        raise ImproperlyConfigured(
             f"{module.__name__}.schemas[{schema_name!r}][{key!r}] "
             "must be a sequence, not a set"
         )
@@ -194,8 +196,3 @@ def _dedupe(values: Iterable[Any]) -> list[Any]:
         seen.add(marker)
         deduped.append(value)
     return deduped
-
-
-# TODO: add optional shortcuts that return ordinary Strawberry classes for CRUD
-# mutations and change subscriptions. Schema authors should still be able to
-# write the fully manual Strawberry shape shown in the module docstring.

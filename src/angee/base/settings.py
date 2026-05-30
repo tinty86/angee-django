@@ -34,10 +34,10 @@ def compose_defaults(
 ) -> dict[str, Any]:
     """Return Django setting values derived from Angee composition.
 
-    ``ANGEE_RUNTIME_DIR`` and ``ANGEE_DATA_DIR`` environment variables override
-    caller-provided paths. ``ANGEE_DATA_DIR`` is required unless ``data_dir`` is
-    passed deliberately, so local commands do not create databases in surprising
-    places.
+    ``ANGEE_RUNTIME_DIR`` and ``ANGEE_DATA_DIR`` environment variables
+    override caller-provided paths. ``ANGEE_DATA_DIR`` is required unless
+    ``data_dir`` is passed deliberately, so local commands do not create
+    databases in surprising places.
     """
 
     runtime_dir = Path(os.environ.get("ANGEE_RUNTIME_DIR", runtime_dir))
