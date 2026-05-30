@@ -9,7 +9,8 @@ from typing import ClassVar
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from angee.base.apps import BaseAddonConfig, ResourceTier
+from angee.base.apps import BaseAddonConfig
+from angee.base.models import Resource
 
 
 class ResourceConfig(BaseAddonConfig):
@@ -17,8 +18,8 @@ class ResourceConfig(BaseAddonConfig):
 
     name = "tests.resource_addon"
     label = "resource_addon"
-    resources: ClassVar[dict[ResourceTier | str, object]] = {
-        ResourceTier.INSTALL: ("resources/install.yaml",),
+    resources: ClassVar[dict[object, object]] = {
+        Resource.Tier.INSTALL: ("resources/install.yaml",),
         "demo": "resources/demo.yaml",
     }
 
@@ -38,9 +39,9 @@ def test_resource_manifest_accepts_enum_keys_and_string_shorthand(
 
     manifest = config_for(tmp_path).get_resource_manifest()
 
-    assert manifest[ResourceTier.MASTER] == ()
-    assert manifest[ResourceTier.INSTALL] == ("resources/install.yaml",)
-    assert manifest[ResourceTier.DEMO] == ("resources/demo.yaml",)
+    assert manifest[Resource.Tier.MASTER] == ()
+    assert manifest[Resource.Tier.INSTALL] == ("resources/install.yaml",)
+    assert manifest[Resource.Tier.DEMO] == ("resources/demo.yaml",)
 
 
 def test_resource_manifest_rejects_unknown_tiers(tmp_path: Path) -> None:

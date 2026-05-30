@@ -63,6 +63,18 @@ decide something. This law has three faces:
   outside; a function that switches on a value's type wants polymorphism. Owner =
   a class.
 
+Before decomposing code, make an owner map. Classify each fact by the thing that
+would answer it in the underlying framework: persisted facts live beside the
+field or record that stores them, collection behavior lives on the collection
+abstraction, instance behavior lives on the instance, declaration facts live on
+the declaring object, and commands or routes stay thin dispatchers. If a helper
+mostly forwards to, mutates, or interprets one owner, move the behavior to that
+owner. If the move creates more ceremony than clarity, stop and choose the
+smaller native framework shape.
+
+- Docs teach principles and point to owners; code states the concrete contract.
+  Do not maintain a parallel code inventory in prose. Public classes, methods,
+  fields, and settings helpers explain their current API with docstrings.
 - Less is more. Better code is the documentation and the example.
 - Compose at build time. Do not monkey-patch, register at runtime, or edit
   generated output.

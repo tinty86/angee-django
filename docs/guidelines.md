@@ -82,6 +82,16 @@ whenever possible.**
 This is the class-scope face of **Find the owner** in
 [`AGENTS.md`](../AGENTS.md#constitution).
 
+Before changing code structure, make a quick owner map. Identify the owner of
+each fact and place the behavior there:
+
+- Persisted facts live beside the field, record, or schema item that stores them.
+- Instance behavior lives on the instance type.
+- Collection behavior lives on the collection abstraction.
+- Declaration facts live on the declaring object.
+- Commands, routes, and other entrypoints parse inputs and dispatch to the owner.
+- Cross-object orchestration stays loose only when no single participant owns it.
+
 Rules belong beside the data they interpret. Prefer methods and properties on the
 class that owns a fact over loose helper functions that repeatedly decode the
 same shape from the outside. The test: if a function branches on — or repeatedly
@@ -93,6 +103,18 @@ Keep a function loose for orchestration across objects, a pure transform with no
 natural owner, or an integration entrypoint — and such a function may still call
 into the owners. Django draws the line cleanly: `DateField.to_python` is a method
 on the field, but it calls the ownerless `parse_date` to parse the string.
+
+Do not fix hidden magic by adding ceremony. If a refactor replaces implicit
+behavior with a larger explicit ritual, stop and look for the smaller native
+framework shape.
+
+### Let Code Carry Code Contracts
+
+Guidelines teach principles and ownership rules; code owns current API details.
+Do not keep lists of fields, classes, settings, or model-specific behavior in
+prose when the contract can live in names, types, and docstrings beside the code.
+Documentation may point to the owning module or class, but it should not become a
+second spec that can drift.
 
 ### Use First-Principles Thinking
 

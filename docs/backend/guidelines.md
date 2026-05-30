@@ -41,9 +41,8 @@ normalizes, or renames a Django object, delete it.
 ## Rules
 
 - Domain behavior lives on models, managers, and querysets.
-- Ordinary source models inherit `AngeeModel`; that inheritance is the composer
-  contract for emitted models and model extensions. Compose explicit mixins only
-  when the model needs a narrower shape.
+- Source model discovery should follow Django model inheritance and explicit
+  model-owned declarations, not naming or field-shape heuristics.
 - Put behavior on the object that owns the shape, the Django way: coerce values
   with `Field.to_python`/`get_prep_value` instead of branching on field type from
   outside; ask `model._meta` (`get_field`, `label_lower`) and
@@ -55,8 +54,7 @@ normalizes, or renames a Django object, delete it.
   owner** in `AGENTS.md` and the Django-Native Rule above.
 - Source models are abstract. Concrete apps are emitted by the composer.
 - Keep Django `Meta` for Django and library-owned options such as
-  `rebac_resource_type`; Angee extension facts live on the model class, for
-  example `extends = "notes.Note"`.
+  `rebac_resource_type`; Angee extension facts live on the owning model class.
 - `runtime/`, generated schemas, migrations, and codegen stubs are output.
   Change the source, not the artifact.
 - REBAC is structural and owned by `django-zed-rebac`. Addons declare
@@ -74,24 +72,28 @@ normalizes, or renames a Django object, delete it.
 Framework contracts should be self-explaining in code. Add docstrings to public
 modules, classes, methods, functions, and declarative manifest attributes. Add
 docstrings to private helpers when their role is not obvious from the function
-name and signature. Do not maintain a parallel spec for behavior that can live
-clearly beside the code.
+name and signature. Do not maintain a parallel spec, field inventory, or model
+API list for behavior that can live clearly beside the code.
 
 `AppConfig` is the addon manifest and owns addon-local interpretation. Use
 Django's own facts before adding an Angee fact: the addon root is
 `AppConfig.path`, source models live in `models.py`, and GraphQL contributions
 live in `graphql.py`. Put validation, normalization, and path resolution for one
 addon on the `AppConfig` subclass. Keep loose functions for cross-addon
-orchestration such as discovery, ordering, emission, and conflict checks. Do not
-add unused helper methods, registries, or derived path accessors. The current
-base manifest fields are:
+orchestration such as discovery, ordering, emission, and conflict checks. Put
+current manifest attributes and their exact authoring forms in the `AppConfig`
+base class docstrings, not in this guideline.
 
-- `depends_on`: addon labels or app names that must compose first.
-- `rebac_schema`: a `django-zed-rebac` schema file, defaulting to
-  `permissions.zed` and skipped when absent.
-- `resources`: a dict of `ResourceTier` keys to explicit file lists. String
-  keys such as `"demo"` are accepted as AppConfig shorthand. Tiers default to no
-  files, so addons only declare the tiers they use.
+Before decomposing backend code, classify each fact by its Django owner:
+
+- Persisted choices live beside the model field, usually as model-owned
+  `TextChoices`.
+- Row-set behavior lives on managers and querysets.
+- Instance behavior lives on model methods and properties.
+- Addon declaration and path-resolution behavior lives on `AppConfig`.
+- Management commands parse arguments and dispatch to the owning model, manager,
+  service, or composer function.
+- Compatibility facades exist only for an explicit compatibility promise.
 
 Settings helpers return plain Django setting mappings. Do not pass `globals()`
 into framework code or let helpers mutate a settings module from the outside;
