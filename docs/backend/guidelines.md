@@ -14,9 +14,35 @@ libraries and what each one owns. Check it before adding a dependency or
 hand-rolling a concern. Python dependency setup belongs in `pyproject.toml` and
 `uv.lock`.
 
+## Django-Native Rule
+
+Angee is not a second framework on top of Django. It is a build-time composer
+for Django apps.
+
+Before adding an Angee abstraction, ask: does Django already have an object,
+method, or convention that owns this fact?
+
+Use Django's native owners:
+
+- App facts live on `AppConfig`.
+- Model behavior lives on models, managers, and querysets.
+- Value coercion lives on fields.
+- Command dispatch lives in Django management commands and `argparse`.
+- Table names, app labels, migrations, and model metadata follow Django
+  defaults.
+
+Angee code should own only the composition seam: discovering addons, ordering
+them deterministically, emitting runtime apps, merging schemas, syncing
+resources, and failing fast on collisions.
+
+A wrapper must prove it adds a real new concept. If it only forwards,
+normalizes, or renames a Django object, delete it.
+
 ## Rules
 
 - Domain behavior lives on models, managers, and querysets.
+- Ordinary source models inherit `AngeeModel`; compose explicit mixins only when
+  the model needs a narrower shape.
 - Put behavior on the object that owns the shape, the Django way: coerce values
   with `Field.to_python`/`get_prep_value` instead of branching on field type from
   outside; ask `model._meta` (`get_field`, `label_lower`) and
@@ -24,7 +50,8 @@ hand-rolling a concern. Python dependency setup belongs in `pyproject.toml` and
   behavior through `Manager.from_queryset`; and give objects classmethod factories
   and `deconstruct`-style methods to construct and serialize themselves. Reserve
   module-level functions for cross-object orchestration — discovery, ordering,
-  emission, conflict checks.
+  emission, conflict checks. This is the backend application of **Find the
+  owner** in `AGENTS.md` and the Django-Native Rule above.
 - Source models are abstract. Concrete apps are emitted by the composer.
 - Keep Django `Meta` for Django and library-owned options such as
   `rebac_resource_type`; Angee extension facts live on the model class, for

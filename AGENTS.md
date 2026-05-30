@@ -41,11 +41,29 @@ models, generated `runtime/` output, and frontend packages live.
 
 ## Constitution
 
+**Find the owner — the first question for every change.** Every fact has one
+owner: an existing Angee pattern, an underlying framework or library, a file, or
+a class. Ask that owner; never re-derive, re-decode, or re-decide from the
+outside what it already knows. If the owner should answer but cannot, add the
+method there instead of writing a helper that reaches in. If no Angee pattern
+exists, follow the underlying framework's pattern. If the framework leaves
+multiple plausible patterns, escalate to the human architect to set the pattern.
+Code establishes patterns and docs reference them; a mismatch between code and
+docs is a bug that requires reconciliation.
+
+The smell that means stop: a function that takes an object and inspects it to
+decide something. This law has three faces:
+
+- **Delegate to the library that owns the concern.** If `docs/stack.md` says a
+  library owns it, wire it; do not rebuild it. Owner = a library.
+- **Keep one source of truth per fact.** Move knowledge to the owning file or
+  level instead of repeating it. Owner = a file or repository level.
+- **Put behavior on the object that owns the data.** Prefer methods and
+  properties on the owning class over loose helpers that decode its shape from
+  outside; a function that switches on a value's type wants polymorphism. Owner =
+  a class.
+
 - Less is more. Better code is the documentation and the example.
-- Delegate first. If `docs/stack.md` says a library owns a concern, wire it; do
-  not rebuild it.
-- Keep one source of truth per fact. Move knowledge to the owning file instead
-  of repeating it.
 - Compose at build time. Do not monkey-patch, register at runtime, or edit
   generated output.
 - Prefer deletion to abstraction. Add an abstraction only when it removes real

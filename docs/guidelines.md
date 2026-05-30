@@ -79,6 +79,9 @@ whenever possible.**
 
 ### Put Behavior on the Owning Object
 
+This is the class-scope face of **Find the owner** in
+[`AGENTS.md`](../AGENTS.md#constitution).
+
 Rules belong beside the data they interpret. Prefer methods and properties on the
 class that owns a fact over loose helper functions that repeatedly decode the
 same shape from the outside. The test: if a function branches on — or repeatedly
