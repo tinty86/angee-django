@@ -30,10 +30,15 @@ def write_permissions(
     """Write a combined permission file for review and drift checks."""
 
     sections: list[str] = []
+    seen: set[Path] = set()
     for addon in addons:
         path = addon.get_rebac_schema_path()
         if path is None:
             continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
         text = path.read_text(encoding="utf-8").strip()
         if text:
             sections.append(f"// addon: {addon.name}\n{text}")

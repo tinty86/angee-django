@@ -22,7 +22,6 @@ def compose_defaults(
     asgi_application: str,
     data_dir: Path | None = None,
     runtime_module: str = "runtime",
-    shells: Sequence[str] = ("public",),
     debug: bool = False,
     use_tz: bool = True,
     graphql_ide: str | None = None,
@@ -42,10 +41,12 @@ def compose_defaults(
 
     runtime_dir = Path(os.environ.get("ANGEE_RUNTIME_DIR", runtime_dir))
     data_dir = _resolve_data_dir(data_dir)
+    # Required side effect: put the runtime parent on the path so the generated
+    # ``runtime`` package (and its emitted addon models) is importable.
     if str(runtime_dir.parent) not in sys.path:
         sys.path.insert(0, str(runtime_dir.parent))
 
-    addon_entries = _addon_entries(addons)
+    addon_configs = _addon_config_classes(addons)
     return {
         "INSTALLED_APPS": _dedupe(
             [
@@ -56,7 +57,7 @@ def compose_defaults(
                 "django.contrib.sessions",
                 "rebac",
                 f"{BaseConfig.__module__}.{BaseConfig.__name__}",
-                *addon_entries,
+                *(f"{cls.__module__}.{cls.__name__}" for cls in addon_configs),
                 *extra_installed_apps,
             ]
         ),
@@ -80,7 +81,6 @@ def compose_defaults(
         "ANGEE_RUNTIME_DIR": runtime_dir,
         "ANGEE_DATA_DIR": data_dir,
         "ANGEE_RUNTIME_MODULE": runtime_module,
-        "ANGEE_SHELLS": tuple(dict.fromkeys(("public", *shells))),
         "ANGEE_GRAPHQL_IDE": graphql_ide
         if graphql_ide is not None
         else ("graphiql" if debug else None),
@@ -90,7 +90,7 @@ def compose_defaults(
         "REBAC_ALLOW_SUDO": True,
         "MIGRATION_MODULES": {
             **dict(migration_modules or {}),
-            **_migration_modules(addons, runtime_module),
+            **_migration_modules(addon_configs, runtime_module),
         },
         "STATIC_URL": static_url,
     }
@@ -109,27 +109,31 @@ def _resolve_data_dir(data_dir: Path | None) -> Path:
     )
 
 
-def _addon_entries(addons: Sequence[str]) -> list[str]:
-    """Resolve addon packages to AppConfig dotted paths."""
+def _addon_config_classes(
+    addons: Sequence[str],
+) -> list[type[BaseAddonConfig]]:
+    """Resolve addon packages to their config classes once, in order.
 
-    entries: list[str] = []
+    ``BaseConfig`` is excluded because the base addon is installed explicitly.
+    Resolving here keeps ``AppConfig.create()`` from running twice per addon.
+    """
+
+    classes: list[type[BaseAddonConfig]] = []
     for addon in addons:
         config_class = _resolve_app_config_class(addon)
         if config_class is BaseConfig:
             continue
-        entries.append(f"{config_class.__module__}.{config_class.__name__}")
-    return entries
+        classes.append(config_class)
+    return classes
 
 
 def _migration_modules(
-    addons: Sequence[str],
+    addon_configs: Sequence[type[BaseAddonConfig]],
     runtime_module: str,
 ) -> dict[str, str]:
     """Return migration-module overrides for emitted apps."""
 
-    labels = {BaseConfig.label}
-    for addon in addons:
-        labels.add(_resolve_app_config_class(addon).label)
+    labels = {config_class.label for config_class in addon_configs}
     return {
         label: f"{runtime_module}.{label}.migrations"
         for label in sorted(labels)

@@ -1,0 +1,4 @@
+_xref,username,email,password
+user_admin,admin,admin@example.com,!
+user_alice,alice,alice@example.com,!
+user_bob,bob,bob@example.com,!

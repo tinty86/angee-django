@@ -22,8 +22,15 @@ class TimestampMixin(models.Model):
         abstract = True
 
 
-class AngeeModel(TimestampMixin):
-    """Default abstract base for composed Angee source models."""
+class AngeeModel(TimestampMixin, RebacMixin):
+    """Default abstract base for composed Angee source models.
+
+    Composing :class:`rebac.RebacMixin` gives every Angee model the
+    REBAC-scoped manager and per-instance actor binding. A model stays an
+    unscoped pass-through until it declares ``Meta.rebac_resource_type``
+    (optionally ``rebac_id_attr``); from then on reads, writes, and field
+    access are gated by the permission schema.
+    """
 
     class Meta:
         """Django model options."""
@@ -93,6 +100,27 @@ class AngeeModel(TimestampMixin):
 
         return f"{cls.__module__}.{cls.__name__}"
 
+    @classmethod
+    def get_extension_bases(cls) -> tuple[type[models.Model], ...]:
+        """Return abstract bases this extension contributes to a target model.
+
+        Extension marker classes may inherit field/behavior mixins and carry
+        only ``extends`` themselves. If no contributed base exists, the
+        extension class itself is the contribution, preserving direct
+        field-bearing extension classes.
+        """
+
+        contributed = tuple(
+            base
+            for base in cls.__bases__
+            if (
+                isinstance(base, type)
+                and issubclass(base, models.Model)
+                and base not in {models.Model, TimestampMixin, AngeeModel}
+            )
+        )
+        return contributed or (cls,)
+
     @property
     def public_id(self) -> str:
         """Return the stable external id for this model instance."""
@@ -104,15 +132,6 @@ class AngeeModel(TimestampMixin):
         """Return the row with this external id or ``None``."""
 
         return cls._default_manager.filter(pk=value).first()
-
-
-class RebacModelMixin(RebacMixin):
-    """Opt a source model into django-zed-rebac enforcement."""
-
-    class Meta:
-        """Django model options."""
-
-        abstract = True
 
 
 class SqidMixin(models.Model):

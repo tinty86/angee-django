@@ -13,88 +13,114 @@ from typing import cast
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.core.management import call_command
 from django.db import models
 
 from angee.base.apps import BaseAddonConfig
-from angee.base.discovery import discover_addons
-from angee.base.mixins import AngeeModel
-from angee.base.rebac import sync_permissions, write_permissions
+from angee.base.compose.rebac import write_permissions
+from angee.base.graphql.schema import render_sdl
+from angee.base.mixins.models import AngeeModel
 
 
 @dataclass(slots=True)
-class BuildResult:
-    """Summary of a build command."""
+class RuntimePlan:
+    """Source emission plan for a discovered addon set."""
 
-    emitted: int
-    """Number of runtime model modules emitted."""
+    addons: tuple[BaseAddonConfig, ...]
+    """Discovered addons in deterministic composition order."""
 
-    applied: bool
-    """Whether migrations and permission sync were applied."""
+    extensions: dict[str, tuple[type[AngeeModel], ...]]
+    """Extension marker classes grouped by target composition label."""
 
-    checked: bool
-    """Whether the build only checked for generated-source drift."""
-
-
-class DriftError(RuntimeError):
-    """Raised when ``angee build --check`` finds generated-source drift."""
+    labels: list[str]
+    """Runtime app labels that emit concrete models."""
 
 
-def emit_runtime(
-    *,
-    addons: tuple[BaseAddonConfig, ...] | None = None,
-    apply: bool,
-    check: bool = False,
-) -> BuildResult:
-    """Emit runtime modules and optionally apply migrations."""
+def plan_runtime(addons: tuple[BaseAddonConfig, ...]) -> RuntimePlan:
+    """Return the deterministic runtime source emission plan."""
 
-    discovered = discover_addons() if addons is None else addons
-    extensions = _extensions_for(discovered)
-    _check_field_collisions(discovered, extensions)
-    runtime_dir = Path(settings.ANGEE_RUNTIME_DIR)
-    if check:
-        _check_runtime(runtime_dir, discovered, extensions)
-        return BuildResult(
-            emitted=len(_runtime_labels(discovered)),
-            applied=False,
-            checked=True,
-        )
-
-    labels = _runtime_labels(discovered)
-    _reset_runtime_dir(runtime_dir, active_labels=labels)
-    _emit_sources(runtime_dir, discovered, extensions)
-    _import_runtime_models(labels)
-    Path(settings.ANGEE_DATA_DIR).mkdir(parents=True, exist_ok=True)
-    if labels:
-        call_command("makemigrations", *labels, interactive=False, verbosity=0)
-        _normalize_migration_headers(runtime_dir, labels)
-    if apply:
-        call_command("migrate", interactive=False, verbosity=0)
-        sync_permissions()
-    return BuildResult(
-        emitted=len(labels),
-        applied=apply,
-        checked=False,
+    extensions = _extensions_for(addons)
+    _check_field_collisions(addons, extensions)
+    return RuntimePlan(
+        addons=addons,
+        extensions=extensions,
+        labels=_runtime_labels(addons),
     )
 
 
-def clean_runtime() -> None:
-    """Delete generated runtime files while keeping the runtime root."""
+def check_runtime(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Compare generated source output against ``runtime_dir``."""
 
-    runtime_dir = Path(settings.ANGEE_RUNTIME_DIR)
-    if not (runtime_dir / ".angee-manifest.json").exists():
-        raise RuntimeError(f"{runtime_dir} is not an Angee runtime directory")
-    for path in sorted(runtime_dir.rglob("*"), reverse=True):
-        if path.is_file():
-            path.unlink()
-        elif path.is_dir():
-            path.rmdir()
+    _check_runtime(runtime_dir, plan.addons, plan.extensions)
+
+
+def reset_runtime_dir(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Make runtime source authoritative while preserving migrations."""
+
+    _reset_runtime_dir(runtime_dir, active_labels=plan.labels)
+
+
+def emit_runtime_sources(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Write deterministic runtime source files."""
+
+    _emit_sources(runtime_dir, plan.addons, plan.extensions)
+
+
+def import_runtime_models(plan: RuntimePlan) -> None:
+    """Import emitted runtime model modules."""
+
+    _import_runtime_models(plan.labels)
+
+
+def normalize_migration_headers(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Remove wall-clock timestamps from generated migration headers."""
+
+    _normalize_migration_headers(runtime_dir, plan.labels)
+
+
+def emit_schema_sdl(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Write printed SDL per named schema once concrete models are importable.
+
+    GraphQL owns schema printing; this seam only persists the rendered SDL so
+    reviews and ``angee build --check`` see GraphQL surface changes the way
+    they see model and migration changes. Runtime serving builds the live
+    schema instead of reading these files.
+    """
+
+    for name, sdl in render_sdl(plan.addons).items():
+        _write(runtime_dir / "schemas" / f"{name}.graphql", sdl)
+
+
+def check_schema_sdl(runtime_dir: Path, plan: RuntimePlan) -> None:
+    """Compare rendered SDL against the committed ``runtime/schemas`` tree."""
+
+    _import_runtime_models(plan.labels)
+    expected = render_sdl(plan.addons)
+    schemas_dir = runtime_dir / "schemas"
+    actual = (
+        {
+            path.stem: path.read_text(encoding="utf-8")
+            for path in schemas_dir.glob("*.graphql")
+        }
+        if schemas_dir.exists()
+        else {}
+    )
+    drift = sorted(
+        (set(expected) ^ set(actual))
+        | {
+            name
+            for name in expected.keys() & actual.keys()
+            if expected[name] != actual[name]
+        }
+    )
+    if drift:
+        rendered = ", ".join(f"schemas/{name}.graphql" for name in drift)
+        raise RuntimeError(f"generated GraphQL SDL is stale: {rendered}")
 
 
 def _check_runtime(
     runtime_dir: Path,
     addons: tuple[BaseAddonConfig, ...],
-    extensions: dict[str, tuple[type[models.Model], ...]],
+    extensions: dict[str, tuple[type[AngeeModel], ...]],
 ) -> None:
     """Emit to a temporary tree and compare generated source files."""
 
@@ -119,23 +145,22 @@ def _check_runtime(
         )
     if drift:
         rendered = ", ".join(str(path) for path in drift)
-        raise DriftError(f"generated runtime is stale: {rendered}")
+        raise RuntimeError(f"generated runtime is stale: {rendered}")
 
 
 def _emit_sources(
     runtime_dir: Path,
     addons: tuple[BaseAddonConfig, ...],
-    extensions: dict[str, tuple[type[models.Model], ...]],
+    extensions: dict[str, tuple[type[AngeeModel], ...]],
 ) -> None:
     """Write deterministic runtime source files."""
 
     runtime_dir.mkdir(parents=True, exist_ok=True)
     labels = _runtime_labels(addons)
     for addon in addons:
-        if addon.model_classes:
+        if addon.get_model_classes():
             _emit_addon(runtime_dir, addon, extensions)
     _write(runtime_dir / "__init__.py", _runtime_init_source(labels))
-    _write(runtime_dir / "schema.py", _schema_source())
     write_permissions(runtime_dir, addons)
     _write(
         runtime_dir / ".angee-manifest.json",
@@ -155,7 +180,7 @@ def _emit_sources(
 def _emit_addon(
     runtime_dir: Path,
     addon: BaseAddonConfig,
-    extensions: dict[str, tuple[type[models.Model], ...]],
+    extensions: dict[str, tuple[type[AngeeModel], ...]],
 ) -> None:
     """Write the concrete model module for one addon."""
 
@@ -170,7 +195,7 @@ def _emit_addon(
 
 def _models_source(
     addon: BaseAddonConfig,
-    extensions: dict[str, tuple[type[models.Model], ...]],
+    extensions: dict[str, tuple[type[AngeeModel], ...]],
 ) -> str:
     """Return concrete model source for one addon."""
 
@@ -188,7 +213,7 @@ def _models_source(
             tuple[tuple[type[models.Model], str], ...],
         ]
     ] = []
-    for raw_model in addon.model_classes:
+    for raw_model in addon.get_model_classes():
         model_class = cast(type[AngeeModel], raw_model)
         source_alias = _source_alias(model_class)
         imports.extend(_class_import(model_class, source_alias))
@@ -196,10 +221,15 @@ def _models_source(
         target_extensions = extensions.get(
             model_class.get_composition_label(), ()
         )
-        for index, extension in enumerate(target_extensions, start=1):
+        extension_bases = tuple(
+            base
+            for extension in target_extensions
+            for base in extension.get_extension_bases()
+        )
+        for index, extension_base in enumerate(extension_bases, start=1):
             alias = f"{model_class.__name__}Extension{index}"
-            aliased_extensions.append((extension, alias))
-            imports.extend(_class_import(extension, alias))
+            aliased_extensions.append((extension_base, alias))
+            imports.extend(_class_import(extension_base, alias))
         render_plans.append(
             (model_class, source_alias, tuple(aliased_extensions))
         )
@@ -217,6 +247,7 @@ def _models_source(
         db_table = _db_table_source(model_class)
         if db_table is not None:
             meta_lines.append(f"        db_table = {db_table}")
+        meta_lines.extend(_rebac_meta_source(model_class))
         lines.extend(
             [
                 f"{meta_name} = getattr({source_alias}, 'Meta', object)",
@@ -249,8 +280,34 @@ def _class_import(model_class: type[models.Model], alias: str) -> list[str]:
     ]
 
 
+def _rebac_meta_source(model_class: type[models.Model]) -> list[str]:
+    """Return concrete-``Meta`` lines that restate the REBAC resource binding.
+
+    The django-zed-rebac metaclass moves ``rebac_resource_type`` (and friends)
+    off the abstract source's ``Meta`` onto ``_meta``, so a concrete subclass
+    built from that source no longer captures them. The composer re-emits them
+    onto the concrete ``Meta`` so the runtime model stays REBAC-bound.
+    """
+
+    lines: list[str] = []
+    for attr in (
+        "rebac_resource_type",
+        "rebac_id_attr",
+        "rebac_default_action",
+    ):
+        value = getattr(model_class._meta, attr, None)
+        if value is not None:
+            lines.append(f"        {attr} = {value!r}")
+    return lines
+
+
 def _db_table_source(model_class: type[models.Model]) -> str | None:
-    """Return an explicit source table override, when declared."""
+    """Return an explicit source table override, when declared.
+
+    Django exposes no public API for "was ``db_table`` set explicitly", so we
+    read ``Meta.original_attrs`` (the verbatim Meta as authored) to avoid
+    re-emitting Django's auto-derived default table name.
+    """
 
     original = getattr(model_class._meta, "original_attrs", {})
     if "db_table" in original:
@@ -260,45 +317,93 @@ def _db_table_source(model_class: type[models.Model]) -> str | None:
 
 def _check_field_collisions(
     addons: tuple[BaseAddonConfig, ...],
-    extensions: dict[str, tuple[type[models.Model], ...]],
+    extensions: dict[str, tuple[type[AngeeModel], ...]],
 ) -> None:
     """Fail before Django silently chooses one directly declared field."""
 
     for addon in addons:
-        for raw_model in addon.model_classes:
+        for raw_model in addon.get_model_classes():
             model_class = cast(type[AngeeModel], raw_model)
             composition_label = model_class.get_composition_label()
             owners: dict[str, type[models.Model]] = {}
-            bases = (*extensions.get(composition_label, ()), model_class)
+            bases = (
+                *(
+                    base
+                    for extension in extensions.get(composition_label, ())
+                    for base in extension.get_extension_bases()
+                ),
+                model_class,
+            )
             for base in bases:
-                source_model = cast(type[AngeeModel], base)
-                field_names = source_model.get_declared_composition_fields()
+                field_names = _declared_composition_fields(base)
                 for field_name in field_names:
                     previous = owners.setdefault(field_name, base)
                     if previous is base:
                         continue
-                    previous_model = cast(type[AngeeModel], previous)
                     raise ImproperlyConfigured(
                         f"{composition_label} composes field "
                         f"{field_name!r} from both "
-                        f"{previous_model.get_model_reference()} and "
-                        f"{source_model.get_model_reference()}"
+                        f"{_model_reference(previous)} and "
+                        f"{_model_reference(base)}"
                     )
+
+
+def _declared_composition_fields(
+    model_class: type[models.Model],
+) -> tuple[str, ...]:
+    """Return fields directly contributed by one abstract composition base.
+
+    Bases reach here either as ``AngeeModel`` source models (which subtract
+    inherited abstract-base fields) or as plain Django mixins contributed by an
+    extension (which have no such method). The fallback to raw local fields is
+    intentional polymorphism over those two shapes, not a missing type.
+    """
+
+    owned_method = getattr(
+        model_class, "get_declared_composition_fields", None
+    )
+    if callable(owned_method):
+        return cast(tuple[str, ...], owned_method())
+    meta = model_class._meta
+    return tuple(
+        sorted(
+            field.name
+            for field in (
+                *meta.local_fields,
+                *meta.local_many_to_many,
+            )
+        )
+    )
+
+
+def _model_reference(model_class: type[models.Model]) -> str:
+    """Return a readable dotted reference to a model class.
+
+    Same dual-shape dispatch as ``_declared_composition_fields``:
+    ``AngeeModel`` answers via ``get_model_reference``; plain extension
+    mixins fall back to their module-qualified name.
+    """
+
+    owned_method = getattr(model_class, "get_model_reference", None)
+    if callable(owned_method):
+        return cast(str, owned_method())
+    return f"{model_class.__module__}.{model_class.__name__}"
 
 
 def _extensions_for(
     addons: tuple[BaseAddonConfig, ...],
-) -> dict[str, tuple[type[models.Model], ...]]:
+) -> dict[str, tuple[type[AngeeModel], ...]]:
     """Group model extension bases by normalized target label."""
 
     known_targets = {
         cast(type[AngeeModel], model_class).get_composition_label()
         for addon in addons
-        for model_class in addon.model_classes
+        for model_class in addon.get_model_classes()
     }
-    grouped: dict[str, list[type[models.Model]]] = {}
+    grouped: dict[str, list[type[AngeeModel]]] = {}
     for extension in _all_extensions(addons):
-        target = cast(type[AngeeModel], extension).get_extension_target()
+        extension_model = cast(type[AngeeModel], extension)
+        target = extension_model.get_extension_target()
         if target is None:
             continue
         if target not in known_targets:
@@ -306,7 +411,7 @@ def _extensions_for(
                 f"{extension.__module__}.{extension.__name__} extends "
                 f"unknown model {target!r}"
             )
-        grouped.setdefault(target, []).append(extension)
+        grouped.setdefault(target, []).append(extension_model)
     return {
         target: tuple(sorted(classes, key=lambda cls: cls._meta.object_name))
         for target, classes in grouped.items()
@@ -319,14 +424,16 @@ def _all_extensions(
     """Flatten extension contributions from all addons."""
 
     return tuple(
-        extension for addon in addons for extension in addon.model_extensions
+        extension
+        for addon in addons
+        for extension in addon.get_model_extensions()
     )
 
 
 def _runtime_labels(addons: tuple[BaseAddonConfig, ...]) -> list[str]:
     """Return addon labels that emit at least one concrete model."""
 
-    return [addon.label for addon in addons if addon.model_classes]
+    return [addon.label for addon in addons if addon.get_model_classes()]
 
 
 def _runtime_init_source(labels: list[str]) -> str:
@@ -338,15 +445,6 @@ def _runtime_init_source(labels: list[str]) -> str:
     )
 
 
-def _schema_source() -> str:
-    """Return the runtime schema module source."""
-
-    return (
-        '"""Generated GraphQL schema entrypoints."""\n\n'
-        "from __future__ import annotations\n\n"
-        "from angee.base.graphql import build_schema\n\n"
-        'schema = build_schema("public")\n'
-    )
 
 
 def _resource_manifest(
@@ -354,17 +452,16 @@ def _resource_manifest(
 ) -> list[dict[str, str]]:
     """Return resource entries for the generated manifest."""
 
-    from angee.base.models import Resource
-
     entries: list[dict[str, str]] = []
     for addon in addons:
-        manifest = Resource.get_manifest(addon)
-        for tier, paths in manifest.items():
-            for path in paths:
+        manifest = addon.get_resource_manifest()
+        for tier, declarations in manifest.items():
+            for declaration in declarations:
+                source = declaration.get("path") or declaration.get("url")
                 entries.append(
                     {
                         "addon": addon.name,
-                        "path": path,
+                        "source": str(source),
                         "tier": tier,
                     }
                 )
@@ -384,11 +481,17 @@ def _generated_source_files(root: Path) -> tuple[Path, ...]:
 
 
 def _is_checked_runtime_source(path: Path) -> bool:
-    """Return true for generated source files except numbered migrations."""
+    """Return true for generated source files except numbered migrations.
+
+    SDL under ``schemas/`` is excluded here; ``check_schema_sdl`` compares it
+    against a freshly rendered schema instead of re-emitting it.
+    """
 
     if "__pycache__" in path.parts:
         return False
     name = path.name
+    if name.endswith(".graphql"):
+        return False
     if (
         path.parent.name == "migrations"
         and name[:4].isdigit()

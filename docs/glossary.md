@@ -63,17 +63,16 @@ Authorization is structural: reads scope through the model manager, writes check
 the instance. Addons use the library's `rebac_schema` / `permissions.zed`
 contract; Angee wires sync into the build.
 
-**Resource** — YAML or CSV data owned by an addon and imported idempotently by
-tier (`master`, `install`, `demo`). Addons list resource files in their
+**Resource** — tabular data owned by an addon and imported idempotently by tier
+(`master`, `install`, `demo`). Addons list resource files in their
 `AppConfig.resources` manifest.
 
 **Symbolic model reference** — referring to a model by symbol/string across addon
 boundaries instead of importing it, to avoid import cycles.
 
-**GraphQL contribution** — native Strawberry types, queries, mutations, and
-subscriptions exported from an addon's conventional `graphql.py`. The composer
-merges these classes into named schemas; it does not introduce a parallel schema
-language.
+**GraphQL contribution** — native Strawberry `Schema` objects exported from an
+addon's conventional `graphql.py`. The composer discovers named schemas; it does
+not introduce a parallel schema language.
 
 ## Frontend
 

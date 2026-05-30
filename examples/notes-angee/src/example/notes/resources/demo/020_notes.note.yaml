@@ -1,0 +1,95 @@
+- model: notes.Note
+  xref: welcome
+  fields:
+    title: Welcome to Angee
+    body: >-
+      This note is loaded from a demo resource file. Edit it, archive it,
+      or star it to see how the framework composes the runtime.
+    status: active
+    tags:
+      - onboarding
+      - backend
+    is_starred: true
+    reminder_at: "2026-06-01 09:00:00"
+    created_by: notes.user_alice
+- model: notes.Note
+  xref: quarterly_planning
+  fields:
+    title: Quarterly planning
+    body: >-
+      Outline the next quarter's themes and the slices that land first.
+    status: active
+    tags:
+      - planning
+    is_starred: false
+    created_by: notes.user_alice
+- model: notes.Note
+  xref: reading_list
+  fields:
+    title: Reading list
+    body: >-
+      Papers and posts to revisit when the composition work settles.
+    status: draft
+    tags:
+      - research
+    is_starred: true
+    created_by: notes.user_alice
+- model: notes.Note
+  xref: draft
+  fields:
+    title: Draft idea
+    body: >-
+      Keep the first slice small and explicit.
+    status: draft
+    tags:
+      - planning
+    is_starred: false
+    created_by: notes.user_bob
+- model: notes.Note
+  xref: bug_triage
+  fields:
+    title: Bug triage notes
+    body: >-
+      Group the open reports by subsystem before the standup.
+    status: active
+    tags:
+      - triage
+      - backend
+    is_starred: false
+    reminder_at: "2026-06-02 15:30:00"
+    created_by: notes.user_bob
+- model: notes.Note
+  xref: one_on_one
+  fields:
+    title: 1:1 agenda
+    body: >-
+      Career goals, current blockers, and feedback for the week.
+    status: active
+    tags:
+      - management
+    is_starred: true
+    created_by: notes.user_bob
+- model: notes.Note
+  xref: team_handbook
+  fields:
+    title: Team handbook
+    body: >-
+      How the team works: rituals, ownership, and on-call expectations.
+    status: active
+    tags:
+      - reference
+    is_starred: false
+    created_by: notes.user_admin
+- model: notes.Note
+  xref: release_checklist
+  fields:
+    title: Release checklist
+    body: >-
+      Steps to cut a release once the build and migrations are verified.
+    status: active
+    tags:
+      - release
+      - backend
+    is_starred: false
+    reminder_at: "2026-06-05 17:00:00"
+    created_by: notes.user_admin

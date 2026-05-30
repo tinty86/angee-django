@@ -12,19 +12,18 @@ SECRET_KEY = "notes-example-dev-key"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
-globals().update(
-    compose_defaults(
-        addons=("example.notes",),
-        runtime_dir=BASE_DIR / "src" / "runtime",
-        root_urlconf="host.urls",
-        asgi_application="host.asgi.application",
-        debug=DEBUG,
-    )
+COMPOSED_SETTINGS = compose_defaults(
+    addons=("example.notes",),
+    runtime_dir=BASE_DIR / "src" / "runtime",
+    root_urlconf="host.urls",
+    asgi_application="host.asgi.application",
+    debug=DEBUG,
 )
+globals().update(COMPOSED_SETTINGS)
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ANGEE_DATA_DIR / "db.sqlite3",
+        "NAME": COMPOSED_SETTINGS["ANGEE_DATA_DIR"] / "db.sqlite3",
     }
 }

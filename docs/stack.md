@@ -27,7 +27,7 @@ Dependency changes must update this file in the same change.
 |---|---|---|
 | Python >= 3.14 | Runtime and typing | Project conventions |
 | Django 6.0+ | ORM, migrations, admin, auth contract, app registry | Abstract bases and build-time composition into runtime apps |
-| strawberry-django | GraphQL types, resolvers, dataloaders, schema printing | Emit schema from composed models and wire REBAC |
+| strawberry-django | GraphQL types, resolvers, dataloaders, schema printing | Merge addon schema parts into named schemas, `crud`/`changes` shortcuts, emit SDL, serve per name |
 | django-choices-field | Enum-backed model fields | `StateField` semantic wrapper |
 | strawberry-django-aggregates | Aggregation and group-by resolvers | Wiring to model metadata |
 | channels + daphne | ASGI and WebSocket transport | GraphQL subscription mounting |
@@ -35,7 +35,7 @@ Dependency changes must update this file in the same change.
 | django-sqids | Opaque external IDs | `SqidMixin` and GraphQL boundary scalar |
 | django-simple-history | Shadow history tables and revert | `HistoryMixin` marker |
 | cryptography | Encryption primitives | `EncryptedTextField(secret=True)` |
-| PyYAML + csv | Resource file parsing | Tiered idempotent resource loader and ledger |
+| django-import-export + tablib | Resource import/export resources, tabular formats, row cleaning, and row results | Tiered manifests, xref ledger, and frozen-tier policy |
 | django-ninja | Typed REST routing and Pydantic I/O | Rare sidecar mounting for callbacks, webhooks, health checks, and presigned upload flows |
 | pydantic | REST payload schemas | Nothing; used inside sidecars |
 | python-magic | MIME detection | Storage wiring |

@@ -5,6 +5,8 @@ from __future__ import annotations
 SECRET_KEY = "angee-tests"
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "rebac",
     "angee.base.apps.BaseConfig",
 ]
 DATABASES = {
@@ -15,3 +17,4 @@ DATABASES = {
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
+ANGEE_RUNTIME_MODULE = "tests.runtime"

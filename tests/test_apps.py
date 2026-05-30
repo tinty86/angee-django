@@ -1,60 +1,65 @@
-"""Tests for addon AppConfig contracts."""
+"""Tests for base addon AppConfig contracts."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import ModuleType
-from typing import ClassVar
 
 import pytest
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 
-from angee.base.apps import BaseAddonConfig
-from angee.base.models import Resource
+import angee.base
+from angee.base.apps import BaseConfig
+from angee.base.resources.models import Resource
 
 
-class ResourceConfig(BaseAddonConfig):
-    """Tiny addon config used to exercise resource manifest parsing."""
+def test_base_addon_owns_resource_model() -> None:
+    """The Resource ledger is a base addon source model."""
 
-    name = "tests.resource_addon"
-    label = "resource_addon"
-    resources: ClassVar[dict[object, object]] = {
-        Resource.Tier.INSTALL: ("resources/install.yaml",),
-        "demo": "resources/demo.yaml",
-    }
+    assert Resource in apps.get_app_config("base").get_model_classes()
 
 
-def config_for(tmp_path: Path) -> ResourceConfig:
-    """Return a resource config with a concrete app root."""
+def _config_with_schemas(schemas: object) -> BaseConfig:
+    """Return a base config whose graphql module exports ``schemas``."""
 
-    module = ModuleType(ResourceConfig.name)
-    module.__file__ = str(tmp_path / "__init__.py")
-    return ResourceConfig(ResourceConfig.name, module)
-
-
-def test_resource_manifest_accepts_enum_keys_and_string_shorthand(
-    tmp_path: Path,
-) -> None:
-    """Resource tiers are enum-owned while AppConfigs stay easy to author."""
-
-    manifest = config_for(tmp_path).get_resource_manifest()
-
-    assert manifest[Resource.Tier.MASTER] == ()
-    assert manifest[Resource.Tier.INSTALL] == ("resources/install.yaml",)
-    assert manifest[Resource.Tier.DEMO] == ("resources/demo.yaml",)
+    config = BaseConfig("angee.base", angee.base)
+    module = ModuleType("fake.graphql")
+    module.schemas = schemas  # type: ignore[attr-defined]
+    config.__dict__["_graphql_module"] = module
+    return config
 
 
-def test_resource_manifest_rejects_unknown_tiers(tmp_path: Path) -> None:
-    """Unknown resource tiers fail at the manifest owner."""
+def test_get_schema_parts_normalizes_scalars_and_buckets() -> None:
+    """A scalar contribution becomes a one-tuple; absent buckets are empty."""
 
-    class BrokenConfig(ResourceConfig):
-        resources: ClassVar[dict[str, tuple[str, ...]]] = {
-            "fixture": ("resources/fixture.yaml",)
-        }
+    sentinel = object()
+    config = _config_with_schemas({"public": {"query": sentinel}})
+    parts = config.get_schema_parts()
 
-    module = ModuleType(BrokenConfig.name)
-    module.__file__ = str(tmp_path / "__init__.py")
-    config = BrokenConfig(BrokenConfig.name, module)
+    assert parts["public"]["query"] == (sentinel,)
+    assert parts["public"]["mutation"] == ()
 
-    with pytest.raises(ImproperlyConfigured, match="Unknown resource tier"):
-        config.get_resource_manifest()
+
+def test_get_schema_parts_rejects_unknown_keys() -> None:
+    """An unknown merge bucket fails fast."""
+
+    config = _config_with_schemas({"public": {"queries": []}})
+    with pytest.raises(ImproperlyConfigured, match="unknown keys: queries"):
+        config.get_schema_parts()
+
+
+def test_get_schema_parts_rejects_sets() -> None:
+    """Unordered sets are rejected so builds stay deterministic."""
+
+    config = _config_with_schemas({"public": {"query": {object()}}})
+    with pytest.raises(ImproperlyConfigured, match="not a set"):
+        config.get_schema_parts()
+
+
+def test_get_schema_parts_missing_module_is_empty() -> None:
+    """An addon without a graphql module contributes nothing."""
+
+    config = BaseConfig("angee.base", angee.base)
+    config.__dict__["_graphql_module"] = None
+
+    assert config.get_schema_parts() == {}

@@ -61,9 +61,9 @@ normalizes, or renames a Django object, delete it.
   `permissions.zed`; Angee wires schema sync and only adds build-time review
   output. Use the library's field-backed relations (`// rebac:field=...`) when a
   relationship is already represented by a Django FK or one-to-one field.
-- GraphQL authoring is native Strawberry. Addons expose plain Strawberry classes
-  from conventional `graphql.py` modules, and the composer only merges them into
-  named schemas.
+- GraphQL authoring is native Strawberry. Addons expose Strawberry `Schema`
+  objects from conventional `graphql.py` modules, and the composer only
+  discovers named schemas.
 - Use symbolic model references across addon boundaries; avoid import cycles.
 - Build output must be byte-deterministic.
 
