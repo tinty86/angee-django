@@ -88,16 +88,27 @@ smaller and clearer.
 
 ## Run From The Root
 
-Always run Angee commands from the project root or an Angee workspace root,
-where `angee.yaml`, `pyproject.toml`, and the workspace manifests are visible.
+`angee dev` is the only supported way to bring the local stack up — do not start
+Django, Vite, Daphne, workers, or watchers by hand. Run it from the repository
+root: the root stack is wired to the `examples/notes-angee` project, so `angee
+dev` there runs that example against the framework.
 
 ```sh
-angee init --dev
-angee dev
+angee dev            # from the repo root — runs the examples/notes-angee stack
 ```
 
-`angee dev` is the only supported local stack entrypoint. Do not start Django,
-Vite, Daphne, workers, or watchers by hand.
+For an isolated branch, create a workspace and run the stack inside it. `angee
+dev` walks up to the nearest `.angee`, so it works from the workspace root too.
+
+```sh
+angee ws create <name> --template dev --input base_ref=main   # branch from main
+cd .angee/workspaces/<name>
+angee dev
+angee ws status      # optional; defaults to the enclosing workspace
+```
+
+A workspace is pinned to `workspace/<name>` — never `git checkout`/`switch`
+inside it; make a new workspace for a different branch.
 
 ## Development Process
 
