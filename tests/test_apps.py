@@ -135,6 +135,22 @@ def test_get_schema_parts_missing_module_is_empty() -> None:
     assert config.schema_parts == {}
 
 
+def test_dependencies_treats_bare_string_as_one_addon() -> None:
+    """A bare-string ``depends_on`` names one dependency, not its chars."""
+
+    class StringDependsConfig(BaseAddonConfig):
+        name = "tests.string_depends"
+        label = "string_depends"
+        depends_on = "base"
+
+    config = StringDependsConfig(
+        "tests.string_depends",
+        _module("tests.string_depends"),
+    )
+
+    assert config.dependencies == ("base",)
+
+
 def test_discover_addons_orders_dependencies() -> None:
     """Discovery returns addon configs after their dependencies."""
 

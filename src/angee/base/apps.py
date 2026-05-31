@@ -42,8 +42,11 @@ class BaseAddonConfig(AppConfig):
     default = False
     default_auto_field = "django.db.models.BigAutoField"
 
-    depends_on: ClassVar[tuple[str, ...]] = ()
-    """Addon labels or app names that must compose before this addon."""
+    depends_on: ClassVar[str | tuple[str, ...]] = ()
+    """Addon labels or app names that must compose before this addon.
+
+    A bare string names a single dependency (it is not split into characters).
+    """
 
     rebac_schema: ClassVar[str | None] = "permissions.zed"
     """Optional REBAC schema path relative to the addon package root."""
@@ -136,7 +139,7 @@ class BaseAddonConfig(AppConfig):
     def dependencies(self) -> tuple[str, ...]:
         """Return dependency aliases used to order addon composition."""
 
-        return tuple(str(dependency) for dependency in self.depends_on)
+        return _normalize_depends_on(self.depends_on)
 
     @cached_property
     def source_models_module(self) -> ModuleType | None:
@@ -366,12 +369,12 @@ def _module_exists(dotted_path: str) -> bool:
 
 
 def _normalize_depends_on(value: object) -> tuple[str, ...]:
-    """Return resource dependency keys, treating a string as one key."""
+    """Return dependency keys, treating a bare string as a single key."""
 
     if isinstance(value, str):
         return (value,)
     if not isinstance(value, Iterable):
         raise ImproperlyConfigured(
-            "resource depends_on must be a string or iterable"
+            "depends_on must be a string or iterable of strings"
         )
     return tuple(str(item) for item in value)
