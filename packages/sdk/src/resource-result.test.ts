@@ -43,4 +43,18 @@ describe("extractConnection", () => {
       pageInfo: undefined,
     });
   });
+
+  test("normalizes a malformed pageInfo to the declared shape", () => {
+    const data = {
+      sales: {
+        totalCount: 0,
+        edges: [],
+        pageInfo: { endCursor: 123, hasNextPage: "yes" },
+      },
+    };
+    expect(extractConnection(data).pageInfo).toEqual({
+      endCursor: null,
+      hasNextPage: false,
+    });
+  });
 });

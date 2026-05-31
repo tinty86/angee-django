@@ -83,6 +83,12 @@ describe("model naming", () => {
     expect(pluralFieldName("Class")).toBe("classes");
     expect(pluralFieldName("Day")).toBe("days");
   });
+
+  test("pluralFieldName doubles a trailing z only after a vowel", () => {
+    expect(pluralFieldName("Quiz")).toBe("quizzes");
+    expect(pluralFieldName("Buzz")).toBe("buzzes");
+    expect(pluralFieldName("Waltz")).toBe("waltzes");
+  });
 });
 
 describe("pagination", () => {

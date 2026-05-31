@@ -98,11 +98,20 @@ export function pluralFieldName(modelLabel: string): string {
   return pluralize(singularFieldName(modelLabel));
 }
 
+// Regular English pluralization, matching the schema's default field naming.
+// Irregular plurals (person -> people) are not derivable from a heuristic and
+// belong to the backend; a model whose plural is irregular needs its field name
+// emitted by the contract rather than guessed here.
 function pluralize(value: string): string {
   const last = value.at(-1);
   const prev = value.at(-2);
   if (last === "y" && prev !== undefined && !"aeiou".includes(prev)) {
     return `${value.slice(0, -1)}ies`;
+  }
+  // A single trailing `z` after a vowel doubles (quiz -> quizzes); `zz`
+  // (buzz) and a `z` after a consonant (waltz) just take `es`.
+  if (last === "z" && prev !== undefined && "aeiou".includes(prev)) {
+    return `${value}zes`;
   }
   if (last === "s" || last === "x" || last === "z") return `${value}es`;
   return `${value}s`;

@@ -4,6 +4,11 @@ import { useMutation as useUrqlMutation } from "urql";
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
 import { useDocumentQuery } from "./document-query";
 import {
+  useInvalidateModels,
+  useRegisterModelRefetch,
+} from "./relay-invalidation";
+import { useStableArray } from "./stable-deps";
+import {
   extractConnection,
   extractNode,
   type PageInfo,
@@ -23,6 +28,7 @@ import type {
 } from "./__generated__/resource-types";
 
 export type { PageInfo } from "./resource-result";
+export type { MutationAction } from "./selection";
 
 /** A filter/order accepted as the model's generated input or any record. */
 type Filter<TName extends ResourceTypeName> = ResourceFilter<TName> | Record<string, unknown>;
@@ -67,14 +73,13 @@ export function useResourceList<TName extends ResourceTypeName = ResourceTypeNam
     enabled = true,
   } = options;
   const active = enabled && Boolean(modelLabel);
-  const fieldsKey = fields.join(" ");
+  const stableFields = useStableArray(fields);
   const withFilter = filter !== undefined;
   const withOrder = order !== undefined;
 
   const document = useMemo(
-    () => assembleListDocument(modelLabel, fields, { withFilter, withOrder }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modelLabel, fieldsKey, withFilter, withOrder],
+    () => assembleListDocument(modelLabel, stableFields, { withFilter, withOrder }),
+    [modelLabel, stableFields, withFilter, withOrder],
   );
 
   const variables = useMemo(() => {
@@ -86,6 +91,9 @@ export function useResourceList<TName extends ResourceTypeName = ResourceTypeNam
   }, [page, pageSize, search, withFilter, withOrder, filter, order]);
 
   const run = useDocumentQuery(document, variables, active);
+  // Register so the change firehose (and post-write invalidation) refresh this
+  // list — the writes the normalized cache can't see on its own.
+  useRegisterModelRefetch(modelLabel, run.refetch, active);
   const { rows, total, pageInfo } = extractConnection(run.data);
   return { rows, total, pageInfo, fetching: run.fetching, error: run.error, refetch: run.refetch };
 }
@@ -105,16 +113,16 @@ export function useResourceRecord(
 ): UseResourceRecordResult {
   const { fields, enabled = true } = options;
   const active = enabled && Boolean(modelLabel) && Boolean(id);
-  const fieldsKey = fields.join(" ");
+  const stableFields = useStableArray(fields);
 
   const document = useMemo(
-    () => assembleDetailDocument(modelLabel, fields),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modelLabel, fieldsKey],
+    () => assembleDetailDocument(modelLabel, stableFields),
+    [modelLabel, stableFields],
   );
   const variables = useMemo(() => ({ id: id ?? "" }), [id]);
 
   const run = useDocumentQuery(document, variables, active);
+  useRegisterModelRefetch(modelLabel, run.refetch, active);
   return {
     record: extractNode(run.data),
     fetching: run.fetching,
@@ -150,13 +158,19 @@ export function useResourceMutation(
   );
 
   const [state, execute] = useUrqlMutation(document);
+  const invalidateModels = useInvalidateModels();
   const mutate = useCallback<ResourceMutate>(
     async (variables) => {
       const result = await execute(variables);
       if (result.error) throw result.error;
+      // create/delete change list membership the normalized cache can't infer;
+      // update returns the same entity, so graphcache refreshes it in place.
+      if (action === "create" || action === "delete") {
+        invalidateModels([modelLabel]);
+      }
       return extractNode(result.data);
     },
-    [execute],
+    [execute, invalidateModels, action, modelLabel],
   );
 
   return [mutate, { fetching: state.fetching, error: state.error ?? null }];

@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import strawberry
 from channels.layers import InMemoryChannelLayer
 from django.contrib.auth.models import Group
-from rebac import anonymous_actor
+from rebac import anonymous_actor, current_actor
+from strawberry.channels import GraphQLWSConsumer
 
 from angee.base import signals
-from angee.base.consumers import scope_actor
+from angee.base.consumers import AngeeGraphQLWSConsumer, scope_actor
 from angee.base.graphql import subscriptions
 from angee.base.graphql.events import ChangeEvent
 from angee.base.graphql.subscriptions import changes
@@ -139,6 +141,106 @@ def test_subscribe_yields_broadcast_payloads(monkeypatch) -> None:
 
     payload = asyncio.run(scenario())
     assert payload["id"] == "7"
+
+
+def test_subscription_resolver_gates_events_through_sync_adapter(
+    monkeypatch,
+) -> None:
+    """Subscription gating runs through the sync adapter."""
+
+    calls: list[bool] = []
+
+    async def subscribe(model: type[Group]):
+        """Yield one payload without touching the channel layer."""
+
+        assert model is Group
+        yield _payload(id="9")
+
+    def gate_event(
+        model: type[Group],
+        actor: object,
+        payload: dict[str, object],
+    ) -> ChangeEvent:
+        """Return a visible event."""
+
+        assert model is Group
+        assert actor == ANON
+        return ChangeEvent.from_payload(payload)
+
+    def sync_adapter(func, *, thread_sensitive: bool):
+        """Record that the resolver offloads the sync gate."""
+
+        assert func is gate_event
+        calls.append(thread_sensitive)
+
+        async def wrapper(*args: object) -> object:
+            return func(*args)
+
+        return wrapper
+
+    monkeypatch.setattr(subscriptions, "_subscribe", subscribe)
+    monkeypatch.setattr(subscriptions, "_gate_event", gate_event)
+    monkeypatch.setattr(subscriptions, "sync_to_async", sync_adapter, raising=False)
+    surface = changes(Group, field="groupChanged")
+    field = surface.__strawberry_definition__.fields[0]
+    resolver = field.base_resolver.wrapped_func
+
+    async def scenario() -> list[ChangeEvent]:
+        events: list[ChangeEvent] = []
+        async for event in resolver(object(), SimpleNamespace(context={"actor": ANON})):
+            events.append(event)
+        return events
+
+    events = asyncio.run(scenario())
+
+    assert calls == [True]
+    assert [event.id for event in events] == [strawberry.ID("9")]
+
+
+def test_ws_consumer_executes_operations_inside_actor_context(monkeypatch) -> None:
+    """WebSocket GraphQL operations install the connection actor."""
+
+    seen: list[object] = []
+
+    async def execute(
+        self: GraphQLWSConsumer,
+        request: object,
+        context: dict[str, object],
+        root_value: object,
+        sub_response: object,
+    ) -> str:
+        """Record the ambient actor while the operation executes."""
+
+        del self, request, context, root_value, sub_response
+        seen.append(current_actor())
+        return "ok"
+
+    monkeypatch.setattr(GraphQLWSConsumer, "execute_operation", execute)
+    @strawberry.type
+    class Query:
+        """Minimal query root for the consumer."""
+
+        @strawberry.field
+        def ok(self) -> bool:
+            """Return true."""
+
+            return True
+
+    consumer = AngeeGraphQLWSConsumer(strawberry.Schema(query=Query))
+    consumer.scope = {}
+
+    result = asyncio.run(
+        consumer.execute_operation(
+            object(),
+            {"actor": ANON},
+            None,
+            object(),
+        )
+    )
+
+    assert result == "ok"
+    assert seen == [ANON]
+    assert current_actor() is None
 
 
 def test_scope_actor_defaults_to_anonymous() -> None:

@@ -6,6 +6,7 @@ import {
   type AggregateBucket,
 } from "./aggregate-extract";
 import { useDocumentQuery } from "./document-query";
+import { useStableArray } from "./stable-deps";
 import {
   aggregateFieldName,
   assembleAggregateDocument,
@@ -34,12 +35,11 @@ export function useAggregateQuery(
 ): { aggregate: AggregateBucket | null; fetching: boolean; error: Error | null } {
   const { measureFields = [], search, enabled = true } = options;
   const active = enabled && Boolean(modelLabel);
-  const measuresKey = measureFields.join(" ");
+  const stableMeasures = useStableArray(measureFields);
 
   const document = useMemo(
-    () => assembleAggregateDocument(modelLabel, measureFields),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modelLabel, measuresKey],
+    () => assembleAggregateDocument(modelLabel, stableMeasures),
+    [modelLabel, stableMeasures],
   );
   const variables = useMemo(() => ({ search: search ?? null }), [search]);
 
@@ -73,13 +73,12 @@ export function useResourceGroupBy(
 } {
   const { groupBy, keyFields, measureFields = [], search, enabled = true } = options;
   const active = enabled && Boolean(modelLabel) && groupBy.length > 0;
-  const keyFieldsKey = keyFields.join(" ");
-  const measuresKey = measureFields.join(" ");
+  const stableKeyFields = useStableArray(keyFields);
+  const stableMeasures = useStableArray(measureFields);
 
   const document = useMemo(
-    () => assembleGroupByDocument(modelLabel, keyFields, measureFields),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modelLabel, keyFieldsKey, measuresKey],
+    () => assembleGroupByDocument(modelLabel, stableKeyFields, stableMeasures),
+    [modelLabel, stableKeyFields, stableMeasures],
   );
   const variables = useMemo(
     () => ({ groupBy, search: search ?? null }),

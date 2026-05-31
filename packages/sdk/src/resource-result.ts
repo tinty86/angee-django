@@ -44,8 +44,15 @@ export function extractConnection(data: unknown): ConnectionResult {
       .map((edge) => (isRecord(edge) ? edge.node : undefined))
       .filter(isRecord),
     total: typeof connection.totalCount === "number" ? connection.totalCount : undefined,
-    pageInfo: isRecord(connection.pageInfo)
-      ? (connection.pageInfo as unknown as PageInfo)
-      : undefined,
+    pageInfo: toPageInfo(connection.pageInfo),
+  };
+}
+
+/** Narrow a response `pageInfo` to the declared shape, field by field. */
+function toPageInfo(value: unknown): PageInfo | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    endCursor: typeof value.endCursor === "string" ? value.endCursor : null,
+    hasNextPage: value.hasNextPage === true,
   };
 }

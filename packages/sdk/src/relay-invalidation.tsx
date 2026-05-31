@@ -1,4 +1,11 @@
-import { createElement, useEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  createElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useAuthoredSubscription } from "./authored-hooks";
 import { makeContext } from "./make-context";
@@ -44,9 +51,7 @@ export function RelayInvalidationProvider(props: {
   autoSubscribe?: boolean;
   children: ReactNode;
 }): ReactNode {
-  const registryRef = useRef<RefetchRegistry>(undefined as unknown as RefetchRegistry);
-  registryRef.current ??= createRefetchRegistry();
-  const registry = registryRef.current;
+  const [registry] = useState(createRefetchRegistry);
   const autoSubscribe = props.autoSubscribe ?? true;
   return RegistryContext.Provider({
     value: registry,
