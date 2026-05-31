@@ -23,8 +23,9 @@ built on top of the framework and base addons.
 
 **Composer** — the build-time tool that turns addon contracts into a runnable
 project: it reads each addon's source models and declarations and emits the
-concrete Django apps, schema, and other `runtime/` artifacts. Composition happens
-at build time — nothing is monkey-patched or registered at runtime.
+concrete Django apps, permission schema, and other `runtime/` artifacts.
+Composition happens at build time — nothing is monkey-patched or registered at
+runtime.
 
 **Host app (host)** — the application at the root of a project that composes the
 chosen addons into the running product. A project contains one host; the host
@@ -49,8 +50,8 @@ the emitted output.
 **Concrete app** — a runtime Django app emitted by the composer from source models.
 Generated output — change the source, not the artifact.
 
-**`runtime/`** — the directory of generated backend output (concrete apps, schemas,
-codegen stubs, migrations). Output, not source.
+**`runtime/`** — the directory of generated backend output (concrete apps,
+GraphQL SDL, codegen stubs, migrations). Output, not source.
 
 **Model extension** — an abstract source model with `extends = "app.Model"`.
 The composer emits it as an additional base for the target model.
@@ -61,7 +62,7 @@ the owning library explicitly supports them, such as `rebac_resource_type`.
 **REBAC** — Relationship-Based Access Control (via `django-zed-rebac`).
 Authorization is structural: reads scope through the model manager, writes check
 the instance. Addons use the library's `rebac_schema` / `permissions.zed`
-contract; Angee wires sync into the build.
+contract; Angee renders the combined schema and `django-zed-rebac` owns sync.
 
 **Resource** — tabular data owned by an addon and imported idempotently by tier
 (`master`, `install`, `demo`). Addons list resource files in their
@@ -70,9 +71,9 @@ contract; Angee wires sync into the build.
 **Symbolic model reference** — referring to a model by symbol/string across addon
 boundaries instead of importing it, to avoid import cycles.
 
-**GraphQL contribution** — native Strawberry `Schema` objects exported from an
-addon's conventional `graphql.py`. The composer discovers named schemas; it does
-not introduce a parallel schema language.
+**GraphQL contribution** — native Strawberry types exported through the
+`schemas` mapping in an addon's conventional `graphql.py`. Each named schema
+contributes to fixed buckets, and Angee builds one Strawberry `Schema` per name.
 
 ## Frontend
 
