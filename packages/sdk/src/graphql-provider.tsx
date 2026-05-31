@@ -37,8 +37,10 @@ export function GraphQLProvider(props: {
 }
 
 const ResetContext = makeContext<() => void>("GraphQLClientReset");
+const ClientsContext = makeContext<Record<string, Client>>("GraphQLClients");
 
 const NO_RESET = (): void => {};
+const NO_CLIENTS: Record<string, Client> = {};
 
 /**
  * Own the client lifecycle for a subtree and expose a reset. Reset rebuilds
@@ -62,10 +64,13 @@ export function GraphQLClientProvider(props: {
   const reset = useCallback(() => setGeneration((current) => current + 1), []);
   return ResetContext.Provider({
     value: reset,
-    children: createElement(GraphQLProvider, {
-      clients,
-      schema: props.schema,
-      children: props.children,
+    children: ClientsContext.Provider({
+      value: clients,
+      children: createElement(GraphQLProvider, {
+        clients,
+        schema: props.schema,
+        children: props.children,
+      }),
     }),
   });
 }
@@ -73,4 +78,14 @@ export function GraphQLClientProvider(props: {
 /** The client reset for the surrounding pool, or a no-op when unprovided. */
 export function useResetClient(): () => void {
   return ResetContext.useMaybe() ?? NO_RESET;
+}
+
+/**
+ * The full per-schema client pool the surrounding `GraphQLClientProvider` owns,
+ * rebuilt on reset. Lets a subtree reach a non-active schema's client — e.g. the
+ * console client that carries the change subscriptions — while the app's reads
+ * run on the active (public) schema. Empty when unprovided.
+ */
+export function useSchemaClients(): Record<string, Client> {
+  return ClientsContext.useMaybe() ?? NO_CLIENTS;
 }

@@ -8,6 +8,23 @@ export { cn, tv, ANGEE_TW_MERGE_CONFIG, type VariantProps } from "./lib";
 // i18n — the base namespace translator.
 export { useBaseT, enBaseMessages } from "./i18n";
 
+// App composition root.
+export {
+  createApp,
+  type AngeeApp,
+  type BaseAddon,
+  type BaseAddonRoute,
+  type CreateAppInput,
+  type ShellConfig,
+} from "./createApp";
+
+// Data-bound views.
+export * from "./views";
+
+// App shell (chrome) and auth surface.
+export * from "./shell";
+export * from "./auth";
+
 // UI primitives — embeddable, SDK-agnostic atoms on base-ui.
 export * from "./ui/button";
 export * from "./ui/spinner";

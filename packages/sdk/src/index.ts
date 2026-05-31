@@ -41,6 +41,7 @@ export {
   GraphQLProvider,
   GraphQLClientProvider,
   useResetClient,
+  useSchemaClients,
 } from "./graphql-provider";
 
 // Resource data access.
