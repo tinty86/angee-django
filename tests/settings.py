@@ -10,6 +10,7 @@ INSTALLED_APPS = [
     "reversion",
     "simple_history",
     "angee.base.apps.BaseConfig",
+    "angee.iam.apps.IAMConfig",
 ]
 DATABASES = {
     "default": {

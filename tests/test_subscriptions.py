@@ -3,25 +3,32 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from types import SimpleNamespace
+from typing import cast
 
 import strawberry
 from channels.layers import InMemoryChannelLayer
 from channels.testing import WebsocketCommunicator
-from django.contrib.auth.models import Group
-from rebac import anonymous_actor, current_actor
+from django.contrib.auth.models import AnonymousUser, Group
+from rebac import actor_context, anonymous_actor, current_actor
+from rebac.graphql.strawberry import RebacChannelsConsumerMixin
 
 from angee.base import signals
-from angee.base.consumers import AngeeGraphQLWSConsumer, scope_actor
+from angee.base.consumers import AngeeGraphQLWSConsumer
 from angee.base.graphql import subscriptions
 from angee.base.graphql.events import ChangeEvent
 from angee.base.graphql.subscriptions import changes
 
 ANON = anonymous_actor()
+SubscriptionResolver = Callable[
+    [object, object],
+    AsyncGenerator[ChangeEvent, None],
+]
 
 
 def _payload(**overrides: object) -> dict[str, object]:
-    payload = {
+    payload: dict[str, object] = {
         "model": "auth.Group",
         "id": "1",
         "action": "update",
@@ -30,6 +37,14 @@ def _payload(**overrides: object) -> dict[str, object]:
     }
     payload.update(overrides)
     return payload
+
+
+def _subscription_resolver(surface: type) -> SubscriptionResolver:
+    """Return the generated subscription resolver from ``surface``."""
+
+    definition = getattr(surface, "__strawberry_definition__")
+    field = definition.fields[0]
+    return cast(SubscriptionResolver, field.base_resolver.wrapped_func)
 
 
 def test_changes_builds_a_named_subscription_field() -> None:
@@ -167,14 +182,25 @@ def test_subscription_resolver_gates_events_through_sync_adapter(
         assert actor == ANON
         return ChangeEvent.from_payload(payload)
 
-    def sync_adapter(func, *, thread_sensitive: bool):
+    def sync_adapter(
+        func: Callable[[type[Group], object, dict[str, object]], ChangeEvent],
+        *,
+        thread_sensitive: bool,
+    ) -> Callable[
+        [type[Group], object, dict[str, object]],
+        Awaitable[object],
+    ]:
         """Record that the resolver offloads the sync gate."""
 
         assert func is gate_event
         calls.append(thread_sensitive)
 
-        async def wrapper(*args: object) -> object:
-            return func(*args)
+        async def wrapper(
+            model: type[Group],
+            actor: object,
+            payload: dict[str, object],
+        ) -> object:
+            return func(model, actor, payload)
 
         return wrapper
 
@@ -187,20 +213,108 @@ def test_subscription_resolver_gates_events_through_sync_adapter(
         raising=False,
     )
     surface = changes(Group, field="groupChanged")
-    field = surface.__strawberry_definition__.fields[0]
-    resolver = field.base_resolver.wrapped_func
+    resolver = _subscription_resolver(surface)
 
     async def scenario() -> list[ChangeEvent]:
         events: list[ChangeEvent] = []
         info = SimpleNamespace(context={"actor": ANON})
-        async for event in resolver(object(), info):
-            events.append(event)
+        with actor_context(ANON):
+            async for event in resolver(object(), info):
+                events.append(event)
         return events
 
     events = asyncio.run(scenario())
 
     assert calls == [True]
     assert [event.id for event in events] == [strawberry.ID("9")]
+
+
+def test_subscription_resolver_uses_current_actor(monkeypatch) -> None:
+    """Subscription gating reads the ambient REBAC actor."""
+
+    seen: list[object] = []
+
+    async def subscribe(model: type[Group]):
+        """Yield one payload without touching the channel layer."""
+
+        assert model is Group
+        yield _payload(id="10")
+
+    def gate_event(
+        model: type[Group],
+        actor: object,
+        payload: dict[str, object],
+    ) -> ChangeEvent:
+        """Record the actor used by the subscription gate."""
+
+        assert model is Group
+        seen.append((actor, current_actor()))
+        return ChangeEvent.from_payload(payload)
+
+    monkeypatch.setattr(subscriptions, "_subscribe", subscribe)
+    monkeypatch.setattr(subscriptions, "_gate_event", gate_event)
+    surface = changes(Group, field="groupChanged")
+    resolver = _subscription_resolver(surface)
+
+    async def scenario() -> list[ChangeEvent]:
+        events: list[ChangeEvent] = []
+        info = SimpleNamespace(context={})
+        with actor_context(ANON):
+            async for event in resolver(object(), info):
+                events.append(event)
+        return events
+
+    events = asyncio.run(scenario())
+
+    assert seen == [(ANON, ANON)]
+    assert [event.id for event in events] == [strawberry.ID("10")]
+
+
+def test_subscription_resolver_denies_without_current_actor(
+    monkeypatch,
+) -> None:
+    """A subscription with no ambient actor yields no change events."""
+
+    calls: list[object] = []
+
+    async def subscribe(model: type[Group]):
+        """Yield one payload without touching the channel layer."""
+
+        assert model is Group
+        yield _payload(id="11")
+
+    def gate_event(
+        model: type[Group],
+        actor: object,
+        payload: dict[str, object],
+    ) -> ChangeEvent:
+        """Fail if no-actor subscriptions reach row gating."""
+
+        calls.append((model, actor, payload))
+        return ChangeEvent.from_payload(payload)
+
+    monkeypatch.setattr(subscriptions, "_subscribe", subscribe)
+    monkeypatch.setattr(subscriptions, "_gate_event", gate_event)
+    surface = changes(Group, field="groupChanged")
+    resolver = _subscription_resolver(surface)
+
+    async def scenario() -> list[ChangeEvent]:
+        events: list[ChangeEvent] = []
+        info = SimpleNamespace(context={})
+        async for event in resolver(object(), info):
+            events.append(event)
+        return events
+
+    events = asyncio.run(scenario())
+
+    assert events == []
+    assert calls == []
+
+
+def test_ws_consumer_uses_rebac_channels_mixin() -> None:
+    """The GraphQL WS consumer delegates actor setup to REBAC."""
+
+    assert issubclass(AngeeGraphQLWSConsumer, RebacChannelsConsumerMixin)
 
 
 def test_ws_query_runs_inside_actor_context() -> None:
@@ -225,6 +339,7 @@ def test_ws_query_runs_inside_actor_context() -> None:
             "/graphql",
             subprotocols=["graphql-transport-ws"],
         )
+        communicator.scope["user"] = AnonymousUser()
         connected, _subprotocol = await communicator.connect()
         assert connected
         await communicator.send_json_to({"type": "connection_init"})
@@ -254,9 +369,3 @@ def test_ws_query_runs_inside_actor_context() -> None:
         "payload": {"data": {"actorActive": True}},
     }
     assert current_actor() is None
-
-
-def test_scope_actor_defaults_to_anonymous() -> None:
-    """A scope without an authenticated user resolves to anonymous."""
-
-    assert scope_actor({}) == anonymous_actor()

@@ -183,6 +183,9 @@ class AngeeRuntime:
             db_table = self._db_table_source(model_class)
             if db_table is not None:
                 meta_lines.append(f"        db_table = {db_table}")
+            swappable = self._swappable_source(model_class)
+            if swappable is not None:
+                meta_lines.append(f"        swappable = {swappable}")
             meta_lines.extend(self._rebac_meta_source(model_class))
             body_lines = self._history_source(label, model_class)
             lines.extend(
@@ -413,6 +416,17 @@ class AngeeRuntime:
         original = getattr(model_class._meta, "original_attrs", {})
         if "db_table" in original:
             return repr(str(original["db_table"]))
+        return None
+
+    def _swappable_source(
+        self,
+        model_class: type[models.Model],
+    ) -> str | None:
+        """Return an explicit source ``swappable`` setting."""
+
+        swappable = getattr(model_class._meta, "swappable", None)
+        if swappable:
+            return repr(str(swappable))
         return None
 
     def _history_excluded_fields(

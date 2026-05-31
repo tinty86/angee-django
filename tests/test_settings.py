@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from angee.base.settings import compose_defaults
 
 
-def _compose(tmp_path: Path) -> dict[str, object]:
+def _compose(tmp_path: Path) -> dict[str, Any]:
     """Return composed settings for the notes example addon."""
 
     return compose_defaults(
@@ -49,6 +50,17 @@ def test_base_is_installed_exactly_once(tmp_path: Path) -> None:
     assert installed.count(base_app) == 1
 
 
+def test_iam_user_is_the_default_auth_model(tmp_path: Path) -> None:
+    """Composed hosts use Angee's swappable IAM user."""
+
+    settings = _compose(tmp_path)
+    installed = settings["INSTALLED_APPS"]
+
+    assert settings["AUTH_USER_MODEL"] == "iam.User"
+    assert "angee.iam.apps.IAMConfig" in installed
+    assert settings["MIGRATION_MODULES"]["iam"] == "runtime.iam.migrations"
+
+
 def test_run_app_set_installs_resources_without_compose(
     tmp_path: Path,
 ) -> None:
@@ -88,5 +100,9 @@ def test_build_app_set_installs_compose_without_runtime_apps(
 
     assert "angee.compose.apps.ComposeConfig" in installed
     assert "angee.base.apps.BaseConfig" in installed
+    assert "angee.iam.apps.IAMConfig" in installed
     assert "angee.resources.apps.ResourcesConfig" not in installed
     assert settings["ANGEE_BUILD"] is True
+    # The emit-only build keeps Django's default user; the swappable
+    # ``iam.User`` is resolved only in the run app set.
+    assert "AUTH_USER_MODEL" not in settings

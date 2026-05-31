@@ -9,7 +9,7 @@ import strawberry
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from django.db import models
-from rebac import SubjectRef, actor_context, anonymous_actor
+from rebac import SubjectRef, current_actor
 
 from angee.base.access import ChangeReadGate
 from angee.base.graphql.events import ChangeEvent
@@ -29,15 +29,17 @@ def changes(model: type[models.Model], *, field: str) -> type:
         """Yield read-gated change events for one subscriber."""
 
         del self
-        actor = _actor_from_info(info)
-        with actor_context(actor):
-            async for payload in _subscribe(model):
-                event = await sync_to_async(
-                    _gate_event,
-                    thread_sensitive=True,
-                )(model, actor, payload)
-                if event is not None:
-                    yield event
+        del info
+        actor = current_actor()
+        if actor is None:
+            return
+        async for payload in _subscribe(model):
+            event = await sync_to_async(
+                _gate_event,
+                thread_sensitive=True,
+            )(model, actor, payload)
+            if event is not None:
+                yield event
 
     resolve.__name__ = field
     namespace = {field: strawberry.subscription(resolver=resolve, name=field)}
@@ -80,15 +82,3 @@ def _gate_event(
     if isinstance(filtered, ChangeEvent):
         return filtered
     return ChangeEvent.from_payload(filtered)
-
-
-def _actor_from_info(info: strawberry.Info) -> SubjectRef:
-    """Return the connection actor attached to GraphQL context."""
-
-    context = info.context
-    actor = (
-        context.get("actor")
-        if isinstance(context, Mapping)
-        else getattr(context, "actor", None)
-    )
-    return actor or anonymous_actor()

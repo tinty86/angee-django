@@ -34,6 +34,24 @@ def test_runtime_renders_base_resource_sources(tmp_path: Path) -> None:
     assert Path("permissions.zed") not in sources
 
 
+def test_runtime_renders_iam_user_sources(tmp_path: Path) -> None:
+    """The IAM addon emits a concrete swappable user model."""
+
+    iam_config = apps.get_app_config("iam")
+    runtime = AngeeRuntime.from_addons(
+        (apps.get_app_config("base"), iam_config),
+        runtime_dir=tmp_path / "runtime",
+    )
+
+    sources = runtime.render_sources()
+    user_source = sources[Path("iam/models.py")]
+
+    assert "class User" in user_source
+    assert 'app_label = "iam"' in user_source
+    assert 'rebac_resource_type = \'auth/user\'' in user_source
+    assert "swappable = 'AUTH_USER_MODEL'" in user_source
+
+
 def test_runtime_emit_and_check_detect_drift(tmp_path: Path) -> None:
     """Emit writes deterministic files and check reports later drift."""
 

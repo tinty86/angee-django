@@ -20,6 +20,9 @@ RESOURCES_APP = "angee.resources.apps.ResourcesConfig"
 COMPOSE_APP = "angee.compose.apps.ComposeConfig"
 """Installed app path for the build-time compose command host."""
 
+IAM_ADDON = "angee.iam"
+"""Built-in IAM addon package installed for every composed host."""
+
 
 def compose_defaults(
     *,
@@ -41,7 +44,7 @@ def compose_defaults(
 ) -> dict[str, Any]:
     """Return Django settings for either build or runtime app sets."""
 
-    addon_configs = _addon_config_classes(addons)
+    addon_configs = _addon_config_classes(_with_builtin_addons(addons))
     installed_apps = (
         _build_installed_apps(addon_configs, extra_installed_apps)
         if build
@@ -62,6 +65,10 @@ def compose_defaults(
             "rebac.backends.auth.RebacBackend",
             "django.contrib.auth.backends.ModelBackend",
         ],
+        # The emit-only build keeps Django's default contrib.auth user: it
+        # only renders runtime sources and never resolves the FK. The run set
+        # swaps in the composed concrete ``iam.User`` emitted under runtime/.
+        **({} if build else {"AUTH_USER_MODEL": "iam.User"}),
         "CHANNEL_LAYERS": channel_layers
         or {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
         "ROOT_URLCONF": root_urlconf,
@@ -146,6 +153,15 @@ def _addon_config_classes(
             continue
         classes.append(config_class)
     return tuple(classes)
+
+
+def _with_builtin_addons(addons: Sequence[str]) -> tuple[str, ...]:
+    """Return user addons with framework-owned addons appended once."""
+
+    normalized = tuple(addons)
+    if IAM_ADDON in normalized or "iam" in normalized:
+        return normalized
+    return (*normalized, IAM_ADDON)
 
 
 def _migration_modules(

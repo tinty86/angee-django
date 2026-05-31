@@ -1,0 +1,20 @@
+// Authorization schema for the IAM addon.
+// @rebac_package: iam
+// @rebac_package_version: 0.1.0
+// @rebac_schema_revision: 1
+
+definition auth/user {
+    relation admin: angee/role#admin
+
+    permission read = admin
+    permission write = admin
+    permission delete = admin
+}
+
+definition auth/group {
+    relation member: auth/user
+}
+
+definition angee/role {
+    relation admin: auth/user | auth/group#member
+}
