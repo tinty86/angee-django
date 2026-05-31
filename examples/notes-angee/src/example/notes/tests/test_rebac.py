@@ -8,7 +8,7 @@ and field permissions redact owner-only fields from other readers.
 from __future__ import annotations
 
 from django.apps import apps
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from rebac import (
@@ -68,6 +68,15 @@ class NotesAuthorizationTests(TransactionTestCase):
         with system_context(reason="test"):
             self.assertEqual(Note.objects.count(), notes_before)
             self.assertEqual(User.objects.count(), users_before)
+
+    def test_demo_users_authenticate(self) -> None:
+        alice = authenticate(username="alice", password="alice")
+        bob = authenticate(username="bob", password="bob")
+
+        self.assertIsNotNone(alice)
+        self.assertIsNotNone(bob)
+        self.assertTrue(alice.is_staff)
+        self.assertFalse(bob.is_staff)
 
     def test_reader_grant_redacts_owner_only_fields(self) -> None:
         write_relationships(

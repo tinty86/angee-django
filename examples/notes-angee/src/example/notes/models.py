@@ -52,7 +52,7 @@ class Note(SqidMixin, AngeeModel, HistoryMixin, RevisionMixin):
         """Django model options."""
 
         abstract = True
-        ordering = ("-updated_at", "title")
+        ordering = ("-updated_at", "title", "sqid")
         rebac_resource_type = "notes/note"
         rebac_id_attr = "sqid"
 

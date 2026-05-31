@@ -1,19 +1,52 @@
-"""Manual Strawberry schema contributions for notes."""
+"""Strawberry-Django schema contributions for notes."""
 
 from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Any, cast
 
 import strawberry
 import strawberry_django
 from django.apps import apps
-from strawberry import auto
+from django.db.models import QuerySet
+from rebac import MissingActorError, current_actor
+from strawberry import auto, relay
+from strawberry_django_aggregates.compiler import (
+    aggregate_alias,
+    compute_aggregation,
+    group_by_alias,
+)
+from strawberry_django_aggregates.granularity import (
+    Granularity,
+    TimeGranularity,
+)
+from strawberry_django_aggregates.operators import AggregateOp
 
-from angee.base.graphql import changes, crud
+from angee.base.graphql import AngeeNode, Connection, changes, crud
 
 Note = apps.get_model("notes", "Note")
+_COUNT_ALIAS = aggregate_alias(AggregateOp.COUNT, None)
+
+
+@strawberry.enum
+class NoteGroupBy(Enum):
+    """Allowed note aggregate groupings."""
+
+    STATUS = "status"
+    IS_STARRED = "is_starred"
+    UPDATED_AT_MONTH = "updated_at_month"
+
+
+_GROUP_BY_SPECS: dict[NoteGroupBy, tuple[str, Granularity | None]] = {
+    NoteGroupBy.STATUS: ("status", None),
+    NoteGroupBy.IS_STARRED: ("is_starred", None),
+    NoteGroupBy.UPDATED_AT_MONTH: ("updated_at", TimeGranularity.MONTH),
+}
 
 
 @strawberry_django.type(Note)
-class NoteType:
+class NoteType(AngeeNode):
     """GraphQL projection of a note."""
 
     title: auto
@@ -24,23 +57,11 @@ class NoteType:
     created_at: auto
     updated_at: auto
 
-    @strawberry.field
-    def sqid(self) -> str:
-        """Return the bare public id."""
-
-        return self.public_id
-
-    @strawberry.field
-    def id(self) -> strawberry.ID:
-        """Return the public opaque id."""
-
-        return strawberry.ID(self.public_id)
-
-    @strawberry.field
+    @strawberry_django.field(only=["body"])
     def word_count(self) -> int:
         """Return the computed word count."""
 
-        return self.word_count
+        return cast(int, self.word_count)
 
 
 @strawberry.input
@@ -58,44 +79,148 @@ class NoteInput:
 class NotePatch:
     """Fields accepted when updating a note."""
 
-    title: str | None = None
-    body: str | None = None
-    status: str | None = None
-    tags: list[str] | None = None
-    is_starred: bool | None = None
+    id: relay.GlobalID
+    title: str | None = strawberry.UNSET
+    body: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+    tags: list[str] | None = strawberry.UNSET
+    is_starred: bool | None = strawberry.UNSET
 
 
 @strawberry.type
 class NotesQuery:
     """Public notes queries."""
 
+    notes: Connection[NoteType] = strawberry_django.connection()
+    note: NoteType | None = strawberry_django.node()
+
+
+@strawberry.type
+class NoteGrouped:
+    """One actor-scoped note aggregate bucket."""
+
+    count: int
+    status: str | None = None
+    is_starred: bool | None = None
+    updated_at_month: datetime | None = None
+
+
+@strawberry.type
+class NoteAggregate:
+    """Actor-scoped aggregate over notes."""
+
+    count: int
+    groups: list[NoteGrouped]
+
+
+@strawberry.type
+class NotesAggregateQuery:
+    """Public notes aggregate queries."""
+
     @strawberry.field
-    def notes(self) -> list[NoteType]:
-        """Return notes in model order."""
+    def note_aggregate(
+        self,
+        group_by: list[NoteGroupBy] | None = None,
+    ) -> NoteAggregate:
+        """Return actor-scoped note counts grouped by allowed fields."""
 
-        return list(Note.objects.all())
+        specs = [_GROUP_BY_SPECS[value] for value in group_by or []]
+        rows = cast(
+            list[dict[str, Any]],
+            compute_aggregation(
+                _scoped_note_queryset(),
+                group_by=specs,
+                aggregates=[(AggregateOp.COUNT, None)],
+                order_by=[
+                    (group_by_alias(field, granularity), "asc", None)
+                    for field, granularity in specs
+                ],
+            ),
+        )
+        if not specs:
+            count = _row_count(rows[0]) if rows else 0
+            return NoteAggregate(count=count, groups=[])
 
-    @strawberry.field
-    def note(self, id: strawberry.ID) -> NoteType | None:
-        """Return one note by public id."""
+        groups = [_grouped_from_row(row, group_by or []) for row in rows]
+        return NoteAggregate(
+            count=sum(group.count for group in groups),
+            groups=groups,
+        )
 
-        return Note.from_public_id(str(id))
+
+def _scoped_note_queryset() -> QuerySet[Any]:
+    """Return notes with the ambient REBAC actor eagerly applied."""
+
+    actor = current_actor()
+    if actor is None:
+        raise MissingActorError(
+            "noteAggregate requires an authenticated actor"
+        )
+    queryset = Note.objects.all().with_actor(actor).on_field_deny("allow")
+    cast(Any, queryset)._apply_scope_in_place()
+    return cast(QuerySet[Any], queryset)
+
+
+def _grouped_from_row(
+    row: dict[str, Any],
+    group_by: list[NoteGroupBy],
+) -> NoteGrouped:
+    """Return GraphQL output for one aggregate row."""
+
+    return NoteGrouped(
+        count=_row_count(row),
+        status=cast(
+            str | None,
+            _group_value(row, NoteGroupBy.STATUS, group_by),
+        ),
+        is_starred=cast(
+            bool | None,
+            _group_value(row, NoteGroupBy.IS_STARRED, group_by),
+        ),
+        updated_at_month=cast(
+            datetime | None,
+            _group_value(
+                row,
+                NoteGroupBy.UPDATED_AT_MONTH,
+                group_by,
+            ),
+        ),
+    )
+
+
+def _group_value(
+    row: dict[str, Any],
+    value: NoteGroupBy,
+    group_by: list[NoteGroupBy],
+) -> Any:
+    """Return one grouped value if it was requested."""
+
+    if value not in group_by:
+        return None
+    field, granularity = _GROUP_BY_SPECS[value]
+    return row.get(group_by_alias(field, granularity))
+
+
+def _row_count(row: dict[str, Any]) -> int:
+    """Return the count aggregate from a compute-layer row."""
+
+    return int(row.get(_COUNT_ALIAS) or 0)
 
 
 schemas = {
     "public": {
-        "query": [NotesQuery],
+        "query": [NotesQuery, NotesAggregateQuery],
         "mutation": [
             crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
         ],
-        "types": [NoteType],
+        "types": [NoteType, NoteAggregate, NoteGrouped],
     },
     "console": {
-        "query": [NotesQuery],
+        "query": [NotesQuery, NotesAggregateQuery],
         "mutation": [
             crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
         ],
         "subscription": [changes(Note, field="noteChanged")],
-        "types": [NoteType],
+        "types": [NoteType, NoteAggregate, NoteGrouped],
     },
 }
