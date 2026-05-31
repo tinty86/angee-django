@@ -21,6 +21,7 @@ dependencies = [
   "strawberry-django-aggregates>=0.2.2",
   "strawberry-graphql-django>=0.86",
   "tablib>=3",
+  "django-choices-field>=4.0.0",
 ]
 
 [dependency-groups]

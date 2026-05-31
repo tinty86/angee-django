@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db import models
 from django_sqids import SqidsField
 
+from angee.base.fields import StateField
 from angee.base.mixins import HistoryMixin, RevisionMixin, SqidMixin
 from angee.base.models import AngeeModel
 
@@ -19,24 +20,17 @@ class Note(SqidMixin, AngeeModel, HistoryMixin, RevisionMixin):
 
     revisioned_fields = ("body",)
 
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-    STATUS_CHOICES = (
-        (DRAFT, "Draft"),
-        (ACTIVE, "Active"),
-        (ARCHIVED, "Archived"),
-    )
+    class Status(models.TextChoices):
+        """Lifecycle states a note moves through."""
+
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        ARCHIVED = "archived", "Archived"
 
     sqid = SqidsField(real_field_name="id", prefix="nte", min_length=8)
     title = models.CharField(max_length=160)
     body = models.TextField(blank=True, default="")
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=DRAFT,
-        db_index=True,
-    )
+    status = StateField(choices_enum=Status, default=Status.DRAFT)
     tags = models.JSONField(blank=True, default=list)
     is_starred = models.BooleanField(default=False, db_index=True)
     reminder_at = models.DateTimeField(null=True, blank=True, db_index=True)

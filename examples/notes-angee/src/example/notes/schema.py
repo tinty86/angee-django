@@ -28,6 +28,12 @@ from angee.base.graphql import AngeeNode, Connection, changes, crud
 Note = apps.get_model("notes", "Note")
 _COUNT_ALIAS = aggregate_alias(AggregateOp.COUNT, None)
 
+# Register the model's TextChoices as the one GraphQL enum, named for the addon
+# so the wire type does not collide with another addon's ``Status``. This
+# single registration is what ``status: auto`` on NoteType resolves to, so the
+# type, inputs, filter, and aggregate bucket all share one ``NoteStatus``.
+NoteStatus = strawberry.enum(Note.Status, name="NoteStatus")
+
 
 @strawberry.enum
 class NoteGroupBy(Enum):
@@ -70,7 +76,7 @@ class NoteInput:
 
     title: str
     body: str = ""
-    status: str = "draft"
+    status: NoteStatus = NoteStatus.DRAFT
     tags: list[str] = strawberry.field(default_factory=list)
     is_starred: bool = False
 
@@ -82,16 +88,38 @@ class NotePatch:
     id: relay.GlobalID
     title: str | None = strawberry.UNSET
     body: str | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
+    status: NoteStatus | None = strawberry.UNSET
     tags: list[str] | None = strawberry.UNSET
     is_starred: bool | None = strawberry.UNSET
+
+
+@strawberry_django.filter_type(Note, lookups=True)
+class NoteFilter:
+    """Field lookups accepted when filtering the notes connection."""
+
+    status: auto
+    is_starred: auto
+    title: auto
+
+
+@strawberry_django.order_type(Note)
+class NoteOrder:
+    """Orderings accepted by the notes connection."""
+
+    title: auto
+    status: auto
+    updated_at: auto
+    created_at: auto
 
 
 @strawberry.type
 class NotesQuery:
     """Public notes queries."""
 
-    notes: Connection[NoteType] = strawberry_django.connection()
+    notes: Connection[NoteType] = strawberry_django.connection(
+        filters=NoteFilter,
+        order=NoteOrder,
+    )
     note: NoteType | None = strawberry_django.node()
 
 
@@ -100,7 +128,7 @@ class NoteGrouped:
     """One actor-scoped note aggregate bucket."""
 
     count: int
-    status: str | None = None
+    status: NoteStatus | None = None
     is_starred: bool | None = None
     updated_at_month: datetime | None = None
 
@@ -167,12 +195,10 @@ def _grouped_from_row(
 ) -> NoteGrouped:
     """Return GraphQL output for one aggregate row."""
 
+    status = _group_value(row, NoteGroupBy.STATUS, group_by)
     return NoteGrouped(
         count=_row_count(row),
-        status=cast(
-            str | None,
-            _group_value(row, NoteGroupBy.STATUS, group_by),
-        ),
+        status=Note.Status(status) if status is not None else None,
         is_starred=cast(
             bool | None,
             _group_value(row, NoteGroupBy.IS_STARRED, group_by),

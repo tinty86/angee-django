@@ -3,6 +3,31 @@
 **This file is the source of truth for the in-flight program. Re-read it after any
 compaction before acting.** Keep it updated as work lands.
 
+## ✅ M2 DONE — `angee dev` lifecycle + full SDL (current)
+Compose/build/serve collapsed to **one boot, no `ANGEE_BUILD` flag**: the composer
+emits the runtime in app-populate **phase 2** (`ComposeConfig.import_models`, ordered
+before adopters), `AUTH_USER_MODEL` comes from the iam addon's `settings_defaults`,
+the host owns+creates `ANGEE_DATA_DIR`, tolerant adoption, `from_settings` raises if
+`ANGEE_RUNTIME_DIR` is unset, `emit_if_stale` is write-only (no boot-time brick).
+Design: `.agents/plans/clean-build-schema-emit.md`. Dev manifest rewritten to the real
+job graph (`build → makemigrations → migrate → rebac sync → resources → schema`; web =
+`runserver`), no env-substitution artifacts. Commit `0a39096`.
+
+**SDL completeness (the M2 acceptance bar) — VERIFIED in `runtime/schemas/public.graphql`:**
+- **Pagination** = strawberry-django relay cursor connection
+  (`NoteTypeCursorConnection`/`Edge`, `PageInfo`, `notes(before,after,first,last)`).
+- **Enums** = `status` is a real GraphQL enum `NoteStatus {DRAFT,ACTIVE,ARCHIVED}` shared
+  across `NoteType`/`NoteInput`/`NotePatch`/`NoteGrouped`, via `django-choices-field`
+  (now a locked dep, `docs/stack.md:31`) + base `StateField` wrapper (`src/angee/base/fields.py`)
+  + model `class Status(TextChoices)`; plus `NoteGroupBy` and `Ordering` enums.
+- **Aggregates** = `noteAggregate(groupBy:[NoteGroupBy!]) → NoteAggregate{count,groups:[NoteGrouped]}`.
+- **Filters/order** = `notes(filters: NoteFilter, order: NoteOrder)` via
+  `strawberry_django.filter_type(lookups=True)` + `order_type`.
+Gate: ruff + mypy + **101 pytest** + **14 example tests** + full e2e from a wiped
+runtime/db (build→makemigrations→migrate→rebac→resources install+demo(11 rows)→schema→
+schema --check) all green. Next: **M3 frontend** (greenfield; pnpm/Vite/urql exist as
+`packages/sdk`).
+
 ## North-star goal (active Stop-hook condition)
 Working `example/notes` **and** an `auth` addon **end-to-end**, strictly following
 `AGENTS.md` + `docs/*` guidelines. No shortcuts, no workarounds, no codegen, step by

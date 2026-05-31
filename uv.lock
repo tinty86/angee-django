@@ -293,6 +293,7 @@ dependencies = [
     { name = "channels" },
     { name = "daphne" },
     { name = "django" },
+    { name = "django-choices-field" },
     { name = "django-import-export" },
     { name = "django-reversion" },
     { name = "django-simple-history" },
@@ -318,6 +319,7 @@ requires-dist = [
     { name = "channels", specifier = ">=4.0" },
     { name = "daphne", specifier = ">=4.0" },
     { name = "django", specifier = ">=6.0" },
+    { name = "django-choices-field", specifier = ">=4.0.0" },
     { name = "django-import-export", specifier = ">=4.3" },
     { name = "django-reversion", specifier = ">=5.1" },
     { name = "django-simple-history", specifier = ">=3.7" },
@@ -336,6 +338,19 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-django", specifier = ">=4.8" },
     { name = "ruff", specifier = ">=0.15.12" },
+]
+
+[[package]]
+name = "django-choices-field"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/23/54749b86f605aafeaab81dc8e023968d95a7cc44434eac4df330e8e7f0d8/django_choices_field-4.0.0.tar.gz", hash = "sha256:7b07aacb2ad2b3ee3c8be78be98302ebbcb606285d20547a4163287819364954", size = 6346, upload-time = "2025-12-27T11:53:50.986Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/fd/2e0bb952961ba108bdb82efbb10eaeae5bbb5a687b6bdaf8427af181ac5d/django_choices_field-4.0.0-py3-none-any.whl", hash = "sha256:dfa59033685af989f5bc49d95a586e8de692999d3179bf1cb14ef99879e6ff45", size = 7035, upload-time = "2025-12-27T11:53:50.229Z" },
 ]
 
 [[package]]

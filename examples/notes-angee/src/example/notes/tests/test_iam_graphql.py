@@ -207,7 +207,7 @@ class IAMGraphQLTests(TransactionTestCase):
                 group["status"]: group["count"]
                 for group in aggregate["byStatus"]["groups"]
             },
-            {"active": 2, "draft": 1},
+            {"ACTIVE": 2, "DRAFT": 1},
         )
         self.assertEqual(aggregate["byStatus"]["count"], 3)
         self.assertEqual(aggregate["byMonth"]["count"], 3)
