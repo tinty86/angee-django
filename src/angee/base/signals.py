@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Any
 
 import reversion
@@ -14,6 +13,7 @@ from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save
 
 from angee.base.models import public_id_of
+from angee.base.serialization import json_safe
 
 _connected: set[type[models.Model]] = set()
 
@@ -99,7 +99,7 @@ def _publish(
     )
     changed_values = (
         {
-            field: _json_safe(getattr(instance, field, None))
+            field: json_safe(getattr(instance, field, None))
             for field in changed_fields
         }
         if changed_fields is not None
@@ -125,17 +125,3 @@ def _broadcast(model: type[models.Model], payload: dict[str, Any]) -> None:
         change_group(model),
         {"type": "angee.change", "payload": payload},
     )
-
-
-def _json_safe(value: Any) -> Any:
-    """Return a JSON-serializable representation of ``value``."""
-
-    if value is None or isinstance(value, bool | int | float | str):
-        return value
-    if isinstance(value, datetime.datetime | datetime.date):
-        return value.isoformat()
-    if isinstance(value, list | tuple):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, Mapping):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    return str(value)

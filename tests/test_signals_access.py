@@ -15,6 +15,7 @@ from rebac import anonymous_actor
 from angee.base import access, signals
 from angee.base.access import ChangeReadGate
 from angee.base.mixins import RevisionMixin
+from angee.base.serialization import json_safe
 
 
 class RevisionRegistered(RevisionMixin, models.Model):
@@ -113,7 +114,7 @@ def test_json_safe_normalizes_nested_values() -> None:
 
     when = datetime.datetime(2026, 5, 31, 12, 0, 0)
 
-    assert signals._json_safe({"when": [when]}) == {
+    assert json_safe({"when": [when]}) == {
         "when": ["2026-05-31T12:00:00"]
     }
 

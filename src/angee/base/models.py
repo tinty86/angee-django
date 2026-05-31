@@ -84,7 +84,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
         lookup = cls._public_id_lookup(value)
         try:
             instance = cls._default_manager.filter(**lookup).first()
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
         return cast(Self | None, instance)
 
@@ -107,7 +107,7 @@ def instance_from_public_id(
 
     try:
         instance = model._default_manager.filter(pk=value).first()
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     return cast(_ModelT | None, instance)
 

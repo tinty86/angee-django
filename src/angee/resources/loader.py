@@ -6,8 +6,6 @@ import functools
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, time
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 import tablib
@@ -18,6 +16,7 @@ from import_export.results import RowResult
 from import_export.utils import get_related_model
 
 from angee.base.models import instance_from_public_id, public_id_of
+from angee.base.serialization import json_safe
 from angee.resources.entries import (
     FROZEN_TIERS,
     RESERVED_ROW_KEYS,
@@ -112,30 +111,19 @@ class AngeeResource(resources.ModelResource):
         xref = self._row_xref(row, row_number=row_number)
         row_hash = self._row_content_hash(row)
         ledger = self._ledger_for_xref(xref)
-        self._existing_ledgers[xref] = ledger
-        self._row_hashes[xref] = row_hash
-        instance = self._instance_from_ledger(ledger)
+        self._record_row_state(xref, row_hash, ledger)
 
-        if ledger is None:
-            adopted = self._adopt_existing_target(row)
-            if adopted is not None:
-                self._adopted_instances[xref] = adopted
-                if self.entry.tier in FROZEN_TIERS:
-                    self._upsert_ledger(
-                        xref=xref,
-                        instance=adopted,
-                        row_hash=row_hash,
-                    )
-                    return self._skip_result(adopted)
+        adopted = self._adopt_for_row(xref, row, row_hash, ledger)
+        if adopted is not None:
+            return adopted
 
-        if ledger is not None and self.entry.tier in FROZEN_TIERS:
-            return self._skip_result(instance)
-        if (
-            ledger is not None
-            and instance is not None
-            and ledger.content_hash == row_hash
-        ):
-            return self._skip_result(instance)
+        skip = self._skip_decision(
+            ledger,
+            self._instance_from_ledger(ledger),
+            row_hash,
+        )
+        if skip is not None:
+            return skip
 
         return cast(
             RowResult,
@@ -168,6 +156,57 @@ class AngeeResource(resources.ModelResource):
             return self._adopted_instances.get(xref)
         return self._instance_from_ledger(ledger)
 
+    def _record_row_state(
+        self,
+        xref: str,
+        row_hash: str,
+        ledger: Resource | None,
+    ) -> None:
+        """Record the ledger and content hash for one row."""
+
+        self._existing_ledgers[xref] = ledger
+        self._row_hashes[xref] = row_hash
+
+    def _adopt_for_row(
+        self,
+        xref: str,
+        row: Mapping[str, Any],
+        row_hash: str,
+        ledger: Resource | None,
+    ) -> RowResult | None:
+        """Adopt an unledgered target and return any frozen-tier skip."""
+
+        if ledger is not None:
+            return None
+        adopted = self._adopt_existing_target(row)
+        if adopted is None:
+            return None
+        self._adopted_instances[xref] = adopted
+        if self.entry.tier not in FROZEN_TIERS:
+            return None
+        self._upsert_ledger(
+            xref=xref,
+            instance=adopted,
+            row_hash=row_hash,
+        )
+        return self._skip_result(adopted)
+
+    def _skip_decision(
+        self,
+        ledger: Resource | None,
+        instance: models.Model | None,
+        row_hash: str,
+    ) -> RowResult | None:
+        """Return a skip result when the ledger row needs no import."""
+
+        if ledger is None:
+            return None
+        if self.entry.tier in FROZEN_TIERS:
+            return self._skip_result(instance)
+        if instance is not None and ledger.content_hash == row_hash:
+            return self._skip_result(instance)
+        return None
+
     def _row_xref(self, row: Mapping[str, Any], *, row_number: int) -> str:
         """Return the normalized xref for one import row."""
 
@@ -187,10 +226,9 @@ class AngeeResource(resources.ModelResource):
             if key not in RESERVED_ROW_KEYS
         }
         body = json.dumps(
-            payload,
+            json_safe(payload),
             sort_keys=True,
             separators=(",", ":"),
-            default=self._json_default,
         ).encode("utf-8")
         return f"sha256:{hashlib.sha256(body).hexdigest()}"
 
@@ -348,16 +386,6 @@ class AngeeResource(resources.ModelResource):
             **updates
         )
         instance.refresh_from_db(fields=list(updates))
-
-    @staticmethod
-    def _json_default(value: object) -> object:
-        """Return a deterministic JSON value for non-JSON scalars."""
-
-        if isinstance(value, datetime | date | time):
-            return value.isoformat()
-        if isinstance(value, Decimal):
-            return str(value)
-        return str(value)
 
 
 class XrefInstanceLoader(BaseInstanceLoader):
