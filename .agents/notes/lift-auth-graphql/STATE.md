@@ -9,6 +9,23 @@ Working `example/notes` **and** an `auth` addon **end-to-end**, strictly followi
 step clean code, **less code is better**, deferring to stack-owned libraries (rebac /
 strawberry-django). Reconstruct, never copy; **no p1 baggage**; no provenance anywhere.
 
+## ⚙ M1 BUILD STATUS (current)
+- **Slice 1 DONE + committed `d009bbe`** ("Add GraphQL identity, REBAC, and denial-code
+  seams"): `AngeeNode` (relay Node + sqid NodeID) in `base/graphql/node.py`, denial-code
+  `Schema` subclass in `errors.py`, universal REBAC extensions in `build()`, `compose/rebac.py`
+  deleted + combined `.zed` emit removed, addon GraphQL module `graphql.py`→`schema.py` (F5).
+  Gate green (ruff/mypy/**91 pytest**), `build --check` ok. Verified by me.
+- **Slices 2–7 NOT yet built** (WS mixin / `angee.iam`+composed User / demo users / login verbs /
+  notes relay read-side / aggregates).
+- **⚠ CODEX SANDBOX CANNOT COMMIT or write `.agents/`** (discovered: the first M1 build job
+  `task-mptaxl16-09028z` spun 6h+ probing `.git`/`.agents` writability, never committed, got
+  stuck; cancelled). Earlier round-1/round-2 dispatches committed fine — the companion runtime
+  reset ("direct startup") changed the sandbox. **Protocol for codex re-dispatches:** instruct it
+  to attempt a commit ONCE per slice and, if it fails, NOT loop — leave changes in the working
+  tree and continue; never write to `.agents/` — report blockers in the final message; **I
+  (main session) verify + commit.** Codex CAN edit `src/`/`tests/`/`docs/`/`examples/` (Slice 1
+  proves it).
+
 ## The main thing (core intent — drives every milestone)
 The point of this program is a **GraphQL contract change** and its propagation to the
 client:
