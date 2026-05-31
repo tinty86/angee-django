@@ -53,11 +53,13 @@ class AngeeResource(resources.ModelResource):
         *,
         entry: ResourceEntry,
         ledger_model: type[models.Model],
+        addon_aliases: Mapping[str, str],
     ) -> None:
         """Bind one resource entry and concrete ledger model."""
 
         self.entry = entry
         self.ledger_model = ledger_model
+        self.addon_aliases = addon_aliases
         self._existing_ledgers: dict[str, Resource | None] = {}
         self._adopted_instances: dict[str, models.Model] = {}
         self._row_hashes: dict[str, str] = {}
@@ -65,6 +67,7 @@ class AngeeResource(resources.ModelResource):
         for field in self.fields.values():
             if isinstance(field.widget, XrefWidgetMixin):
                 field.widget.ledger_model = ledger_model
+                field.widget.addon_aliases = addon_aliases
 
     @classmethod
     def get_fk_widget(cls, field: Any) -> functools.partial[Any]:
@@ -185,6 +188,7 @@ class AngeeResource(resources.ModelResource):
     ) -> None:
         """Record the ledger and content hash for one row."""
 
+        self._check_ledger_target(xref, ledger)
         self._existing_ledgers[xref] = ledger
         self._row_hashes[xref] = row_hash
 
@@ -267,7 +271,25 @@ class AngeeResource(resources.ModelResource):
             .first()
         )
         self._existing_ledgers[xref] = cast("Resource | None", ledger)
-        return self._existing_ledgers[xref]
+        ledger = self._existing_ledgers[xref]
+        self._check_ledger_target(xref, ledger)
+        return ledger
+
+    def _check_ledger_target(
+        self,
+        xref: str,
+        ledger: Resource | None,
+    ) -> None:
+        """Raise when an existing xref belongs to another target model."""
+
+        if ledger is None:
+            return
+        expected = self._meta.model._meta.label
+        if ledger.target_model != expected:
+            raise ResourceLoadError(
+                f"xref collision in {self.entry.addon.name}: {xref!r} "
+                f"already targets {ledger.target_model}, not {expected}"
+            )
 
     def _upsert_ledger(
         self,
@@ -481,6 +503,7 @@ def build_resource(
     entry: ResourceEntry,
     *,
     ledger_model: type[models.Model],
+    addon_aliases: Mapping[str, str],
 ) -> AngeeResource:
     """Return an xref-aware import-export resource for ``model``."""
 
@@ -506,7 +529,11 @@ def build_resource(
     )
     return cast(
         AngeeResource,
-        resource_type(entry=entry, ledger_model=ledger_model),
+        resource_type(
+            entry=entry,
+            ledger_model=ledger_model,
+            addon_aliases=addon_aliases,
+        ),
     )
 
 

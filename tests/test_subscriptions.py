@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import strawberry
 from channels.layers import InMemoryChannelLayer
+from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import Group
 from rebac import anonymous_actor, current_actor
-from strawberry.channels import GraphQLWSConsumer
 
 from angee.base import signals
 from angee.base.consumers import AngeeGraphQLWSConsumer, scope_actor
@@ -203,51 +203,56 @@ def test_subscription_resolver_gates_events_through_sync_adapter(
     assert [event.id for event in events] == [strawberry.ID("9")]
 
 
-def test_ws_consumer_executes_operations_inside_actor_context(
-    monkeypatch,
-) -> None:
-    """WebSocket GraphQL operations install the connection actor."""
+def test_ws_query_runs_inside_actor_context() -> None:
+    """GraphQL-over-WebSocket queries install the connection actor."""
 
-    seen: list[object] = []
-
-    async def execute(
-        self: GraphQLWSConsumer,
-        request: object,
-        context: dict[str, object],
-        root_value: object,
-        sub_response: object,
-    ) -> str:
-        """Record the ambient actor while the operation executes."""
-
-        del self, request, context, root_value, sub_response
-        seen.append(current_actor())
-        return "ok"
-
-    monkeypatch.setattr(GraphQLWSConsumer, "execute_operation", execute)
     @strawberry.type
     class Query:
         """Minimal query root for the consumer."""
 
         @strawberry.field
-        def ok(self) -> bool:
-            """Return true."""
+        def actor_active(self) -> bool:
+            """Return whether the ambient actor is installed."""
 
-            return True
+            return current_actor() == ANON
 
-    consumer = AngeeGraphQLWSConsumer(strawberry.Schema(query=Query))
-    consumer.scope = {}
-
-    result = asyncio.run(
-        consumer.execute_operation(
-            object(),
-            {"actor": ANON},
-            None,
-            object(),
+    async def scenario() -> dict[str, object]:
+        application = AngeeGraphQLWSConsumer.as_asgi(
+            schema=strawberry.Schema(query=Query)
         )
-    )
+        communicator = WebsocketCommunicator(
+            application,
+            "/graphql",
+            subprotocols=["graphql-transport-ws"],
+        )
+        connected, _subprotocol = await communicator.connect()
+        assert connected
+        await communicator.send_json_to({"type": "connection_init"})
+        assert await communicator.receive_json_from() == {
+            "type": "connection_ack"
+        }
+        await communicator.send_json_to(
+            {
+                "id": "1",
+                "type": "subscribe",
+                "payload": {"query": "{ actorActive }"},
+            }
+        )
+        payload = await communicator.receive_json_from()
+        assert await communicator.receive_json_from() == {
+            "id": "1",
+            "type": "complete",
+        }
+        await communicator.disconnect()
+        return payload
 
-    assert result == "ok"
-    assert seen == [ANON]
+    result = asyncio.run(scenario())
+
+    assert result == {
+        "id": "1",
+        "type": "next",
+        "payload": {"data": {"actorActive": True}},
+    }
     assert current_actor() is None
 
 

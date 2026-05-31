@@ -316,8 +316,8 @@ def test_resource_unique_constraint_is_addon_xref_pair() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_resolve_xref_requires_exact_source_addon() -> None:
-    """A short suffix alias does not resolve a dotted source addon."""
+def test_resolve_xref_accepts_addon_label_alias() -> None:
+    """A label-form xref resolves to the canonical addon ledger row."""
 
     class ResolveExactTarget(models.Model):
         """Target model resolved by exact xref tests."""
@@ -358,8 +358,16 @@ def test_resolve_xref_requires_exact_source_addon() -> None:
             target_id=str(target.pk),
         )
 
-        with pytest.raises(ValueError, match="unresolved xref"):
-            resolve_xref("resource_addon.target", ResolveExactLedger)
+        resolved = resolve_xref(
+            "resource_addon.target",
+            ResolveExactLedger,
+            {
+                "resource_addon": "tests.resource_addon",
+                "tests.resource_addon": "tests.resource_addon",
+            },
+        )
+
+        assert resolved == target
     finally:
         with connection.schema_editor() as schema_editor:
             for model in reversed(models_to_create):
@@ -428,7 +436,11 @@ def test_resolve_xref_reports_ambiguous_source_rows() -> None:
         )
 
         with pytest.raises(ValueError, match="ambiguous xref"):
-            resolve_xref("tests.resource_addon.shared", ResolveAmbiguousLedger)
+            resolve_xref(
+                "tests.resource_addon.shared",
+                ResolveAmbiguousLedger,
+                {"tests.resource_addon": "tests.resource_addon"},
+            )
     finally:
         with connection.schema_editor() as schema_editor:
             for model in reversed(models_to_create):
@@ -439,7 +451,7 @@ def test_resolve_xref_reports_ambiguous_source_rows() -> None:
 def test_resource_manager_loads_rows_and_resolves_xrefs(
     tmp_path: Path,
 ) -> None:
-    """Resource rows load through import-export with FK xrefs and JSON."""
+    """Resource rows load with label-form FK xrefs on a fresh ledger."""
 
     class ImportUser(AngeeModel):
         """User-like model loaded from resources."""
@@ -505,6 +517,85 @@ def test_resource_manager_loads_rows_and_resolves_xrefs(
         assert second.created == 0
         assert second.updated == 0
         assert second.skipped == 2
+    finally:
+        with connection.schema_editor() as schema_editor:
+            for model in reversed(models_to_create):
+                schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resource_load_rejects_existing_xref_for_another_model(
+    tmp_path: Path,
+) -> None:
+    """A later load cannot reuse an addon xref for another target model."""
+
+    class CollisionUser(AngeeModel):
+        """First target model for ledger collision tests."""
+
+        username = models.CharField(max_length=40, unique=True)
+
+        class Meta:
+            """Django model options for the test model."""
+
+            app_label = "base"
+
+    class CollisionNote(AngeeModel):
+        """Second target model for ledger collision tests."""
+
+        title = models.CharField(max_length=80)
+
+        class Meta:
+            """Django model options for the test model."""
+
+            app_label = "base"
+
+    class CollisionLedger(Resource):
+        """Concrete resource ledger for collision tests."""
+
+        class Meta(Resource.Meta):
+            """Django model options for the test ledger."""
+
+            app_label = "base"
+            abstract = False
+
+    resource_dir = tmp_path / "resources"
+    resource_dir.mkdir()
+    (resource_dir / "010_base.collisionuser.csv").write_text(
+        "_xref,username\nshared,alice\n",
+        encoding="utf-8",
+    )
+    (resource_dir / "020_base.collisionnote.csv").write_text(
+        "_xref,title\nshared,Same xref\n",
+        encoding="utf-8",
+    )
+    owner = addon(
+        tmp_path,
+        manifest={
+            "master": (
+                {"path": "resources/010_base.collisionuser.csv"},
+            ),
+            "install": (
+                {"path": "resources/020_base.collisionnote.csv"},
+            ),
+            "demo": (),
+        },
+    )
+
+    models_to_create = (CollisionUser, CollisionNote, CollisionLedger)
+    with connection.schema_editor() as schema_editor:
+        for model in models_to_create:
+            schema_editor.create_model(model)
+    try:
+        CollisionLedger.objects.load_addons(
+            (owner,),
+            tiers=[Resource.Tier.MASTER],
+        )
+
+        with pytest.raises(ResourceLoadError, match="xref collision"):
+            CollisionLedger.objects.load_addons(
+                (owner,),
+                tiers=[Resource.Tier.INSTALL],
+            )
     finally:
         with connection.schema_editor() as schema_editor:
             for model in reversed(models_to_create):
@@ -810,7 +901,7 @@ def _write_resource_files(tmp_path: Path) -> Addon:
     (resource_dir / "020_base.importnote.yaml").write_text(
         "- _xref: note_framework_map\n"
         "  title: Framework map\n"
-        "  created_by: tests.resource_addon.user_alice\n"
+        "  created_by: resource_addon.user_alice\n"
         "  tags:\n"
         "    - composition\n"
         "    - resources\n",

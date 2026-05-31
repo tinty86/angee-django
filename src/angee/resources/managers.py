@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.conf import settings
@@ -11,6 +11,7 @@ from django.db import IntegrityError, models, transaction
 from import_export.exceptions import ImportError as ResourceImportError
 from rebac import system_context
 
+from angee.base.discovery import _addon_aliases
 from angee.resources.entries import (
     LoadResult,
     ResourceEntry,
@@ -39,9 +40,14 @@ class ResourceQuerySet(models.QuerySet[Any]):
     ) -> ValidationResult:
         """Validate selected addon resource files without saving rows."""
 
-        groups = self._groups_for(addons, tiers=tiers)
+        selected_addons = tuple(addons)
+        groups = self._groups_for(selected_addons, tiers=tiers)
         self._check_xref_collisions(groups)
-        self._import_groups(groups, dry_run=True)
+        self._import_groups(
+            groups,
+            dry_run=True,
+            addon_aliases=_addon_aliases(selected_addons),
+        )
         return ValidationResult(
             checked_files=len(groups),
             checked_rows=sum(len(group.rows) for group in groups),
@@ -65,12 +71,13 @@ class ResourceQuerySet(models.QuerySet[Any]):
                 "resources load demo requires DEBUG or --allow-non-dev"
             )
 
-        groups = self._groups_for(addons, tiers=active_tiers)
+        selected_addons = tuple(addons)
+        groups = self._groups_for(selected_addons, tiers=active_tiers)
         self._check_xref_collisions(groups)
         return self._import_groups(
             groups,
             dry_run=dry_run,
-            allow_non_dev=allow_non_dev,
+            addon_aliases=_addon_aliases(selected_addons),
         )
 
     def _import_groups(
@@ -78,11 +85,10 @@ class ResourceQuerySet(models.QuerySet[Any]):
         groups: tuple[ResourceGroup, ...],
         *,
         dry_run: bool,
-        allow_non_dev: bool = False,
+        addon_aliases: Mapping[str, str],
     ) -> LoadResult:
         """Import ``groups`` and optionally roll the transaction back."""
 
-        del allow_non_dev
         created = 0
         updated = 0
         skipped = 0
@@ -94,6 +100,7 @@ class ResourceQuerySet(models.QuerySet[Any]):
                         group.model,
                         group.entry,
                         ledger_model=self.model,
+                        addon_aliases=addon_aliases,
                     )
                     try:
                         result = resource.import_data(

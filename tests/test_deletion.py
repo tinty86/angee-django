@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 from django.db import connection, models
+from django.db.models.deletion import Collector
+from django.db.models.signals import post_delete, pre_delete
+from rebac.signals import _rebac_cascade_resource, _rebac_pre_delete
 
 from angee.base.deletion import DeletionPreview
 
@@ -112,10 +115,11 @@ def test_deletion_preview_counts_set_null_updates() -> None:
     try:
         parent = PreviewNullableParent.objects.create(name="parent")
         PreviewNullableChild.objects.create(parent=parent)
+        PreviewNullableChild.objects.create(parent=parent)
 
         preview = DeletionPreview.from_instance(parent)
 
-        assert preview.updated[0].count == 1
+        assert preview.updated[0].count == 2
         assert not preview.has_blockers
     finally:
         with connection.schema_editor() as schema_editor:
@@ -198,8 +202,17 @@ def test_deletion_preview_counts_fast_deletes() -> None:
         schema_editor.create_model(PreviewCascadeParent)
         schema_editor.create_model(PreviewCascadeChild)
     try:
+        pre_delete.disconnect(_rebac_pre_delete)
+        post_delete.disconnect(_rebac_cascade_resource)
         parent = PreviewCascadeParent.objects.create(name="parent")
         PreviewCascadeChild.objects.create(parent=parent)
+        collector = Collector(using=parent._state.db or "default")
+        collector.collect([parent])
+
+        assert any(
+            queryset.model is PreviewCascadeChild
+            for queryset in collector.fast_deletes
+        )
 
         preview = DeletionPreview.from_instance(parent)
 
@@ -209,6 +222,8 @@ def test_deletion_preview_counts_fast_deletes() -> None:
         assert deleted[parent_label] == 1
         assert deleted[child_label] == 1
     finally:
+        pre_delete.connect(_rebac_pre_delete)
+        post_delete.connect(_rebac_cascade_resource)
         with connection.schema_editor() as schema_editor:
             schema_editor.delete_model(PreviewCascadeChild)
             schema_editor.delete_model(PreviewCascadeParent)

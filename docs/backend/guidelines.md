@@ -72,7 +72,7 @@ Rules that follow from the layering:
   run-settings process that loads the freshly emitted concrete models normally.
 - **The resource ledger is contributed by the composer.** The composer imports
   the resource ledger source model and emits it under the `base` label at build
-  time. `angee.base` must not name or import `angee.resources`.
+  time. `angee.base` must not import `angee.resources`.
 - **Refer to an emitted concrete model through the app registry**
   (`apps.get_model("base", "Resource")`), never by importing the generated
   `runtime/` tree.

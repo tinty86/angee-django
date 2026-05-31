@@ -18,6 +18,9 @@ class XrefWidgetMixin:
     ledger_model: type[models.Model] | None = None
     """Concrete resource ledger model used to resolve xrefs."""
 
+    addon_aliases: Mapping[str, str] | None = None
+    """Addon aliases keyed by full addon name and short label."""
+
 
 class XrefForeignKeyWidget(XrefWidgetMixin, widgets.ForeignKeyWidget):
     """Resolve ``<addon>.<xref>`` foreign keys through the ledger."""
@@ -35,7 +38,7 @@ class XrefForeignKeyWidget(XrefWidgetMixin, widgets.ForeignKeyWidget):
             return None
         if not isinstance(value, str):
             raise ValueError("xref foreign keys must be strings")
-        target = resolve_xref(value, self.ledger_model)
+        target = resolve_xref(value, self.ledger_model, self.addon_aliases)
         if target._meta.concrete_model is not self.model._meta.concrete_model:
             raise ValueError(
                 f"xref {value!r} targets {target._meta.label}, "
@@ -58,7 +61,7 @@ class XrefManyToManyWidget(XrefWidgetMixin, widgets.ManyToManyWidget):
         del row, kwargs
         targets: list[models.Model] = []
         for ref in xref_list(value):
-            target = resolve_xref(ref, self.ledger_model)
+            target = resolve_xref(ref, self.ledger_model, self.addon_aliases)
             if (
                 target._meta.concrete_model
                 is not self.model._meta.concrete_model
@@ -90,17 +93,18 @@ class _NativeJSONWidget(widgets.JSONWidget):
 def resolve_xref(
     value: str,
     ledger_model: type[models.Model] | None,
+    addon_aliases: Mapping[str, str] | None,
 ) -> models.Model:
     """Resolve ``<addon>.<xref>`` through the resource ledger."""
 
     if ledger_model is None:
         raise ValueError("xref resolution requires a bound ledger model")
-    if "." not in value:
-        raise ValueError("xrefs must use <addon>.<xref>")
-    addon_ref, xref = value.rsplit(".", 1)
+    if addon_aliases is None:
+        raise ValueError("xref resolution requires addon aliases")
+    source_addon, xref = _split_xref(value, addon_aliases)
     matches = list(
         ledger_model._default_manager.filter(
-            source_addon=addon_ref,
+            source_addon=source_addon,
             xref=xref,
         ).exclude(target_id="")[:2]
     )
@@ -114,6 +118,21 @@ def resolve_xref(
     if target is None:
         raise ValueError(f"xref {value!r} has no ORM target")
     return target
+
+
+def _split_xref(
+    value: str,
+    addon_aliases: Mapping[str, str],
+) -> tuple[str, str]:
+    """Return the canonical addon name and local xref from ``value``."""
+
+    parts = value.split(".")
+    for cut in range(len(parts) - 1, 0, -1):
+        candidate = ".".join(parts[:cut])
+        source_addon = addon_aliases.get(candidate)
+        if source_addon is not None:
+            return source_addon, ".".join(parts[cut:])
+    raise ValueError(f"unresolved xref {value!r}")
 
 
 def xref_list(value: Any) -> list[str]:

@@ -77,7 +77,7 @@ def _sort_addons(
     return tuple(ordered)
 
 
-def _addon_aliases(addons: tuple[BaseAddonConfig, ...]) -> dict[str, str]:
+def _addon_aliases(addons: Iterable[BaseAddonConfig]) -> dict[str, str]:
     """Return addon names and labels mapped to canonical addon names."""
 
     aliases: dict[str, str] = {}
