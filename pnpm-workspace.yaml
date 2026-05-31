@@ -1,4 +1,7 @@
 packages:
   - "packages/*"
+  - "examples/*/src/web"
+  - "examples/*/src/example/*/web"
 allowBuilds:
   esbuild: true
+  "@tailwindcss/oxide": true

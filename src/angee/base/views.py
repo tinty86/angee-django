@@ -7,7 +7,9 @@ from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import ensure_csrf_cookie
 from strawberry.django.views import GraphQLView
 
 from angee.base.graphql.schema import GraphQLSchemas
@@ -32,3 +34,14 @@ def graphql_endpoint(request: object, schema_name: str) -> HttpResponse:
     except ImproperlyConfigured as error:
         raise Http404(str(error)) from error
     return view(request)
+
+
+@ensure_csrf_cookie
+def csrf_token(request: HttpRequest) -> JsonResponse:
+    """Set the CSRF cookie and return its token for the SPA to echo.
+
+    The session-cookie GraphQL endpoints are CSRF-protected; a browser client
+    fetches this once and sends the token as ``X-CSRFToken`` on every mutation.
+    """
+
+    return JsonResponse({"token": get_token(request)})

@@ -26,6 +26,7 @@ export {
 // Transport: clients, cache config, CSRF, per-schema provider.
 export {
   cacheConfigFromSchema,
+  cacheConfigFromSDL,
   type CacheConfig,
 } from "./cache-config";
 export {

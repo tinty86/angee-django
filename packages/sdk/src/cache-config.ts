@@ -1,4 +1,5 @@
 import {
+  buildSchema,
   getNamedType,
   isObjectType,
   type GraphQLSchema,
@@ -52,4 +53,11 @@ export function cacheConfigFromSchema(schema: GraphQLSchema): CacheConfig {
   }
 
   return { keys, resolvers };
+}
+
+/** Build the cache config straight from a printed SDL string (the runtime
+ * `schemas/<name>.graphql` an app imports). Saves the caller a `graphql`
+ * dependency just to parse the schema. */
+export function cacheConfigFromSDL(sdl: string): CacheConfig {
+  return cacheConfigFromSchema(buildSchema(sdl));
 }
