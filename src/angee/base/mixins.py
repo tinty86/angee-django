@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
+import reversion
 from django.db import models
 from django_sqids import SqidsField
 from simple_history.models import HistoricalRecords
@@ -58,3 +59,18 @@ class RevisionMixin(models.Model):
         """Django model options for revision-only abstract inheritance."""
 
         abstract = True
+
+    @property
+    def revisions(self) -> Any:
+        """Return this row's django-reversion versions newest-first."""
+
+        return reversion.models.Version.objects.get_for_object(self)
+
+    def revert_to(self, version: Any) -> None:
+        """Restore declared revisioned fields from ``version`` and save."""
+
+        data = version.field_dict
+        for name in self.revisioned_fields:
+            if name in data:
+                setattr(self, name, data[name])
+        self.save()

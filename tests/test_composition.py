@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import pytest
+import reversion
 from django.db import connection, models
 from rebac import RebacMixin, system_context
 
-from angee.base.mixins import SqidMixin
+from angee.base.mixins import RevisionMixin, SqidMixin
 from angee.base.models import (
     AngeeModel,
     instance_from_public_id,
@@ -34,6 +35,20 @@ class PlainPublicIdThing(models.Model):
         """Django model options for the test model."""
 
         app_label = "tests"
+
+
+class RevisionThing(RevisionMixin, models.Model):
+    """Concrete test model tracked through django-reversion."""
+
+    revisioned_fields = ("body",)
+
+    title = models.CharField(max_length=32)
+    body = models.TextField()
+
+    class Meta:
+        """Django model options for the test model."""
+
+        app_label = "auth"
 
 
 def test_every_angee_model_carries_the_rebac_mixin() -> None:
@@ -78,3 +93,35 @@ def test_public_id_helpers_support_angee_and_plain_django_models() -> None:
         with connection.schema_editor() as schema_editor:
             schema_editor.delete_model(PlainPublicIdThing)
             schema_editor.delete_model(PublicIdThing)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_revision_mixin_restores_declared_fields_from_versions() -> None:
+    """Revision helpers expose newest-first versions and restore fields."""
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(RevisionThing)
+
+    reversion.register(RevisionThing, fields=RevisionThing.revisioned_fields)
+
+    try:
+        instance = RevisionThing.objects.create(title="Draft", body="v0")
+        with reversion.create_revision():
+            instance.body = "v1"
+            instance.save()
+        with reversion.create_revision():
+            instance.title = "Final"
+            instance.body = "v2"
+            instance.save()
+
+        assert instance.revisions.count() == 2
+        assert instance.revisions.first().field_dict["body"] == "v2"
+        instance.revert_to(instance.revisions.last())
+        instance.refresh_from_db()
+
+        assert instance.title == "Final"
+        assert instance.body == "v1"
+    finally:
+        reversion.unregister(RevisionThing)
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(RevisionThing)
