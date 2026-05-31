@@ -55,8 +55,11 @@ Dependency changes must update this file in the same change.
 | TanStack Form | Form state | `FormView` binding |
 | TanStack Table | Columns, sort, filter, grouping, selection | `ListView` and `BoardView` bindings |
 | TanStack Virtual | Row and column virtualization | Long-list wiring |
+| nuqs | Type-safe URL query state | View state (page, sort, filter, group) in the address bar |
 | valibot | Schema validation | Server-emitted schema binding |
 | i18next | Runtime i18n | Per-addon namespace convention |
+| date-fns | Date and relative-time formatting | Date and timestamp widgets |
+| use-debounce | Debounced React values and callbacks | Search and filter inputs |
 | Tailwind 4 | Token styling engine | Semantic token set |
 | tailwind-merge | Safe class merging | `cn()` helper |
 | lucide-react | Icons | Name-referenced icon registry |
@@ -71,6 +74,9 @@ Dependency changes must update this file in the same change.
 | Pick | Owns | Angee adds |
 |---|---|---|
 | @base-ui-components/react | Headless primitives: dialog, popover, menu, tabs, tooltip, field, toolbar, scroll area, and related UI | Styled binding and composition rules |
+| @floating-ui/react-dom | Floating-element positioning and virtual anchors | Popover and menu anchoring |
+| @angee/logo-react | Angee brand logo and cube marks | Brand lockup in the public shell |
+| react-markdown + remark-gfm | Markdown rendering (GitHub-flavored) | Markdown widget preview |
 | tailwind-variants | Variant recipes with slots | Component recipes |
 | tw-animate-css | Tailwind 4 animation utilities | Motion tokens |
 | simple-icons + @lobehub/icons | Brand and vendor SVGs | Icon registry entries |
