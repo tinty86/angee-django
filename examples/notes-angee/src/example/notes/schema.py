@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, cast
 
 import strawberry
@@ -13,8 +14,10 @@ from strawberry import auto, relay
 from strawberry_django_aggregates import AggregateBuilder
 
 from angee.base.graphql import AngeeNode, OffsetPaginated, changes, crud
+from angee.base.models import public_id_of
 
 Note = apps.get_model("notes", "Note")
+User = apps.get_model("iam", "User")
 
 # Register the model's TextChoices as the one GraphQL enum, named for the addon
 # so the wire type does not collide with another addon's ``Status``. This
@@ -40,6 +43,39 @@ class NoteType(AngeeNode):
         """Return the computed word count."""
 
         return cast(int, self.word_count)
+
+    @strawberry_django.field(only=["created_by_id"])
+    def created_by(self) -> strawberry.ID | None:
+        """Return the creator's public id without exposing the user object."""
+
+        return _user_public_id(self.created_by_id)
+
+    @strawberry_django.field(only=["updated_by_id"])
+    def updated_by(self) -> strawberry.ID | None:
+        """Return the updater's public id without exposing the user object."""
+
+        return _user_public_id(self.updated_by_id)
+
+
+@strawberry.type
+class NoteRevision:
+    """Versioned body snapshot for one note revision."""
+
+    id: strawberry.ID
+    created_at: datetime
+    comment: str | None
+    body: str
+
+    @classmethod
+    def from_version(cls, version: Any) -> NoteRevision:
+        """Return GraphQL output for one django-reversion version."""
+
+        return cls(
+            id=strawberry.ID(str(version.pk)),
+            created_at=cast(datetime, version.revision.date_created),
+            comment=cast(str | None, version.revision.comment or None),
+            body=str(version.field_dict.get("body", "")),
+        )
 
 
 @strawberry.input
@@ -84,7 +120,7 @@ class NoteOrder:
     created_at: auto
 
 
-def _rebac_scoped(info: strawberry.Info) -> QuerySet[Any]:
+def _rebac_scoped(info: strawberry.Info | None = None) -> QuerySet[Any]:
     """Return notes with the ambient REBAC actor eagerly applied.
 
     The aggregates library owns aggregation but expects a pre-scoped
@@ -131,6 +167,18 @@ class NotesQuery:
     note_aggregate = _note_aggregates.aggregate_field
     note_groups = _note_aggregates.group_by_field
 
+    @strawberry.field
+    def note_revisions(self, id: relay.GlobalID) -> list[NoteRevision]:
+        """Return actor-visible body revisions for one note."""
+
+        note = _scoped_note_by_id(id)
+        if note is None:
+            return []
+        return [
+            NoteRevision.from_version(version)
+            for version in note.revisions
+        ]
+
 
 _AGGREGATE_TYPES = [
     _note_aggregates.aggregate_type,
@@ -139,13 +187,31 @@ _AGGREGATE_TYPES = [
     _note_aggregates.group_key_type,
 ]
 
+
+def _scoped_note_by_id(id: relay.GlobalID) -> Any | None:
+    """Return the actor-visible note addressed by relay id, if any."""
+
+    return (
+        _rebac_scoped()
+        .filter(**Note._public_id_lookup(id.node_id))
+        .first()
+    )
+
+
+def _user_public_id(user_id: Any) -> strawberry.ID | None:
+    """Return a user's opaque public id without fetching the user row."""
+
+    if user_id is None:
+        return None
+    return strawberry.ID(public_id_of(User(id=user_id)))
+
 schemas = {
     "public": {
         "query": [NotesQuery],
         "mutation": [
             crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
         ],
-        "types": [NoteType, *_AGGREGATE_TYPES],
+        "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
     },
     "console": {
         "query": [NotesQuery],
@@ -153,6 +219,6 @@ schemas = {
             crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
         ],
         "subscription": [changes(Note, field="noteChanged")],
-        "types": [NoteType, *_AGGREGATE_TYPES],
+        "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
     },
 }

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from django.conf import settings
 from django.db import models
 from django_sqids import SqidsField
 
 from angee.base.fields import StateField
-from angee.base.mixins import HistoryMixin, RevisionMixin, SqidMixin
+from angee.base.mixins import (
+    AuditMixin,
+    HistoryMixin,
+    RevisionMixin,
+    SqidMixin,
+)
 from angee.base.models import AngeeModel
 
 
-class Note(SqidMixin, AngeeModel, HistoryMixin, RevisionMixin):
+class Note(SqidMixin, AuditMixin, AngeeModel, HistoryMixin, RevisionMixin):
     """A short note used to exercise backend composition.
 
     Metadata changes are audited through ``history``; the ``body`` field is
@@ -24,6 +28,7 @@ class Note(SqidMixin, AngeeModel, HistoryMixin, RevisionMixin):
         """Lifecycle states a note moves through."""
 
         DRAFT = "draft", "Draft"
+        IN_REVIEW = "in_review", "In Review"
         ACTIVE = "active", "Active"
         ARCHIVED = "archived", "Archived"
 
@@ -34,13 +39,6 @@ class Note(SqidMixin, AngeeModel, HistoryMixin, RevisionMixin):
     tags = models.JSONField(blank=True, default=list)
     is_starred = models.BooleanField(default=False, db_index=True)
     reminder_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-    )
 
     class Meta:
         """Django model options."""

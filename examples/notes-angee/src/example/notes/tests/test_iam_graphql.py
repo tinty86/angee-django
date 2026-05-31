@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
+import reversion
 from django.apps import apps
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import Client, TransactionTestCase
 from rebac import system_context
 
 Note = apps.get_model("notes", "Note")
+User = get_user_model()
 
 
 class IAMGraphQLTests(TransactionTestCase):
@@ -23,6 +26,8 @@ class IAMGraphQLTests(TransactionTestCase):
         )
         with system_context(reason="test-setup"):
             self.welcome = Note.objects.get(title="Welcome to Angee")
+            self.alice = User.objects.get(username="alice")
+            self.admin = User.objects.get(username="admin")
         self.client = Client()
 
     def test_login_current_user_and_logout_use_session_cookie(self) -> None:
@@ -135,6 +140,136 @@ class IAMGraphQLTests(TransactionTestCase):
             {"id": relay_id, "title": "Welcome through Relay"},
         )
 
+    def test_note_can_have_in_review_status(self) -> None:
+        alice = Client()
+        self.login(alice, "alice")
+        page = self.post(
+            alice,
+            """
+            query {
+              notes(pagination: { limit: 20 }) {
+                results { title status }
+              }
+            }
+            """,
+        )["data"]["notes"]["results"]
+
+        planning = next(
+            node for node in page if node["title"] == "Quarterly planning"
+        )
+        self.assertEqual(planning["status"], "IN_REVIEW")
+
+    def test_note_exposes_scalar_audit_ids_and_stamps_updates(self) -> None:
+        alice = Client()
+        self.login(alice, "alice")
+        alice_notes = self.post(
+            alice,
+            """
+            query {
+              notes(pagination: { limit: 20 }) {
+                results { id title createdBy updatedBy }
+              }
+            }
+            """,
+        )["data"]["notes"]["results"]
+        planning = next(
+            node
+            for node in alice_notes
+            if node["title"] == "Quarterly planning"
+        )
+
+        self.assertEqual(planning["createdBy"], self.alice.public_id)
+        self.assertEqual(planning["updatedBy"], self.admin.public_id)
+        self.assertIsInstance(planning["createdBy"], str)
+        self.assertIsInstance(planning["updatedBy"], str)
+        self.assertTrue(planning["createdBy"])
+        self.assertTrue(planning["updatedBy"])
+
+        updated = self.post(
+            alice,
+            """
+            mutation UpdateNote($id: ID!) {
+              updateNote(
+                data: {id: $id, title: "Quarterly planning updated"}
+              ) {
+                id
+                title
+                createdBy
+                updatedBy
+              }
+            }
+            """,
+            {"id": planning["id"]},
+        )
+
+        self.assertEqual(
+            updated["data"]["updateNote"],
+            {
+                "id": planning["id"],
+                "title": "Quarterly planning updated",
+                "createdBy": self.alice.public_id,
+                "updatedBy": self.alice.public_id,
+            },
+        )
+
+    def test_note_revisions_are_actor_scoped(self) -> None:
+        with system_context(reason="test-setup"):
+            with reversion.create_revision():
+                self.welcome.body = "First reviewed body"
+                self.welcome.save()
+                reversion.set_comment("first body")
+            with reversion.create_revision():
+                self.welcome.body = "Second reviewed body"
+                self.welcome.save()
+                reversion.set_comment("second body")
+
+        alice = Client()
+        self.login(alice, "alice")
+        welcome_id = next(
+            node["id"]
+            for node in self.notes(alice)["results"]
+            if node["title"] == "Welcome to Angee"
+        )
+        visible = self.post(
+            alice,
+            """
+            query NoteRevisions($id: ID!) {
+              noteRevisions(id: $id) {
+                id
+                createdAt
+                comment
+                body
+              }
+            }
+            """,
+            {"id": welcome_id},
+        )
+
+        revisions = visible["data"]["noteRevisions"]
+        self.assertEqual(
+            [revision["body"] for revision in revisions],
+            ["Second reviewed body", "First reviewed body"],
+        )
+        self.assertEqual(
+            [revision["comment"] for revision in revisions],
+            ["second body", "first body"],
+        )
+        self.assertTrue(all(revision["id"] for revision in revisions))
+        self.assertTrue(all(revision["createdAt"] for revision in revisions))
+
+        bob = Client()
+        self.login(bob, "bob")
+        scoped_out = self.post(
+            bob,
+            """
+            query NoteRevisions($id: ID!) {
+              noteRevisions(id: $id) { id }
+            }
+            """,
+            {"id": welcome_id},
+        )
+        self.assertEqual(scoped_out["data"]["noteRevisions"], [])
+
     def test_notes_paginate_in_declared_order(self) -> None:
         alice = Client()
         self.login(alice, "alice")
@@ -207,13 +342,13 @@ class IAMGraphQLTests(TransactionTestCase):
         # column value ("active"/"draft"), not the NoteStatus enum member.
         # Enum-typed group keys would be a strawberry-django-aggregates
         # improvement, not an angee workaround.
-        self.assertEqual(data["byStatus"]["totalCount"], 2)
+        self.assertEqual(data["byStatus"]["totalCount"], 3)
         self.assertEqual(
             {
                 row["key"]["status"]: row["count"]
                 for row in data["byStatus"]["results"]
             },
-            {"active": 2, "draft": 1},
+            {"active": 1, "draft": 1, "in_review": 1},
         )
 
         # group-by a date granularity (month) buckets the same three notes.
@@ -238,8 +373,8 @@ class IAMGraphQLTests(TransactionTestCase):
         page0 = self.graphql(query, {"p": {"offset": 0, "limit": 1}})["data"]
         page1 = self.graphql(query, {"p": {"offset": 1, "limit": 1}})["data"]
 
-        # Two status groups, one per offset page; totalCount is page-stable.
-        self.assertEqual(page0["noteGroups"]["totalCount"], 2)
+        # Three status groups, one per offset page; totalCount is page-stable.
+        self.assertEqual(page0["noteGroups"]["totalCount"], 3)
         self.assertEqual(len(page0["noteGroups"]["results"]), 1)
         self.assertEqual(len(page1["noteGroups"]["results"]), 1)
         first = page0["noteGroups"]["results"][0]["key"]["status"]

@@ -1,15 +1,15 @@
-"""Ownership relationships for notes, derived from the acting user.
+"""Ownership and audit relationships for notes, derived from the acting user.
 
 Creating a note stamps the actor as ``created_by`` and grants them the
-``owner`` relation on ``notes/note``; deleting a note clears its relationships.
-Owner grants are what make a note readable and writable by its creator under
-the permission schema, so they are wired to the model lifecycle rather than
-left to callers.
+``owner`` relation on ``notes/note``. Updating a note stamps the actor as
+``updated_by``. Deleting a note clears its relationships. Owner grants are what
+make a note readable and writable by its creator under the permission schema,
+so they are wired to the model lifecycle rather than left to callers.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Model
 from django.db.models.signals import post_delete, post_save, pre_save
@@ -30,23 +30,24 @@ USER_TYPE = "auth/user"
 def connect() -> None:
     """Wire note ownership to the note lifecycle (idempotent)."""
 
-    pre_save.connect(stamp_creator, dispatch_uid="notes.stamp_creator")
+    pre_save.connect(stamp_audit_user, dispatch_uid="notes.stamp_audit_user")
     post_save.connect(grant_owner, dispatch_uid="notes.grant_owner")
     post_delete.connect(clear_relationships, dispatch_uid="notes.clear")
 
 
-def stamp_creator(
+def stamp_audit_user(
     sender: type[Model], instance: Model, raw: bool = False, **_: Any
 ) -> None:
-    """Record the acting user as the creator of a new note."""
+    """Record the acting user as the note creator or updater."""
 
-    if raw or not _is_note(sender) or instance.pk is not None:
-        return
-    if getattr(instance, "created_by_id", None) is not None:
+    if raw or not _is_note(sender):
         return
     actor = current_actor()
     if actor is not None and actor.subject_type == USER_TYPE:
-        instance.created_by_id = actor.subject_id
+        cast(Any, instance).stamp_audit_actor(
+            actor.subject_id,
+            creating=instance.pk is None,
+        )
 
 
 def grant_owner(

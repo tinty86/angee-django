@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import reversion
+from django.conf import settings
 from django.db import models
 from django_sqids import SqidsField
 
@@ -34,6 +35,41 @@ class SqidMixin(models.Model):
         """Django model options for sqid-only abstract inheritance."""
 
         abstract = True
+
+
+class AuditMixin(models.Model):
+    """Add conventional user-owned audit foreign keys to a model."""
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    """The user that created the row, when known."""
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    """The user that most recently updated the row, when known."""
+
+    class Meta:
+        """Django model options for audit-only abstract inheritance."""
+
+        abstract = True
+
+    def stamp_audit_actor(self, user_id: Any, *, creating: bool) -> None:
+        """Stamp audit ids from the acting user without fetching the user."""
+
+        if creating and getattr(self, "created_by_id", None) is None:
+            setattr(self, "created_by_id", user_id)
+        if not creating:
+            setattr(self, "updated_by_id", user_id)
 
 
 class HistoryMixin(models.Model):

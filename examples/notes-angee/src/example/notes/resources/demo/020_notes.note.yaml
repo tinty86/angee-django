@@ -12,17 +12,19 @@
     is_starred: true
     reminder_at: "2026-06-01 09:00:00"
     created_by: notes.user_alice
+    updated_by: notes.user_alice
 - model: notes.Note
   xref: quarterly_planning
   fields:
     title: Quarterly planning
     body: >-
       Outline the next quarter's themes and the slices that land first.
-    status: active
+    status: in_review
     tags:
       - planning
     is_starred: false
     created_by: notes.user_alice
+    updated_by: notes.user_admin
 - model: notes.Note
   xref: reading_list
   fields:
@@ -34,6 +36,7 @@
       - research
     is_starred: true
     created_by: notes.user_alice
+    updated_by: notes.user_alice
 - model: notes.Note
   xref: draft
   fields:
@@ -45,19 +48,21 @@
       - planning
     is_starred: false
     created_by: notes.user_bob
+    updated_by: notes.user_bob
 - model: notes.Note
   xref: bug_triage
   fields:
     title: Bug triage notes
     body: >-
       Group the open reports by subsystem before the standup.
-    status: active
+    status: in_review
     tags:
       - triage
       - backend
     is_starred: false
     reminder_at: "2026-06-02 15:30:00"
     created_by: notes.user_bob
+    updated_by: notes.user_admin
 - model: notes.Note
   xref: one_on_one
   fields:
@@ -69,6 +74,7 @@
       - management
     is_starred: true
     created_by: notes.user_bob
+    updated_by: notes.user_bob
 - model: notes.Note
   xref: team_handbook
   fields:
@@ -80,6 +86,7 @@
       - reference
     is_starred: false
     created_by: notes.user_admin
+    updated_by: notes.user_admin
 - model: notes.Note
   xref: release_checklist
   fields:
@@ -93,3 +100,4 @@
     is_starred: false
     reminder_at: "2026-06-05 17:00:00"
     created_by: notes.user_admin
+    updated_by: notes.user_admin
