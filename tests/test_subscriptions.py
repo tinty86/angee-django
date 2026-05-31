@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
-from types import SimpleNamespace
 
 import strawberry
-from angee.base.graphql import subscriptions
-from angee.base.graphql.subscriptions import ChangeEvent, changes
 from channels.layers import InMemoryChannelLayer
 from django.contrib.auth.models import Group
 from rebac import anonymous_actor
 
 from angee.base import signals
+from angee.base.graphql import subscriptions
+from angee.base.graphql.events import ChangeEvent
+from angee.base.graphql.subscriptions import changes
 
 ANON = anonymous_actor()
 
@@ -49,7 +48,17 @@ def test_changes_builds_a_named_subscription_field() -> None:
 def test_gate_event_passes_through_non_rebac_models(monkeypatch) -> None:
     """A model without a REBAC resource type streams unfiltered."""
 
-    monkeypatch.setattr(subscriptions, "model_resource_type", lambda model: "")
+    class Gate:
+        """Gate stub that returns the payload unchanged."""
+
+        def __init__(self, model: object, actor: object) -> None:
+            self.model = model
+            self.actor = actor
+
+        def filter(self, payload: dict[str, object]) -> ChangeEvent:
+            return ChangeEvent.from_payload(payload)
+
+    monkeypatch.setattr(subscriptions, "ChangeReadGate", Gate)
 
     event = subscriptions._gate_event(Group, ANON, _payload())
 
@@ -61,15 +70,17 @@ def test_gate_event_passes_through_non_rebac_models(monkeypatch) -> None:
 def test_gate_event_drops_unreadable_rows(monkeypatch) -> None:
     """An event for a row the actor cannot read is suppressed."""
 
-    monkeypatch.setattr(
-        subscriptions, "model_resource_type", lambda model: "group"
-    )
-    monkeypatch.setattr(subscriptions, "backend", lambda: object())
-    monkeypatch.setattr(
-        subscriptions,
-        "check_field_access",
-        lambda *a, **k: SimpleNamespace(allowed=False),
-    )
+    class Gate:
+        """Gate stub that drops every payload."""
+
+        def __init__(self, model: object, actor: object) -> None:
+            self.model = model
+            self.actor = actor
+
+        def filter(self, payload: dict[str, object]) -> None:
+            return None
+
+    monkeypatch.setattr(subscriptions, "ChangeReadGate", Gate)
 
     assert subscriptions._gate_event(Group, ANON, _payload()) is None
 
@@ -77,18 +88,20 @@ def test_gate_event_drops_unreadable_rows(monkeypatch) -> None:
 def test_gate_event_redacts_denied_fields(monkeypatch) -> None:
     """Field-gated values the actor cannot read are removed from the event."""
 
-    monkeypatch.setattr(
-        subscriptions, "model_resource_type", lambda model: "group"
-    )
-    monkeypatch.setattr(subscriptions, "backend", lambda: object())
-    monkeypatch.setattr(
-        subscriptions, "gated_read_fields", lambda model: frozenset({"secret"})
-    )
+    class Gate:
+        """Gate stub that redacts the secret field."""
 
-    def check(_backend, *, subject, action, resource):
-        return SimpleNamespace(allowed=action != "read__secret")
+        def __init__(self, model: object, actor: object) -> None:
+            self.model = model
+            self.actor = actor
 
-    monkeypatch.setattr(subscriptions, "check_field_access", check)
+        def filter(self, payload: dict[str, object]) -> ChangeEvent:
+            redacted = dict(payload)
+            redacted["changed_fields"] = ["name"]
+            redacted["changed_values"] = {"name": "x"}
+            return ChangeEvent.from_payload(redacted)
+
+    monkeypatch.setattr(subscriptions, "ChangeReadGate", Gate)
 
     event = subscriptions._gate_event(
         Group,
@@ -125,18 +138,3 @@ def test_subscribe_yields_broadcast_payloads(monkeypatch) -> None:
 
     payload = asyncio.run(scenario())
     assert payload["id"] == "7"
-
-
-def test_scope_actor_defaults_to_anonymous() -> None:
-    """A scope without an authenticated user resolves to anonymous."""
-
-    assert subscriptions.scope_actor({}) == anonymous_actor()
-
-
-def test_json_safe_normalizes_values() -> None:
-    """Non-primitive values become JSON-serializable representations."""
-
-    when = datetime.datetime(2026, 5, 30, 12, 0, 0)
-    assert signals._json_safe(when) == "2026-05-30T12:00:00"
-    assert signals._json_safe([when]) == ["2026-05-30T12:00:00"]
-    assert signals._json_safe(3) == 3

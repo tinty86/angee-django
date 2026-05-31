@@ -127,7 +127,11 @@ def test_change_read_gate_passes_non_rebac_payloads(
 
     gate = ChangeReadGate(Group, anonymous_actor())
 
-    assert gate.filter(payload()) == payload()
+    event = gate.filter(payload())
+
+    assert event is not None
+    assert event.action == "update"
+    assert event.changed_fields == ["name"]
 
 
 def test_change_read_gate_drops_unreadable_rows(
@@ -173,5 +177,5 @@ def test_change_read_gate_redacts_denied_fields(
     )
 
     assert event is not None
-    assert event["changed_fields"] == ["name"]
-    assert event["changed_values"] == {"name": "editors"}
+    assert event.changed_fields == ["name"]
+    assert event.changed_values == {"name": "editors"}

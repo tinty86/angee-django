@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 import strawberry
 import strawberry_django
-from angee.base.graphql import crud
 from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
 from strawberry import auto
+
+from angee.base.graphql import crud
 
 
 @strawberry_django.type(Group)
@@ -98,13 +99,14 @@ def test_crud_fields_merge_into_a_schema() -> None:
 
 
 @pytest.mark.django_db
-def test_collect_delete_preview_counts_affected_rows() -> None:
-    """The cascade preview reports what removing a row would delete."""
+def test_delete_preview_output_adapts_deletion_domain() -> None:
+    """CRUD delete output serializes the deletion preview domain object."""
 
-    from angee.base.graphql.crud import collect_delete_preview
+    from angee.base.deletion import DeletionPreview
+    from angee.base.graphql.crud import DeletePreview
 
     group = Group.objects.create(name="reviewers")
-    preview = collect_delete_preview(group)
+    preview = DeletePreview.from_domain(DeletionPreview.from_instance(group))
 
     assert preview.total_deleted_count == 1
     assert not preview.has_blockers

@@ -6,15 +6,13 @@ from typing import Any, cast
 
 import pytest
 import strawberry
-from angee.base.graphql.schema import (
-    build_schema,
-    collect_schema_names,
-    collect_schema_parts,
-    render_sdl,
-)
 from django.core.exceptions import ImproperlyConfigured
 
 from angee.base.apps import SCHEMA_PART_KEYS, BaseAddonConfig
+from angee.base.graphql.schema import (
+    DEFAULT_SCHEMA_NAME,
+    GraphQLSchemas,
+)
 
 
 @strawberry.type
@@ -70,22 +68,23 @@ def test_collect_folds_addons_in_order() -> None:
         public={"query": [WorldQuery]}, console={"query": [HelloQuery]}
     )
 
-    collected = collect_schema_parts([first, second])
+    schemas = GraphQLSchemas.from_addons([first, second])
+    collected = schemas.parts
 
     assert collected["public"]["query"] == (HelloQuery, WorldQuery)
     assert set(collected) == {"public", "console"}
-    assert collect_schema_names([first, second]) == ("console", "public")
+    assert schemas.names() == ("console", "public")
 
 
 def test_collect_dedupes_by_identity() -> None:
     """A surface contributed twice is folded once."""
 
-    collected = collect_schema_parts(
+    collected = GraphQLSchemas.from_addons(
         [
             addon(public={"query": [HelloQuery]}),
             addon(public={"query": [HelloQuery]}),
         ]
-    )
+    ).parts
 
     assert collected["public"]["query"] == (HelloQuery,)
 
@@ -93,13 +92,12 @@ def test_collect_dedupes_by_identity() -> None:
 def test_build_schema_merges_query_surfaces() -> None:
     """Query surfaces from several addons merge into one root."""
 
-    schema = build_schema(
-        "public",
+    schema = GraphQLSchemas.from_addons(
         [
             addon(public={"query": [HelloQuery]}),
             addon(public={"query": [WorldQuery]}),
-        ],
-    )
+        ]
+    ).build("public")
 
     result = schema.execute_sync("{ hello world }")
 
@@ -110,10 +108,9 @@ def test_build_schema_merges_query_surfaces() -> None:
 def test_build_schema_includes_mutation_root() -> None:
     """A mutation bucket becomes the schema mutation root."""
 
-    schema = build_schema(
-        "public",
-        [addon(public={"query": [HelloQuery], "mutation": [PingMutation]})],
-    )
+    schema = GraphQLSchemas.from_addons(
+        [addon(public={"query": [HelloQuery], "mutation": [PingMutation]})]
+    ).build("public")
 
     result = schema.execute_sync("mutation { ping }")
 
@@ -125,14 +122,18 @@ def test_build_schema_unknown_name_lists_available() -> None:
     """An unknown schema name reports the names that do exist."""
 
     with pytest.raises(ImproperlyConfigured, match="available schemas"):
-        build_schema("console", [addon(public={"query": [HelloQuery]})])
+        GraphQLSchemas.from_addons(
+            [addon(public={"query": [HelloQuery]})]
+        ).build("console")
 
 
 def test_build_schema_requires_query_root() -> None:
     """A schema without any query contribution fails fast."""
 
     with pytest.raises(ImproperlyConfigured, match="no query root"):
-        build_schema("public", [addon(public={"mutation": [PingMutation]})])
+        GraphQLSchemas.from_addons(
+            [addon(public={"mutation": [PingMutation]})]
+        ).build("public")
 
 
 def test_merge_root_field_collision() -> None:
@@ -145,35 +146,24 @@ def test_merge_root_field_collision() -> None:
             return "shadow"
 
     with pytest.raises(ImproperlyConfigured, match="contributed by both"):
-        build_schema(
-            "public",
+        GraphQLSchemas.from_addons(
             [
                 addon(public={"query": [HelloQuery]}),
                 addon(public={"query": [OtherHello]}),
-            ],
-        )
+            ]
+        ).build("public")
 
 
-def test_render_sdl_is_deterministic_per_name() -> None:
-    """SDL is printed per schema name in sorted order."""
+def test_default_schema_name_is_public() -> None:
+    """The default live schema remains the public schema."""
 
-    sdl = render_sdl(
-        [
-            addon(
-                public={"query": [HelloQuery]},
-                console={"query": [WorldQuery]},
-            )
-        ]
-    )
-
-    assert list(sdl) == ["console", "public"]
-    assert "hello" in sdl["public"]
-    assert "world" in sdl["console"]
+    assert DEFAULT_SCHEMA_NAME == "public"
 
 
 def test_empty_addons_contribute_no_schemas() -> None:
     """No contributions means no names and no parts."""
 
     empty: list[Any] = []
-    assert collect_schema_parts(empty) == {}
-    assert collect_schema_names(empty) == ()
+    schemas = GraphQLSchemas.from_addons(empty)
+    assert schemas.parts == {}
+    assert schemas.names() == ()

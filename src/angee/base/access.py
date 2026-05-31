@@ -11,6 +11,8 @@ from rebac.backends import backend
 from rebac.field_visibility import check_field_access, gated_read_fields
 from rebac.resources import model_resource_type
 
+from angee.base.graphql.events import ChangeEvent
+
 
 class ChangeReadGate:
     """Filter and redact change payloads for one model and actor."""
@@ -31,11 +33,11 @@ class ChangeReadGate:
     def filter(
         self,
         payload: Mapping[str, Any],
-    ) -> dict[str, Any] | None:
-        """Return a readable payload, or ``None`` when the row is hidden."""
+    ) -> ChangeEvent | None:
+        """Return a readable change event, or ``None`` when hidden."""
 
         if not self.resource_type:
-            return dict(payload)
+            return ChangeEvent.from_payload(payload)
 
         resource = ObjectRef(self.resource_type, str(payload["id"]))
         allowed = check_field_access(
@@ -46,7 +48,7 @@ class ChangeReadGate:
         )
         if not allowed.allowed:
             return None
-        return self._redact(payload, resource)
+        return ChangeEvent.from_payload(self._redact(payload, resource))
 
     def _redact(
         self,
