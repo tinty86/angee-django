@@ -30,6 +30,21 @@ simplified, invalidation provider uses a Fragment (headless). NOT yet committed
 (await architect). Next: Phase 2 (@angee/base).
 
 ## ▶ M3 FRONTEND — IN FLIGHT (full end-to-end, phased). Plan: `.agents/plans/m3-frontend.md`
+Phase 1 committed (`1e53680`). **Phase 2 (@angee/base) IN PROGRESS** — strategy
+locked (plan §Phase 2): the prototype's base is already on our stack
+(base-ui + tailwind-variants + TanStack + lucide + valibot + cmdk). Reuse near-
+verbatim (clean, strip provenance): the styling foundation (`lib/{cn,variants,
+tailwind-merge-config}.ts`, `styles/{tokens,index}.css` — Tailwind 4 `@theme` token
+system every primitive needs) + the `ui/` primitives notes+auth uses. Reconstruct on
+the NEW SDK (prototype's views are old-SDK-coupled): ListView (offset pager),
+FormView (TanStack Form + enum select), DataPage/ResourcePage, aggregate panel,
+LoginPage + UsernamePasswordForm, app shell + createApp (wire console client into
+RelayInvalidationProvider). Add only owner-rowed deps; avoid nuqs/date-fns/
+floating-ui/use-debounce/react-markdown/@angee/logo-react (use TanStack Router
+search, Intl, base-ui positioning, a local debounce). Skip xyflow/dnd/codemirror/
+upload/json-ansi/wide-widget-catalog. NEXT: scaffold packages/base (package.json
+stack-deps, tsconfig, exports), port the foundation+tokens, then primitives, verify
+typecheck; then the SDK-bound views + app/shell/login.
 Workspace `m3-frontend` (branch `workspace/m3-frontend`), off `main`. `angee dev`
 runs the backend from here. Architect decisions: (1) full M3 now — SDK fix +
 `@angee/base` + example web app + Vite dev-serving + browser e2e; (2) **pagination =

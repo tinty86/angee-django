@@ -99,15 +99,40 @@ schema.
 
 ## Phase 2 — @angee/base rendered binding (task #2)
 
-New `packages/base` (`@angee/base`). Minimal rendered binding to render notes+auth
-— not the full catalog. Per `docs/stack.md` frontend rows (React 19, TanStack
-Router/Form/Table/Virtual, base-ui-components, tailwind-variants, tailwind 4,
-lucide, valibot, i18next). `createApp` host composition + `defineAddon` already in
-the SDK. Pieces: provider stack/app shell + chrome, login page + username/password
-form, ListView (cursor pager that shows `total`/pages from `totalCount`, status
-enum column + filter, order via `NoteOrder`), FormView (TanStack Form, enum
-`select`), aggregate/group-by panel (count by status/isStarred/month). Reference p1
-`packages/base` for the proven shape; reconstruct natively, less code.
+New `packages/base` (`@angee/base`). **Architect: reuse the prototype's base
+aggressively where the code is clean** — its base is already on our stack
+(`@base-ui-components/react` + `tailwind-variants`/`tailwind-merge`/`tw-animate-css`
++ TanStack form/table/virtual + lucide + valibot + cmdk, all owner-rowed in
+`docs/stack.md`). The reuse splits in two:
+
+- **Reuse near-verbatim (vet clean, strip ALL provenance):** the styling foundation
+  (`lib/{cn,variants,tailwind-merge-config,tones,statusVariants}.ts`,
+  `styles/{tokens,index}.css`) and the UI primitives notes+auth needs from `ui/`
+  (button, dialog, alert-dialog, field, form, form-layout, input, textarea,
+  number-field, label, select, checkbox, switch, table, tabs, badge, chip, card,
+  spinner, separator, popover, tooltip, scroll-area, pagination, toolbar, avatar,
+  status-icon, command). These are base-ui + tailwind-variants recipes — SDK-
+  agnostic presentation, so they port cleanly.
+- **Reconstruct on the NEW SDK (the prototype's are coupled to the old SDK):** the
+  data-bound layer — `ListView` (offset pager from `useResourceList` page/setPage/
+  pageCount; status enum column + `NoteOrder`), `FormView` (TanStack Form, enum
+  `select`), `DataPage`/`ResourcePage`, the aggregate/group-by panel (new
+  `noteAggregate(groupBy:)` shape), `LoginPage` + `UsernamePasswordForm` (new
+  `useLoginWithPassword`), app shell + `createApp` providers (wire the console
+  client into `RelayInvalidationProvider`).
+
+**Dependencies:** add ONLY owner-rowed deps to `packages/base/package.json`
+(base-ui, tailwind-variants, tailwind-merge, tw-animate-css, TanStack form/table/
+virtual, lucide, valibot, cmdk — all already in `docs/stack.md`). **Avoid the
+prototype's owner-row-less deps** (`nuqs`, `date-fns`, `@floating-ui/react-dom`,
+`use-debounce`, `react-markdown`, `@angee/logo-react`): use TanStack Router search
+params for query-state, `Intl` for dates, base-ui's own positioning, a tiny local
+debounce. Flag to the architect only if one proves unavoidable. **Skip** the
+prototype's graph (`@xyflow`), board (`@dnd-kit`), CodeMirror editor, upload, json/
+ansi panels, and the wide widget/chrome catalog — not needed for the notes+auth e2e.
+
+Provenance hygiene: copied files keep no source comments, plan numbers, or
+"ported/lifted" notes; rename anything that references the prototype.
 
 ## Phase 3 — notes + auth example web app (task #3)
 
