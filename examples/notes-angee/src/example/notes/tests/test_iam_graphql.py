@@ -182,36 +182,70 @@ class IAMGraphQLTests(TransactionTestCase):
             }
             """
         )
-        aggregate = self.graphql(
+        data = self.graphql(
             """
             query {
-              total: noteAggregate {
-                count
-                groups { count }
+              total: noteAggregate { count }
+              byStatus: noteGroups(groupBy: [{field: STATUS}]) {
+                totalCount
+                results { key { status } count }
               }
-              byStatus: noteAggregate(groupBy: [STATUS]) {
-                count
-                groups { status count }
-              }
-              byMonth: noteAggregate(groupBy: [UPDATED_AT_MONTH]) {
-                count
-                groups { updatedAtMonth count }
+              byMonth: noteGroups(
+                groupBy: [{field: UPDATED_AT, granularity: MONTH}]
+              ) {
+                totalCount
+                results { key { updatedAtMonth } count }
               }
             }
             """
         )["data"]
 
-        self.assertEqual(aggregate["total"], {"count": 3, "groups": []})
+        # Ungrouped total is actor-scoped to alice's three notes.
+        self.assertEqual(data["total"]["count"], 3)
+
+        # group-by status: groups paginate (totalCount). The library emits
+        # group keys as raw scalars (status: String), so the value is the
+        # column value ("active"/"draft"), not the NoteStatus enum member.
+        # Enum-typed group keys would be a strawberry-django-aggregates
+        # improvement, not an angee workaround.
+        self.assertEqual(data["byStatus"]["totalCount"], 2)
         self.assertEqual(
             {
-                group["status"]: group["count"]
-                for group in aggregate["byStatus"]["groups"]
+                row["key"]["status"]: row["count"]
+                for row in data["byStatus"]["results"]
             },
-            {"ACTIVE": 2, "DRAFT": 1},
+            {"active": 2, "draft": 1},
         )
-        self.assertEqual(aggregate["byStatus"]["count"], 3)
-        self.assertEqual(aggregate["byMonth"]["count"], 3)
-        self.assertTrue(aggregate["byMonth"]["groups"][0]["updatedAtMonth"])
+
+        # group-by a date granularity (month) buckets the same three notes.
+        self.assertGreaterEqual(data["byMonth"]["totalCount"], 1)
+        self.assertEqual(
+            sum(row["count"] for row in data["byMonth"]["results"]), 3
+        )
+        self.assertTrue(data["byMonth"]["results"][0]["key"]["updatedAtMonth"])
+
+    def test_note_groups_paginate_with_offset(self) -> None:
+        self.graphql(
+            'mutation { login(username: "alice", password: "alice") { ok } }'
+        )
+        query = """
+            query Page($p: OffsetPaginationInput) {
+              noteGroups(groupBy: [{field: STATUS}], pagination: $p) {
+                totalCount
+                results { key { status } count }
+              }
+            }
+        """
+        page0 = self.graphql(query, {"p": {"offset": 0, "limit": 1}})["data"]
+        page1 = self.graphql(query, {"p": {"offset": 1, "limit": 1}})["data"]
+
+        # Two status groups, one per offset page; totalCount is page-stable.
+        self.assertEqual(page0["noteGroups"]["totalCount"], 2)
+        self.assertEqual(len(page0["noteGroups"]["results"]), 1)
+        self.assertEqual(len(page1["noteGroups"]["results"]), 1)
+        first = page0["noteGroups"]["results"][0]["key"]["status"]
+        second = page1["noteGroups"]["results"][0]["key"]["status"]
+        self.assertNotEqual(first, second)
 
     def test_non_owner_cannot_read_another_users_notes(self) -> None:
         alice = Client()
