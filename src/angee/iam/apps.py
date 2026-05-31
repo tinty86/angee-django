@@ -12,3 +12,5 @@ class IAMConfig(BaseAddonConfig):
     name = "angee.iam"
     label = "iam"
     depends_on = ("base",)
+    settings_defaults = {"AUTH_USER_MODEL": "iam.User"}
+    """IAM owns the swappable user model it emits as the composed default."""

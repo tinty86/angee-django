@@ -6,36 +6,10 @@ template:
   active: stacks/dev
   answers_file: .copier-answers.yml
 
-operator:
-  url: http://127.0.0.1:{{ operator_port }}
-  token_secret: operator-token
-  port_pool:
-    web: { range: "8200-8299" }
-    storybook: { range: "6007-6105" }
-    custom: { range: "10000-10999" }
-
-secrets_backend:
-  type: env-file
-  path: .env
-
-secrets:
-  django-secret-key: { generated: true, length: 50 }
-  operator-token: { generated: true, length: 32 }
-  anthropic-api-key: {}
-
 ports:
   web: { value: {{ django_port }}, export_env: DJANGO_PORT }
-  ui: { value: {{ ui_port }}, export_env: UI_PORT }
-  storybook: { value: {{ storybook_port }}, export_env: STORYBOOK_PORT }
-  operator: { value: {{ operator_port }}, export_env: ANGEE_OPERATOR_PORT }
-  playwright: { value: {{ playwright_port }}, export_env: PLAYWRIGHT_PORT }
   process_compose: { value: {{ process_compose_port }}, export_env: PROCESS_COMPOSE_PORT }
 
-# Two local source trees: ``app`` is the consumer project (e.g.
-# ``examples/notes-angee``), ``framework`` is the angee-django monorepo
-# root. The SPA lives under the consumer; Storybook lives under the
-# framework. Splitting the source lets the template stay project-rooted
-# while still reaching the workspace-level Storybook host.
 sources:
   app:
     kind: local
@@ -44,145 +18,75 @@ sources:
     kind: local
     path: {{ framework_path }}
 
-volumes:
-  app-data: { driver: local-fs, path: data }
-  logs: { driver: local-fs, path: data/logs }
-
+# The compose/build/serve lifecycle. JOBS run once in depends_on order; SERVICES
+# stay up. Every command boots the host settings, whose composer emits the
+# concrete runtime in app-populate phase 2 before the addons adopt it — so a
+# wiped runtime self-heals on the first job. The host owns DATA_DIR (and creates
+# it).
 jobs:
+  # Explicit emit. A normal boot already self-heals the runtime in phase 2; this
+  # is the legible, idempotent front of the graph.
   build:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec env ANGEE_DATA="$VOLUME_APP_DATA_PATH" uv run python manage.py angee build --no-apply
+    command: ["uv", "run", "python", "manage.py", "angee", "build"]
     env:
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
+
+  # Generate migrations against the freshly emitted concrete models. Mandatory:
+  # the composer emits models.py, never migration files.
+  makemigrations:
+    runtime: local
+    workdir: source://app
+    command: ["uv", "run", "python", "manage.py", "makemigrations", "base", "iam", "notes"]
+    env:
+      DJANGO_SETTINGS_MODULE: {{ django_settings }}
+    depends_on: [build]
 
   migrate:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec env ANGEE_DATA="$VOLUME_APP_DATA_PATH" uv run python manage.py migrate --noinput
+    command: ["uv", "run", "python", "manage.py", "migrate", "--noinput"]
     env:
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
-    depends_on: [build]
+    depends_on: [makemigrations]
 
   permissions:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec env ANGEE_DATA="$VOLUME_APP_DATA_PATH" uv run python manage.py rebac sync --yes
+    command: ["uv", "run", "python", "manage.py", "rebac", "sync", "--yes"]
     env:
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
     depends_on: [migrate]
 
-  assets:
+  resources:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
     command:
       - sh
       - "-c"
-      - >-
-        env ANGEE_DATA="$VOLUME_APP_DATA_PATH"
-        uv run python manage.py angee assets load install &&
-        env ANGEE_DATA="$VOLUME_APP_DATA_PATH"
-        uv run python manage.py angee assets load demo
+      - uv run python manage.py resources load install && uv run python manage.py resources load demo
     env:
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
     depends_on: [permissions]
 
-  # pnpm is a workspace tool — installing at the framework root pulls
-  # deps for every workspace package (the SPA at examples/.../web, the
-  # storybook-host, all addon UI bindings).
-  ui-install:
-    runtime: local
-    workdir: source://framework
-    command: ["npx", "-y", "pnpm@11.0.9", "install"]
-
-services:
-  build-watch:
+  # Render GraphQL SDL to runtime/schemas/<name>.graphql for React codegen.
+  schema:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec env ANGEE_DATA="$VOLUME_APP_DATA_PATH" uv run python manage.py angee build --watch --no-apply
+    command: ["uv", "run", "python", "manage.py", "schema"]
     env:
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
-    after: [build]
+    depends_on: [build]
 
+services:
+  # Daphne runserver: ASGI (HTTP + WebSocket) under Django's autoreloader.
+  # Editing serving code restarts the worker; the fresh boot re-emits the
+  # runtime in phase 2, so model changes are picked up on that restart.
   web:
     runtime: local
     workdir: source://app
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec env ANGEE_DATA="$VOLUME_APP_DATA_PATH" uv run daphne -b 127.0.0.1 -p ${ports.web} host.asgi:application
+    command: ["uv", "run", "python", "manage.py", "runserver", "127.0.0.1:{{ django_port }}"]
     env:
-      PYTHONPATH: src
       DJANGO_SETTINGS_MODULE: {{ django_settings }}
-      DJANGO_SECRET_KEY: "${secret.django-secret-key}"
-      DJANGO_DEBUG: "true"
-      ANGEE_OPERATOR_GRAPHQL_ENDPOINT: "/operator/graphql"
-      ANGEE_OPERATOR_URL: "http://127.0.0.1:${ports.operator}"
-      ANGEE_OPERATOR_TOKEN: "${secret.operator-token}"
-      ANGEE_MCP_SERVER_URL: "http://host.docker.internal:${ports.web}/mcp/"
-      DJANGO_CSRF_TRUSTED_ORIGINS: "http://127.0.0.1:${ports.ui},http://localhost:${ports.ui},http://127.0.0.1:${ports.storybook},http://localhost:${ports.storybook}"
-    after: [assets]
-
-  operator:
-    runtime: local
-    command:
-      - sh
-      - "-c"
-      - exec angee operator --root . --bind 127.0.0.1 --port ${ports.operator} --token "$ANGEE_OPERATOR_TOKEN"
-    env:
-      ANGEE_OPERATOR_TOKEN: "${secret.operator-token}"
-
-  # The consumer SPA. Lives under the consumer project so each
-  # downstream host can ship its own surface, slot composition, and
-  # branding. ``pnpm dev`` resolves to the per-package ``vite`` script.
-  ui:
-    runtime: local
-    workdir: source://app/src/web
-    command: ["npx", "-y", "pnpm@11.0.9", "dev", "--host", "127.0.0.1", "--port", "${ports.ui}", "--strictPort"]
-    env:
-      ANGEE_VITE_PORT: "${ports.ui}"
-      ANGEE_API_TARGET: "http://127.0.0.1:${ports.web}"
-      ANGEE_OPERATOR_URL: "http://127.0.0.1:${ports.operator}"
-    after: [operator, web, ui-install]
-
-  # Storybook replaces the second-binding SPA we used to keep for
-  # component development. Lives under ``packages/storybook-host`` at
-  # the framework root because every consumer project shares the same
-  # component library; per-consumer Storybooks would just be theme
-  # forks of the same content.
-  storybook:
-    runtime: local
-    workdir: source://framework/packages/storybook-host
-    command: ["npx", "-y", "pnpm@11.0.9", "dev", "--host", "127.0.0.1", "--port", "${ports.storybook}", "--no-open"]
-    after: [ui-install]
-
-  playwright-mcp:
-    runtime: local
-    mounts: ["volume://app-data:/data"]
-    command:
-      - sh
-      - "-c"
-      - exec npx -y @playwright/mcp@latest --port ${ports.playwright} --host 127.0.0.1 --browser {{ playwright_browser }} --user-data-dir "$VOLUME_APP_DATA_PATH/chrome"
+    after: [resources, schema]

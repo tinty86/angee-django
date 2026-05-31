@@ -51,6 +51,15 @@ class BaseAddonConfig(AppConfig):
     rebac_schema: ClassVar[str | None] = "permissions.zed"
     """Optional REBAC schema path relative to the addon package root."""
 
+    settings_defaults: ClassVar[Mapping[str, object]] = {}
+    """Django setting defaults this addon contributes to a composed host.
+
+    The composer folds these into the run app set beneath framework defaults
+    and host overrides; the build app set ignores them (it must keep Django's
+    defaults, e.g. ``AUTH_USER_MODEL``, while the concrete runtime is emitted).
+    Two addons contributing the same key with different values is an error.
+    """
+
     resources: ClassVar[ResourceManifest] = {}
     """Resource declarations grouped by tier."""
 
@@ -200,11 +209,14 @@ class BaseAddonConfig(AppConfig):
         )
 
     def import_models(self) -> None:
-        """Import emitted concrete models when the runtime package exists."""
+        """Adopt this addon's emitted concrete models when present.
+
+        The composer emits the runtime earlier in this same phase, so the
+        package normally exists. An absent runtime reads as "not built yet"
+        (e.g. a host with no composer installed) rather than an error.
+        """
 
         super().import_models()
-        if getattr(settings, "ANGEE_BUILD", False):
-            return
         runtime_module = getattr(settings, "ANGEE_RUNTIME_MODULE", None)
         if not runtime_module:
             return

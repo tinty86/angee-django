@@ -26,24 +26,25 @@ DATA_DIR = Path(
     os.environ.get("ANGEE_DATA_DIR", REPO_ROOT / ".angee" / "data")
 )
 
+# The host owns where data lives (the resource cache and the DB read it). The
+# composer no longer couriers this; the host sets it directly and ensures the
+# directory exists so sqlite and the resource cache can open files under it.
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+ANGEE_DATA_DIR = DATA_DIR
+
 # The host owns making the generated ``runtime`` package importable.
 if str(RUNTIME_DIR.parent) not in sys.path:
     sys.path.insert(0, str(RUNTIME_DIR.parent))
 
-BUILD_COMMAND = (
-    len(sys.argv) >= 3
-    and sys.argv[1] == "angee"
-    and sys.argv[2] in {"build", "clean"}
-)
-
+# One app set, one boot: the composer emits the runtime in phase 2 before the
+# addons adopt it, so every entrypoint (runserver, migrate, schema, …) shares
+# this configuration.
 COMPOSED_SETTINGS = compose_defaults(
     addons=("example.notes",),
     runtime_dir=RUNTIME_DIR,
-    data_dir=DATA_DIR,
     root_urlconf="host.urls",
     asgi_application="host.asgi.application",
     debug=DEBUG,
-    build=BUILD_COMMAND,
 )
 globals().update(COMPOSED_SETTINGS)
 

@@ -28,7 +28,6 @@ def compose_defaults(
     *,
     addons: Sequence[str],
     runtime_dir: Path,
-    data_dir: Path,
     root_urlconf: str,
     asgi_application: str,
     runtime_module: str = "runtime",
@@ -40,18 +39,18 @@ def compose_defaults(
     extra_installed_apps: Sequence[str] = (),
     extra_middleware: Sequence[str] = (),
     channel_layers: Mapping[str, Any] | None = None,
-    build: bool = False,
 ) -> dict[str, Any]:
-    """Return Django settings for either build or runtime app sets."""
+    """Return Django settings for one composed host.
+
+    There is a single app set and a single boot. The composer emits the
+    concrete runtime in ``import_models`` (app-populate phase 2) *before* the
+    addons adopt it, so by phase 3 ``iam.User`` is registered and Django's auth
+    contract resolves normally. No build/run mode, no ``ANGEE_BUILD`` flag.
+    """
 
     addon_configs = _addon_config_classes(_with_builtin_addons(addons))
-    installed_apps = (
-        _build_installed_apps(addon_configs, extra_installed_apps)
-        if build
-        else _run_installed_apps(addon_configs, extra_installed_apps)
-    )
-    return {
-        "INSTALLED_APPS": installed_apps,
+    composed: dict[str, Any] = {
+        "INSTALLED_APPS": _installed_apps(addon_configs, extra_installed_apps),
         "MIDDLEWARE": [
             "django.middleware.common.CommonMiddleware",
             "django.contrib.sessions.middleware.SessionMiddleware",
@@ -65,10 +64,6 @@ def compose_defaults(
             "rebac.backends.auth.RebacBackend",
             "django.contrib.auth.backends.ModelBackend",
         ],
-        # The emit-only build keeps Django's default contrib.auth user: it
-        # only renders runtime sources and never resolves the FK. The run set
-        # swaps in the composed concrete ``iam.User`` emitted under runtime/.
-        **({} if build else {"AUTH_USER_MODEL": "iam.User"}),
         "CHANNEL_LAYERS": channel_layers
         or {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
         "ROOT_URLCONF": root_urlconf,
@@ -76,9 +71,7 @@ def compose_defaults(
         "DEFAULT_AUTO_FIELD": "django.db.models.BigAutoField",
         "USE_TZ": use_tz,
         "ANGEE_RUNTIME_DIR": runtime_dir,
-        "ANGEE_DATA_DIR": data_dir,
         "ANGEE_RUNTIME_MODULE": runtime_module,
-        "ANGEE_BUILD": build,
         "ANGEE_GRAPHQL_IDE": graphql_ide
         if graphql_ide is not None
         else ("graphiql" if debug else None),
@@ -93,35 +86,23 @@ def compose_defaults(
         },
         "STATIC_URL": static_url,
     }
+    # Addons contribute setting defaults (e.g. IAM's AUTH_USER_MODEL) beneath
+    # framework defaults and host overrides.
+    for key, value in _addon_settings_defaults(addon_configs).items():
+        composed.setdefault(key, value)
+    return composed
 
 
-def _build_installed_apps(
+def _installed_apps(
     addon_configs: Sequence[type[BaseAddonConfig]],
     extra_installed_apps: Sequence[str],
 ) -> list[str]:
-    """Return installed apps for the emit-only build process."""
+    """Return the single composed app set in deterministic, adopt-safe order.
 
-    return _dedupe(
-        [
-            "django.contrib.contenttypes",
-            "django.contrib.auth",
-            "django.contrib.sessions",
-            "rebac",
-            "reversion",
-            "simple_history",
-            BASE_APP,
-            *(f"{cls.__module__}.{cls.__name__}" for cls in addon_configs),
-            COMPOSE_APP,
-            *extra_installed_apps,
-        ]
-    )
-
-
-def _run_installed_apps(
-    addon_configs: Sequence[type[BaseAddonConfig]],
-    extra_installed_apps: Sequence[str],
-) -> list[str]:
-    """Return installed apps for serving and post-build runtime commands."""
+    ``COMPOSE_APP`` is listed before ``BASE_APP`` and the source addons so its
+    ``import_models`` emits the concrete runtime in phase 2 before any addon
+    adopts ``runtime.<label>`` in the same phase.
+    """
 
     return _dedupe(
         [
@@ -133,6 +114,7 @@ def _run_installed_apps(
             "rebac",
             "reversion",
             "simple_history",
+            COMPOSE_APP,
             BASE_APP,
             RESOURCES_APP,
             *(f"{cls.__module__}.{cls.__name__}" for cls in addon_configs),
@@ -175,6 +157,30 @@ def _migration_modules(
         label: f"{runtime_module}.{label}.migrations"
         for label in sorted(labels)
     }
+
+
+def _addon_settings_defaults(
+    addon_configs: Sequence[type[BaseAddonConfig]],
+) -> dict[str, object]:
+    """Return setting defaults contributed by addons.
+
+    A key contributed by two addons with conflicting values is a composition
+    error.
+    """
+
+    merged: dict[str, object] = {}
+    owners: dict[str, str] = {}
+    for config_class in addon_configs:
+        for key, value in config_class.settings_defaults.items():
+            owner = owners.get(key)
+            if owner is not None and merged[key] != value:
+                raise ImproperlyConfigured(
+                    f"Addons {owner} and {config_class.__name__} both "
+                    f"contribute setting {key!r} with conflicting values"
+                )
+            merged[key] = value
+            owners[key] = config_class.__name__
+    return merged
 
 
 def _resolve_app_config_class(package_name: str) -> type[BaseAddonConfig]:

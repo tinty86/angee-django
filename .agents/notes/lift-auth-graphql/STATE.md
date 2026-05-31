@@ -59,6 +59,40 @@ PERMISSION_DENIED) all green. Workarounds removed:
 hint, not a GraphQL leak — `created_by` is NOT exposed on `NoteType`, so there is no nested user
 path to leak. M2 research (wuoceuykb) wires `manage.py schema` into `angee dev`.
 
+## ⭐ STANDING PRINCIPLE (architect): WHEN STUCK, CHECK p1 — don't invent.
+Any time the lift hits an issue (a library not doing what's expected, a "this needs a
+workaround" moment), FIRST read how the **working prototype `../angee-django-p1`** solved it
+(it uses the same libs — rebac/strawberry-django/aggregates — and works end-to-end). p1's
+solution is the proven, library-native reference. Reconstruct from it; do NOT invent a
+decorator/subclass/private-API-reach. This is why M1 grew hacks: codex invented instead of
+consulting p1. Every cleanup fix must be grounded in p1's working approach AND the library's
+public API. (Pairs with "ALWAYS PREFER A LIBRARY".) Concrete p1 references for the open M1
+smells: auth user lookup-without-actor → p1 `src/angee/auth/{models,backends}.py`; aggregate
+scoped-queryset → p1 `addons/angee/angee/graphql/aggregate_wiring.py`; relay connection
+ordering / node → p1 `addons/angee/angee/graphql/{type_factory,runtime}.py`.
+
+## ⛳ DIRECTION CHANGE (architect) — refactor M1 to p1's shape (SUPERSEDES the iam/no-shim/build-flag decisions)
+The architect chose p1's shape over the current p2 shape, accepting p1's contrib.auth shim
+as the trade for killing the build flag. When the in-flight review (`wczldvpbm`) lands,
+dispatch ONE Claude agent (light context, CLEAR instructions, **do NOT run tests** — just make
+the shape work) to refactor toward p1, grounded in `../angee-django-p1`:
+1. **Rename `angee.iam` → `angee.auth`** (label `auth`); the auth label is owned by the
+   generated runtime app (the abstract user emits with `app_label="auth"`).
+2. **Add p1's `sys.modules` shim** (`auth/compat/auth_models_shim.py` + `install.py`) that lazily
+   resolves `User`/`Group`/`Permission` via `apps.get_model("auth", ...)`, and **remove
+   `django.contrib.auth` from INSTALLED_APPS** (so Django never runs the `auth.E*` checks that
+   crash when `auth.User` isn't loaded). Accepted shim — architect's call.
+3. **Constant `AUTH_USER_MODEL = "auth.User"`** in every mode.
+4. **Kill the `ANGEE_BUILD` flag + the `_build_installed_apps`/`_run_installed_apps` fork** →
+   ONE `compose_defaults`, ONE INSTALLED_APPS, ONE settings shape.
+5. **Failure-tolerant `import_models`** (p1 core/apps.py:92-105): always `try` to import
+   `runtime.<label>.models`; on `ModuleNotFoundError` whose `.name` is the runtime/label/target,
+   `return` ("not built yet"); else re-raise. NO flag gate. "Don't worry about the imports" —
+   use the try/except in import_models; don't fuss about imports-at-top for this.
+6. While there, fold in the review's other confirmed smells (UserManager bypass, aggregate
+   `_apply_scope_in_place`/`on_field_deny`, AngeeConnection, copy.copy) — fixed per p1's approach.
+The agent REPORTS THE SHAPE (no test run); the architect checks the shape before we verify.
+
 ## The main thing (core intent — drives every milestone)
 The point of this program is a **GraphQL contract change** and its propagation to the
 client:

@@ -74,6 +74,10 @@ exclude = [
   ".ruff_cache",
   ".venv",
   "node_modules",
+  # Generated runtime is emitted output, not source: concrete models and
+  # Django-authored migrations live here. The composer owns its shape; lint
+  # the abstract sources instead.
+  "**/runtime",
 ]
 
 [tool.ruff.lint]

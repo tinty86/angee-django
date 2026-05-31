@@ -40,11 +40,25 @@ class AngeeRuntime:
 
     @classmethod
     def from_settings(cls) -> AngeeRuntime:
-        """Return a runtime using discovered addons and Django settings."""
+        """Return a runtime using discovered addons and Django settings.
 
+        ``ANGEE_RUNTIME_DIR`` is the single owner of where the runtime lives;
+        ``compose_defaults`` always sets it. A host that installs the composer
+        without it is misconfigured, so fail loudly here rather than let a
+        caller silently skip emission and surface a cryptic missing-model
+        error later in app population.
+        """
+
+        runtime_dir = getattr(settings, "ANGEE_RUNTIME_DIR", None)
+        if not runtime_dir:
+            raise ImproperlyConfigured(
+                "angee.compose requires ANGEE_RUNTIME_DIR; compose_defaults "
+                "sets it. A host installing the composer must configure the "
+                "runtime directory."
+            )
         return cls.from_addons(
             discover_addons(),
-            runtime_dir=Path(settings.ANGEE_RUNTIME_DIR),
+            runtime_dir=Path(runtime_dir),
         )
 
     @classmethod
@@ -75,19 +89,60 @@ class AngeeRuntime:
         return sources
 
     def emit(self) -> None:
-        """Write generated runtime sources to disk."""
+        """Reset the runtime and write all sources (destructive; explicit).
+
+        Used by the ``angee build`` command: it runs the ``_ensure_cleanable``
+        gate and prunes stale files (e.g. a removed addon's leftover label),
+        then rewrites. Not used at boot — see ``emit_if_stale``.
+        """
 
         self.reset()
+        self._write_sources()
+
+    def emit_if_stale(self) -> bool:
+        """Write the runtime when it drifts from the sources, on every boot.
+
+        Called from the composer's ``import_models`` in app-populate phase 2.
+        Write-only and idempotent: it never resets or cleans, so a present-but-
+        stale runtime is healed file by file and a corrupted or non-Angee
+        directory can never abort app population through the destructive
+        ``_ensure_cleanable`` gate. Orphaned files from a removed addon are
+        pruned by the explicit ``angee build`` (which calls ``emit``).
+        Returning early when current keeps boots fast and avoids churning files
+        the running process (and Django's autoreloader) already imported.
+        """
+
+        if not self._drift():
+            return False
+        self._write_sources()
+        return True
+
+    def _write_sources(self) -> None:
+        """Write every rendered source file, creating parents as needed."""
+
         for relative_path, text in self.render_sources().items():
             self._write(self.runtime_dir / relative_path, text)
+
+    def is_current(self) -> bool:
+        """Return whether the on-disk runtime matches the rendered sources."""
+
+        return not self._drift()
 
     def check(self) -> None:
         """Raise when generated runtime sources differ from disk."""
 
+        drift = self._drift()
+        if drift:
+            rendered = ", ".join(str(path) for path in drift)
+            raise RuntimeError(f"generated runtime is stale: {rendered}")
+
+    def _drift(self) -> list[Path]:
+        """Return generated source paths that differ from the rendered set."""
+
         expected = self.render_sources()
         actual_paths = self._actual_source_paths()
         expected_paths = set(expected)
-        drift = sorted(
+        return sorted(
             (expected_paths ^ actual_paths)
             | {
                 path
@@ -96,9 +151,6 @@ class AngeeRuntime:
                 != expected[path]
             }
         )
-        if drift:
-            rendered = ", ".join(str(path) for path in drift)
-            raise RuntimeError(f"generated runtime is stale: {rendered}")
 
     def reset(self) -> None:
         """Clear generated runtime sources while preserving migrations."""
@@ -433,11 +485,23 @@ class AngeeRuntime:
         self,
         model_class: type[models.Model],
     ) -> list[str]:
-        """Return source fields simple-history cannot mirror."""
+        """Return source fields simple-history cannot mirror.
 
+        Reads the model's own field lists rather than ``get_fields()``: the
+        latter walks reverse relations through the global relation graph, which
+        requires ``models_ready``. Emission runs mid app-populate (phase 2,
+        before adoption), so only definition-time field lists are available.
+        """
+
+        meta = model_class._meta
+        own_fields = (
+            *meta.local_fields,
+            *meta.private_fields,
+            *meta.local_many_to_many,
+        )
         return sorted(
             field.name
-            for field in model_class._meta.get_fields()
+            for field in own_fields
             if getattr(field, "concrete", True) is False
             and not field.is_relation
             and not getattr(field, "auto_created", False)
