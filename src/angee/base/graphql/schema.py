@@ -7,12 +7,19 @@ from typing import Any, cast
 
 import strawberry
 from django.core.exceptions import ImproperlyConfigured
+from django.db import models
 from django.utils.functional import cached_property
+from rebac import RebacMixin
+from rebac.graphql.strawberry import RebacExtension
+from rebac.graphql.strawberry_django import RebacDjangoOptimizerExtension
+from rebac.managers import RebacManager
 from strawberry.tools import merge_types
 
 from angee.base.apps import SCHEMA_PART_KEYS, BaseAddonConfig, SchemaParts
 from angee.base.discovery import discover_addons
+from angee.base.graphql.errors import AngeeSchema
 from angee.base.graphql.introspection import (
+    django_model,
     surface_field_names,
     surface_name,
 )
@@ -92,7 +99,8 @@ class GraphQLSchemas:
             raise ImproperlyConfigured(
                 f"GraphQL schema {name!r} has no query root"
             )
-        return strawberry.Schema(
+        self._assert_rebac_managers(name, parts["types"])
+        return AngeeSchema(
             query=query,
             mutation=self._merge_root(name, "mutation", parts["mutation"]),
             subscription=self._merge_root(
@@ -101,7 +109,14 @@ class GraphQLSchemas:
                 parts["subscription"],
             ),
             types=cast(list[Any], list(parts["types"])),
-            extensions=cast(list[Any], list(parts["extensions"])),
+            extensions=cast(
+                list[Any],
+                [
+                    RebacExtension,
+                    *parts["extensions"],
+                    RebacDjangoOptimizerExtension,
+                ],
+            ),
         )
 
     def render_sdl(self) -> dict[str, str]:
@@ -150,3 +165,32 @@ class GraphQLSchemas:
             seen.add(marker)
             deduped.append(value)
         return tuple(deduped)
+
+    def _assert_rebac_managers(
+        self,
+        schema_name: str,
+        types: tuple[object, ...],
+    ) -> None:
+        """Raise when a GraphQL-exposed REBAC model is not manager-scoped."""
+
+        for surface in types:
+            model = self._django_model_or_none(surface)
+            if model is None or not issubclass(model, RebacMixin):
+                continue
+            if not isinstance(model._default_manager, RebacManager):
+                raise ImproperlyConfigured(
+                    f"GraphQL schema {schema_name!r} exposes "
+                    f"{model._meta.label} without a RebacManager default "
+                    "manager"
+                )
+
+    def _django_model_or_none(
+        self,
+        surface: object,
+    ) -> type[models.Model] | None:
+        """Return the strawberry-django model for ``surface`` when present."""
+
+        try:
+            return django_model(cast(type, surface))
+        except ImproperlyConfigured:
+            return None

@@ -7,6 +7,12 @@ from typing import Any, cast
 import pytest
 import strawberry
 from django.core.exceptions import ImproperlyConfigured
+from django.db import models
+from rebac import MissingActorError, PermissionDenied, RebacMixin
+from rebac.graphql.strawberry import RebacExtension
+from rebac.graphql.strawberry_django import RebacDjangoOptimizerExtension
+from rebac.managers import RebacManager
+from strawberry.extensions import SchemaExtension
 
 from angee.base.apps import SCHEMA_PART_KEYS, BaseAddonConfig
 from angee.base.graphql.schema import (
@@ -34,6 +40,70 @@ class PingMutation:
     @strawberry.mutation
     def ping(self) -> str:
         return "pong"
+
+
+class CustomExtension(SchemaExtension):
+    """Sentinel extension contributed by an addon."""
+
+
+class ManagedThing(RebacMixin):
+    """Concrete REBAC model with the library manager intact."""
+
+    name = models.CharField(max_length=32)
+
+    class Meta:
+        """Django model options for the managed test model."""
+
+        app_label = "tests"
+        rebac_resource_type = "tests/managed"
+
+
+class UnmanagedThing(RebacMixin):
+    """Concrete REBAC model with an unsafe default manager."""
+
+    objects = models.Manager()
+    name = models.CharField(max_length=32)
+
+    class Meta:
+        """Django model options for the unmanaged test model."""
+
+        app_label = "tests"
+        rebac_resource_type = "tests/unmanaged"
+
+
+@strawberry.type
+class DenialQuery:
+    @strawberry.field
+    def missing_actor(self) -> str:
+        raise MissingActorError("missing actor")
+
+    @strawberry.field
+    def permission_denied(self) -> str:
+        raise PermissionDenied("denied")
+
+
+@strawberry.type
+class ManagedThingType:
+    """GraphQL type exposing a safely managed REBAC model."""
+
+    name: str
+    __strawberry_django_definition__ = type(
+        "DjangoDefinition",
+        (),
+        {"model": ManagedThing},
+    )()
+
+
+@strawberry.type
+class UnmanagedThingType:
+    """GraphQL type exposing an unsafely managed REBAC model."""
+
+    name: str
+    __strawberry_django_definition__ = type(
+        "DjangoDefinition",
+        (),
+        {"model": UnmanagedThing},
+    )()
 
 
 class FakeAddon:
@@ -92,6 +162,8 @@ def test_collect_dedupes_by_identity() -> None:
 def test_build_schema_merges_query_surfaces() -> None:
     """Query surfaces from several addons merge into one root."""
 
+    from angee.base.graphql.errors import AngeeSchema
+
     schema = GraphQLSchemas.from_addons(
         [
             addon(public={"query": [HelloQuery]}),
@@ -103,6 +175,83 @@ def test_build_schema_merges_query_surfaces() -> None:
 
     assert result.errors is None
     assert result.data == {"hello": "hi", "world": "world"}
+    assert isinstance(schema, AngeeSchema)
+
+
+def test_build_schema_installs_universal_rebac_extensions() -> None:
+    """REBAC brackets every schema while addon extensions keep their slot."""
+
+    schema = GraphQLSchemas.from_addons(
+        [
+            addon(
+                public={
+                    "query": [HelloQuery],
+                    "extensions": [CustomExtension],
+                }
+            )
+        ]
+    ).build("public")
+
+    assert schema.extensions == (
+        RebacExtension,
+        CustomExtension,
+        RebacDjangoOptimizerExtension,
+    )
+
+
+def test_denial_errors_get_graphql_codes() -> None:
+    """REBAC denials surface with stable GraphQL error codes."""
+
+    schema = GraphQLSchemas.from_addons(
+        [addon(public={"query": [DenialQuery]})]
+    ).build("public")
+
+    missing_actor = schema.execute_sync("{ missingActor }")
+    denied = schema.execute_sync("{ permissionDenied }")
+
+    assert missing_actor.errors is not None
+    assert denied.errors is not None
+    assert missing_actor.errors[0].extensions["code"] == "UNAUTHENTICATED"
+    assert denied.errors[0].extensions["code"] == "PERMISSION_DENIED"
+
+
+def test_graphql_identity_exports_relay_node_and_connection() -> None:
+    """The framework exposes one relay node and cursor connection seam."""
+
+    from strawberry_django.relay import DjangoCursorConnection
+
+    from angee.base.graphql import AngeeNode, Connection
+
+    assert issubclass(AngeeNode, strawberry.relay.Node)
+    assert Connection is DjangoCursorConnection
+
+
+def test_rebac_graphql_types_require_rebac_default_manager() -> None:
+    """GraphQL-exposed REBAC models fail fast without the library manager."""
+
+    assert isinstance(ManagedThing._default_manager, RebacManager)
+    GraphQLSchemas.from_addons(
+        [
+            addon(
+                public={
+                    "query": [HelloQuery],
+                    "types": [ManagedThingType],
+                }
+            )
+        ]
+    ).build("public")
+
+    with pytest.raises(ImproperlyConfigured, match="RebacManager"):
+        GraphQLSchemas.from_addons(
+            [
+                addon(
+                    public={
+                        "query": [HelloQuery],
+                        "types": [UnmanagedThingType],
+                    }
+                )
+            ]
+        ).build("public")
 
 
 def test_build_schema_includes_mutation_root() -> None:

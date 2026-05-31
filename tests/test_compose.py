@@ -31,6 +31,7 @@ def test_runtime_renders_base_resource_sources(tmp_path: Path) -> None:
     assert "class Resource" in sources[Path("base/models.py")]
     assert 'app_label = "base"' in sources[Path("base/models.py")]
     assert ".angee-manifest.json" not in {str(path) for path in sources}
+    assert Path("permissions.zed") not in sources
 
 
 def test_runtime_emit_and_check_detect_drift(tmp_path: Path) -> None:

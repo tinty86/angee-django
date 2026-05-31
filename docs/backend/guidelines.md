@@ -130,12 +130,12 @@ Rules that follow from the layering:
 - `runtime/`, generated schemas, migrations, and codegen stubs are output.
   Change the source, not the artifact.
 - REBAC is structural and owned by `django-zed-rebac`. Addons declare
-  `permissions.zed`; Angee renders the combined permission schema at build time.
-  Permission sync is the library's own `manage.py rebac sync`. Use the library's
+  `permissions.zed` beside the owning app. Permission sync is the library's
+  own `manage.py rebac sync`. Use the library's
   field-backed relations (`// rebac:field=...`) when a relationship is already
   represented by a Django FK or one-to-one field.
 - GraphQL authoring is native Strawberry. Addons expose a `schemas` mapping in
-  conventional `graphql.py` modules. Each named schema contributes Strawberry
+  conventional `schema.py` modules. Each named schema contributes Strawberry
   types into fixed buckets (`query`, `mutation`, `subscription`, `types`,
   `extensions`); Angee merges buckets across addons and builds one Strawberry
   `Schema` per name.
@@ -153,7 +153,7 @@ API list for behavior that can live clearly beside the code.
 `AppConfig` is the addon manifest and owns addon-local interpretation. Use
 Django's own facts before adding an Angee fact: the addon root is
 `AppConfig.path`, source models live in `models.py`, and GraphQL contributions
-live in `graphql.py`. Put validation, normalization, and path resolution for one
+live in `schema.py`. Put validation, normalization, and path resolution for one
 addon on the `AppConfig` subclass. Prefer methods on the object that owns the
 data — the `AppConfig` for one addon, a runtime build object for composition —
 over loose functions; keep a function loose only for orchestration no single

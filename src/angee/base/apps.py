@@ -30,7 +30,7 @@ SCHEMA_PART_KEYS: tuple[str, ...] = (
     "types",
     "extensions",
 )
-"""GraphQL merge buckets accepted from addon ``graphql.schemas``."""
+"""GraphQL merge buckets accepted from addon ``schema.schemas``."""
 
 RESOURCE_TIER_VALUES: tuple[str, ...] = ("master", "install", "demo")
 """Resource tier values accepted in addon manifests."""
@@ -67,7 +67,7 @@ class BaseAddonConfig(AppConfig):
     def schema_parts(self) -> dict[str, SchemaParts]:
         """Return normalized GraphQL schema parts declared by this addon."""
 
-        module = self.graphql_module
+        module = self.schema_module
         if module is None:
             return {}
         schemas = getattr(module, "schemas", None)
@@ -147,10 +147,10 @@ class BaseAddonConfig(AppConfig):
         return self.import_optional_module("models")
 
     @cached_property
-    def graphql_module(self) -> ModuleType | None:
-        """Return this addon's optional ``graphql.py`` module."""
+    def schema_module(self) -> ModuleType | None:
+        """Return this addon's optional ``schema.py`` module."""
 
-        return self.import_optional_module("graphql")
+        return self.import_optional_module("schema")
 
     @cached_property
     def _model_contributions(

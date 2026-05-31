@@ -10,6 +10,7 @@ from angee.base.apps import BaseAddonConfig
 SRC = Path(__file__).resolve().parents[1] / "src" / "angee"
 BASE = SRC / "base"
 RESOURCES = SRC / "resources"
+COMPOSE = SRC / "compose"
 
 
 def _module_imports(path: Path) -> set[str]:
@@ -72,3 +73,9 @@ def test_discovery_depends_only_on_apps() -> None:
     imports = _module_imports(BASE / "discovery.py")
     internal = {name for name in imports if name.startswith("angee.base")}
     assert internal <= {"angee.base.apps"}
+
+
+def test_compose_has_no_rebac_permission_renderer() -> None:
+    """Per-addon REBAC schemas stay with their owning apps."""
+
+    assert not (COMPOSE / "rebac.py").exists()

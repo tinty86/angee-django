@@ -90,12 +90,12 @@ def test_resource_manifest_rejects_unknown_tiers() -> None:
 
 
 def _config_with_schemas(schemas: object) -> BaseConfig:
-    """Return a base config whose graphql module exports ``schemas``."""
+    """Return a base config whose schema module exports ``schemas``."""
 
     config = BaseConfig("angee.base", angee.base)
-    module = ModuleType("fake.graphql")
+    module = ModuleType("fake.schema")
     module.schemas = schemas  # type: ignore[attr-defined]
-    config.__dict__["graphql_module"] = module
+    config.__dict__["schema_module"] = module
     return config
 
 
@@ -127,10 +127,10 @@ def test_get_schema_parts_rejects_sets() -> None:
 
 
 def test_get_schema_parts_missing_module_is_empty() -> None:
-    """An addon without a graphql module contributes nothing."""
+    """An addon without a schema module contributes nothing."""
 
     config = BaseConfig("angee.base", angee.base)
-    config.__dict__["graphql_module"] = None
+    config.__dict__["schema_module"] = None
 
     assert config.schema_parts == {}
 

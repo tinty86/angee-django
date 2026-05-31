@@ -14,7 +14,6 @@ from angee.base.apps import BaseAddonConfig
 from angee.base.discovery import discover_addons
 from angee.base.mixins import HistoryMixin
 from angee.base.models import AngeeModel
-from angee.compose.rebac import render_permissions
 from angee.resources.models import Resource
 
 GENERATED_SENTINEL = "# ANGEE GENERATED RUNTIME - DO NOT EDIT"
@@ -64,7 +63,6 @@ class AngeeRuntime:
 
         sources: dict[Path, str] = {
             Path("__init__.py"): self._runtime_init_source(),
-            Path("permissions.zed"): render_permissions(self.addons),
         }
         for label, source_models in self.sources_by_label.items():
             root = Path(label)

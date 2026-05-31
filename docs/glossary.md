@@ -62,7 +62,7 @@ the owning library explicitly supports them, such as `rebac_resource_type`.
 **REBAC** — Relationship-Based Access Control (via `django-zed-rebac`).
 Authorization is structural: reads scope through the model manager, writes check
 the instance. Addons use the library's `rebac_schema` / `permissions.zed`
-contract; Angee renders the combined schema and `django-zed-rebac` owns sync.
+contract; `django-zed-rebac` owns sync.
 
 **Resource** — tabular data owned by an addon and imported idempotently by tier
 (`master`, `install`, `demo`). Addons list resource files in their
@@ -72,7 +72,7 @@ contract; Angee renders the combined schema and `django-zed-rebac` owns sync.
 boundaries instead of importing it, to avoid import cycles.
 
 **GraphQL contribution** — native Strawberry types exported through the
-`schemas` mapping in an addon's conventional `graphql.py`. Each named schema
+`schemas` mapping in an addon's conventional `schema.py`. Each named schema
 contributes to fixed buckets, and Angee builds one Strawberry `Schema` per name.
 
 ## Frontend
