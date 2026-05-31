@@ -63,19 +63,16 @@ Rules that follow from the layering:
   package that owns commands (the composer, the resource subsystem) provides a
   plain `AppConfig` and is installed, and is excluded from `BaseAddonConfig`
   discovery (discovery collects only `BaseAddonConfig` instances).
-- **Build and run may use different `INSTALLED_APPS`.** The settings helper emits
-  a build app set (source addons + the composer command host, no runtime serving
-  apps) and a run app set (runtime + resources + source addons with
-  `import_models()` adoption). Because the build process never loads the runtime
-  apps, there is no "is a build running" flag: the build emits source from the
-  abstract models, and `makemigrations`/SDL render/`migrate` run as a later step
-  in a fresh run-settings process that loads the freshly emitted concrete models
-  normally.
-- **`source_model_modules` lists explicit source-model inputs for an
-  `AppConfig`,** even when their dotted path is outside the app package. The
-  composer owns those classes by declaration; it must not infer ownership from
-  package prefix alone. (This is how `angee.resources`'s `Resource` is emitted
-  under the `base` label without `base` importing `resources`.)
+- **Build and run use different `INSTALLED_APPS`.** The settings helper emits a
+  build app set (source addons + the composer command host) and a run app set
+  (runtime base + the resource command host + source addons). Build mode is the
+  explicit `ANGEE_BUILD` setting; `AppConfig.import_models()` uses it to skip
+  generated model adoption while `angee build` emits sources. `makemigrations`,
+  `migrate`, resource loading, and SDL rendering run later in a fresh
+  run-settings process that loads the freshly emitted concrete models normally.
+- **The resource ledger is contributed by the composer.** The composer imports
+  the resource ledger source model and emits it under the `base` label at build
+  time. `angee.base` must not name or import `angee.resources`.
 - **Refer to an emitted concrete model through the app registry**
   (`apps.get_model("base", "Resource")`), never by importing the generated
   `runtime/` tree.
@@ -133,12 +130,15 @@ Rules that follow from the layering:
 - `runtime/`, generated schemas, migrations, and codegen stubs are output.
   Change the source, not the artifact.
 - REBAC is structural and owned by `django-zed-rebac`. Addons declare
-  `permissions.zed`; Angee wires schema sync and only adds build-time review
-  output. Use the library's field-backed relations (`// rebac:field=...`) when a
-  relationship is already represented by a Django FK or one-to-one field.
-- GraphQL authoring is native Strawberry. Addons expose Strawberry `Schema`
-  objects from conventional `graphql.py` modules, and the composer only
-  discovers named schemas.
+  `permissions.zed`; Angee renders the combined permission schema at build time.
+  Permission sync is the library's own `manage.py rebac sync`. Use the library's
+  field-backed relations (`// rebac:field=...`) when a relationship is already
+  represented by a Django FK or one-to-one field.
+- GraphQL authoring is native Strawberry. Addons expose a `schemas` mapping in
+  conventional `graphql.py` modules. Each named schema contributes Strawberry
+  types into fixed buckets (`query`, `mutation`, `subscription`, `types`,
+  `extensions`); Angee merges buckets across addons and builds one Strawberry
+  `Schema` per name.
 - Use symbolic model references across addon boundaries; avoid import cycles.
 - Build output must be byte-deterministic.
 
@@ -218,10 +218,10 @@ Run the narrowest relevant check while editing, then the broad check before
 handoff:
 
 ```sh
-uv run ruff check .
+uv run ruff check . --no-cache
 uv run mypy src/
 uv run pytest
-angee build --check
+uv run examples/notes-angee/manage.py angee build --check
 ```
 
 If a command is not wired yet, say so plainly.

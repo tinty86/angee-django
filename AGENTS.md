@@ -133,14 +133,15 @@ angee dev            # from the repo root — runs the examples/notes-angee stac
 `angee dev` is for bringing the long-running stack up. To run a one-shot Django
 management command against the example, drive its `manage.py` through `uv` from
 the repository root, never by `cd`-ing into the project. The composer is
-emit-only; migrations, then resource data, are separate later steps (a fresh
-process loads the freshly emitted concrete models):
+emit-only; migrations, resource data, and GraphQL SDL checks are separate later
+steps (a fresh process loads the freshly emitted concrete models):
 
 ```sh
 uv run examples/notes-angee/manage.py angee build              # emit runtime sources
 uv run examples/notes-angee/manage.py makemigrations base notes
 uv run examples/notes-angee/manage.py migrate
 uv run examples/notes-angee/manage.py resources load           # data, after migrate
+uv run examples/notes-angee/manage.py schema --check           # SDL, after runtime load
 ```
 
 For an isolated branch, create a workspace and run the stack inside it. `angee
