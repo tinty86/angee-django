@@ -5,12 +5,12 @@ from __future__ import annotations
 from types import ModuleType
 
 import pytest
+from angee.base.resources.models import Resource
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 
 import angee.base
 from angee.base.apps import BaseConfig
-from angee.base.resources.models import Resource
 
 
 def test_base_addon_owns_resource_model() -> None:

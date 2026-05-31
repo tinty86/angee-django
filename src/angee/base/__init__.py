@@ -1,1 +1,1 @@
-"""Base addon primitives used by Angee projects and addons."""
+"""Runtime foundation for composed Angee applications."""

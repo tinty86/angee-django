@@ -7,13 +7,13 @@ import datetime
 from types import SimpleNamespace
 
 import strawberry
+from angee.base.graphql import subscriptions
+from angee.base.graphql.subscriptions import ChangeEvent, changes
 from channels.layers import InMemoryChannelLayer
 from django.contrib.auth.models import Group
 from rebac import anonymous_actor
 
 from angee.base import signals
-from angee.base.graphql import subscriptions
-from angee.base.graphql.subscriptions import ChangeEvent, changes
 
 ANON = anonymous_actor()
 

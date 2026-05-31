@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from rebac import RebacMixin
-
 from angee.base.compose.emission import _rebac_meta_source
 from angee.base.models import AngeeModel
+from rebac import RebacMixin
 
 
 def test_every_angee_model_carries_the_rebac_mixin() -> None:

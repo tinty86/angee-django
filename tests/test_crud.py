@@ -5,11 +5,10 @@ from __future__ import annotations
 import pytest
 import strawberry
 import strawberry_django
+from angee.base.graphql import crud
 from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
 from strawberry import auto
-
-from angee.base.graphql import crud
 
 
 @strawberry_django.type(Group)

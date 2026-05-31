@@ -6,15 +6,15 @@ from typing import Any, cast
 
 import pytest
 import strawberry
-from django.core.exceptions import ImproperlyConfigured
-
-from angee.base.apps import SCHEMA_PART_KEYS, BaseAddonConfig
 from angee.base.graphql.schema import (
     build_schema,
     collect_schema_names,
     collect_schema_parts,
     render_sdl,
 )
+from django.core.exceptions import ImproperlyConfigured
+
+from angee.base.apps import SCHEMA_PART_KEYS, BaseAddonConfig
 
 
 @strawberry.type

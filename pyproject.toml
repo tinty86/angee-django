@@ -56,7 +56,7 @@ only-include = [
 cache_dir = ".pytest_cache"
 DJANGO_SETTINGS_MODULE = "tests.settings"
 python_files = ["test_*.py"]
-testpaths = ["tests", "src/angee/base/resources/tests"]
+testpaths = ["tests", "src/angee/resources/tests"]
 pythonpath = [".", "src", "examples/notes-angee/src"]
 addopts = "-ra --strict-markers --import-mode=importlib"
 
@@ -68,6 +68,7 @@ exclude = [
   ".angee",
   ".git",
   ".mypy_cache",
+  ".reference",
   ".pytest_cache",
   ".ruff_cache",
   ".venv",

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import reversion
+from angee.base.graphql import build_schema
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from rebac import actor_context, system_context, to_subject_ref
-
-from angee.base.graphql import build_schema
 
 Note = apps.get_model("notes", "Note")
 User = get_user_model()
