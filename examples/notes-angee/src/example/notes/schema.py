@@ -124,6 +124,13 @@ def _rebac_scoped(info: strawberry.Info | None = None) -> QuerySet[Any]:
     where row scoping would otherwise fire. Under REBAC strict mode an
     unscoped queryset would raise ``MissingActorError`` at materialisation,
     so a missing actor yields an empty result rather than a leak.
+
+    ``on_field_deny("allow")`` relaxes field-read enforcement here because the
+    same ``.values().annotate()`` paths do not apply per-field redaction. That
+    is safe ONLY while every exposed group-by axis is a non-gated read field:
+    a field with a ``read__<field>`` gate (``is_starred``, ``reminder_at``)
+    must never be a ``group_by_fields`` axis, or its owner-only value leaks via
+    the bucket keys/counts.
     """
 
     actor = current_actor()
@@ -140,10 +147,16 @@ def _rebac_scoped(info: strawberry.Info | None = None) -> QuerySet[Any]:
 # full granularity track, having, and ordering). Angee contributes only the
 # REBAC-scoped queryset. Count is the M2 measure (notes carry no summable
 # numeric column; ``word_count`` is a Python property).
+#
+# Group-by axes are non-gated read fields only. ``is_starred`` and
+# ``reminder_at`` are owner-gated reads (``permissions.zed``: ``read__*``);
+# exposing either as an axis would leak the owner-only value through the bucket
+# keys/counts, because aggregation runs with field enforcement relaxed (see
+# ``_rebac_scoped``).
 _note_aggregates = AggregateBuilder(
     model=Note,
     aggregate_fields=["id"],
-    group_by_fields=["status", "is_starred", "updated_at"],
+    group_by_fields=["status", "updated_at"],
     pagination_style="offset",
     get_queryset=_rebac_scoped,
 ).build()

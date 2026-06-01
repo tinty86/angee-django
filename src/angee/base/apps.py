@@ -147,7 +147,13 @@ class BaseAddonConfig(AppConfig):
 
     @cached_property
     def schema_module(self) -> ModuleType | None:
-        """Return this addon's optional ``schema.py`` module."""
+        """Return this addon's optional ``schema.py`` module.
+
+        Addon GraphQL contributions live in ``schema.py`` (not ``graphql.py``):
+        a top-level ``graphql.py`` shadows the ``graphql`` core package on
+        import and breaks ``manage.py test``. ``schema.py`` is the
+        framework-wide convention every addon follows.
+        """
 
         return self.import_optional_module("schema")
 
@@ -336,10 +342,7 @@ class BaseConfig(BaseAddonConfig):
             return
         # Deferred: ready() runs after app population; signal wiring imports
         # model-dependent modules that are unsafe during phase 1.
-        from angee.base.signals import (
-            connect_audit_stamping,
-            register_revision_models,
-        )
+        from angee.base.signals import connect_audit_stamping, register_revision_models
 
         register_revision_models()
         connect_audit_stamping()

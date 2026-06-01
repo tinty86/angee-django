@@ -26,6 +26,7 @@ class IAMGraphQLTests(TransactionTestCase):
         with system_context(reason="test-setup"):
             self.welcome = Note.objects.get(title="Welcome to Angee")
             self.alice = User.objects.get(username="alice")
+            self.bob = User.objects.get(username="bob")
             self.admin = User.objects.get(username="admin")
         self.client = Client()
 
@@ -340,6 +341,31 @@ class IAMGraphQLTests(TransactionTestCase):
         )
         self.assertTrue(data["byMonth"]["results"][0]["key"]["updatedAtMonth"])
 
+    def test_platform_admin_sees_every_users_notes(self) -> None:
+        self.login(self.client, "admin")
+        data = self.graphql(
+            """
+            query {
+              notes(pagination: { limit: 100 }) {
+                totalCount
+                results { createdBy }
+              }
+            }
+            """
+        )["data"]["notes"]
+        with system_context(reason="test"):
+            total = Note.objects.count()
+
+        self.assertEqual(data["totalCount"], total)
+        self.assertGreaterEqual(
+            {node["createdBy"] for node in data["results"]},
+            {
+                self.admin.public_id,
+                self.alice.public_id,
+                self.bob.public_id,
+            },
+        )
+
     def test_note_groups_paginate_with_offset(self) -> None:
         self.graphql('mutation { login(username: "alice", password: "alice") { ok } }')
         query = """
@@ -364,6 +390,29 @@ class IAMGraphQLTests(TransactionTestCase):
         first = page0["noteGroups"]["results"][0]["key"]["status"]
         second = page1["noteGroups"]["results"][0]["key"]["status"]
         self.assertNotEqual(first, second)
+
+    def test_owner_gated_flag_is_not_an_aggregate_group_by_axis(self) -> None:
+        # ``is_starred`` is an owner-only read (permissions.zed:
+        # ``read__is_starred = owner``). It must never be an aggregate group-by
+        # axis: grouping runs with field enforcement relaxed, so a reader could
+        # otherwise infer another owner's flag from the bucket keys/counts. The
+        # schema rejects it as an unknown enum value -- a query-validation
+        # error, before execution, so no session is needed.
+        payload = self.post(
+            Client(),
+            """
+            query {
+              noteGroups(groupBy: [{field: IS_STARRED}]) {
+                totalCount
+              }
+            }
+            """,
+        )
+
+        self.assertIn("errors", payload)
+        self.assertIsNone((payload.get("data") or {}).get("noteGroups"))
+        message = payload["errors"][0]["message"].lower()
+        self.assertIn("is_starred", message)
 
     def test_non_owner_cannot_read_another_users_notes(self) -> None:
         alice = Client()

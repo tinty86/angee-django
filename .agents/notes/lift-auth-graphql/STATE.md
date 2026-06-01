@@ -1,7 +1,9 @@
 # Auth + GraphQL Lift — durable state (compaction lifeline)
 
-**This file is the source of truth for the in-flight program. Re-read it after any
-compaction before acting.** Keep it updated as work lands.
+**Planning is consolidated in `.agents/plans/notes-auth-lift.md` — the single plan.**
+This file is the execution log / compaction lifeline: what is DONE and in-flight. The plan
+owns forward work. Re-read both after any compaction before acting; keep this updated as
+work lands.
 
 ## ✅ M3 production frontend — current branch state (2026-05-31)
 Branch `workspace/m3-frontend` is rebased on `wip-base-lift-refactor` and carries
@@ -427,10 +429,10 @@ group_by (word_count is a @property, not summable — promote later for sum/avg)
 build concern in RECIPE.md.
 
 ## Pointers (don't duplicate content)
-- Findings + roadmap: `.agents/plans/2026-05-30-followups.md`
-- Round-1 executed plan: `.agents/plans/2026-05-30-review-fixes.md`
-- Round-2 brief (in flight): `.agents/plans/2026-05-30-review-fixes-round2.md`
-- Reviewer personas: `.agents/agents/{architecture-reviewer,django-reviewer}.md`
+- **The plan (single source of truth): `.agents/plans/notes-auth-lift.md`** — it folded in
+  the former followups roadmap, round-1/round-2 review fixes, and the M1/M3 review findings.
+  Those plan docs were consolidated and removed; git history retains them.
+- Build recipe / locked lib symbols: `.agents/notes/lift-auth-graphql/RECIPE.md`
+- M1 adversarial review findings: `.agents/notes/lift-auth-graphql/m1-review-findings.md`
+- Reviewer personas: `.agents/agents/{architecture-reviewer,django-reviewer,react-reviewer}.md`
 - Six-pass reports: `.agents/notes/final-review/*.md`
-- LIFT MAP + research reports: will be saved under `.agents/notes/lift-auth-graphql/`
-  when the understanding workflow returns.
