@@ -90,6 +90,8 @@ intent.**
 
 - **[Get Started](docs/howto/getstarted.md)** — what Angee is, what you can
   build, and your first run. Start here.
+- **[Features](docs/features.md)** — the complete capability list and how each
+  part works.
 - **[Glossary](docs/glossary.md)** — shared vocabulary (addon, composer, host,
   source model, seams…).
 - **[Opinionated stack](docs/stack.md)** — which library owns which concern, and

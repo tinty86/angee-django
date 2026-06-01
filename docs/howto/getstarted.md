@@ -71,8 +71,9 @@ You bring the product logic; Angee brings the composed foundation under it.
 
 ## What's included?
 
-The platform's intended surface — the capabilities Angee composes for every
-project on top of plain Django + React:
+A quick tour of what Angee composes for every project on top of plain Django +
+React — see **[Features](../features.md)** for the complete list and how each one
+works:
 
 - **Workspaces and services** — isolated environments composed from Sources
   and/or agentic configuration, plus the long-running workloads (Services)
@@ -91,27 +92,34 @@ project on top of plain Django + React:
 
 ## How much of this is built today?
 
-Honestly: the foundation is real and growing, and most of the higher-level
-capability list above is still the vision. Treat the list as where Angee is
-going, not a feature checklist you can rely on today.
+Every capability in the [feature list](../features.md) is already **prototyped
+and working end to end** — proven inside production platforms the team has built.
+Angee is the exercise of *lifting* those capabilities out of those codebases and
+open-sourcing them here, reconstructed to the framework's conventions one addon
+at a time. Expect a lot of movement over the coming weeks as new addons land.
 
-- **Built — the operator.** A working Go prototype already drives Stacks,
-  Services, Jobs, Sources, Workspaces, secrets, ports, and gitops topology over
-  CLI, REST, and GraphQL. You can stand up and tear down stacks with it now.
-- **Built — the framework core.** Composition (source models → `runtime/`),
-  GraphQL via strawberry-django, relationship-based authorization (REBAC),
-  aggregates, tiered resources, history/revisions, and the React frontend
-  (shells, list/board/form views) are landing and usable for the example
-  project.
-- **Ahead — the higher-level addons.** Agent runtimes, knowledge, workflows,
-  integrations, communications, and CRM/PRM are mostly not built yet; several of
-  their underlying picks (queues, MCP surface, vector/graph search,
-  collaborative editing) are still in the *Proposed, Not Locked* stage.
+Concretely, today:
 
-The single source of truth for what is actually wired versus proposed is the
-[opinionated stack](../stack.md) — its tables list every locked library and a
-"Proposed, Not Locked" section for what is still ahead. When in doubt, that file
-wins over any prose here.
+- **Already landed here.** The operator (Stacks, Services, Jobs, Sources,
+  Workspaces, secrets, ports, and gitops topology over CLI, REST, and GraphQL)
+  and the framework core: composition (source models → `runtime/`), GraphQL via
+  strawberry-django, relationship-based authorization (REBAC), aggregates,
+  tiered resources, history/revisions, and the React frontend (shells,
+  list/board/form views).
+- **Being lifted in now.** The higher-level addons — agents, integrations,
+  knowledge, storage, and communications. They already run in the team's other
+  platforms; the work in flight is reconstructing and open-sourcing them here,
+  addon by addon.
+
+This is the whole point of the framework — and why it is **technical investment,
+not technical debt**. Every component and its permissions are tested end to end,
+so the foundation each new addon builds on is already proven, and each addon that
+lands makes the next one easier instead of adding to a pile of things to fix
+later.
+
+For exactly which libraries are wired versus still proposed, the
+[opinionated stack](../stack.md) is the source of truth; for the full breakdown
+of every capability see **[Features](../features.md)**.
 
 ## When will it be ready for production?
 
