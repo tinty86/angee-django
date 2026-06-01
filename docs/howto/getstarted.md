@@ -126,9 +126,9 @@ of every capability see **[Features](../features.md)**.
 The target is **Q3 2026**. That is a target, not a promise — and
 production-readiness arrives capability-by-capability rather than as one flip of
 a switch. The operator and the framework core harden first; the higher-level
-addons follow as they land. Until then, treat Angee as **early access for
-builders**: excellent for prototyping and for shaping the framework, not yet a
-platform to run a business-critical product on unattended.
+addons follow as they land. Until then, Angee is an **early alpha preview**:
+excellent for prototyping and for shaping the framework, not yet a platform to
+run a business-critical product on unattended.
 
 ## How can I get access?
 

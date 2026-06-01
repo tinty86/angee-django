@@ -6,7 +6,11 @@
 ![Python](https://img.shields.io/badge/python-3.14%2B-3776AB.svg)
 ![Django](https://img.shields.io/badge/django-6.0%2B-092E20.svg)
 ![React](https://img.shields.io/badge/react-19-61DAFB.svg)
-![Status](https://img.shields.io/badge/status-early%20access-orange.svg)
+![Status](https://img.shields.io/badge/status-early%20alpha%20preview-orange.svg)
+
+> **Early alpha preview.** Angee is prototyped and working end to end and is being
+> open-sourced addon by addon — expect rapid change, and don't run it
+> business-critical yet.
 
 ## What is this?
 
@@ -121,7 +125,7 @@ request.
 
 ## Status
 
-**Early access for builders.** Production-readiness is targeted for **Q3 2026** —
+**Early alpha preview.** Production-readiness is targeted for **Q3 2026** —
 a target, not a promise — and arrives capability-by-capability. See
 [Get Started](docs/howto/getstarted.md#how-much-of-this-is-built-today) for the
 current built-versus-ahead breakdown.

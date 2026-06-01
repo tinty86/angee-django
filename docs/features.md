@@ -6,9 +6,10 @@ real-time, agents, deployment — and ships them as framework primitives and
 composable addons. You inherit the answers and spend your code budget on what is
 actually unique to your product.
 
-> Everything below is **prototyped and working end to end** — proven in platforms
-> the team has shipped — and is being lifted into this open-source framework one
-> addon at a time. Items marked **Planned** are designed and on the near roadmap.
+> **Angee is in early alpha preview.** Everything below is **prototyped and
+> working end to end** — proven in platforms the team has shipped — and is being
+> lifted into this open-source framework one addon at a time. Items marked
+> **Planned** are designed and on the near roadmap.
 > Because every component *and its permissions* are tested end to end, each new
 > addon stands on a proven foundation: technical **investment**, not technical
 > debt.
