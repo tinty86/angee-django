@@ -15,17 +15,8 @@ import {
   CHATTER_MAX_WIDTH,
   CHATTER_MIN_WIDTH,
   useChatter,
-  type ChatterTabId,
+  type ChatterTab,
 } from "./chatter-context";
-
-export interface ChatterTab {
-  id: ChatterTabId;
-  label: React.ReactNode;
-  icon?: string;
-  count?: number;
-  panelClassName?: string;
-  children: React.ReactNode;
-}
 
 export interface ChatterProps {
   tabs?: readonly ChatterTab[];
@@ -40,8 +31,10 @@ export function Chatter({
   composer,
   className,
 }: ChatterProps): React.ReactElement | null {
-  const { activeTab, collapsed, setActiveTab, setWidth, width } = useChatter();
-  const resolvedTabs = tabs ?? defaultTabs(children);
+  const { activeTab, collapsed, content, setActiveTab, setWidth, width } =
+    useChatter();
+  const resolvedTabs = tabs ?? content?.tabs ?? defaultTabs(children);
+  const resolvedComposer = composer ?? content?.composer;
   const active = resolvedTabs.some((tab) => tab.id === activeTab)
     ? activeTab
     : resolvedTabs[0]?.id;
@@ -112,8 +105,10 @@ export function Chatter({
               </Tabs.Panel>
             ))}
           </Tabs>
-          {composer ? (
-            <div className="border-t border-border-subtle p-3">{composer}</div>
+          {resolvedComposer ? (
+            <div className="border-t border-border-subtle p-3">
+              {resolvedComposer}
+            </div>
           ) : null}
         </Panel>
       </PanelGroup>

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   Outlet,
   RouterProvider,
@@ -10,10 +10,11 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
-import type { ReactNode, SVGProps } from "react";
+import { useMemo, type ReactNode, type SVGProps } from "react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { ConsoleShell } from "./ConsoleShell";
+import { useChatterContent } from "../communication";
 
 vi.mock("@angee/logo-react", () => ({
   AngeeLogo: ({ bgColor: _bgColor, geometry: _geometry, preset: _preset, ...props }: SVGProps<SVGSVGElement> & {
@@ -106,4 +107,39 @@ describe("ConsoleShell", () => {
     expect(screen.getByText("No agent yet")).toBeTruthy();
     expect(screen.getByText("Set up your assistant")).toBeTruthy();
   });
+
+  test("lets page content publish chatter tabs through context", async () => {
+    renderInRouter(
+      <ConsoleShell title="Notes" icon="file">
+        <ChatterPublisher />
+        <section aria-label="Page body">Body content</section>
+      </ConsoleShell>,
+    );
+    await screen.findByText("Body content");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Activity 2" }));
+    expect(screen.getByText("Revision one")).toBeTruthy();
+  });
 });
+
+function ChatterPublisher(): null {
+  const tabs = useMemo(
+    () => [
+      {
+        id: "angee",
+        label: "Angee",
+        children: <p>No agent yet</p>,
+      },
+      {
+        id: "activity",
+        label: "Activity",
+        count: 2,
+        children: <p>Revision one</p>,
+      },
+    ],
+    [],
+  );
+  const content = useMemo(() => ({ tabs }), [tabs]);
+  useChatterContent(content);
+  return null;
+}
