@@ -174,7 +174,7 @@ def test_discover_addons_orders_dependencies() -> None:
 
             return (second, first)
 
-    assert discover_addons(Registry()) == (first, second)  # type: ignore[arg-type]
+    assert discover_addons(Registry()) == (first, second)
 
 
 def test_discover_addons_rejects_cycles() -> None:
@@ -205,4 +205,4 @@ def test_discover_addons_rejects_cycles() -> None:
             return (first, second)
 
     with pytest.raises(ImproperlyConfigured, match="Cycle"):
-        discover_addons(Registry())  # type: ignore[arg-type]
+        discover_addons(Registry())

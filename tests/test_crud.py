@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Protocol, cast
+
 import pytest
 import strawberry
 import strawberry_django
@@ -30,8 +32,20 @@ class GroupPatch:
     name: str | None = None
 
 
+class _StrawberryField(Protocol):
+    python_name: str
+
+
+class _StrawberryDefinition(Protocol):
+    fields: list[_StrawberryField]
+
+
+class _StrawberrySurface(Protocol):
+    __strawberry_definition__: _StrawberryDefinition
+
+
 def _field_names(surface: type) -> list[str]:
-    definition = surface.__strawberry_definition__
+    definition = cast(_StrawberrySurface, surface).__strawberry_definition__
     return [field.python_name for field in definition.fields]
 
 

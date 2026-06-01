@@ -225,8 +225,12 @@ def test_denial_errors_get_graphql_codes() -> None:
 
     assert missing_actor.errors is not None
     assert denied.errors is not None
-    assert missing_actor.errors[0].extensions["code"] == "UNAUTHENTICATED"
-    assert denied.errors[0].extensions["code"] == "PERMISSION_DENIED"
+    missing_actor_extensions = missing_actor.errors[0].extensions
+    denied_extensions = denied.errors[0].extensions
+    assert missing_actor_extensions is not None
+    assert denied_extensions is not None
+    assert missing_actor_extensions["code"] == "UNAUTHENTICATED"
+    assert denied_extensions["code"] == "PERMISSION_DENIED"
 
 
 def test_graphql_identity_exports_relay_node_and_connection() -> None:
