@@ -1,0 +1,133 @@
+// @vitest-environment happy-dom
+
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { AppRuntimeProvider, type Row } from "@angee/sdk";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+import { defaultWidgets } from "../widgets";
+import { FormView, type FormField } from "./FormView";
+
+const sdkMocks = vi.hoisted(() => ({
+  record: null as Row | null,
+  mutate: vi.fn(),
+}));
+
+vi.mock("@angee/sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/sdk")>();
+  return {
+    ...actual,
+    useResourceRecord: () => ({
+      record: sdkMocks.record,
+      fetching: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    useResourceMutation: () => [
+      sdkMocks.mutate,
+      { fetching: false, error: null },
+    ],
+  };
+});
+
+const statusOptions = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "ARCHIVED", label: "Archived" },
+];
+
+const fields = [
+  { name: "title", label: "Title", title: true },
+  {
+    name: "status",
+    label: "Status",
+    widget: "statusbar",
+    options: statusOptions,
+  },
+  {
+    name: "createdAt",
+    label: "Created At",
+    widget: "datetime",
+    readOnly: true,
+  },
+  { name: "wordCount", label: "Word Count", readOnly: true },
+] satisfies readonly FormField[];
+
+describe("FormView", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    sdkMocks.record = {
+      id: "note-1",
+      title: "First",
+      status: "ACTIVE",
+      createdAt: "2026-05-31T12:00:00Z",
+      wordCount: 3,
+    };
+    sdkMocks.mutate.mockReset();
+    sdkMocks.mutate.mockImplementation(async ({ data }: { data: Row }) => ({
+      ...sdkMocks.record,
+      ...data,
+    }));
+  });
+
+  test("submits only changed writable fields for an update", async () => {
+    renderForm("note-1");
+
+    const title = await screen.findByLabelText("Title");
+    await waitFor(() =>
+      expect((title as HTMLInputElement).value).toBe("First"),
+    );
+
+    fireEvent.change(title, { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: { title: "Renamed", id: "note-1" },
+    });
+  });
+
+  test("includes an enum field when the user changes it", async () => {
+    renderForm("note-1");
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe(
+        "First",
+      ),
+    );
+    fireEvent.click(screen.getByText("Archived"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: { status: "ARCHIVED", id: "note-1" },
+    });
+  });
+
+  test("omits unselected option fields from create payloads", async () => {
+    renderForm(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: { title: "" },
+    });
+  });
+});
+
+function renderForm(id: string | null): void {
+  render(
+    <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
+      <FormView model="notes.Note" id={id} fields={fields} />
+    </AppRuntimeProvider>,
+  );
+}

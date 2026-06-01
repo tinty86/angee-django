@@ -82,14 +82,24 @@ export function FormView({
     isCreate ? "create" : "update",
     { fields: selection },
   );
+  const defaultValues = React.useMemo(
+    () => emptyDraft(resolvedFields),
+    [resolvedFields],
+  );
+  const baselineValuesRef = React.useRef<Values>(defaultValues);
   const form = useForm({
-    defaultValues: emptyDraft(resolvedFields),
+    defaultValues,
     onSubmit: async ({ value }) => {
-      const data: Values = { ...value };
-      if (!isCreate && id != null) data.id = id;
+      const data = mutationData(value, resolvedFields, {
+        baseline: baselineValuesRef.current,
+        id,
+        isCreate,
+      });
       const saved = await mutate({ data });
       if (saved) {
-        form.reset(recordToValues(saved, resolvedFields));
+        const savedValues = recordToValues(saved, resolvedFields);
+        baselineValuesRef.current = savedValues;
+        form.reset(savedValues);
         onSaved?.(saved);
       }
     },
@@ -100,16 +110,19 @@ export function FormView({
     if (isCreate) {
       if (seededIdRef.current !== null) {
         seededIdRef.current = null;
-        form.reset(emptyDraft(resolvedFields));
+        baselineValuesRef.current = defaultValues;
+        form.reset(defaultValues);
       }
       return;
     }
     const recordId = typeof record?.id === "string" ? record.id : null;
     if (record && recordId && seededIdRef.current !== recordId) {
       seededIdRef.current = recordId;
-      form.reset(recordToValues(record, resolvedFields));
+      const recordValues = recordToValues(record, resolvedFields);
+      baselineValuesRef.current = recordValues;
+      form.reset(recordValues);
     }
-  }, [isCreate, record, resolvedFields, form]);
+  }, [defaultValues, isCreate, record, resolvedFields, form]);
 
   const titleField = resolvedFields.find((field) => field.title);
   const statusField = resolvedFields.find((field) => field.widget === "statusbar");
@@ -327,10 +340,56 @@ function recordToValues(record: Row, fields: readonly FieldDescriptor[]): Values
   return values;
 }
 
+function mutationData(
+  values: Values,
+  fields: readonly FieldDescriptor[],
+  options: {
+    baseline: Values;
+    id?: string | null;
+    isCreate: boolean;
+  },
+): Values {
+  const data: Values = {};
+  for (const field of fields) {
+    if (field.readOnly) continue;
+    const next = values[field.name];
+    if (isUnselectedOption(field, next)) continue;
+    if (!options.isCreate && valuesEqual(next, options.baseline[field.name])) {
+      continue;
+    }
+    data[field.name] = next;
+  }
+  if (!options.isCreate && options.id != null) data.id = options.id;
+  return data;
+}
+
 function emptyValue(field: FieldDescriptor): unknown {
   if (field.widget === "tagInput") return [];
   if (field.kind === "switch" || field.widget === "switch") return false;
   return "";
+}
+
+function hasOptionValue(field: FieldDescriptor): boolean {
+  return Boolean(
+    field.options &&
+      (field.widget === "select" ||
+        field.widget === "statusbar" ||
+        field.kind === "select" ||
+        field.kind === "selection"),
+  );
+}
+
+function isUnselectedOption(field: FieldDescriptor, value: unknown): boolean {
+  return value === "" && hasOptionValue(field);
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  return (
+    left.length === right.length &&
+    left.every((item, index) => valuesEqual(item, right[index]))
+  );
 }
 
 function widgetId(field: FieldDescriptor): string {
