@@ -42,10 +42,6 @@ class AngeeConnection(DjangoCursorConnection[relay.NodeType]):
     ) -> AwaitableOrValue[Self]:
         """Apply the model's declared ordering, then paginate by keyset."""
 
-        if (
-            isinstance(nodes, QuerySet)
-            and not nodes.query.order_by
-            and nodes.model._meta.ordering
-        ):
+        if isinstance(nodes, QuerySet) and not nodes.query.order_by and nodes.model._meta.ordering:
             nodes = nodes.order_by(*nodes.model._meta.ordering)
         return super().resolve_connection(nodes, info=info, **kwargs)

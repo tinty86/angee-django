@@ -31,9 +31,7 @@ def discover_addons(
         if not isinstance(app_config, BaseAddonConfig):
             continue
         if app_config.name in seen_names:
-            raise ImproperlyConfigured(
-                f"Duplicate Angee addon {app_config.name!r}"
-            )
+            raise ImproperlyConfigured(f"Duplicate Angee addon {app_config.name!r}")
         seen_names.add(app_config.name)
         addons.append(app_config)
     return _sort_addons(tuple(addons))
@@ -56,17 +54,13 @@ def _sort_addons(
         if name in visited:
             return
         if name in visiting:
-            raise ImproperlyConfigured(
-                f"Cycle in addon dependencies at {name}"
-            )
+            raise ImproperlyConfigured(f"Cycle in addon dependencies at {name}")
         visiting.add(name)
         addon = by_name[name]
         for dependency in sorted(addon.dependencies):
             dependency_name = aliases.get(dependency)
             if dependency_name is None:
-                raise ImproperlyConfigured(
-                    f"{addon.name} depends on unknown addon {dependency!r}"
-                )
+                raise ImproperlyConfigured(f"{addon.name} depends on unknown addon {dependency!r}")
             visit(dependency_name)
         visiting.remove(name)
         visited.add(name)

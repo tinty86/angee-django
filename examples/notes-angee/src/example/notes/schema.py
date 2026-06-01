@@ -19,6 +19,7 @@ from angee.base.models import public_id_of
 Note = apps.get_model("notes", "Note")
 User = apps.get_model("iam", "User")
 
+
 @strawberry_django.type(Note)
 class NoteType(AngeeNode):
     """GraphQL projection of a note."""
@@ -167,10 +168,7 @@ class NotesQuery:
         note = _scoped_note_by_id(id)
         if note is None:
             return []
-        return [
-            NoteRevision.from_version(version)
-            for version in note.revisions
-        ]
+        return [NoteRevision.from_version(version) for version in note.revisions]
 
 
 _AGGREGATE_TYPES = [
@@ -184,11 +182,7 @@ _AGGREGATE_TYPES = [
 def _scoped_note_by_id(id: relay.GlobalID) -> Any | None:
     """Return the actor-visible note addressed by relay id, if any."""
 
-    return (
-        _rebac_scoped()
-        .filter(**Note._public_id_lookup(id.node_id))
-        .first()
-    )
+    return _rebac_scoped().filter(**Note._public_id_lookup(id.node_id)).first()
 
 
 def _user_public_id(user_id: Any) -> strawberry.ID | None:
@@ -198,19 +192,16 @@ def _user_public_id(user_id: Any) -> strawberry.ID | None:
         return None
     return strawberry.ID(public_id_of(User(id=user_id)))
 
+
 schemas = {
     "public": {
         "query": [NotesQuery],
-        "mutation": [
-            crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
-        ],
+        "mutation": [crud(NoteType, create=NoteInput, update=NotePatch, delete=True)],
         "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
     },
     "console": {
         "query": [NotesQuery],
-        "mutation": [
-            crud(NoteType, create=NoteInput, update=NotePatch, delete=True)
-        ],
+        "mutation": [crud(NoteType, create=NoteInput, update=NotePatch, delete=True)],
         "subscription": [changes(Note, field="noteChanged")],
         "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
     },

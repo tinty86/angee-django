@@ -64,12 +64,8 @@ class ResourceQuerySet(models.QuerySet[Any]):
         """Load selected addon resource tiers idempotently."""
 
         active_tiers = self._normalize_tiers(tiers)
-        if self.model.Tier.DEMO in active_tiers and not (
-            settings.DEBUG or allow_non_dev
-        ):
-            raise ImproperlyConfigured(
-                "resources load demo requires DEBUG or --allow-non-dev"
-            )
+        if self.model.Tier.DEMO in active_tiers and not (settings.DEBUG or allow_non_dev):
+            raise ImproperlyConfigured("resources load demo requires DEBUG or --allow-non-dev")
 
         selected_addons = tuple(addons)
         groups = self._groups_for(selected_addons, tiers=active_tiers)
@@ -111,9 +107,7 @@ class ResourceQuerySet(models.QuerySet[Any]):
                             use_transactions=False,
                         )
                     except (IntegrityError, ResourceImportError) as error:
-                        raise ResourceLoadError(
-                            f"{group.entry.display}: {error}"
-                        ) from error
+                        raise ResourceLoadError(f"{group.entry.display}: {error}") from error
                     counts = result_counts(result.rows)
                     group_created, group_updated, group_skipped = counts
                     created += group_created
@@ -134,8 +128,7 @@ class ResourceQuerySet(models.QuerySet[Any]):
         """Return resource display names and parsed row counts."""
 
         return tuple(
-            (entry.display, len(entry.read_resource_rows()))
-            for entry in self._entries_for(addons, tiers=tiers)
+            (entry.display, len(entry.read_resource_rows())) for entry in self._entries_for(addons, tiers=tiers)
         )
 
     def _groups_for(

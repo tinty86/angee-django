@@ -78,15 +78,9 @@ class ChangeReadGate:
             return dict(payload)
 
         redacted = dict(payload)
-        redacted["changed_fields"] = [
-            field for field in fields if field not in denied
-        ]
+        redacted["changed_fields"] = [field for field in fields if field not in denied]
         if isinstance(values, Mapping):
-            redacted["changed_values"] = {
-                field: value
-                for field, value in values.items()
-                if field not in denied
-            }
+            redacted["changed_values"] = {field: value for field, value in values.items() if field not in denied}
         return redacted
 
     def _can_read_field(self, field: str, resource: ObjectRef) -> bool:

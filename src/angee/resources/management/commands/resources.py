@@ -68,8 +68,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"resources validate ({', '.join(tiers)}): "
-                f"{result.checked_files} files, {result.checked_rows} rows"
+                f"resources validate ({', '.join(tiers)}): {result.checked_files} files, {result.checked_rows} rows"
             )
         )
 

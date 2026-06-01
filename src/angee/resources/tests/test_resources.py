@@ -52,8 +52,7 @@ def addon(
         name=name,
         label=label,
         path=str(tmp_path),
-        resource_manifest=manifest
-        or {"master": (), "install": (), "demo": ()},
+        resource_manifest=manifest or {"master": (), "install": (), "demo": ()},
     )
 
 
@@ -81,12 +80,7 @@ def test_resource_entry_reads_structured_rows_and_fields(
     resource_dir = tmp_path / "resources"
     resource_dir.mkdir()
     (resource_dir / "notes.yaml").write_text(
-        "_meta:\n"
-        "  model: base.ImportNote\n"
-        "rows:\n"
-        "  - _xref: n1\n"
-        "    fields:\n"
-        "      title: First\n",
+        "_meta:\n  model: base.ImportNote\nrows:\n  - _xref: n1\n    fields:\n      title: First\n",
         encoding="utf-8",
     )
 
@@ -109,13 +103,7 @@ def test_resource_entry_rejects_reserved_keys_in_structured_fields(
     resource_dir = tmp_path / "resources"
     resource_dir.mkdir()
     (resource_dir / "notes.yaml").write_text(
-        "_meta:\n"
-        "  model: base.ImportNote\n"
-        "rows:\n"
-        "  - _xref: n1\n"
-        "    fields:\n"
-        "      _xref: n2\n"
-        "      title: First\n",
+        "_meta:\n  model: base.ImportNote\nrows:\n  - _xref: n1\n    fields:\n      _xref: n2\n      title: First\n",
         encoding="utf-8",
     )
 
@@ -283,10 +271,7 @@ def test_fetch_url_caches_by_full_url(
     def build_opener(*handlers: object) -> Opener:
         """Return an opener with redirect scheme checks installed."""
 
-        assert any(
-            isinstance(handler, _SchemeCheckedRedirectHandler)
-            for handler in handlers
-        )
+        assert any(isinstance(handler, _SchemeCheckedRedirectHandler) for handler in handlers)
         return Opener()
 
     monkeypatch.setattr("urllib.request.build_opener", build_opener)
@@ -499,9 +484,7 @@ def test_resource_manager_loads_rows_and_resolves_xrefs(
         with system_context(reason="resource load assertions"):
             alice = ImportUser.objects.get(username="alice")
             note = ImportNote.objects.get(title="Framework map")
-        ledger_xrefs = set(
-            ResourceLedger.objects.values_list("xref", flat=True)
-        )
+        ledger_xrefs = set(ResourceLedger.objects.values_list("xref", flat=True))
 
         assert result.created == 2
         assert result.loaded == 2
@@ -571,12 +554,8 @@ def test_resource_load_rejects_existing_xref_for_another_model(
     owner = addon(
         tmp_path,
         manifest={
-            "master": (
-                {"path": "resources/010_base.collisionuser.csv"},
-            ),
-            "install": (
-                {"path": "resources/020_base.collisionnote.csv"},
-            ),
+            "master": ({"path": "resources/010_base.collisionuser.csv"},),
+            "install": ({"path": "resources/020_base.collisionnote.csv"},),
             "demo": (),
         },
     )
@@ -644,9 +623,7 @@ def test_resource_validate_cleans_rows_and_resolves_xrefs(
     resource_dir = tmp_path / "resources"
     resource_dir.mkdir()
     (resource_dir / "010_base.validatenote.yaml").write_text(
-        "- _xref: note\n"
-        "  title: Broken reference\n"
-        "  created_by: tests.resource_addon.missing\n",
+        "- _xref: note\n  title: Broken reference\n  created_by: tests.resource_addon.missing\n",
         encoding="utf-8",
     )
     owner = addon(

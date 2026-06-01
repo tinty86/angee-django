@@ -331,9 +331,7 @@ def test_ws_query_runs_inside_actor_context() -> None:
             return current_actor() == ANON
 
     async def scenario() -> dict[str, object]:
-        application = AngeeGraphQLWSConsumer.as_asgi(
-            schema=strawberry.Schema(query=Query)
-        )
+        application = AngeeGraphQLWSConsumer.as_asgi(schema=strawberry.Schema(query=Query))
         communicator = WebsocketCommunicator(
             application,
             "/graphql",
@@ -343,9 +341,7 @@ def test_ws_query_runs_inside_actor_context() -> None:
         connected, _subprotocol = await communicator.connect()
         assert connected
         await communicator.send_json_to({"type": "connection_init"})
-        assert await communicator.receive_json_from() == {
-            "type": "connection_ack"
-        }
+        assert await communicator.receive_json_from() == {"type": "connection_ack"}
         await communicator.send_json_to(
             {
                 "id": "1",

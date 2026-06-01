@@ -21,9 +21,7 @@ class NotesVersioningTests(TransactionTestCase):
     def setUp(self) -> None:
         call_command("rebac", "sync", verbosity=0)
         with system_context(reason="test-setup"):
-            self.user = User.objects.create(
-                username="ed", email="ed@example.com", password="!"
-            )
+            self.user = User.objects.create(username="ed", email="ed@example.com", password="!")
             self.note = Note(title="Draft", body="v1", created_by=self.user)
             self.note.save()
 
@@ -50,15 +48,10 @@ class NotesVersioningTests(TransactionTestCase):
         self.assertEqual(self.note.body, "v1")
 
     def test_delete_returns_a_cascade_preview(self) -> None:
-        query = (
-            "mutation($id: ID!){ deleteNote(id: $id){ "
-            "totalDeletedCount hasBlockers deleted { label count } } }"
-        )
+        query = "mutation($id: ID!){ deleteNote(id: $id){ totalDeletedCount hasBlockers deleted { label count } } }"
         with actor_context(to_subject_ref(self.user)):
             schema = GraphQLSchemas.from_discovery().build("console")
-            result = schema.execute_sync(
-                query, variable_values={"id": self.note.sqid}
-            )
+            result = schema.execute_sync(query, variable_values={"id": self.note.sqid})
 
         self.assertIsNone(result.errors)
         self.assertEqual(result.data["deleteNote"]["totalDeletedCount"], 1)

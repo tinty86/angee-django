@@ -47,18 +47,9 @@ class DeletePreview:
 
         return cls(
             total_deleted_count=preview.total_deleted_count,
-            deleted=[
-                DeletePreviewGroup.from_domain(group)
-                for group in preview.deleted
-            ],
-            updated=[
-                DeletePreviewGroup.from_domain(group)
-                for group in preview.updated
-            ],
-            blocked=[
-                DeletePreviewGroup.from_domain(group)
-                for group in preview.blocked
-            ],
+            deleted=[DeletePreviewGroup.from_domain(group) for group in preview.deleted],
+            updated=[DeletePreviewGroup.from_domain(group) for group in preview.updated],
+            blocked=[DeletePreviewGroup.from_domain(group) for group in preview.blocked],
             has_blockers=preview.has_blockers,
         )
 
@@ -115,10 +106,7 @@ def crud(
         )
 
     if not annotations:
-        raise ImproperlyConfigured(
-            f"crud({surface_name(node)}) needs at least one of create, "
-            "update, or delete"
-        )
+        raise ImproperlyConfigured(f"crud({surface_name(node)}) needs at least one of create, update, or delete")
     type_name = f"{singular[:1].upper()}{singular[1:]}Mutation"
     surface = type(type_name, (), namespace)
     return strawberry.type(surface)
@@ -148,7 +136,5 @@ def _resolve_for_delete(
 
     instance = instance_from_public_id(model, public_id)
     if instance is None:
-        raise ValueError(
-            f"{model._meta.object_name} {public_id!r} was not found"
-        )
+        raise ValueError(f"{model._meta.object_name} {public_id!r} was not found")
     return instance

@@ -85,24 +85,17 @@ class BaseAddonConfig(AppConfig):
         if schemas is None:
             return {}
         if not isinstance(schemas, Mapping):
-            raise ImproperlyConfigured(
-                f"{module.__name__}.schemas must be a mapping"
-            )
+            raise ImproperlyConfigured(f"{module.__name__}.schemas must be a mapping")
 
         parts: dict[str, SchemaParts] = {}
         for raw_name, raw_entry in schemas.items():
             name = str(raw_name)
             if not isinstance(raw_entry, Mapping):
-                raise ImproperlyConfigured(
-                    f"{module.__name__}.schemas[{name!r}] must be a mapping"
-                )
+                raise ImproperlyConfigured(f"{module.__name__}.schemas[{name!r}] must be a mapping")
             unknown = set(raw_entry) - set(SCHEMA_PART_KEYS)
             if unknown:
                 listed = ", ".join(sorted(str(key) for key in unknown))
-                raise ImproperlyConfigured(
-                    f"{module.__name__}.schemas[{name!r}] has unknown keys: "
-                    f"{listed}"
-                )
+                raise ImproperlyConfigured(f"{module.__name__}.schemas[{name!r}] has unknown keys: {listed}")
             parts[name] = {
                 key: self._schema_part_values(
                     module,
@@ -126,18 +119,13 @@ class BaseAddonConfig(AppConfig):
             return path
         if relative_path == "permissions.zed":
             return None
-        raise ImproperlyConfigured(
-            f"{self.name}.rebac_schema references missing file "
-            f"{relative_path!r}"
-        )
+        raise ImproperlyConfigured(f"{self.name}.rebac_schema references missing file {relative_path!r}")
 
     @cached_property
     def resource_manifest(self) -> dict[str, tuple[dict[str, Any], ...]]:
         """Return normalized resource declarations keyed by tier."""
 
-        manifest: dict[str, tuple[dict[str, Any], ...]] = {
-            tier: () for tier in RESOURCE_TIER_VALUES
-        }
+        manifest: dict[str, tuple[dict[str, Any], ...]] = {tier: () for tier in RESOURCE_TIER_VALUES}
         for raw_tier, declarations in (self.resources or {}).items():
             tier = self._resource_tier_value(raw_tier)
             manifest[tier] = self._resource_entries(declarations)
@@ -199,8 +187,7 @@ class BaseAddonConfig(AppConfig):
                 sorted(
                     extensions,
                     key=lambda cls: (
-                        cast(type[AngeeModel], cls).get_extension_target()
-                        or "",
+                        cast(type[AngeeModel], cls).get_extension_target() or "",
                         cls._meta.object_name,
                     ),
                 )
@@ -261,11 +248,7 @@ class BaseAddonConfig(AppConfig):
         # ``_model_contributions``.
         from angee.base.models import AngeeModel
 
-        return (
-            issubclass(value, AngeeModel)
-            and value is not AngeeModel
-            and value._meta.abstract
-        )
+        return issubclass(value, AngeeModel) and value is not AngeeModel and value._meta.abstract
 
     def _schema_part_values(
         self,
@@ -279,10 +262,7 @@ class BaseAddonConfig(AppConfig):
         if value is None:
             return ()
         if isinstance(value, set | frozenset):
-            raise ImproperlyConfigured(
-                f"{module.__name__}.schemas[{name!r}][{key!r}] must be a "
-                "sequence, not a set"
-            )
+            raise ImproperlyConfigured(f"{module.__name__}.schemas[{name!r}][{key!r}] must be a sequence, not a set")
         if isinstance(value, Sequence) and not isinstance(value, str | bytes):
             return tuple(value)
         return (value,)
@@ -298,9 +278,7 @@ class BaseAddonConfig(AppConfig):
         if isinstance(declarations, str | Path | Mapping):
             return (self._resource_entry(declarations),)
         if not isinstance(declarations, Iterable):
-            raise ImproperlyConfigured(
-                f"{declarations!r} is not a resource entry or iterable"
-            )
+            raise ImproperlyConfigured(f"{declarations!r} is not a resource entry or iterable")
         return tuple(self._resource_entry(entry) for entry in declarations)
 
     def _resource_entry(self, declaration: object) -> dict[str, Any]:
@@ -309,22 +287,13 @@ class BaseAddonConfig(AppConfig):
         if isinstance(declaration, str | Path):
             return {"path": self._relative_path(declaration)}
         if not isinstance(declaration, Mapping):
-            raise ImproperlyConfigured(
-                f"{declaration!r} is not a resource path or mapping"
-            )
+            raise ImproperlyConfigured(f"{declaration!r} is not a resource path or mapping")
 
-        entry: dict[str, Any] = {
-            str(key): declaration[key]
-            for key in declaration
-            if key not in {"path", "url"}
-        }
+        entry: dict[str, Any] = {str(key): declaration[key] for key in declaration if key not in {"path", "url"}}
         path = declaration.get("path")
         url = declaration.get("url")
         if (path is None) == (url is None):
-            raise ImproperlyConfigured(
-                f"resource entry {dict(declaration)!r} must set exactly one "
-                "of 'path' or 'url'"
-            )
+            raise ImproperlyConfigured(f"resource entry {dict(declaration)!r} must set exactly one of 'path' or 'url'")
         if path is None:
             entry["url"] = str(url)
         else:
@@ -339,9 +308,7 @@ class BaseAddonConfig(AppConfig):
         raw = str(getattr(value, "value", value))
         if raw not in RESOURCE_TIER_VALUES:
             expected = ", ".join(RESOURCE_TIER_VALUES)
-            raise ImproperlyConfigured(
-                f"Unknown resource tier {raw!r}; expected one of {expected}"
-            )
+            raise ImproperlyConfigured(f"Unknown resource tier {raw!r}; expected one of {expected}")
         return raw
 
     def _relative_path(self, value: object) -> str:
@@ -350,10 +317,7 @@ class BaseAddonConfig(AppConfig):
         raw = str(value)
         path = Path(raw)
         if not raw or path.is_absolute() or ".." in path.parts:
-            raise ImproperlyConfigured(
-                f"Manifest path {raw!r} must be relative and stay inside "
-                "the addon"
-            )
+            raise ImproperlyConfigured(f"Manifest path {raw!r} must be relative and stay inside the addon")
         return raw
 
 
@@ -396,7 +360,5 @@ def _normalize_depends_on(value: object) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
     if not isinstance(value, Iterable):
-        raise ImproperlyConfigured(
-            "depends_on must be a string or iterable of strings"
-        )
+        raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
     return tuple(str(item) for item in value)

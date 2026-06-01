@@ -59,9 +59,7 @@ def resolve_model(label: str) -> type[models.Model]:
 ResourceDeclaration: TypeAlias = str | Path | Mapping[str, Any]
 """One declared resource entry."""
 
-ResourceDeclarations: TypeAlias = (
-    ResourceDeclaration | Iterable[ResourceDeclaration] | None
-)
+ResourceDeclarations: TypeAlias = ResourceDeclaration | Iterable[ResourceDeclaration] | None
 """A resource declaration or deterministic iterable of declarations."""
 
 RESERVED_ROW_KEYS = frozenset({"_xref", "xref", "model", "_meta"})
@@ -200,9 +198,7 @@ class ResourceEntry:
             stem = remainder
         parts = stem.split(".")
         if len(parts) != 2 or not all(parts):
-            raise ImproperlyConfigured(
-                f"{self.display} must declare model or use [NNN_]app.model.ext"
-            )
+            raise ImproperlyConfigured(f"{self.display} must declare model or use [NNN_]app.model.ext")
         return f"{parts[0]}.{parts[1]}"
 
     def _read_records(self) -> tuple[list[dict[str, Any]], str | None]:
@@ -211,8 +207,7 @@ class ResourceEntry:
         path = self.materialize()
         if not path.exists():
             raise ImproperlyConfigured(
-                f"{self.addon.name}.resources[{self.tier}] references "
-                f"missing file {self.source!r}"
+                f"{self.addon.name}.resources[{self.tier}] references missing file {self.source!r}"
             )
         file_format = self._tablib_format(path)
         if file_format in STRUCTURED_FORMATS:
@@ -233,21 +228,15 @@ class ResourceEntry:
             try:
                 data = json.loads(text)
             except json.JSONDecodeError as error:
-                raise ImproperlyConfigured(
-                    f"{self.display} could not be parsed as json"
-                ) from error
+                raise ImproperlyConfigured(f"{self.display} could not be parsed as json") from error
         else:
             try:
                 data = yaml.safe_load(text)
             except yaml.YAMLError as error:
-                raise ImproperlyConfigured(
-                    f"{self.display} could not be parsed as yaml"
-                ) from error
+                raise ImproperlyConfigured(f"{self.display} could not be parsed as yaml") from error
         return self._records_from_object(data)
 
-    def _records_from_object(
-        self, data: object
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    def _records_from_object(self, data: object) -> tuple[list[dict[str, Any]], str | None]:
         """Return row mappings and an optional file model from parsed data."""
 
         if data is None:
@@ -255,30 +244,22 @@ class ResourceEntry:
         file_model: str | None = None
         if isinstance(data, Mapping):
             meta = data.get("_meta")
-            if isinstance(meta, Mapping) and isinstance(
-                meta.get("model"), str
-            ):
+            if isinstance(meta, Mapping) and isinstance(meta.get("model"), str):
                 file_model = meta["model"]
             elif isinstance(data.get("model"), str):
                 file_model = data["model"]
             rows = data.get("rows")
             if rows is None:
-                raise ImproperlyConfigured(
-                    f"{self.display}: mapping form must contain `rows`"
-                )
+                raise ImproperlyConfigured(f"{self.display}: mapping form must contain `rows`")
         else:
             rows = data
         if not isinstance(rows, list):
-            raise ImproperlyConfigured(
-                f"{self.display}: resource data must be a list of rows"
-            )
+            raise ImproperlyConfigured(f"{self.display}: resource data must be a list of rows")
 
         records: list[dict[str, Any]] = []
         for index, row in enumerate(rows, start=1):
             if not isinstance(row, Mapping):
-                raise ImproperlyConfigured(
-                    f"{self.display} row {index}: row must be a mapping"
-                )
+                raise ImproperlyConfigured(f"{self.display} row {index}: row must be a mapping")
             records.append(dict(row))
         return records, file_model
 
@@ -296,22 +277,15 @@ class ResourceEntry:
         try:
             dataset.load(content, format=file_format)
         except Exception as error:
-            raise ImproperlyConfigured(
-                f"{self.display} could not be parsed as {file_format}"
-            ) from error
+            raise ImproperlyConfigured(f"{self.display} could not be parsed as {file_format}") from error
         return [dict(row) for row in dataset.dict]
 
     def _check_model_conflict(self, file_model: str | None) -> None:
         """Raise when entry and file metadata declare different models."""
 
-        if (
-            self.model
-            and file_model
-            and _normalize_label(self.model) != _normalize_label(file_model)
-        ):
+        if self.model and file_model and _normalize_label(self.model) != _normalize_label(file_model):
             raise ResourceLoadError(
-                f"{self.display}: model conflict; entry declares "
-                f"{self.model!r}, file declares {file_model!r}"
+                f"{self.display}: model conflict; entry declares {self.model!r}, file declares {file_model!r}"
             )
 
     def _tablib_format(self, path: Path) -> str:
@@ -321,10 +295,7 @@ class ResourceEntry:
         file_format = TEXT_FORMATS.get(suffix)
         if file_format is None:
             expected = ", ".join(sorted(TEXT_FORMATS))
-            raise ImproperlyConfigured(
-                f"{self.display} has unsupported format {suffix!r}; "
-                f"expected one of {expected}"
-            )
+            raise ImproperlyConfigured(f"{self.display} has unsupported format {suffix!r}; expected one of {expected}")
         return file_format
 
 
@@ -356,14 +327,10 @@ class ResourceRow:
         """Return a normalized row from parsed file data."""
 
         payload = dict(record)
-        raw_model = (
-            payload.get("model") or fallback_model or entry.infer_model_label()
-        )
+        raw_model = payload.get("model") or fallback_model or entry.infer_model_label()
         raw_xref = payload.get("_xref") or payload.get("xref")
         if not isinstance(raw_xref, str) or not raw_xref.strip():
-            raise ResourceLoadError(
-                f"{entry.display} row {index}: missing _xref"
-            )
+            raise ResourceLoadError(f"{entry.display} row {index}: missing _xref")
         return cls(
             entry=entry,
             model_label=str(raw_model),
@@ -384,21 +351,14 @@ class ResourceRow:
         if "fields" in payload:
             fields_value = payload["fields"]
             if not isinstance(fields_value, Mapping):
-                raise ImproperlyConfigured(
-                    "resource row fields must map names"
-                )
+                raise ImproperlyConfigured("resource row fields must map names")
             reserved = RESERVED_ROW_KEYS & set(fields_value)
             if reserved:
                 raise ImproperlyConfigured(
-                    "resource row fields cannot contain reserved keys: "
-                    f"{', '.join(sorted(reserved))}"
+                    f"resource row fields cannot contain reserved keys: {', '.join(sorted(reserved))}"
                 )
             return dict(fields_value)
-        return {
-            key: value
-            for key, value in payload.items()
-            if key not in RESERVED_ROW_KEYS
-        }
+        return {key: value for key, value in payload.items() if key not in RESERVED_ROW_KEYS}
 
 
 @dataclass(slots=True)

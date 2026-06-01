@@ -19,12 +19,8 @@ ALLOWED_HOSTS = ["*"]
 # ANGEE_RUNTIME_DIR / ANGEE_DATA_DIR to point them at its own control
 # directory; otherwise anchor to the in-repo .angee via __file__ so manage.py
 # works from anywhere in the repo. compose_defaults just uses what it is given.
-RUNTIME_DIR = Path(
-    os.environ.get("ANGEE_RUNTIME_DIR", BASE_DIR / "src" / "runtime")
-)
-DATA_DIR = Path(
-    os.environ.get("ANGEE_DATA_DIR", REPO_ROOT / ".angee" / "data")
-)
+RUNTIME_DIR = Path(os.environ.get("ANGEE_RUNTIME_DIR", BASE_DIR / "src" / "runtime"))
+DATA_DIR = Path(os.environ.get("ANGEE_DATA_DIR", REPO_ROOT / ".angee" / "data"))
 
 # The host owns where data lives (the resource cache and the DB read it). The
 # composer no longer couriers this; the host sets it directly and ensures the

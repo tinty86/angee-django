@@ -23,9 +23,7 @@ def order_entries(
     for index, entry in enumerate(entries):
         key = _entry_key(entry)
         if key in by_key:
-            raise ResourceLoadError(
-                f"duplicate resource entry {entry.display}"
-            )
+            raise ResourceLoadError(f"duplicate resource entry {entry.display}")
         by_key[key] = entry
         position[key] = index
         addon_names[entry.addon.name] = entry.addon.name
@@ -37,10 +35,7 @@ def order_entries(
         for dependency in entry.depends_on:
             dependency_key = _dependency_key(entry, dependency, addon_names)
             if dependency_key not in by_key:
-                raise ResourceLoadError(
-                    f"{entry.display}: depends_on target not selected: "
-                    f"{dependency}"
-                )
+                raise ResourceLoadError(f"{entry.display}: depends_on target not selected: {dependency}")
             outgoing[dependency_key].append(key)
             indegree[key] += 1
 

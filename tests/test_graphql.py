@@ -148,9 +148,7 @@ def test_collect_folds_addons_in_order() -> None:
     """Parts for one name accumulate across addons, deterministically."""
 
     first = addon(public={"query": [HelloQuery]})
-    second = addon(
-        public={"query": [WorldQuery]}, console={"query": [HelloQuery]}
-    )
+    second = addon(public={"query": [WorldQuery]}, console={"query": [HelloQuery]})
 
     schemas = GraphQLSchemas.from_addons([first, second])
     collected = schemas.parts
@@ -216,9 +214,7 @@ def test_build_schema_installs_universal_rebac_extensions() -> None:
 def test_denial_errors_get_graphql_codes() -> None:
     """REBAC denials surface with stable GraphQL error codes."""
 
-    schema = GraphQLSchemas.from_addons(
-        [addon(public={"query": [DenialQuery]})]
-    ).build("public")
+    schema = GraphQLSchemas.from_addons([addon(public={"query": [DenialQuery]})]).build("public")
 
     missing_actor = schema.execute_sync("{ missingActor }")
     denied = schema.execute_sync("{ permissionDenied }")
@@ -275,9 +271,9 @@ def test_rebac_graphql_types_require_rebac_default_manager() -> None:
 def test_build_schema_includes_mutation_root() -> None:
     """A mutation bucket becomes the schema mutation root."""
 
-    schema = GraphQLSchemas.from_addons(
-        [addon(public={"query": [HelloQuery], "mutation": [PingMutation]})]
-    ).build("public")
+    schema = GraphQLSchemas.from_addons([addon(public={"query": [HelloQuery], "mutation": [PingMutation]})]).build(
+        "public"
+    )
 
     result = schema.execute_sync("mutation { ping }")
 
@@ -320,18 +316,14 @@ def test_build_schema_unknown_name_lists_available() -> None:
     """An unknown schema name reports the names that do exist."""
 
     with pytest.raises(ImproperlyConfigured, match="available schemas"):
-        GraphQLSchemas.from_addons(
-            [addon(public={"query": [HelloQuery]})]
-        ).build("console")
+        GraphQLSchemas.from_addons([addon(public={"query": [HelloQuery]})]).build("console")
 
 
 def test_build_schema_requires_query_root() -> None:
     """A schema without any query contribution fails fast."""
 
     with pytest.raises(ImproperlyConfigured, match="no query root"):
-        GraphQLSchemas.from_addons(
-            [addon(public={"mutation": [PingMutation]})]
-        ).build("public")
+        GraphQLSchemas.from_addons([addon(public={"mutation": [PingMutation]})]).build("public")
 
 
 def test_merge_root_field_collision() -> None:

@@ -31,9 +31,7 @@ class _SchemeCheckedRedirectHandler(urllib.request.HTTPRedirectHandler):
         """Return a redirected request when the target scheme is allowed."""
 
         if urlparse(newurl).scheme not in ALLOWED_SCHEMES:
-            raise ResourceLoadError(
-                f"{newurl!r}: redirect to a disallowed scheme"
-            )
+            raise ResourceLoadError(f"{newurl!r}: redirect to a disallowed scheme")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -42,9 +40,7 @@ def fetch_url(url: str) -> Path:
 
     parsed = urlparse(url)
     if parsed.scheme not in ALLOWED_SCHEMES:
-        raise ResourceLoadError(
-            f"{url!r}: only http/https resource URLs are allowed"
-        )
+        raise ResourceLoadError(f"{url!r}: only http/https resource URLs are allowed")
     cache_path = _cache_path(url, parsed.path)
     if cache_path.exists():
         return cache_path

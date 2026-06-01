@@ -183,8 +183,7 @@ class AngeeRuntime:
             | {
                 path
                 for path in expected_paths & actual_paths
-                if (self.runtime_dir / path).read_text(encoding="utf-8")
-                != expected[path]
+                if (self.runtime_dir / path).read_text(encoding="utf-8") != expected[path]
             }
         )
 
@@ -250,9 +249,7 @@ class AngeeRuntime:
             source_alias = self._source_alias(model_class)
             imports.extend(self._class_import(model_class, source_alias))
             if issubclass(model_class, HistoryMixin):
-                imports.append(
-                    "from simple_history.models import HistoricalRecords"
-                )
+                imports.append("from simple_history.models import HistoricalRecords")
             extension_bases = tuple(
                 base
                 for extension in self.extensions.get(
@@ -266,17 +263,13 @@ class AngeeRuntime:
                 alias = f"{model_class.__name__}Extension{index}"
                 aliased_extensions.append((extension_base, alias))
                 imports.extend(self._class_import(extension_base, alias))
-            render_plans.append(
-                (model_class, source_alias, tuple(aliased_extensions))
-            )
+            render_plans.append((model_class, source_alias, tuple(aliased_extensions)))
 
         lines.extend(sorted(set(imports)))
         lines.append("")
         for model_class, source_alias, extension_aliases in render_plans:
             meta_name = f"_{model_class.__name__}Meta"
-            base_names = [alias for _extension, alias in extension_aliases] + [
-                source_alias
-            ]
+            base_names = [alias for _extension, alias in extension_aliases] + [source_alias]
             meta_lines = [
                 "        abstract = False",
                 f'        app_label = "{label}"',
@@ -307,11 +300,7 @@ class AngeeRuntime:
     def _runtime_init_source(self) -> str:
         """Return the generated runtime package source."""
 
-        return (
-            '"""Generated Angee runtime package."""\n'
-            f"{GENERATED_SENTINEL}\n\n"
-            f"RUNTIME_APPS = {list(self.labels)!r}\n"
-        )
+        return f'"""Generated Angee runtime package."""\n{GENERATED_SENTINEL}\n\nRUNTIME_APPS = {list(self.labels)!r}\n'
 
     def _history_source(
         self,
@@ -334,31 +323,21 @@ class AngeeRuntime:
         """Return model extensions grouped by target composition label."""
 
         known_targets = {
-            model.get_composition_label()
-            for source_models in self.sources_by_label.values()
-            for model in source_models
+            model.get_composition_label() for source_models in self.sources_by_label.values() for model in source_models
         }
         grouped: dict[str, list[type[AngeeModel]]] = {}
-        for extension in (
-            extension
-            for addon in self.addons
-            for extension in addon.model_extensions
-        ):
+        for extension in (extension for addon in self.addons for extension in addon.model_extensions):
             extension_model = cast(type[AngeeModel], extension)
             target = extension_model.get_extension_target()
             if target is None:
                 continue
             if target not in known_targets:
                 raise ImproperlyConfigured(
-                    f"{extension.__module__}.{extension.__name__} extends "
-                    f"unknown model {target!r}"
+                    f"{extension.__module__}.{extension.__name__} extends unknown model {target!r}"
                 )
             grouped.setdefault(target, []).append(extension_model)
         return {
-            target: tuple(
-                sorted(classes, key=lambda cls: cls._meta.object_name)
-            )
-            for target, classes in grouped.items()
+            target: tuple(sorted(classes, key=lambda cls: cls._meta.object_name)) for target, classes in grouped.items()
         }
 
     def _check_field_collisions(self) -> None:
@@ -369,11 +348,7 @@ class AngeeRuntime:
                 label = model_class.get_composition_label()
                 owners: dict[str, type[models.Model]] = {}
                 bases = (
-                    *(
-                        base
-                        for extension in self.extensions.get(label, ())
-                        for base in extension.get_extension_bases()
-                    ),
+                    *(base for extension in self.extensions.get(label, ()) for base in extension.get_extension_bases()),
                     model_class,
                 )
                 for base in bases:
@@ -393,16 +368,9 @@ class AngeeRuntime:
         grouped: dict[str, list[type[AngeeModel]]] = {}
         for addon in self.addons:
             models_for_label = grouped.setdefault(addon.label, [])
-            models_for_label.extend(
-                cast(type[AngeeModel], model)
-                for model in addon.model_classes
-            )
+            models_for_label.extend(cast(type[AngeeModel], model) for model in addon.model_classes)
         grouped.setdefault("base", []).append(Resource)
-        return {
-            label: tuple(source_models)
-            for label, source_models in sorted(grouped.items())
-            if source_models
-        }
+        return {label: tuple(source_models) for label, source_models in sorted(grouped.items()) if source_models}
 
     def _actual_source_paths(self) -> set[Path]:
         """Return generated source paths currently on disk."""
@@ -422,29 +390,19 @@ class AngeeRuntime:
         if configured is not None:
             configured_path = Path(configured).resolve()
             if self.runtime_dir.resolve() != configured_path:
-                raise RuntimeError(
-                    f"{self.runtime_dir} is not the configured runtime dir"
-                )
+                raise RuntimeError(f"{self.runtime_dir} is not the configured runtime dir")
         if not self.runtime_dir.exists():
             return
         children = list(self.runtime_dir.iterdir())
         if not children:
             return
         init_path = self.runtime_dir / "__init__.py"
-        if init_path.exists() and GENERATED_SENTINEL in init_path.read_text(
-            encoding="utf-8"
-        ):
+        if init_path.exists() and GENERATED_SENTINEL in init_path.read_text(encoding="utf-8"):
             return
-        remaining_files = [
-            path for path in self.runtime_dir.rglob("*") if path.is_file()
-        ]
-        if remaining_files and all(
-            self._is_preserved_migration_path(path) for path in remaining_files
-        ):
+        remaining_files = [path for path in self.runtime_dir.rglob("*") if path.is_file()]
+        if remaining_files and all(self._is_preserved_migration_path(path) for path in remaining_files):
             return
-        raise RuntimeError(
-            f"{self.runtime_dir} is not an Angee runtime directory"
-        )
+        raise RuntimeError(f"{self.runtime_dir} is not an Angee runtime directory")
 
     def _is_checked_source(self, path: Path) -> bool:
         """Return whether ``path`` participates in source drift checks."""
@@ -466,11 +424,7 @@ class AngeeRuntime:
     def _is_numbered_migration(self, path: Path) -> bool:
         """Return whether ``path`` is a Django numbered migration file."""
 
-        return (
-            path.parent.name == "migrations"
-            and path.name[:4].isdigit()
-            and path.suffix == ".py"
-        )
+        return path.parent.name == "migrations" and path.name[:4].isdigit() and path.suffix == ".py"
 
     def _write(self, path: Path, text: str) -> None:
         """Write ``text`` to ``path``, creating parents first."""
@@ -492,10 +446,7 @@ class AngeeRuntime:
     ) -> list[str]:
         """Return import lines needed to reference ``model_class``."""
 
-        return [
-            f"from {model_class.__module__} import "
-            f"{model_class.__name__} as {alias}"
-        ]
+        return [f"from {model_class.__module__} import {model_class.__name__} as {alias}"]
 
     def _rebac_meta_source(self, model_class: type[models.Model]) -> list[str]:
         """Return concrete Meta lines for REBAC model options."""
@@ -563,18 +514,11 @@ class AngeeRuntime:
         """Return fields directly declared by one abstract composition base."""
 
         meta = model_class._meta
-        local = {
-            field.name
-            for field in (*meta.local_fields, *meta.local_many_to_many)
-        }
+        local = {field.name for field in (*meta.local_fields, *meta.local_many_to_many)}
         inherited: set[str] = set()
         for base in model_class.__mro__[1:]:
             base_meta = getattr(base, "_meta", None)
-            if (
-                not issubclass(base, models.Model)
-                or base_meta is None
-                or not base_meta.abstract
-            ):
+            if not issubclass(base, models.Model) or base_meta is None or not base_meta.abstract:
                 continue
             inherited.update(
                 field.name

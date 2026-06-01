@@ -40,10 +40,7 @@ class XrefForeignKeyWidget(XrefWidgetMixin, widgets.ForeignKeyWidget):
             raise ValueError("xref foreign keys must be strings")
         target = resolve_xref(value, self.ledger_model, self.addon_aliases)
         if target._meta.concrete_model is not self.model._meta.concrete_model:
-            raise ValueError(
-                f"xref {value!r} targets {target._meta.label}, "
-                f"not {self.model._meta.label}"
-            )
+            raise ValueError(f"xref {value!r} targets {target._meta.label}, not {self.model._meta.label}")
         return target.pk if self.key_is_id else target
 
 
@@ -62,14 +59,8 @@ class XrefManyToManyWidget(XrefWidgetMixin, widgets.ManyToManyWidget):
         targets: list[models.Model] = []
         for ref in xref_list(value):
             target = resolve_xref(ref, self.ledger_model, self.addon_aliases)
-            if (
-                target._meta.concrete_model
-                is not self.model._meta.concrete_model
-            ):
-                raise ValueError(
-                    f"xref {ref!r} targets {target._meta.label}, "
-                    f"not {self.model._meta.label}"
-                )
+            if target._meta.concrete_model is not self.model._meta.concrete_model:
+                raise ValueError(f"xref {ref!r} targets {target._meta.label}, not {self.model._meta.label}")
             targets.append(target)
         return targets
 

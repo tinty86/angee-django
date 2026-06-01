@@ -28,6 +28,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "faker>=30.0",
   "mypy>=1.10",
   "pytest>=8.0",
   "pytest-django>=4.8",
@@ -67,7 +68,7 @@ pythonpath = [".", "src", "examples/notes-angee/src"]
 addopts = "-ra --strict-markers --import-mode=importlib"
 
 [tool.ruff]
-line-length = 79
+line-length = 120
 target-version = "py314"
 cache-dir = ".ruff_cache"
 exclude = [

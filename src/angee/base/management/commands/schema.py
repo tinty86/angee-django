@@ -53,20 +53,13 @@ class Command(BaseCommand):
         expected = self._render_schema_sdl()
         schema_dir = self._schema_dir()
         actual = (
-            {
-                path.stem: path.read_text(encoding="utf-8")
-                for path in sorted(schema_dir.glob("*.graphql"))
-            }
+            {path.stem: path.read_text(encoding="utf-8") for path in sorted(schema_dir.glob("*.graphql"))}
             if schema_dir.exists()
             else {}
         )
         drift = sorted(
             (set(expected) ^ set(actual))
-            | {
-                name
-                for name in expected.keys() & actual.keys()
-                if expected[name] != actual[name]
-            }
+            | {name for name in expected.keys() & actual.keys() if expected[name] != actual[name]}
         )
         if drift:
             rendered = ", ".join(f"schemas/{name}.graphql" for name in drift)

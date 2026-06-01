@@ -24,8 +24,6 @@ def test_user_source_model_owns_auth_identity() -> None:
     assert isinstance(manager, BaseUserManager)
     assert isinstance(manager, RebacManager)
     assert User.USERNAME_FIELD == "username"
-    assert {"username", "email", "sqid", "is_staff", "is_active"} <= (
-        field_names
-    )
+    assert {"username", "email", "sqid", "is_staff", "is_active"} <= (field_names)
     assert "groups" not in field_names
     assert "user_permissions" not in field_names

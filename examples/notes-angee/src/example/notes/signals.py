@@ -58,9 +58,7 @@ def grant_owner(
     )
 
 
-def clear_relationships(
-    sender: type[Model], instance: Model, **_: Any
-) -> None:
+def clear_relationships(sender: type[Model], instance: Model, **_: Any) -> None:
     """Drop every relationship pointing at a deleted note."""
 
     if not _is_note(sender):

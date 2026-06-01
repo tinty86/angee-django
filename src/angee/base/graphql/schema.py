@@ -71,9 +71,7 @@ class GraphQLSchemas:
                     {key: () for key in SCHEMA_PART_KEYS},
                 )
                 for key in SCHEMA_PART_KEYS:
-                    bucket[key] = self._dedupe_by_identity(
-                        bucket[key] + parts[key]
-                    )
+                    bucket[key] = self._dedupe_by_identity(bucket[key] + parts[key])
         return collected
 
     def names(self) -> tuple[str, ...]:
@@ -92,15 +90,12 @@ class GraphQLSchemas:
         except KeyError as error:
             available = ", ".join(self.names()) or "none"
             raise ImproperlyConfigured(
-                f"GraphQL schema {name!r} has no contributions; "
-                f"available schemas: {available}"
+                f"GraphQL schema {name!r} has no contributions; available schemas: {available}"
             ) from error
 
         query = self._merge_root(name, "query", parts["query"])
         if query is None:
-            raise ImproperlyConfigured(
-                f"GraphQL schema {name!r} has no query root"
-            )
+            raise ImproperlyConfigured(f"GraphQL schema {name!r} has no query root")
         self._assert_rebac_managers(name, parts["types"])
         return AngeeSchema(
             query=query,
@@ -187,9 +182,7 @@ class GraphQLSchemas:
                 continue
             if not isinstance(model._default_manager, RebacManager):
                 raise ImproperlyConfigured(
-                    f"GraphQL schema {schema_name!r} exposes "
-                    f"{model._meta.label} without a RebacManager default "
-                    "manager"
+                    f"GraphQL schema {schema_name!r} exposes {model._meta.label} without a RebacManager default manager"
                 )
 
     def _django_model_or_none(

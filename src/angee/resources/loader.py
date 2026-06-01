@@ -163,10 +163,7 @@ class AngeeResource(resources.ModelResource):
     def _prime_existing_ledgers(self, dataset: tablib.Dataset) -> None:
         """Load existing ledger rows for this import dataset in one query."""
 
-        xrefs = {
-            self._row_xref(row, row_number=index)
-            for index, row in enumerate(dataset.dict, start=1)
-        }
+        xrefs = {self._row_xref(row, row_number=index) for index, row in enumerate(dataset.dict, start=1)}
         self._existing_ledgers = {xref: None for xref in xrefs}
         if not xrefs:
             return
@@ -237,19 +234,13 @@ class AngeeResource(resources.ModelResource):
 
         value = row.get("_xref")
         if not isinstance(value, str) or not value.strip():
-            raise ResourceLoadError(
-                f"{self.entry.display} row {row_number}: missing _xref"
-            )
+            raise ResourceLoadError(f"{self.entry.display} row {row_number}: missing _xref")
         return value.strip()
 
     def _row_content_hash(self, row: Mapping[str, Any]) -> str:
         """Return a deterministic hash for model field values in ``row``."""
 
-        payload = {
-            key: value
-            for key, value in sorted(row.items())
-            if key not in RESERVED_ROW_KEYS
-        }
+        payload = {key: value for key, value in sorted(row.items()) if key not in RESERVED_ROW_KEYS}
         body = json.dumps(
             json_safe(payload),
             sort_keys=True,
@@ -357,17 +348,12 @@ class AngeeResource(resources.ModelResource):
                     candidates.append(candidate)
             if len(candidates) > 1:
                 names = ", ".join(name for name, _value in candidates)
-                raise ImproperlyConfigured(
-                    f"{self.entry.display}: adopt=True matched multiple "
-                    f"unique fields: {names}"
-                )
+                raise ImproperlyConfigured(f"{self.entry.display}: adopt=True matched multiple unique fields: {names}")
 
         if not candidates:
             return None
         field_name, value = candidates[0]
-        matches = list(
-            self._meta.model._default_manager.filter(**{field_name: value})[:2]
-        )
+        matches = list(self._meta.model._default_manager.filter(**{field_name: value})[:2])
         if len(matches) != 1:
             return None
         return matches[0]
@@ -382,10 +368,7 @@ class AngeeResource(resources.ModelResource):
         field = self._unique_adoption_field(field_name)
         resource_field = self.fields.get(field.name)
         if resource_field is None:
-            raise ImproperlyConfigured(
-                f"{self.entry.display}: adopt field {field_name!r} is not "
-                "importable"
-            )
+            raise ImproperlyConfigured(f"{self.entry.display}: adopt field {field_name!r} is not importable")
         if resource_field.column_name not in row:
             return None
         value = row.get(resource_field.column_name)
@@ -402,17 +385,9 @@ class AngeeResource(resources.ModelResource):
         try:
             field = self._meta.model._meta.get_field(field_name)
         except FieldDoesNotExist as error:
-            raise ImproperlyConfigured(
-                f"{self.entry.display}: adopt field {field_name!r} does "
-                "not exist"
-            ) from error
-        if not isinstance(field, models.Field) or not self._is_adoptable_field(
-            field
-        ):
-            raise ImproperlyConfigured(
-                f"{self.entry.display}: adopt field {field_name!r} must be "
-                "a unique model field"
-            )
+            raise ImproperlyConfigured(f"{self.entry.display}: adopt field {field_name!r} does not exist") from error
+        if not isinstance(field, models.Field) or not self._is_adoptable_field(field):
+            raise ImproperlyConfigured(f"{self.entry.display}: adopt field {field_name!r} must be a unique model field")
         return field
 
     def _is_adoptable_field(self, field: models.Field[Any, Any]) -> bool:
@@ -434,26 +409,20 @@ class AngeeResource(resources.ModelResource):
     def _validate_headers(self, headers: Sequence[str]) -> None:
         """Reject primary-key and unknown field headers."""
 
-        allowed = set(self.fields) | {
-            field.column_name for field in self.fields.values()
-        }
+        allowed = set(self.fields) | {field.column_name for field in self.fields.values()}
         pk = self._meta.model._meta.pk
         primary_keys = {pk.name, pk.attname}
 
         blocked = sorted(set(headers) & primary_keys)
         if blocked:
             names = ", ".join(blocked)
-            raise ResourceLoadError(
-                f"{self.entry.display}: primary key field(s) are managed "
-                f"by _xref: {names}"
-            )
+            raise ResourceLoadError(f"{self.entry.display}: primary key field(s) are managed by _xref: {names}")
 
         unknown = sorted(set(headers) - allowed)
         if unknown:
             names = ", ".join(unknown)
             raise ResourceLoadError(
-                f"{self.entry.display}: unknown field(s) for "
-                f"{self._meta.model._meta.label}: {names}"
+                f"{self.entry.display}: unknown field(s) for {self._meta.model._meta.label}: {names}"
             )
 
     def _restore_auto_fields(
@@ -480,9 +449,7 @@ class AngeeResource(resources.ModelResource):
 
         if not updates:
             return
-        type(instance)._default_manager.filter(pk=instance.pk).update(
-            **updates
-        )
+        type(instance)._default_manager.filter(pk=instance.pk).update(**updates)
         instance.refresh_from_db(fields=list(updates))
 
 

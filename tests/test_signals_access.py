@@ -114,9 +114,7 @@ def test_json_safe_normalizes_nested_values() -> None:
 
     when = datetime.datetime(2026, 5, 31, 12, 0, 0)
 
-    assert json_safe({"when": [when]}) == {
-        "when": ["2026-05-31T12:00:00"]
-    }
+    assert json_safe({"when": [when]}) == {"when": ["2026-05-31T12:00:00"]}
 
 
 def test_change_read_gate_passes_non_rebac_payloads(

@@ -22,9 +22,7 @@ class IAMGraphQLTests(TransactionTestCase):
 
     def setUp(self) -> None:
         call_command("rebac", "sync", verbosity=0)
-        call_command(
-            "resources", "load", "demo", allow_non_dev=True, verbosity=0
-        )
+        call_command("resources", "load", "demo", allow_non_dev=True, verbosity=0)
         with system_context(reason="test-setup"):
             self.welcome = Note.objects.get(title="Welcome to Angee")
             self.alice = User.objects.get(username="alice")
@@ -56,9 +54,7 @@ class IAMGraphQLTests(TransactionTestCase):
             },
         )
 
-        current = self.graphql(
-            "query { currentUser { username isStaff } }"
-        )
+        current = self.graphql("query { currentUser { username isStaff } }")
         self.assertEqual(
             current["data"],
             {"currentUser": {"username": "alice", "isStaff": True}},
@@ -67,9 +63,7 @@ class IAMGraphQLTests(TransactionTestCase):
         logged_out = self.graphql("mutation { logout }")
         self.assertEqual(logged_out["data"], {"logout": True})
 
-        anonymous_again = self.graphql(
-            "query { currentUser { username } }"
-        )
+        anonymous_again = self.graphql("query { currentUser { username } }")
         self.assertEqual(anonymous_again["data"], {"currentUser": None})
 
     def test_notes_page_and_update_by_relay_id(self) -> None:
@@ -100,11 +94,7 @@ class IAMGraphQLTests(TransactionTestCase):
 
         notes = page["data"]["notes"]
         self.assertGreaterEqual(notes["totalCount"], 3)
-        welcome = next(
-            node
-            for node in notes["results"]
-            if node["title"] == "Welcome to Angee"
-        )
+        welcome = next(node for node in notes["results"] if node["title"] == "Welcome to Angee")
         relay_id = welcome["id"]
         self.assertNotEqual(relay_id, self.welcome.sqid)
         self.assertIn("backend", welcome["tags"])
@@ -155,9 +145,7 @@ class IAMGraphQLTests(TransactionTestCase):
             """,
         )["data"]["notes"]["results"]
 
-        planning = next(
-            node for node in page if node["title"] == "Quarterly planning"
-        )
+        planning = next(node for node in page if node["title"] == "Quarterly planning")
         self.assertEqual(planning["status"], "IN_REVIEW")
 
     def test_note_exposes_scalar_audit_ids_and_stamps_updates(self) -> None:
@@ -173,11 +161,7 @@ class IAMGraphQLTests(TransactionTestCase):
             }
             """,
         )["data"]["notes"]["results"]
-        planning = next(
-            node
-            for node in alice_notes
-            if node["title"] == "Quarterly planning"
-        )
+        planning = next(node for node in alice_notes if node["title"] == "Quarterly planning")
 
         self.assertEqual(planning["createdBy"], self.alice.public_id)
         self.assertEqual(planning["updatedBy"], self.admin.public_id)
@@ -226,11 +210,7 @@ class IAMGraphQLTests(TransactionTestCase):
 
         alice = Client()
         self.login(alice, "alice")
-        welcome_id = next(
-            node["id"]
-            for node in self.notes(alice)["results"]
-            if node["title"] == "Welcome to Angee"
-        )
+        welcome_id = next(node["id"] for node in self.notes(alice)["results"] if node["title"] == "Welcome to Angee")
         visible = self.post(
             alice,
             """
@@ -336,9 +316,7 @@ class IAMGraphQLTests(TransactionTestCase):
         )["data"]
         expected_status_counts = {
             str(row["status"]).upper(): row["count"]
-            for row in Note.objects.as_user(self.alice)
-            .values("status")
-            .annotate(count=Count("pk"))
+            for row in Note.objects.as_user(self.alice).values("status").annotate(count=Count("pk"))
         }
         expected_total = sum(expected_status_counts.values())
 
@@ -348,14 +326,9 @@ class IAMGraphQLTests(TransactionTestCase):
 
         # group-by status: groups paginate (totalCount) and carry typed enum
         # keys, matching the schema's NoteStatus group key.
+        self.assertEqual(data["byStatus"]["totalCount"], len(expected_status_counts))
         self.assertEqual(
-            data["byStatus"]["totalCount"], len(expected_status_counts)
-        )
-        self.assertEqual(
-            {
-                row["key"]["status"]: row["count"]
-                for row in data["byStatus"]["results"]
-            },
+            {row["key"]["status"]: row["count"] for row in data["byStatus"]["results"]},
             expected_status_counts,
         )
 
@@ -368,9 +341,7 @@ class IAMGraphQLTests(TransactionTestCase):
         self.assertTrue(data["byMonth"]["results"][0]["key"]["updatedAtMonth"])
 
     def test_note_groups_paginate_with_offset(self) -> None:
-        self.graphql(
-            'mutation { login(username: "alice", password: "alice") { ok } }'
-        )
+        self.graphql('mutation { login(username: "alice", password: "alice") { ok } }')
         query = """
             query Page($p: OffsetPaginationInput) {
               noteGroups(groupBy: [{field: STATUS}], pagination: $p) {
@@ -382,8 +353,12 @@ class IAMGraphQLTests(TransactionTestCase):
         page0 = self.graphql(query, {"p": {"offset": 0, "limit": 1}})["data"]
         page1 = self.graphql(query, {"p": {"offset": 1, "limit": 1}})["data"]
 
-        # Three status groups, one per offset page; totalCount is page-stable.
-        self.assertEqual(page0["noteGroups"]["totalCount"], 3)
+        # One status group per offset page; totalCount is page-stable and
+        # matches the distinct statuses among alice's scoped notes.
+        groups = Note.objects.as_user(self.alice).values("status").distinct().count()
+        self.assertGreaterEqual(groups, 2)
+        self.assertEqual(page0["noteGroups"]["totalCount"], groups)
+        self.assertEqual(page1["noteGroups"]["totalCount"], groups)
         self.assertEqual(len(page0["noteGroups"]["results"]), 1)
         self.assertEqual(len(page1["noteGroups"]["results"]), 1)
         first = page0["noteGroups"]["results"][0]["key"]["status"]
@@ -394,11 +369,7 @@ class IAMGraphQLTests(TransactionTestCase):
         alice = Client()
         self.login(alice, "alice")
         alice_notes = self.notes(alice)
-        welcome_id = next(
-            node["id"]
-            for node in alice_notes["results"]
-            if node["title"] == "Welcome to Angee"
-        )
+        welcome_id = next(node["id"] for node in alice_notes["results"] if node["title"] == "Welcome to Angee")
 
         bob = Client()
         self.login(bob, "bob")

@@ -56,9 +56,7 @@ def _stamp_audit_actor(
         return
     actor = current_actor()
     if actor is not None and actor.subject_type == _USER_SUBJECT_TYPE:
-        instance.stamp_audit_actor(
-            actor.subject_id, creating=instance.pk is None
-        )
+        instance.stamp_audit_actor(actor.subject_id, creating=instance.pk is None)
 
 
 def change_group(model: type[models.Model]) -> str:
@@ -126,16 +124,9 @@ def _publish(
     """Build and broadcast one change payload after commit."""
 
     model = type(instance)
-    changed_fields = (
-        sorted(str(field) for field in update_fields)
-        if update_fields is not None
-        else None
-    )
+    changed_fields = sorted(str(field) for field in update_fields) if update_fields is not None else None
     changed_values = (
-        {
-            field: json_safe(getattr(instance, field, None))
-            for field in changed_fields
-        }
+        {field: json_safe(getattr(instance, field, None)) for field in changed_fields}
         if changed_fields is not None
         else None
     )

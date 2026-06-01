@@ -64,17 +64,14 @@ def compose_defaults(
             "rebac.backends.auth.RebacBackend",
             "django.contrib.auth.backends.ModelBackend",
         ],
-        "CHANNEL_LAYERS": channel_layers
-        or {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
+        "CHANNEL_LAYERS": channel_layers or {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
         "ROOT_URLCONF": root_urlconf,
         "ASGI_APPLICATION": asgi_application,
         "DEFAULT_AUTO_FIELD": "django.db.models.BigAutoField",
         "USE_TZ": use_tz,
         "ANGEE_RUNTIME_DIR": runtime_dir,
         "ANGEE_RUNTIME_MODULE": runtime_module,
-        "ANGEE_GRAPHQL_IDE": graphql_ide
-        if graphql_ide is not None
-        else ("graphiql" if debug else None),
+        "ANGEE_GRAPHQL_IDE": graphql_ide if graphql_ide is not None else ("graphiql" if debug else None),
         "REBAC_BACKEND": "local",
         "REBAC_LOCAL_BACKEND_STORAGE": "registry",
         "REBAC_STRICT_MODE": True,
@@ -153,10 +150,7 @@ def _migration_modules(
     """Return migration module overrides for emitted runtime apps."""
 
     labels = {config_class.label for config_class in addon_configs}
-    return {
-        label: f"{runtime_module}.{label}.migrations"
-        for label in sorted(labels)
-    }
+    return {label: f"{runtime_module}.{label}.migrations" for label in sorted(labels)}
 
 
 def _addon_settings_defaults(
@@ -190,9 +184,7 @@ def _resolve_app_config_class(package_name: str) -> type[BaseAddonConfig]:
         return BaseConfig
     app_config = AppConfig.create(package_name)
     if not isinstance(app_config, BaseAddonConfig):
-        raise ImproperlyConfigured(
-            f"{package_name} must resolve to a BaseAddonConfig subclass"
-        )
+        raise ImproperlyConfigured(f"{package_name} must resolve to a BaseAddonConfig subclass")
     return type(app_config)
 
 

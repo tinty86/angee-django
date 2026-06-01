@@ -59,20 +59,14 @@ class DeletionPreview:
         except RestrictedError as error:
             blocked = _groups(_count_by_model(error.restricted_objects))
 
-        deleted_counts: dict[type[models.Model], int] = {
-            model: len(rows) for model, rows in collector.data.items()
-        }
+        deleted_counts: dict[type[models.Model], int] = {model: len(rows) for model, rows in collector.data.items()}
         for queryset in collector.fast_deletes:
-            deleted_counts[queryset.model] = (
-                deleted_counts.get(queryset.model, 0) + queryset.count()
-            )
+            deleted_counts[queryset.model] = deleted_counts.get(queryset.model, 0) + queryset.count()
 
         updated_counts: dict[type[models.Model], int] = {}
         for (field, _value), object_groups in collector.field_updates.items():
             model = field.model
-            updated_counts[model] = updated_counts.get(model, 0) + sum(
-                len(group) for group in object_groups
-            )
+            updated_counts[model] = updated_counts.get(model, 0) + sum(len(group) for group in object_groups)
         return cls(
             total_deleted_count=sum(deleted_counts.values()),
             deleted=_groups(deleted_counts),

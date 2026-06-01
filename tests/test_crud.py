@@ -52,9 +52,7 @@ def _field_names(surface: type) -> list[str]:
 def test_crud_builds_named_fields_from_the_model() -> None:
     """Each requested operation becomes a model-named mutation field."""
 
-    surface = crud(
-        GroupType, create=GroupInput, update=GroupPatch, delete=True
-    )
+    surface = crud(GroupType, create=GroupInput, update=GroupPatch, delete=True)
 
     assert _field_names(surface) == [
         "create_group",
@@ -72,9 +70,7 @@ def test_crud_only_includes_requested_operations() -> None:
 def test_crud_name_overrides_the_singular() -> None:
     """An explicit name renames every field's subject."""
 
-    assert _field_names(crud(GroupType, update=GroupPatch, name="team")) == [
-        "update_team"
-    ]
+    assert _field_names(crud(GroupType, update=GroupPatch, name="team")) == ["update_team"]
 
 
 def test_crud_requires_at_least_one_operation() -> None:
@@ -106,9 +102,7 @@ def test_crud_fields_merge_into_a_schema() -> None:
         def ok(self) -> bool:
             return True
 
-    sdl = strawberry.Schema(
-        query=Query, mutation=surface, types=[GroupType]
-    ).as_str()
+    sdl = strawberry.Schema(query=Query, mutation=surface, types=[GroupType]).as_str()
 
     assert "createGroup(data: GroupInput!): GroupType!" in sdl
     assert "deleteGroup(id: ID!): DeletePreview!" in sdl

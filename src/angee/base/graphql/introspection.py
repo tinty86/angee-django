@@ -17,9 +17,7 @@ def surface_field_names(surface: object) -> tuple[str, ...]:
 
     definition = getattr(surface, "__strawberry_definition__", None)
     if definition is None:
-        raise ImproperlyConfigured(
-            f"{surface_name(surface)} is not a Strawberry type"
-        )
+        raise ImproperlyConfigured(f"{surface_name(surface)} is not a Strawberry type")
     return tuple(field.python_name for field in definition.fields)
 
 
@@ -28,7 +26,5 @@ def django_model(node: type) -> type[models.Model]:
 
     definition = getattr(node, "__strawberry_django_definition__", None)
     if definition is None:
-        raise ImproperlyConfigured(
-            f"{surface_name(node)} is not a strawberry_django type"
-        )
+        raise ImproperlyConfigured(f"{surface_name(node)} is not a strawberry_django type")
     return definition.model

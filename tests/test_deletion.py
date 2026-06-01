@@ -209,10 +209,7 @@ def test_deletion_preview_counts_fast_deletes() -> None:
         collector = Collector(using=parent._state.db or "default")
         collector.collect([parent])
 
-        assert any(
-            queryset.model is PreviewCascadeChild
-            for queryset in collector.fast_deletes
-        )
+        assert any(queryset.model is PreviewCascadeChild for queryset in collector.fast_deletes)
 
         preview = DeletionPreview.from_instance(parent)
 

@@ -24,6 +24,4 @@ class ResourceTier(models.TextChoices):
             return cls(raw).value
         except ValueError as error:
             expected = ", ".join(cls.values)
-            raise ImproperlyConfigured(
-                f"Unknown resource tier {raw!r}; expected one of {expected}"
-            ) from error
+            raise ImproperlyConfigured(f"Unknown resource tier {raw!r}; expected one of {expected}") from error

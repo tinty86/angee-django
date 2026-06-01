@@ -98,6 +98,7 @@ Dependency changes must update this file in the same change.
 | ruff | Python lint and format | Repo checks |
 | mypy | Python type checking | Strict backend checks |
 | pytest + pytest-django | Backend tests | Synthetic project and integration fixtures |
+| Faker | Test and seed data generation | Bulk lorem fixtures (e.g. `seed_lorem_notes`) |
 | Vitest | TypeScript and React tests | Frontend unit checks |
 | happy-dom | DOM environment for Vitest | Per-file env opt-in for hook and component tests |
 | @testing-library/react | React component and hook test rendering | Provider-wrapped render and hook harnesses |

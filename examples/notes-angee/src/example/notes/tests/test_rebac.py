@@ -29,9 +29,7 @@ class NotesAuthorizationTests(TransactionTestCase):
 
     def setUp(self) -> None:
         call_command("rebac", "sync", verbosity=0)
-        call_command(
-            "resources", "load", "demo", allow_non_dev=True, verbosity=0
-        )
+        call_command("resources", "load", "demo", allow_non_dev=True, verbosity=0)
         with system_context(reason="test-setup"):
             self.alice = User.objects.get(username="alice")
             self.bob = User.objects.get(username="bob")
@@ -47,24 +45,15 @@ class NotesAuthorizationTests(TransactionTestCase):
 
         self.assertTrue(alice_notes)
         self.assertTrue(bob_notes)
-        self.assertTrue(
-            all(note.created_by_id == self.alice.pk for note in alice_notes)
-        )
-        self.assertTrue(
-            all(note.created_by_id == self.bob.pk for note in bob_notes)
-        )
-        self.assertFalse(
-            {note.sqid for note in alice_notes}
-            & {note.sqid for note in bob_notes}
-        )
+        self.assertTrue(all(note.created_by_id == self.alice.pk for note in alice_notes))
+        self.assertTrue(all(note.created_by_id == self.bob.pk for note in bob_notes))
+        self.assertFalse({note.sqid for note in alice_notes} & {note.sqid for note in bob_notes})
 
     def test_demo_load_is_idempotent(self) -> None:
         with system_context(reason="test"):
             notes_before = Note.objects.count()
             users_before = User.objects.count()
-        call_command(
-            "resources", "load", "demo", allow_non_dev=True, verbosity=0
-        )
+        call_command("resources", "load", "demo", allow_non_dev=True, verbosity=0)
         with system_context(reason="test"):
             self.assertEqual(Note.objects.count(), notes_before)
             self.assertEqual(User.objects.count(), users_before)
@@ -101,6 +90,4 @@ class NotesAuthorizationTests(TransactionTestCase):
         with system_context(reason="test"):
             Note.objects.get(sqid=sqid).delete()
         # The owner can no longer reach the note: its grants were cleared.
-        self.assertEqual(
-            list(Note.objects.as_user(self.alice).filter(sqid=sqid)), []
-        )
+        self.assertEqual(list(Note.objects.as_user(self.alice).filter(sqid=sqid)), [])

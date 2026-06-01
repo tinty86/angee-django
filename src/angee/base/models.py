@@ -39,15 +39,12 @@ class AngeeModel(TimestampMixin, RebacMixin):
         if target is None:
             return None
         if not isinstance(target, str):
-            raise ImproperlyConfigured(
-                f"{cls.__module__}.{cls.__name__}.extends must be a string."
-            )
+            raise ImproperlyConfigured(f"{cls.__module__}.{cls.__name__}.extends must be a string.")
         try:
             app_label, model_name = make_model_tuple(target)
         except ValueError as error:
             raise ImproperlyConfigured(
-                f"{cls.__module__}.{cls.__name__}.extends must be "
-                "an 'app_label.ModelName' reference."
+                f"{cls.__module__}.{cls.__name__}.extends must be an 'app_label.ModelName' reference."
             ) from error
         return f"{app_label}.{model_name}"
 
@@ -58,11 +55,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
         if cls.get_extension_target() is None:
             return ()
 
-        bases = tuple(
-            base
-            for base in cls.__bases__
-            if _is_contributed_extension_base(base)
-        )
+        bases = tuple(base for base in cls.__bases__ if _is_contributed_extension_base(base))
         return bases or (cls,)
 
     @property
@@ -84,7 +77,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
         lookup = cls._public_id_lookup(value)
         try:
             instance = cls._default_manager.filter(**lookup).first()
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
         return cast(Self | None, instance)
 
@@ -97,9 +90,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
         return {cls._meta.pk.name: value}
 
 
-def instance_from_public_id(
-    model: type[_ModelT], value: str
-) -> _ModelT | None:
+def instance_from_public_id(model: type[_ModelT], value: str) -> _ModelT | None:
     """Return ``model`` instance addressed by Angee or Django public ID."""
 
     if issubclass(model, AngeeModel):
@@ -107,7 +98,7 @@ def instance_from_public_id(
 
     try:
         instance = model._default_manager.filter(pk=value).first()
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return cast(_ModelT | None, instance)
 
@@ -138,8 +129,7 @@ def _has_model_field(model: type[models.Model], name: str) -> bool:
     """Return whether ``model`` exposes a concrete or private field."""
 
     return any(
-        field.name == name or field.attname == name
-        for field in (*model._meta.fields, *model._meta.private_fields)
+        field.name == name or field.attname == name for field in (*model._meta.fields, *model._meta.private_fields)
     )
 
 

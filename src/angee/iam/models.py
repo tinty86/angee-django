@@ -24,9 +24,7 @@ class UserManager(RebacManager, BaseUserManager):
     def get_by_natural_key(self, username: str) -> Any:
         """Return a user for credential checks without row-scope filtering."""
 
-        return self.system_context(reason="iam.credentials").get(
-            **{self.model.USERNAME_FIELD: username}
-        )
+        return self.system_context(reason="iam.credentials").get(**{self.model.USERNAME_FIELD: username})
 
     def get(self, *args: Any, **kwargs: Any) -> Any:
         """Return a user, bypassing REBAC only for session primary keys."""
@@ -38,9 +36,7 @@ class UserManager(RebacManager, BaseUserManager):
     async def aget_by_natural_key(self, username: str) -> Any:
         """Async sibling of ``get_by_natural_key``."""
 
-        return await self.system_context(reason="iam.credentials").aget(
-            **{self.model.USERNAME_FIELD: username}
-        )
+        return await self.system_context(reason="iam.credentials").aget(**{self.model.USERNAME_FIELD: username})
 
     def create_user(
         self,

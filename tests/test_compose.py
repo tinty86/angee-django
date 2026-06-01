@@ -48,7 +48,7 @@ def test_runtime_renders_iam_user_sources(tmp_path: Path) -> None:
 
     assert "class User" in user_source
     assert 'app_label = "iam"' in user_source
-    assert 'rebac_resource_type = \'auth/user\'' in user_source
+    assert "rebac_resource_type = 'auth/user'" in user_source
     assert "swappable = 'AUTH_USER_MODEL'" in user_source
 
 
@@ -100,16 +100,12 @@ def test_clean_then_emit_is_idempotent(tmp_path: Path, settings: Any) -> None:
     runtime = runtime_for(tmp_path)
     settings.ANGEE_RUNTIME_DIR = runtime.runtime_dir
     runtime.emit()
-    migration_path = (
-        runtime.runtime_dir / "base" / "migrations" / "0001_initial.py"
-    )
+    migration_path = runtime.runtime_dir / "base" / "migrations" / "0001_initial.py"
     migration_path.write_text("# migration\n", encoding="utf-8")
 
     runtime.clean()
     runtime.emit()
 
-    assert "ANGEE GENERATED RUNTIME" in (
-        runtime.runtime_dir / "__init__.py"
-    ).read_text(encoding="utf-8")
+    assert "ANGEE GENERATED RUNTIME" in (runtime.runtime_dir / "__init__.py").read_text(encoding="utf-8")
     runtime.clean()
     runtime.clean()

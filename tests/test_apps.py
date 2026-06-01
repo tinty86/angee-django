@@ -65,9 +65,7 @@ def test_resource_manifest_normalizes_tiers_and_entries() -> None:
             "depends_on": ("resources/notes.yaml",),
         },
     )
-    assert config.resource_manifest["demo"] == (
-        {"url": "https://example.test/demo.csv"},
-    )
+    assert config.resource_manifest["demo"] == ({"url": "https://example.test/demo.csv"},)
 
 
 def test_resource_manifest_rejects_unknown_tiers() -> None:
@@ -76,9 +74,7 @@ def test_resource_manifest_rejects_unknown_tiers() -> None:
     class BrokenConfig(BaseAddonConfig):
         name = "tests.broken_resources"
         label = "broken_resources"
-        resources: ClassVar[dict[object, object]] = {
-            "fixture": ("resources/fixture.csv",)
-        }
+        resources: ClassVar[dict[object, object]] = {"fixture": ("resources/fixture.csv",)}
 
     config = BrokenConfig(
         "tests.broken_resources",

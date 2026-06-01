@@ -72,20 +72,9 @@ def test_public_id_helpers_support_angee_and_plain_django_models() -> None:
         assert public_id_of(angee_instance) == angee_instance.sqid
         assert public_id_of(plain_instance) == str(plain_instance.pk)
         with system_context(reason="test public-id lookup"):
-            assert (
-                instance_from_public_id(
-                    PublicIdThing, angee_instance.public_id
-                )
-                == angee_instance
-            )
-            assert (
-                PublicIdThing.from_public_id(angee_instance.public_id)
-                == angee_instance
-            )
-        assert (
-            instance_from_public_id(PlainPublicIdThing, str(plain_instance.pk))
-            == plain_instance
-        )
+            assert instance_from_public_id(PublicIdThing, angee_instance.public_id) == angee_instance
+            assert PublicIdThing.from_public_id(angee_instance.public_id) == angee_instance
+        assert instance_from_public_id(PlainPublicIdThing, str(plain_instance.pk)) == plain_instance
         with system_context(reason="test missing public-id lookup"):
             assert instance_from_public_id(PublicIdThing, "missing") is None
         assert instance_from_public_id(PlainPublicIdThing, "0") is None
