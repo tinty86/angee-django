@@ -3,6 +3,39 @@
 **This file is the source of truth for the in-flight program. Re-read it after any
 compaction before acting.** Keep it updated as work lands.
 
+## ✅ M3 production frontend — current branch state (2026-05-31)
+Branch `workspace/m3-frontend` is rebased on `wip-base-lift-refactor` and carries
+the production rebuild commits through P6:
+
+- `8537eda` dependency manifest + `docs/stack.md` owner rows.
+- `dfa5174` P1 view seams: Element DSL, data-view model/provider, widget registry,
+  modal/confirm host.
+- `6303908` P2 chrome/shell/chatter.
+- `57f96fc` production frontend surfaces: login, public shell, markdown editor,
+  list/form/data page rebuilds, notes reference config, SDK aggregation support.
+- `bbfd5c5` Activity chatter wired to `noteRevisions(id)`.
+- `dfcc785` record chrome pager + shared view switcher in the
+  `DataPage`/`FormView`/`ListView` seam.
+
+Fresh verification after `dfcc785`: `pnpm --filter @angee/base exec tsc --noEmit`,
+`pnpm -r typecheck`, `pnpm --filter @angee/base exec vitest run`, `pnpm run test`,
+`pnpm run build`, `uv run ruff check . --no-cache`, `uv run mypy src/`,
+`uv run pytest`, `uv run examples/notes-angee/manage.py schema --check`, and
+`uv run examples/notes-angee/manage.py angee build --check` all exited 0.
+
+Live browser evidence now covers login/list, grouped table, record drawer with
+`3 of 3` pager, previous-record navigation to `2 of 3`, record view switch back to
+board, and live `noteChanged` invalidation: a separate localhost HTTP client
+mutated "Reading list" to "Reading list websocket"; the already-open browser list
+updated without reload, then the title was restored through the same GraphQL path
+and the browser reflected the restore. The dev stack was stopped afterward.
+
+Remaining before claiming the whole P7 bar complete: reviewer passes are not
+available in this session, and the full browser walkthrough still lacks fresh
+proof for every acceptance subcase (notably create/edit/status-transition and
+list paging with more than one page of data). Continue from the production plan,
+keeping commits phase-quality and provenance-free.
+
 ## ✅ M3 Phase 1 DONE — SDK → new contract + offset pagination (gate green)
 The SDK now consumes the emitted contract: relay `ID!` nodes, real
 `NoteStatus`/`Ordering`/`NoteGroupBy` enums, `NoteOrder @oneOf`, `NoteFilter`
