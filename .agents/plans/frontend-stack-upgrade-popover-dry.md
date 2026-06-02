@@ -72,11 +72,17 @@ review → render-verify on live `:5173` vs mockup `:5174`).
   counts/totals + per-group and footer aggregate rollups. The screenshot shows
   only a bare count chip (10/10/8) per group — the richer column aggregates +
   nested rollup chain still need wiring/polish.
-- [ ] **V3 — FormView save reverts without reload (BROKEN, framework-level).**
-  After save, fields revert to old/undefined values until a manual reload; root
-  cause is the SDK urql graphcache not normalizing the mutation result into the
-  cache. Affects every form/view/subscription → fix in the SDK cache/mutation
-  layer, not per-form.
+- [x] **V3 — FormView fields blanked after save until reload. DONE.** Original
+  "SDK cache" hypothesis was WRONG — live tracing proved the mutation persists,
+  the result returns the full node, and the cache normalizes (the breadcrumb/
+  other views update with no reload). The real cause: `@tanstack/react-form`
+  1.33.0 re-seeds an *untouched* form from `defaultValues` whenever that ref
+  deep-changes, and the post-save `onSaved → onSelect` re-render passed a fresh
+  empty-draft `defaultValues`, clobbering the just-saved values after
+  `form.reset(savedValues)`. Fix: feed `useForm` from a stable `baselineValuesRef`
+  (the single baseline authority, reassigned only on seed/save/create-reset) +
+  guard comment. Browser-free regression test added (fails pre-fix). Reviewed
+  (react+arch, no blockers); live-verified the title persists post-save, 0 errors.
 - [ ] **V4 — FormView chrome remainder.** Smart-buttons, More/Actions menu,
   notebook tabs not built. (DONE: dirty-only Save+Discard top band, nav guard,
   inline title, sheet layout.)

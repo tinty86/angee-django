@@ -129,7 +129,7 @@ export function FormView({
     isCreate ? "create" : "update",
     { fields: selection },
   );
-  const defaultValues = React.useMemo(
+  const emptyValues = React.useMemo(
     () => emptyDraft(resolvedFields),
     [resolvedFields],
   );
@@ -137,10 +137,14 @@ export function FormView({
     () => resolvedFields.length > 0 && resolvedFields.every((field) => field.readOnly),
     [resolvedFields],
   );
-  const baselineValuesRef = React.useRef<Values>(defaultValues);
+  // `useForm` re-seeds an untouched form whenever `defaultValues` deep-changes.
+  // Source it from this stable baseline ref (reassigned only on record seed,
+  // post-save reset, and create reset) so a post-save re-render carrying new
+  // field-descriptor identities can't re-seed and blank the just-saved values.
+  const baselineValuesRef = React.useRef<Values>(emptyValues);
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const form = useForm({
-    defaultValues,
+    defaultValues: baselineValuesRef.current,
     onSubmit: async ({ value }) => {
       setSaveError(null);
       const data = mutationData(value, resolvedFields, {
@@ -180,8 +184,8 @@ export function FormView({
     if (isCreate) {
       if (seededIdRef.current !== null) {
         seededIdRef.current = null;
-        baselineValuesRef.current = defaultValues;
-        form.reset(defaultValues);
+        baselineValuesRef.current = emptyValues;
+        form.reset(emptyValues);
         setSaveError(null);
       }
       return;
@@ -194,7 +198,7 @@ export function FormView({
       form.reset(recordValues);
       setSaveError(null);
     }
-  }, [defaultValues, isCreate, record, resolvedFields, form]);
+  }, [emptyValues, isCreate, record, resolvedFields, form]);
 
   const titleField = titleFieldFor(resolvedFields);
   const statusField = resolvedFields.find((field) => field.widget === "statusbar");
