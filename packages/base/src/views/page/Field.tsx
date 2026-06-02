@@ -20,6 +20,7 @@ export interface FieldProps {
   widget?: string;
   readOnly?: boolean;
   title?: boolean;
+  body?: boolean;
   kind?: PageFieldKind;
   options?: readonly WidgetOption[];
   placeholder?: string;
@@ -32,6 +33,7 @@ export interface FieldDescriptor {
   widget?: string;
   readOnly?: boolean;
   title?: boolean;
+  body?: boolean;
   kind?: PageFieldKind;
   options?: readonly WidgetOption[];
   placeholder?: string;

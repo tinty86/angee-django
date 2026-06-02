@@ -96,6 +96,7 @@ function fieldDescriptor(props: FieldProps): FieldDescriptor {
     ...(props.widget !== undefined ? { widget: props.widget } : {}),
     ...(props.readOnly !== undefined ? { readOnly: props.readOnly } : {}),
     ...(props.title !== undefined ? { title: props.title } : {}),
+    ...(props.body !== undefined ? { body: props.body } : {}),
     ...(props.kind !== undefined ? { kind: props.kind } : {}),
     ...(props.options !== undefined ? { options: props.options } : {}),
     ...(props.placeholder !== undefined ? { placeholder: props.placeholder } : {}),

@@ -11,7 +11,9 @@ export {
   type ColumnAlign,
 } from "./ListView";
 export {
+  FORM_VIEW_NOTEBOOK_SLOT,
   FormView,
+  formViewNotebookSlot,
   type FormViewProps,
   type FormField,
   type FieldKind,

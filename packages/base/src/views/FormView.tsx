@@ -4,10 +4,13 @@ import { useBlocker } from "@tanstack/react-router";
 import {
   useResourceMutation,
   useResourceRecord,
+  useSlot,
   type Row,
+  type SlotContribution,
 } from "@angee/sdk";
 
 import { Button } from "../ui/button";
+import { Glyph } from "../chrome/Glyph";
 import { ErrorBanner } from "../fragments/ErrorBanner";
 import { useConfirm } from "../feedback";
 import {
@@ -16,9 +19,15 @@ import {
   FieldLabel,
   FieldRoot,
 } from "../ui/field";
-import { FormActions } from "../ui/form-layout";
+import {
+  FormActions,
+  FormFooter,
+  FormGrid,
+  FormSectionKicker,
+} from "../ui/form-layout";
 import { Input } from "../ui/input";
 import { Spinner } from "../ui/spinner";
+import { Tabs } from "../ui/tabs";
 import { cn } from "../lib/cn";
 import {
   useResolvedWidget,
@@ -51,12 +60,37 @@ export interface FormViewProps {
 
 type Values = Record<string, unknown>;
 
+export const FORM_VIEW_NOTEBOOK_SLOT = "form.notebook";
+
 const TITLE_TEXT_CLASS =
   "block w-full min-w-0 truncate text-28 font-semibold leading-9 text-fg";
 const TITLE_INPUT_CLASS =
   "h-auto min-h-9 rounded-none border-0 bg-transparent px-0 py-0 shadow-none " +
   "text-28 font-semibold leading-9 hover:border-transparent focus:border-transparent " +
   "focus:bg-transparent focus-visible:border-transparent placeholder:text-fg-subtle";
+// Interim: wrapper styling strips current widget chrome; widget recipes should own an appearance variant later.
+const EDITABLE_FIELD_CONTROL_CLASS = cn(
+  "-mx-2 min-h-8 rounded-md border border-transparent bg-transparent px-2",
+  "transition-colors hover:border-border-subtle hover:bg-inset",
+  "focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring",
+  "[&>button]:h-8 [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-0 [&>button]:shadow-none",
+  "[&>button:hover]:bg-transparent [&>button:focus-visible]:shadow-none",
+  "[&>input]:h-8 [&>input]:border-0 [&>input]:bg-transparent [&>input]:px-0 [&>input]:shadow-none",
+  "[&>input:focus]:border-transparent [&>input:focus]:shadow-none [&>input:focus-visible]:border-transparent [&>input:focus-visible]:shadow-none",
+  "[&>textarea]:min-h-[120px] [&>textarea]:border-0 [&>textarea]:bg-transparent [&>textarea]:px-0 [&>textarea]:py-1.5 [&>textarea]:shadow-none",
+  "[&>textarea:focus]:border-transparent [&>textarea:focus]:shadow-none",
+  "[&>div]:border-0 [&>div]:bg-transparent [&>div]:shadow-none",
+);
+const READONLY_FIELD_CONTROL_CLASS = "min-h-8 text-13 text-fg";
+const FIELD_ROOT_CLASS = "block min-w-0";
+const FIELD_LABEL_CLASS =
+  "mb-1 flex min-h-4 items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-fg-muted";
+const FIELD_CONTROL_CLASS = "min-w-0";
+const FULL_FIELD_CLASS = "col-span-full";
+
+export function formViewNotebookSlot(model: string): string {
+  return `${FORM_VIEW_NOTEBOOK_SLOT}:${model}`;
+}
 
 export function FormView({
   model,
@@ -134,6 +168,8 @@ export function FormView({
     isDirty: formIsDirty,
     readOnly: formReadOnly,
   });
+  const globalNotebookSlot = useSlot(FORM_VIEW_NOTEBOOK_SLOT);
+  const modelNotebookSlot = useSlot(formViewNotebookSlot(model));
 
   const seededIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -162,75 +198,85 @@ export function FormView({
 
   const titleField = titleFieldFor(resolvedFields);
   const statusField = resolvedFields.find((field) => field.widget === "statusbar");
-  const bodyFields = React.useMemo(
+  const bodyField = React.useMemo(
+    () => bodyFieldFor(resolvedFields, titleField, statusField),
+    [resolvedFields, statusField, titleField],
+  );
+  const gridFields = React.useMemo(
     () =>
       resolvedFields.filter(
         (field) =>
-          field.name !== statusField?.name && field.name !== titleField?.name,
+          field.name !== bodyField?.name &&
+          field.name !== statusField?.name &&
+          field.name !== titleField?.name,
       ),
-    [resolvedFields, statusField?.name, titleField?.name],
+    [bodyField?.name, resolvedFields, statusField?.name, titleField?.name],
   );
-  const bodyGroups = React.useMemo(
+  const gridGroups = React.useMemo(
     () =>
       resolvedGroups.map((group) => ({
         ...group,
         fields: group.fields.filter(
           (field) =>
+            field.name !== bodyField?.name &&
             field.name !== statusField?.name && field.name !== titleField?.name,
         ),
       })),
-    [resolvedGroups, statusField?.name, titleField?.name],
+    [bodyField?.name, resolvedGroups, statusField?.name, titleField?.name],
   );
   const sections = React.useMemo(
-    () => formSections(bodyFields, bodyGroups),
-    [bodyFields, bodyGroups],
+    () => formSections(gridFields, gridGroups),
+    [gridFields, gridGroups],
+  );
+  const subtitleParts = React.useMemo(
+    () => recordSubtitleParts(record, id),
+    [id, record],
+  );
+  const notebookTabs = React.useMemo(
+    () => notebookTabsFromSlots([...globalNotebookSlot, ...modelNotebookSlot]),
+    [globalNotebookSlot, modelNotebookSlot],
   );
 
   return (
     <form
-      className={cn("mx-auto flex w-full max-w-5xl flex-col gap-6", className)}
+      className={cn("min-h-full bg-sheet", className)}
       onSubmit={(event) => {
         event.preventDefault();
         void form.handleSubmit();
       }}
     >
-      <header className="grid gap-3">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0 self-start">
-            {titleField ? (
-              <form.Field name={titleField.name}>
-                {(api) => (
-                  titleField.readOnly ? (
-                    <h1 className={TITLE_TEXT_CLASS}>
-                      {titleText(api.state.value)}
-                    </h1>
-                  ) : (
-                    <Input
-                      value={String(api.state.value ?? "")}
-                      placeholder={titleField.placeholder ?? "Untitled"}
-                      aria-label={fieldAriaLabel(titleField)}
-                      className={cn(TITLE_TEXT_CLASS, TITLE_INPUT_CLASS)}
-                      onChange={(event) =>
-                        api.handleChange(event.currentTarget.value)
-                      }
-                    />
-                  )
-                )}
-              </form.Field>
-            ) : (
-              <h2 className="truncate text-28 font-semibold leading-9 text-fg">
-                Record
-              </h2>
-            )}
-            {loading ? (
-              <div className="mt-1 flex items-center gap-2 text-13 text-fg-muted">
-                <Spinner size="sm" />
-                Loading...
-              </div>
-            ) : null}
-          </div>
-          {statusField || headerActions ? (
-            <div className="flex min-w-0 flex-col items-end gap-2">
+      <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-6 px-6 py-6 pb-12 sm:px-8">
+        <header className="grid gap-4">
+          <div className="flex items-start gap-4 max-[900px]:flex-col max-[900px]:items-stretch">
+            <div className="min-w-0 flex-1 self-start">
+              {titleField ? (
+                <form.Field name={titleField.name}>
+                  {(api) => (
+                    titleField.readOnly ? (
+                      <h1 className={TITLE_TEXT_CLASS}>
+                        {titleText(api.state.value)}
+                      </h1>
+                    ) : (
+                      <Input
+                        value={String(api.state.value ?? "")}
+                        placeholder={titleField.placeholder ?? "Untitled"}
+                        aria-label={fieldAriaLabel(titleField)}
+                        className={cn(TITLE_TEXT_CLASS, TITLE_INPUT_CLASS)}
+                        onChange={(event) =>
+                          api.handleChange(event.currentTarget.value)
+                        }
+                      />
+                    )
+                  )}
+                </form.Field>
+              ) : (
+                <h1 className="truncate text-28 font-semibold leading-9 text-fg">
+                  Record
+                </h1>
+              )}
+              <RecordSubtitle loading={loading} parts={subtitleParts} />
+            </div>
+            <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[900px]:w-full">
               {statusField ? (
                 <form.Field name={statusField.name}>
                   {(api) => (
@@ -243,99 +289,121 @@ export function FormView({
                   )}
                 </form.Field>
               ) : null}
+              {/* Presentational pending record action wiring. */}
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="icon"
+                  size="iconMd"
+                  aria-label="Star"
+                  className="text-amber-500 hover:text-amber-500"
+                >
+                  <Glyph name="star" className="fill-current" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="icon"
+                  size="iconMd"
+                  aria-label="Share"
+                >
+                  <Glyph name="share" />
+                </Button>
+              </div>
               {headerActions ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   {headerActions}
                 </div>
               ) : null}
             </div>
-          ) : null}
+          </div>
+
+          <form.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isDirty: state.isDirty,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {(state) => {
+              if (!isCreate && !state.isDirty) return null;
+              const isSaving = mutation.fetching || state.isSubmitting;
+              return (
+                <FormFooter
+                  align="start"
+                  density="compact"
+                  border="top"
+                  note={null}
+                  noteClassName="hidden"
+                  className="border-b border-border-subtle py-2"
+                >
+                  <FormActions align="start" density="compact">
+                    {state.isDirty ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isSaving}
+                        onClick={() => form.reset()}
+                      >
+                        Discard
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      loading={isSaving}
+                      disabled={!state.canSubmit}
+                    >
+                      {submitLabel ?? (isCreate ? "Create" : "Save")}
+                    </Button>
+                  </FormActions>
+                </FormFooter>
+              );
+            }}
+          </form.Subscribe>
+        </header>
+
+        <ErrorBanner message={saveError} title="Save failed" />
+
+        <div className="grid gap-6">
+          {sections.map((section) => (
+            <FormSection
+              key={section.key}
+              section={section}
+              renderField={(field) => (
+                <form.Field key={field.name} name={field.name}>
+                  {(api) => (
+                    <BoundFieldRow
+                      field={field}
+                      value={api.state.value}
+                      errors={api.state.meta.errors}
+                      onChange={(next) => api.handleChange(next)}
+                    />
+                  )}
+                </form.Field>
+              )}
+            />
+          ))}
         </div>
 
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isDirty: state.isDirty,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {(state) => {
-            if (!isCreate && !state.isDirty) return null;
-            const isSaving = mutation.fetching || state.isSubmitting;
-            return (
-              <div className="flex min-h-btn-md items-center border-y border-border-subtle py-2">
-                <FormActions align="start" density="compact">
-                  {state.isDirty ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={isSaving}
-                      onClick={() => form.reset()}
-                    >
-                      Discard
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    loading={isSaving}
-                    disabled={!state.canSubmit}
-                  >
-                    {submitLabel ?? (isCreate ? "Create" : "Save")}
-                  </Button>
-                </FormActions>
-              </div>
-            );
-          }}
-        </form.Subscribe>
-      </header>
-
-      <ErrorBanner message={saveError} title="Save failed" />
-
-      {sections.map((section) => (
-        <section
-          key={section.key}
-          className="grid gap-3"
-        >
-          {section.label ? (
-            <h3 className="text-sm font-semibold text-fg">{section.label}</h3>
-          ) : null}
-          <div
-            className={
-              section.columns === 2
-                ? "grid gap-4 md:grid-cols-2"
-                : "grid gap-4"
-            }
-          >
-            {section.fields.map((field) => (
-              <form.Field key={field.name} name={field.name}>
-                {(api) => {
-                  const errors = api.state.meta.errors;
-                  return (
-                    <FieldRoot>
-                      <FieldLabel>{field.label ?? field.name}</FieldLabel>
-                      <FieldWidget
-                        field={field}
-                        value={api.state.value}
-                        readOnly={field.readOnly}
-                        onChange={(next) => api.handleChange(next)}
-                      />
-                      {field.description ? (
-                        <FieldDescription>{field.description}</FieldDescription>
-                      ) : null}
-                      {errors.length > 0 ? (
-                        <FieldError>{errors.join(", ")}</FieldError>
-                      ) : null}
-                    </FieldRoot>
-                  );
-                }}
-              </form.Field>
-            ))}
-          </div>
-        </section>
-      ))}
+        <Notebook
+          bodyField={bodyField}
+          tabs={notebookTabs}
+          renderBody={(field) => (
+            <form.Field name={field.name}>
+              {(api) => (
+                <NotebookField
+                  field={field}
+                  value={api.state.value}
+                  errors={api.state.meta.errors}
+                  onChange={(next) => api.handleChange(next)}
+                />
+              )}
+            </form.Field>
+          )}
+        />
+      </div>
     </form>
   );
 }
@@ -394,20 +462,220 @@ function FieldWidget({
   );
 }
 
-type FormSection = {
+type FormSectionModel = {
   key: string;
   label?: React.ReactNode;
   columns?: number;
   fields: readonly FieldDescriptor[];
 };
 
+type NotebookTab = {
+  id: string;
+  label: React.ReactNode;
+  count?: React.ReactNode;
+  children: React.ReactNode;
+};
+
+type NotebookSlotContent = {
+  label?: React.ReactNode;
+  count?: React.ReactNode;
+  children?: React.ReactNode;
+};
+
+function RecordSubtitle({
+  loading,
+  parts,
+}: {
+  loading: boolean;
+  parts: readonly React.ReactNode[];
+}): React.ReactElement | null {
+  if (!loading && parts.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-13 text-fg-muted">
+      {parts.map((part, index) => (
+        <React.Fragment key={index}>
+          {index > 0 ? <span aria-hidden="true">/</span> : null}
+          <span>{part}</span>
+        </React.Fragment>
+      ))}
+      {loading ? (
+        <>
+          {parts.length > 0 ? <span aria-hidden="true">/</span> : null}
+          <span className="inline-flex items-center gap-2">
+            <Spinner size="sm" />
+            Loading...
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function FormSection({
+  section,
+  renderField,
+}: {
+  section: FormSectionModel;
+  renderField: (field: FieldDescriptor) => React.ReactNode;
+}): React.ReactElement | null {
+  if (section.fields.length === 0) return null;
+  return (
+    <section className="grid gap-3">
+      {section.label ? (
+        <FormSectionKicker
+          as="h3"
+          spacing="field"
+          tracking="wide"
+          weight="semibold"
+          className="border-b border-border-subtle pb-1"
+        >
+          {section.label}
+        </FormSectionKicker>
+      ) : null}
+      <FormGrid
+        columns={section.columns === 1 ? "one" : "two"}
+        density="comfortable"
+        className="gap-x-8 gap-y-4 pb-2"
+      >
+        {section.fields.map((field) => renderField(field))}
+      </FormGrid>
+    </section>
+  );
+}
+
+function BoundFieldRow({
+  field,
+  value,
+  errors,
+  onChange,
+}: {
+  field: FieldDescriptor;
+  value: unknown;
+  errors: readonly unknown[];
+  onChange: (value: unknown) => void;
+}): React.ReactElement {
+  const readOnly = Boolean(field.readOnly);
+  const messages = fieldErrorMessages(errors);
+  return (
+    <FieldRoot
+      invalid={messages.length > 0}
+      className={cn(FIELD_ROOT_CLASS, gridFieldClass(field))}
+    >
+      <FieldLabel className={FIELD_LABEL_CLASS}>
+        {field.label ?? field.name}
+      </FieldLabel>
+      <div
+        className={cn(
+          FIELD_CONTROL_CLASS,
+          readOnly ? READONLY_FIELD_CONTROL_CLASS : EDITABLE_FIELD_CONTROL_CLASS,
+        )}
+      >
+        <FieldWidget
+          field={field}
+          value={value}
+          readOnly={field.readOnly}
+          onChange={onChange}
+        />
+      </div>
+      <FieldFooter description={field.description} errors={messages} />
+    </FieldRoot>
+  );
+}
+
+function Notebook({
+  bodyField,
+  renderBody,
+  tabs,
+}: {
+  bodyField?: FieldDescriptor;
+  renderBody: (field: FieldDescriptor) => React.ReactNode;
+  tabs: readonly NotebookTab[];
+}): React.ReactElement | null {
+  const resolvedTabs = [
+    ...(bodyField
+      ? [
+          {
+            id: "description",
+            label: bodyField.label ?? "Description",
+            children: renderBody(bodyField),
+          },
+        ]
+      : []),
+    ...tabs,
+  ];
+  if (resolvedTabs.length === 0) return null;
+  return (
+    <Tabs
+      defaultValue={resolvedTabs[0]?.id}
+      variant="card"
+      className="pt-2"
+    >
+      <Tabs.List className="overflow-x-auto">
+        {resolvedTabs.map((tab) => (
+          <Tabs.Tab key={tab.id} value={tab.id}>
+            {tab.label}
+            {tab.count !== undefined ? <Tabs.Count>{tab.count}</Tabs.Count> : null}
+          </Tabs.Tab>
+        ))}
+        <Tabs.Indicator />
+      </Tabs.List>
+      {resolvedTabs.map((tab) => (
+        <Tabs.Panel key={tab.id} value={tab.id}>
+          {tab.children}
+        </Tabs.Panel>
+      ))}
+    </Tabs>
+  );
+}
+
+function NotebookField({
+  field,
+  value,
+  errors,
+  onChange,
+}: {
+  field: FieldDescriptor;
+  value: unknown;
+  errors: readonly unknown[];
+  onChange: (value: unknown) => void;
+}): React.ReactElement {
+  const messages = fieldErrorMessages(errors);
+  return (
+    <FieldRoot invalid={messages.length > 0} className="grid gap-2">
+      <FieldWidget
+        field={field}
+        value={value}
+        readOnly={field.readOnly}
+        onChange={onChange}
+      />
+      <FieldFooter description={field.description} errors={messages} />
+    </FieldRoot>
+  );
+}
+
+function FieldFooter({
+  description,
+  errors,
+}: {
+  description?: React.ReactNode;
+  errors: readonly string[];
+}): React.ReactElement | null {
+  if (!description && errors.length === 0) return null;
+  return (
+    <>
+      {description ? <FieldDescription>{description}</FieldDescription> : null}
+      {errors.length > 0 ? <FieldError>{errors.join(", ")}</FieldError> : null}
+    </>
+  );
+}
+
 function formSections(
   fields: readonly FieldDescriptor[],
   groups: readonly GroupDescriptor[],
-): readonly FormSection[] {
+): readonly FormSectionModel[] {
   if (groups.length === 0) return [{ key: "fields", fields }];
   const groupedNames = new Set<string>();
-  const sections: FormSection[] = groups.flatMap((group, index) => {
+  const sections: FormSectionModel[] = groups.flatMap((group, index) => {
     if (group.fields.length === 0) return [];
     for (const field of group.fields) groupedNames.add(field.name);
     return [
@@ -429,6 +697,35 @@ function titleFieldFor(
 ): FieldDescriptor | undefined {
   return fields.find((field) => field.title) ??
     fields.find((field) => field.name === "title");
+}
+
+function bodyFieldFor(
+  fields: readonly FieldDescriptor[],
+  titleField: FieldDescriptor | undefined,
+  statusField: FieldDescriptor | undefined,
+): FieldDescriptor | undefined {
+  const candidates = fields.filter(
+    (field) => field.name !== titleField?.name && field.name !== statusField?.name,
+  );
+  return candidates.find((field) => field.body) ??
+    candidates.find(isNamedBodyField) ??
+    candidates.find(isLongTextField);
+}
+
+function isNamedBodyField(field: FieldDescriptor): boolean {
+  const name = normaliseFieldName(field.name);
+  return name === "body" || name === "description";
+}
+
+function isLongTextField(field: FieldDescriptor): boolean {
+  const id = widgetId(field);
+  return (
+    id === "textarea" ||
+    id === "markdown" ||
+    id === "markdown.editor" ||
+    id === "markdown.preview" ||
+    field.kind === "textarea"
+  );
 }
 
 function titleText(value: unknown): string {
@@ -509,6 +806,163 @@ function widgetId(field: FieldDescriptor): string {
 
 function fieldAriaLabel(field: FieldDescriptor): string {
   return typeof field.label === "string" ? field.label : field.name;
+}
+
+function gridFieldClass(field: FieldDescriptor): string | undefined {
+  return field.widget === "tagInput" ? FULL_FIELD_CLASS : undefined;
+}
+
+function fieldErrorMessages(errors: readonly unknown[]): string[] {
+  return errors.map(fieldErrorMessage);
+}
+
+function fieldErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    (typeof error.message === "string" || typeof error.message === "number")
+  ) {
+    return String(error.message);
+  }
+  return String(error);
+}
+
+function recordSubtitleParts(
+  record: Row | null | undefined,
+  id: string | null | undefined,
+): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const recordId = presentValue(record?.id) ?? presentValue(id);
+  if (recordId !== undefined) parts.push(shortRecordId(String(recordId)));
+  if (record) {
+    // Reads conventional metadata names until Row exposes typed metadata.
+    const created = recordValue(record, ["createdAt", "created_at", "created"]);
+    const updated = recordValue(record, ["updatedAt", "updated_at", "updated"]);
+    const words = recordValue(record, ["wordCount", "word_count", "words"]);
+    if (created !== undefined) parts.push(`created ${formatRecordDate(created)}`);
+    if (updated !== undefined) parts.push(`updated ${formatRecordDate(updated)}`);
+    if (words !== undefined) parts.push(formatWordCount(words));
+  }
+  return parts.filter((part) => String(part).trim() !== "");
+}
+
+function recordValue(
+  record: Row,
+  names: readonly string[],
+): unknown | undefined {
+  for (const name of names) {
+    const value = presentValue(record[name]);
+    if (value !== undefined) return value;
+  }
+  const normalised = new Set(names.map(normaliseFieldName));
+  for (const [key, value] of Object.entries(record)) {
+    if (normalised.has(normaliseFieldName(key))) {
+      const present = presentValue(value);
+      if (present !== undefined) return present;
+    }
+  }
+  return undefined;
+}
+
+function presentValue(value: unknown): unknown | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  return value;
+}
+
+function shortRecordId(value: string): string {
+  const text = value.trim();
+  if (text.length <= 12) return text;
+  return text.slice(0, 8);
+}
+
+function formatRecordDate(value: unknown): string {
+  const text = String(value);
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatWordCount(value: unknown): string {
+  const count =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+  if (Number.isFinite(count)) {
+    return `${new Intl.NumberFormat().format(count)} words`;
+  }
+  return `${String(value)} words`;
+}
+
+function notebookTabsFromSlots(
+  entries: readonly SlotContribution[],
+): NotebookTab[] {
+  return entries.flatMap<NotebookTab>((entry) => {
+    const content = entry.content;
+    if (isNotebookSlotContent(content)) {
+      const nodes = slotNodes(content.children, entry.id);
+      if (nodes.length === 0) return [];
+      return [
+        {
+          id: `slot:${entry.id}`,
+          label: content.label ?? humanizeSlotId(entry.id),
+          count: content.count,
+          children: <>{nodes}</>,
+        },
+      ];
+    }
+    const nodes = slotNodes(content, entry.id);
+    if (nodes.length === 0) return [];
+    return [
+      {
+        id: `slot:${entry.id}`,
+        label: humanizeSlotId(entry.id),
+        children: <>{nodes}</>,
+      },
+    ];
+  });
+}
+
+function isNotebookSlotContent(value: unknown): value is NotebookSlotContent {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !React.isValidElement(value) &&
+    ("children" in value || "label" in value || "count" in value)
+  );
+}
+
+function slotNodes(value: unknown, key: string): React.ReactNode[] {
+  if (value == null || typeof value === "boolean") return [];
+  if (typeof value === "string" || typeof value === "number") {
+    return [<span key={key}>{value}</span>];
+  }
+  if (React.isValidElement(value)) {
+    return [<React.Fragment key={key}>{value}</React.Fragment>];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => slotNodes(item, `${key}:${index}`));
+  }
+  return [];
+}
+
+function humanizeSlotId(id: string): string {
+  return id
+    .replace(/[-_.]+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function normaliseFieldName(value: string): string {
+  return value.replace(/[-_\s]+/g, "").toLowerCase();
 }
 
 function fallbackWidget(): WidgetDefinition {
