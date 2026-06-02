@@ -25,6 +25,7 @@ export * from "./feedback";
 export * from "./toolbars";
 export * from "./page";
 export * from "./layouts";
+export * from "./fragments";
 
 // App shell (chrome) and auth surface.
 export * from "./chrome";

@@ -1,0 +1,65 @@
+import * as React from "react";
+
+import { Glyph } from "../chrome/Glyph";
+import { tv } from "../lib/variants";
+import { Card } from "../ui/card";
+
+export type EmptyStateProps = Omit<
+  React.HTMLAttributes<HTMLElement>,
+  "className" | "title"
+> & {
+  actions?: React.ReactNode;
+  body?: React.ReactNode;
+  className?: string;
+  description?: React.ReactNode;
+  icon?: React.ReactNode | string;
+  title: React.ReactNode;
+};
+
+export const emptyStateVariants = tv({
+  slots: {
+    root:
+      "grid min-h-64 place-content-center gap-3 p-8 text-center shadow-none",
+    icon:
+      "mx-auto grid size-12 place-content-center rounded-full bg-inset text-fg-muted [&_.glyph]:size-5 [&>svg]:size-5",
+    copy: "space-y-1",
+    title: "text-22 font-semibold text-fg",
+    description: "mx-auto max-w-md text-sm leading-relaxed text-fg-muted",
+    actions: "flex flex-wrap items-center justify-center gap-2",
+  },
+});
+
+export const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
+  function EmptyState(
+    { actions, body, className, description, icon, title, ...props },
+    ref,
+  ) {
+    const styles = emptyStateVariants();
+    const resolvedDescription = description ?? body;
+
+    return (
+      <Card
+        ref={ref}
+        className={styles.root({ className })}
+        placeholder
+        {...props}
+      >
+        {icon ? (
+          <div className={styles.icon()}>{renderEmptyIcon(icon)}</div>
+        ) : null}
+        <div className={styles.copy()}>
+          <h2 className={styles.title()}>{title}</h2>
+          {resolvedDescription ? (
+            <p className={styles.description()}>{resolvedDescription}</p>
+          ) : null}
+        </div>
+        {actions ? <div className={styles.actions()}>{actions}</div> : null}
+      </Card>
+    );
+  },
+);
+EmptyState.displayName = "EmptyState";
+
+function renderEmptyIcon(icon: React.ReactNode | string): React.ReactNode {
+  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
+}

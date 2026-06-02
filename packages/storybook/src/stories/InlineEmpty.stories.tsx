@@ -1,0 +1,23 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { InlineEmpty } from "@angee/base";
+
+const meta = {
+  title: "Fragments/InlineEmpty",
+  component: InlineEmpty,
+  parameters: { layout: "padded" },
+  args: {
+    label: "No activity for this record.",
+  },
+} satisfies Meta<typeof InlineEmpty>;
+
+export default meta;
+
+type Story = StoryObj<typeof meta>;
+
+export const Compact: Story = {
+  render: () => (
+    <div className="max-w-xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
+      <InlineEmpty icon="info" label="No activity for this record." />
+    </div>
+  ),
+};

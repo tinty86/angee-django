@@ -1,0 +1,32 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { MetaGrid, MetaSection } from "@angee/base";
+
+const meta = {
+  title: "Fragments/MetaGrid",
+  component: MetaGrid,
+  parameters: { layout: "padded" },
+  args: {
+    rows: [["Owner", "Platform"]],
+  },
+} satisfies Meta<typeof MetaGrid>;
+
+export default meta;
+
+type Story = StoryObj<typeof meta>;
+
+export const Grid: Story = {
+  render: () => (
+    <div className="max-w-xl rounded-md border border-border-subtle bg-sheet p-5">
+      <MetaSection title="Record metadata">
+        <MetaGrid
+          rows={[
+            ["Owner", "Platform"],
+            ["Updated", "Today"],
+            ["Visibility", "Internal"],
+            { id: "words", label: "Words", value: "2,840" },
+          ]}
+        />
+      </MetaSection>
+    </div>
+  ),
+};
