@@ -39,6 +39,22 @@ export class NotesPage extends PageObject {
   get groupHeaders(): Locator {
     return this.page.locator('tbody tr [aria-expanded]');
   }
+  /** The group-header disclosure for the group whose row contains `label`. */
+  groupHeader(label: string): Locator {
+    return this.page
+      .locator("tbody tr", { hasText: label })
+      .locator("[aria-expanded]")
+      .first();
+  }
+  /** Expand a group by label and wait for its lazily-fetched records. */
+  async expandGroup(label: string): Promise<void> {
+    await this.groupHeader(label).click();
+    await this.recordRows.first().waitFor({ state: "visible", timeout: 12000 });
+  }
+  /** The top group pager label, e.g. "Groups 1-4 / 4 groups". */
+  get groupPagerLabel(): Locator {
+    return this.page.locator('[aria-label^="Groups "]').first();
+  }
   get nextPageButton(): Locator {
     return this.page.getByRole("button", { name: /next page/i });
   }
