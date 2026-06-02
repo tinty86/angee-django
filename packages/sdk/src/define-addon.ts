@@ -21,6 +21,7 @@ export interface MenuItem {
   id: string;
   label?: string;
   to?: string;
+  icon?: string;
 }
 
 /** Field-widget registry: widget id -> renderer (opaque to the headless SDK). */

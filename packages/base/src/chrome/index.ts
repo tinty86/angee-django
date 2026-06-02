@@ -11,8 +11,9 @@ export {
 export { GlobalSearch, type GlobalSearchProps } from "./GlobalSearch";
 export { Glyph, type GlyphProps } from "./Glyph";
 export {
+  baseIcons,
   getIcon,
-  registerIcon,
+  useIcon,
   type IconComponent,
   type IconProps,
 } from "./icon-registry";

@@ -25,7 +25,7 @@ const notes: BaseAddon = {
       component: NoteRecordPage,
     },
   ],
-  menus: [{ id: "notes", label: "Notes", to: "/notes" }],
+  menus: [{ id: "notes", label: "Notes", to: "/notes", icon: "notes" }],
 };
 
 export default notes;

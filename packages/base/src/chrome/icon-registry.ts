@@ -1,28 +1,20 @@
 import { createElement, type ComponentType, type SVGProps } from "react";
 import { AngeeLogo } from "@angee/logo-react";
+import { useAppRuntime } from "@angee/sdk";
 import {
   Activity,
   Archive,
   Bell,
-  BookOpen,
-  Calendar,
   CircleHelp,
-  Database,
   FileText,
-  Folder,
-  HelpCircle,
   Home,
   LayoutDashboard,
+  List,
   LogOut,
-  Menu,
   MessageCircle,
   Search,
-  Settings,
   Shield,
   Star,
-  User,
-  Users,
-  Workflow,
   Zap,
 } from "lucide-react";
 
@@ -47,47 +39,43 @@ function AngeeCubeIcon({ size = 20, strokeWidth, ...props }: IconProps) {
   });
 }
 
-const icons = new Map<string, IconComponent>([
-  ["activity", Activity],
-  ["agent", Zap],
-  ["angee", AngeeCubeIcon],
-  ["angee-cube", AngeeCubeIcon],
-  ["archive", Archive],
-  ["auth", Shield],
-  ["bell", Bell],
-  ["book", BookOpen],
-  ["calendar", Calendar],
-  ["comments", MessageCircle],
-  ["dashboard", LayoutDashboard],
-  ["data", Database],
-  ["database", Database],
-  ["file", FileText],
-  ["files", Folder],
-  ["folder", Folder],
-  ["help", CircleHelp],
-  ["help-circle", HelpCircle],
-  ["home", Home],
-  ["layout-dashboard", LayoutDashboard],
-  ["log-out", LogOut],
-  ["menu", Menu],
-  ["messages", MessageCircle],
-  ["notes", FileText],
-  ["search", Search],
-  ["settings", Settings],
-  ["star", Star],
-  ["user", User],
-  ["users", Users],
-  ["workflow", Workflow],
-  ["workflows", Workflow],
-  ["zap", Zap],
-]);
+export const baseIcons = {
+  activity: Activity,
+  agent: Zap,
+  angee: AngeeCubeIcon,
+  "angee-cube": AngeeCubeIcon,
+  archive: Archive,
+  auth: Shield,
+  bell: Bell,
+  comments: MessageCircle,
+  file: FileText,
+  help: CircleHelp,
+  home: Home,
+  "layout-dashboard": LayoutDashboard,
+  list: List,
+  "log-out": LogOut,
+  notes: FileText,
+  search: Search,
+  star: Star,
+} satisfies Readonly<Record<string, IconComponent>>;
 
-export function getIcon(name: string): IconComponent | null {
-  return icons.get(normalizeIconName(name)) ?? null;
+export function useIcon(name: string): IconComponent | null {
+  const { icons } = useAppRuntime();
+  return getIcon(icons, name);
 }
 
-export function registerIcon(name: string, icon: IconComponent): void {
-  icons.set(normalizeIconName(name), icon);
+export function getIcon(
+  icons: Readonly<Record<string, unknown>>,
+  name: string,
+): IconComponent | null {
+  const icon = icons[normalizeIconName(name)];
+  return isIconComponent(icon) ? icon : null;
+}
+
+function isIconComponent(value: unknown): value is IconComponent {
+  if (typeof value === "function") return true;
+  if (!value || typeof value !== "object") return false;
+  return typeof (value as { render?: unknown }).render === "function";
 }
 
 function normalizeIconName(name: string): string {

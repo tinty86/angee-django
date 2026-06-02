@@ -35,6 +35,7 @@ import {
 
 import { ModalsHost } from "./feedback";
 import type { BreadcrumbItem } from "./chrome/Breadcrumb";
+import { baseIcons } from "./chrome/icon-registry";
 import { enBaseBundle } from "./i18n";
 import { defaultWidgets } from "./widgets";
 
@@ -94,7 +95,10 @@ export interface AngeeApp {
  * `createApp({...}).mount(...)`.
  */
 export function createApp(input: CreateAppInput): AngeeApp {
-  const composed = composeAddons(input.addons as readonly AddonManifest[]);
+  const composed = composeAddons([
+    { id: "base", icons: baseIcons },
+    ...(input.addons as readonly AddonManifest[]),
+  ]);
 
   const pageByRoute = new Map<string, ComponentType>();
   const chromePropsByRoute = new Map<

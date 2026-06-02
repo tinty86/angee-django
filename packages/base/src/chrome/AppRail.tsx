@@ -1,10 +1,12 @@
 import type { ReactElement } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMenus, type MenuItem } from "@angee/sdk";
+import { CircleHelp } from "lucide-react";
 
 import { cn } from "../lib/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Glyph } from "./Glyph";
+import { useIcon } from "./icon-registry";
 import { UserMenu } from "./UserMenu";
 
 export interface AppRailProps {
@@ -13,18 +15,17 @@ export interface AppRailProps {
 
 type MenuWithChrome = MenuItem & {
   children?: readonly MenuWithChrome[];
-  icon?: string;
   parent?: string;
   parentId?: string;
 };
 
 const RAIL_BUTTON =
-  "group relative grid size-9 place-content-center rounded-6 text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring [&_.glyph]:size-4";
+  "group relative grid size-9 place-content-center rounded-6 text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring";
 const RAIL_BUTTON_ACTIVE =
   "bg-rail-hi text-on-rail-hi before:absolute before:-left-[7px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-r-2 before:bg-brand before:content-['']";
 
 export function AppRail({ className }: AppRailProps): ReactElement {
-  const items = railItems(useMenus() as readonly MenuWithChrome[]);
+  const items = railItems(useMenus());
   const home = items[0]?.to ?? items[0]?.children?.find((item) => item.to)?.to ?? "/";
   return (
     <aside
@@ -57,6 +58,7 @@ export function AppRail({ className }: AppRailProps): ReactElement {
 }
 
 function RailItem({ item }: { item: MenuWithChrome }): ReactElement | null {
+  const iconName = item.icon ?? item.id;
   const to = item.to ?? item.children?.find((child) => child.to)?.to;
   if (!to) return null;
   const label = item.label ?? item.id;
@@ -71,10 +73,24 @@ function RailItem({ item }: { item: MenuWithChrome }): ReactElement | null {
           className: RAIL_BUTTON_ACTIVE,
         }}
       >
-        <Glyph name={item.icon ?? item.id} />
+        <RailGlyph name={iconName} />
         <span className="sr-only">{label}</span>
       </Link>
     </Tooltip>
+  );
+}
+
+function RailGlyph({ name }: { name: string }): ReactElement {
+  const Icon = useIcon(name);
+  if (Icon) return <Glyph name={name} size={16} />;
+  return (
+    <CircleHelp
+      aria-hidden
+      className="glyph"
+      focusable="false"
+      size={16}
+      style={{ width: 16, height: 16 }}
+    />
   );
 }
 

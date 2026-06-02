@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 
 import { cn } from "../lib/cn";
-import { getIcon } from "./icon-registry";
+import { useIcon } from "./icon-registry";
 
 export interface GlyphProps {
   name: string;
@@ -13,14 +13,15 @@ export interface GlyphProps {
 
 export function Glyph({
   name,
-  size = 16,
+  size,
   className,
   decorative = true,
   label,
 }: GlyphProps): ReactElement | null {
-  const Icon = getIcon(name);
+  const Icon = useIcon(name);
   if (!Icon) return null;
   const accessibleLabel = decorative ? undefined : (label ?? name);
+  const sizeStyle = size === undefined ? undefined : { width: size, height: size };
   return (
     <Icon
       aria-hidden={decorative || undefined}
@@ -29,6 +30,7 @@ export function Glyph({
       focusable="false"
       role={decorative ? undefined : "img"}
       size={size}
+      style={sizeStyle}
     />
   );
 }
