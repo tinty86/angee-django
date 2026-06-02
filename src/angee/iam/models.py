@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import UnicodeUsernameValidator
 from django.db import models
@@ -12,8 +14,28 @@ from django_sqids import SqidsField
 from rebac.managers import RebacManager
 from rebac.permissions_mixin import RebacPermissionsMixin
 
-from angee.base.mixins import SqidMixin
+from angee.base.fields import EncryptedField, StateField
+from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
+from angee.iam.credentials import CredentialKind, handler_for
+
+
+class AccountStatus(models.TextChoices):
+    """Lifecycle state for a linked external account."""
+
+    ACTIVE = "active", "Active"
+    EXPIRED = "expired", "Expired"
+    REVOKED = "revoked", "Revoked"
+    ERROR = "error", "Error"
+    DISABLED = "disabled", "Disabled"
+
+
+class CredentialStatus(models.TextChoices):
+    """Lifecycle state for per-user credential material."""
+
+    ACTIVE = "active", "Active"
+    EXPIRED = "expired", "Expired"
+    REVOKED = "revoked", "Revoked"
 
 
 class UserManager(RebacManager, BaseUserManager):
@@ -148,3 +170,320 @@ class User(SqidMixin, AbstractBaseUser, RebacPermissionsMixin, AngeeModel):
         """Return the user's short display name."""
 
         return self.first_name
+
+
+class Vendor(SqidMixin, AuditMixin, AngeeModel):
+    """Admin-managed third-party vendor reference catalogue."""
+
+    sqid = SqidsField(real_field_name="id", prefix="vnd", min_length=8)
+    slug = models.SlugField(unique=True)
+    display_name = models.CharField(max_length=128)
+    website_url = models.URLField(blank=True)
+    icon = models.CharField(max_length=128, blank=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        """Django model options for IAM vendors."""
+
+        abstract = True
+        ordering = ("slug",)
+        rebac_resource_type = "auth/vendor"
+        rebac_id_attr = "sqid"
+
+    def __str__(self) -> str:
+        """Return the display label used by Django surfaces."""
+
+        return self.display_name or self.slug
+
+
+class AccountManager(RebacManager):
+    """Manager for idempotent external account linking.
+
+    Actor-less framework writes run under ``system_context``; update paths do not maintain ``updated_by``.
+    """
+
+    caller_fields = frozenset(
+        {
+            "email",
+            "display_name",
+            "avatar_url",
+            "status",
+            "identity_claims",
+            "last_error",
+            "last_error_at",
+        }
+    )
+
+    def link(self, vendor: Any, external_id: str, **identity: Any) -> Any:
+        """Create or update one ``(vendor, external_id)`` external account."""
+
+        reason = "iam.connections.link"
+        update_values = _validated_manager_values(
+            self.model,
+            identity,
+            allowed=self.caller_fields,
+        )
+        create_values = {
+            "email": "",
+            "display_name": "",
+            "avatar_url": "",
+            "status": AccountStatus.ACTIVE,
+            "identity_claims": {},
+            "last_error": "",
+            "last_error_at": None,
+            "last_used_at": None,
+            **update_values,
+        }
+        instance, created = self.system_context(reason=reason).update_or_create(
+            vendor=vendor,
+            external_id=external_id,
+            defaults=update_values,
+            create_defaults=create_values,
+        )
+        if created:
+            # owner grant wired in S2 (auth/* owner relation)
+            return instance
+        return instance
+
+
+class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
+    """Vendor account identity shared by principals through REBAC grants."""
+
+    sqid = SqidsField(real_field_name="id", prefix="eac", min_length=8)
+    vendor = models.ForeignKey(
+        "iam.Vendor",
+        on_delete=models.PROTECT,
+        related_name="external_accounts",
+    )
+    external_id = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+    display_name = models.CharField(max_length=255, blank=True)
+    avatar_url = models.URLField(blank=True)
+    status = StateField(choices_enum=AccountStatus, default=AccountStatus.ACTIVE)
+    identity_claims = models.JSONField(default=dict)
+    last_error = models.TextField(blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    objects = AccountManager()
+
+    class Meta:
+        """Django model options for external accounts."""
+
+        abstract = True
+        ordering = ("-updated_at",)
+        rebac_resource_type = "auth/external_account"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(
+                fields=("vendor", "external_id"),
+                name="uniq_iam_external_account_vendor_external_id",
+            ),
+        )
+
+    def __str__(self) -> str:
+        """Return a stable vendor-qualified account label."""
+
+        vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
+        return f"{vendor_slug}:{self.external_id}"
+
+
+class Client(SqidMixin, AuditMixin, AngeeModel):
+    """OAuth/OIDC client configuration and login policy for a vendor."""
+
+    sqid = SqidsField(real_field_name="id", prefix="clt", min_length=8)
+    vendor = models.ForeignKey(
+        "iam.Vendor",
+        on_delete=models.PROTECT,
+        related_name="clients",
+    )
+    environment = models.CharField(max_length=32, default="prod")
+    display_name = models.CharField(max_length=128)
+    client_id = models.CharField(max_length=255)
+    client_secret = EncryptedField(blank=True)
+    issuer = models.URLField(blank=True)
+    authorize_endpoint = models.URLField(blank=True)
+    token_endpoint = models.URLField(blank=True)
+    revoke_endpoint = models.URLField(blank=True)
+    userinfo_endpoint = models.URLField(blank=True)
+    jwks_uri = models.URLField(blank=True)
+    discovery_url = models.URLField(blank=True)
+    is_oidc = models.BooleanField(default=False, db_index=True)
+    is_enabled = models.BooleanField(default=True, db_index=True)
+    scopes_catalogue = models.JSONField(default=list)
+    default_scopes = models.JSONField(default=list)
+    supports_refresh = models.BooleanField(default=True)
+    refresh_rotates = models.BooleanField(default=False)
+    supports_pkce = models.BooleanField(default=True)
+    max_refresh_age_seconds = models.PositiveIntegerField(null=True, blank=True)
+    link_on_email_match = models.BooleanField(default=False)
+    create_on_login = models.BooleanField(default=False)
+    allowed_email_domains = models.JSONField(default=list)
+
+    class Meta:
+        """Django model options for clients."""
+
+        abstract = True
+        ordering = ("vendor__slug", "environment")
+        rebac_resource_type = "auth/client"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(
+                fields=("vendor", "environment"),
+                name="uniq_iam_client_vendor_environment",
+            ),
+        )
+
+    def __str__(self) -> str:
+        """Return the configured display name or vendor environment."""
+
+        if self.display_name:
+            return self.display_name
+        vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
+        return f"{vendor_slug} ({self.environment})"
+
+
+class CredentialManager(RebacManager):
+    """Manager for idempotent per-user credential writes.
+
+    Actor-less framework writes run under ``system_context``; update paths do not maintain ``updated_by``.
+    """
+
+    caller_fields = frozenset(
+        {
+            "external_account",
+            "status",
+            "expires_at",
+            "last_refresh_at",
+            "last_refresh_status",
+        }
+    )
+    operation_fields = frozenset({"kind", "material"})
+
+    def upsert_for_user(
+        self,
+        user: Any,
+        client: Any,
+        kind: str,
+        material: dict[str, Any],
+        /,
+        *,
+        external_account: Any | None = None,
+        **fields: Any,
+    ) -> Any:
+        """Create or update one ``(user, client)`` credential."""
+
+        reason = "iam.connections.credential"
+        handler = handler_for(kind)
+        handler.validate(material)
+        kind_value = handler.kind
+        if owned := self.operation_fields & fields.keys():
+            names = ", ".join(sorted(owned))
+            raise ValueError(f"Credential field(s) are owned by upsert_for_user: {names}")
+        update_values = _validated_manager_values(
+            self.model,
+            fields,
+            allowed=self.caller_fields,
+        )
+        material_value = json.dumps(material, sort_keys=True, separators=(",", ":"))
+        operation_values = {
+            "kind": kind_value,
+            "material": material_value,
+        }
+        if external_account is not None:
+            update_values["external_account"] = external_account
+        create_values = {
+            "external_account": external_account,
+            "status": CredentialStatus.ACTIVE,
+            "expires_at": None,
+            "last_refresh_at": None,
+            "last_refresh_status": "",
+            **operation_values,
+            **update_values,
+        }
+        instance, created = self.system_context(reason=reason).update_or_create(
+            user=user,
+            client=client,
+            defaults={**operation_values, **update_values},
+            create_defaults=create_values,
+        )
+        if created:
+            # owner grant wired in S2 (auth/* owner relation)
+            return instance
+        return instance
+
+
+class Credential(SqidMixin, AuditMixin, AngeeModel):
+    """Per-user credential material for acting against a vendor client."""
+
+    sqid = SqidsField(real_field_name="id", prefix="crd", min_length=8)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="credentials",
+    )
+    client = models.ForeignKey(
+        "iam.Client",
+        on_delete=models.PROTECT,
+        related_name="credentials",
+    )
+    external_account = models.ForeignKey(
+        "iam.ExternalAccount",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="credentials",
+    )
+    kind = models.CharField(max_length=32, choices=CredentialKind.choices)
+    material = EncryptedField()
+    status = StateField(choices_enum=CredentialStatus, default=CredentialStatus.ACTIVE)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_refresh_at = models.DateTimeField(null=True, blank=True)
+    last_refresh_status = models.CharField(max_length=32, blank=True)
+
+    objects = CredentialManager()
+
+    class Meta:
+        """Django model options for credentials."""
+
+        abstract = True
+        ordering = ("-updated_at",)
+        rebac_resource_type = "auth/credential"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(
+                fields=("user", "client"),
+                name="uniq_iam_credential_user_client",
+            ),
+        )
+
+    @property
+    def handler(self) -> Any:
+        """Return the registered handler for this credential kind."""
+
+        return handler_for(self.kind)
+
+    def reveal(self) -> dict[str, Any]:
+        """Return decrypted material through the kind handler."""
+
+        return self.handler.reveal(self)
+
+    def auth_headers(self) -> dict[str, str]:
+        """Return authorization headers through the kind handler."""
+
+        return self.handler.auth_headers(self)
+
+
+def _validated_manager_values(
+    model: type[models.Model],
+    values: dict[str, Any],
+    *,
+    allowed: frozenset[str],
+) -> dict[str, Any]:
+    """Return caller values validated against one manager-owned field set."""
+
+    unknown = set(values) - allowed
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"Unknown {model.__name__} field(s): {names}")
+    return dict(values)
