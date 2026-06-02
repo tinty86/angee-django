@@ -34,6 +34,7 @@ checklist in §10; file-level surface in the P1 UI Inventory (bottom).
 
 **References & live services:**
 - **Look&feel target:** mockup `../angee-console-mockups/angee-console-react` → http://localhost:5174/#/notes (user-run; dense grouped rows, status badges, tag chips, avatars). Screenshot it to compare.
+- **HARD RULE — NEVER synthesize/guess a visual.** Every asset, markup, class set, and layout already exists in the mockup (`../angee-console-mockups/angee-console-react/{src,public}`) and P1. Pull the EXACT source and copy it verbatim (architect override permits visual copy). Do not approximate with library params or a lookalike. E.g. the brand mark IS the mockup's `public/logo-icon.svg` (now inlined as `chrome/AngeeMark.tsx`) — not an `AngeeLogo` geometry guess. If the exact source isn't found yet, FIND IT before writing; don't invent.
 - **Feature source:** `../angee-django-p1` (P1, read-only). P1 storybook on :6006 failed to start.
 - **Our app:** `angee dev` on :5173 (I control it; it dies when the launching shell exits — restart with `angee dev` backgrounded, then poll 5173).
 - **Verify/repro harness (gitignored):** `examples/notes-angee/e2e/test-results/{check,repro2,repro3,shot,mockup}.mjs` — Playwright (chromium + webkit installed); login alice/alice; the freeze repro = load `/notes?group=updatedAt:year` then open the filter popover, check in **WebKit**.
