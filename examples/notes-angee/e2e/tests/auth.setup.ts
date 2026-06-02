@@ -6,6 +6,7 @@ import { test as setup, loginViaApi, roleStatePath, type Credentials } from "@an
  * without re-authenticating per test.
  */
 const ROLES: Credentials[] = [
+  { username: "admin", password: "admin" },
   { username: "alice", password: "alice" },
   { username: "bob", password: "bob" },
 ];
