@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Tooltip as BaseTooltip } from "@base-ui-components/react/tooltip";
+import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import type {
   TooltipArrowProps as BaseTooltipArrowProps,
   TooltipPopupProps as BaseTooltipPopupProps,
@@ -8,7 +8,7 @@ import type {
   TooltipProviderProps as BaseTooltipProviderProps,
   TooltipRootProps as BaseTooltipRootProps,
   TooltipTriggerProps as BaseTooltipTriggerProps,
-} from "@base-ui-components/react/tooltip";
+} from "@base-ui/react/tooltip";
 
 import { tv, type VariantProps } from "../lib/variants";
 

@@ -2,7 +2,7 @@ import * as React from "react";
 import {
   Separator as BaseSeparator,
   type SeparatorProps as BaseSeparatorProps,
-} from "@base-ui-components/react/separator";
+} from "@base-ui/react/separator";
 
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";

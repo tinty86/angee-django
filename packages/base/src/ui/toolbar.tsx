@@ -1,12 +1,12 @@
 import * as React from "react";
-import { Toolbar as BaseToolbar } from "@base-ui-components/react/toolbar";
+import { Toolbar as BaseToolbar } from "@base-ui/react/toolbar";
 import type {
   ToolbarButtonProps as BaseToolbarButtonProps,
   ToolbarGroupProps as BaseToolbarGroupProps,
   ToolbarInputProps as BaseToolbarInputProps,
   ToolbarRootProps as BaseToolbarRootProps,
   ToolbarSeparatorProps as BaseToolbarSeparatorProps,
-} from "@base-ui-components/react/toolbar";
+} from "@base-ui/react/toolbar";
 
 import { tv, type VariantProps } from "../lib/variants";
 
@@ -101,7 +101,7 @@ export type ToolbarGroupProps = Omit<BaseToolbarGroupProps, "className"> &
     className?: string;
   };
 
-export const ToolbarGroup = React.forwardRef<HTMLElement, ToolbarGroupProps>(
+export const ToolbarGroup = React.forwardRef<HTMLDivElement, ToolbarGroupProps>(
   function ToolbarGroup({ className, surface = "plain", ...props }, ref) {
     const styles = toolbarVariants({ surface });
     return (

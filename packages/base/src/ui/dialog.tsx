@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import type {
   DialogBackdropProps as BaseDialogBackdropProps,
   DialogCloseProps as BaseDialogCloseProps,
@@ -9,7 +9,7 @@ import type {
   DialogRootProps as BaseDialogRootProps,
   DialogTitleProps as BaseDialogTitleProps,
   DialogTriggerProps as BaseDialogTriggerProps,
-} from "@base-ui-components/react/dialog";
+} from "@base-ui/react/dialog";
 import { X } from "lucide-react";
 
 import { tv, type VariantProps } from "../lib/variants";

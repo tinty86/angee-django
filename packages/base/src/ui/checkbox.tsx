@@ -2,7 +2,7 @@ import * as React from "react";
 import {
   Checkbox as BaseCheckbox,
   type CheckboxRootProps as BaseCheckboxRootProps,
-} from "@base-ui-components/react/checkbox";
+} from "@base-ui/react/checkbox";
 import { Check, Minus } from "lucide-react";
 
 import { cn } from "../lib/cn";

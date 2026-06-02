@@ -1,8 +1,8 @@
 import * as React from "react";
-import { AlertDialog as BaseAlertDialog } from "@base-ui-components/react/alert-dialog";
+import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import type {
   AlertDialogRootProps as BaseAlertDialogRootProps,
-} from "@base-ui-components/react/alert-dialog";
+} from "@base-ui/react/alert-dialog";
 
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";

@@ -1,9 +1,9 @@
 import * as React from "react";
-import { Switch as BaseSwitch } from "@base-ui-components/react/switch";
+import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import type {
   SwitchRootProps as BaseSwitchRootProps,
   SwitchThumbProps as BaseSwitchThumbProps,
-} from "@base-ui-components/react/switch";
+} from "@base-ui/react/switch";
 
 import { tv, type VariantProps } from "../lib/variants";
 

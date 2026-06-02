@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ScrollArea as BaseScrollArea } from "@base-ui-components/react/scroll-area";
+import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area";
 import type {
   ScrollAreaContentProps as BaseScrollAreaContentProps,
   ScrollAreaCornerProps as BaseScrollAreaCornerProps,
@@ -7,7 +7,7 @@ import type {
   ScrollAreaScrollbarProps as BaseScrollAreaScrollbarProps,
   ScrollAreaThumbProps as BaseScrollAreaThumbProps,
   ScrollAreaViewportProps as BaseScrollAreaViewportProps,
-} from "@base-ui-components/react/scroll-area";
+} from "@base-ui/react/scroll-area";
 
 import { tv, type VariantProps } from "../lib/variants";
 

@@ -1,12 +1,12 @@
 import * as React from "react";
-import { Tabs as BaseTabs } from "@base-ui-components/react/tabs";
+import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import type {
   TabsIndicatorProps as BaseTabsIndicatorProps,
   TabsListProps as BaseTabsListProps,
   TabsPanelProps as BaseTabsPanelProps,
   TabsRootProps as BaseTabsRootProps,
   TabsTabProps as BaseTabsTabProps,
-} from "@base-ui-components/react/tabs";
+} from "@base-ui/react/tabs";
 
 import { tv, type VariantProps } from "../lib/variants";
 
@@ -103,7 +103,7 @@ export type TabsTabProps = Omit<BaseTabsTabProps, "className" | "render"> &
     render?: BaseTabsTabProps["render"];
   };
 
-export const TabsTab = React.forwardRef<Element, TabsTabProps>(
+export const TabsTab = React.forwardRef<HTMLElement, TabsTabProps>(
   function TabsTab({ className, icon, children, variant, ...props }, ref) {
     const resolvedVariant = useTabsVariant(variant);
     const styles = tabsVariants({ variant: resolvedVariant });

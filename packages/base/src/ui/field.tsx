@@ -1,12 +1,12 @@
 import * as React from "react";
-import { Field as BaseField } from "@base-ui-components/react/field";
+import { Field as BaseField } from "@base-ui/react/field";
 import type {
   FieldControlProps as BaseFieldControlProps,
   FieldDescriptionProps as BaseFieldDescriptionProps,
   FieldErrorProps as BaseFieldErrorProps,
   FieldLabelProps as BaseFieldLabelProps,
   FieldRootProps as BaseFieldRootProps,
-} from "@base-ui-components/react/field";
+} from "@base-ui/react/field";
 
 import { tv, type VariantProps } from "../lib/variants";
 

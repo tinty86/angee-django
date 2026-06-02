@@ -2,7 +2,7 @@ import * as React from "react";
 import {
   Button as BaseButton,
   type ButtonProps as BaseUIButtonProps,
-} from "@base-ui-components/react/button";
+} from "@base-ui/react/button";
 
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";

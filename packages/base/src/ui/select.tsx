@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Select as BaseSelect } from "@base-ui-components/react/select";
+import { Select as BaseSelect } from "@base-ui/react/select";
 import type {
   SelectArrowProps as BaseSelectArrowProps,
   SelectBackdropProps as BaseSelectBackdropProps,
@@ -17,7 +17,7 @@ import type {
   SelectRootProps as BaseSelectRootProps,
   SelectTriggerProps as BaseSelectTriggerProps,
   SelectValueProps as BaseSelectValueProps,
-} from "@base-ui-components/react/select";
+} from "@base-ui/react/select";
 import { Check, ChevronDown } from "lucide-react";
 
 import { tv, type VariantProps } from "../lib/variants";
@@ -176,7 +176,7 @@ export type SelectContentProps = Omit<BaseSelectPopupProps, "className"> &
   };
 
 export const SelectContent = React.forwardRef<
-  Element,
+  HTMLDivElement,
   SelectContentProps
 >(function SelectContent({ className, size = "md", ...props }, ref) {
   const styles = selectVariants({ size });

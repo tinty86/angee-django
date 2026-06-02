@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Popover as BasePopover } from "@base-ui-components/react/popover";
+import { Popover as BasePopover } from "@base-ui/react/popover";
 import type {
   PopoverArrowProps as BasePopoverArrowProps,
   PopoverBackdropProps as BasePopoverBackdropProps,
@@ -11,7 +11,7 @@ import type {
   PopoverRootProps as BasePopoverRootProps,
   PopoverTitleProps as BasePopoverTitleProps,
   PopoverTriggerProps as BasePopoverTriggerProps,
-} from "@base-ui-components/react/popover";
+} from "@base-ui/react/popover";
 
 import { tv, type VariantProps } from "../lib/variants";
 
@@ -80,73 +80,12 @@ export const PopoverBackdrop = BasePopover.Backdrop;
 export const PopoverClose = BasePopover.Close;
 export const PopoverViewport = BasePopover.Viewport;
 
-export const PopoverTrigger = React.forwardRef<
-  HTMLButtonElement,
-  PopoverTriggerProps
->(function PopoverTrigger(
-  {
-    disabled,
-    onClickCapture,
-    onMouseDownCapture,
-    onPointerDownCapture,
-    ...props
-  },
-  ref,
-) {
-  const pendingPointerPressRef = React.useRef(false);
-  return (
-    <BasePopover.Trigger
-      ref={ref}
-      disabled={disabled}
-      onPointerDownCapture={(event) => {
-        onPointerDownCapture?.(event);
-        if (!shouldDeferPopoverPress(event, disabled)) return;
-        pendingPointerPressRef.current = true;
-        stopPopoverPress(event);
-      }}
-      onMouseDownCapture={(event) => {
-        onMouseDownCapture?.(event);
-        if (!shouldDeferPopoverPress(event, disabled)) return;
-        pendingPointerPressRef.current = true;
-        stopPopoverPress(event);
-      }}
-      onClickCapture={(event) => {
-        onClickCapture?.(event);
-        if (
-          disabled
-          || event.defaultPrevented
-          || !event.isTrusted
-          || !pendingPointerPressRef.current
-        ) {
-          return;
-        }
-        pendingPointerPressRef.current = false;
-        stopPopoverPress(event);
-        const trigger = event.currentTarget;
-        globalThis.setTimeout(() => {
-          if (trigger.isConnected) trigger.click();
-        }, 0);
-      }}
-      {...props}
-    />
-  );
-});
-PopoverTrigger.displayName = "PopoverTrigger";
-
-function shouldDeferPopoverPress(
-  event: React.SyntheticEvent<HTMLButtonElement>,
-  disabled: boolean | undefined,
-): boolean {
-  return !disabled && event.isTrusted && !event.defaultPrevented;
-}
-
-function stopPopoverPress(
-  event: React.SyntheticEvent<HTMLButtonElement>,
-): void {
-  event.preventDefault();
-  event.stopPropagation();
-  event.nativeEvent.stopImmediatePropagation?.();
-}
+// Thin re-export. Base UI's controlled `open`/`onOpenChange` owns the open/close
+// transition; we no longer intercept the press here. The old rc.0-era capture-phase
+// defer (swallow the trusted press, re-dispatch via `setTimeout`) is gone — heavy
+// view-state work is de-prioritized at its owner (a React transition in the data-view
+// store), not by re-timing the trigger.
+export const PopoverTrigger = BasePopover.Trigger;
 
 export interface PopoverVirtualAnchorRect {
   x: number;
