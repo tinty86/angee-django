@@ -20,7 +20,6 @@ import {
   type ResourceTypeName,
   type Row,
   type UseResourceListOptions,
-  type UseResourceListResult,
 } from "@angee/sdk";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -28,7 +27,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 
@@ -43,6 +41,7 @@ import { Badge, CountBadge, type BadgeVariant } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Chip } from "../ui/chip";
+import { Pager, type PagerState } from "../ui/pager";
 import { Spinner } from "../ui/spinner";
 import { StatusDot } from "../ui/status-icon";
 import {
@@ -117,6 +116,10 @@ const BOARD_SCROLL_STYLE: React.CSSProperties = {
 const BOARD_CARD_SHELL_CLASS =
   "block w-full rounded-lg text-left text-inherit outline-none focus-visible:focus-ring";
 const GROUPED_LIST_ITEM_PAGE_SIZE = 20;
+
+function formatPagerNumber(value: number): string {
+  return value.toLocaleString();
+}
 
 export function ListView<TRow extends Row = Row>(
   props: ListViewProps<TRow>,
@@ -228,13 +231,33 @@ function ListViewBody<TRow extends Row = Row>({
     page: dataView.state.page,
     enabled: !groupedListMode,
   });
-  const toolbarList = React.useMemo<UseResourceListResult>(
-    () =>
-      groupedListMode
-        ? groupPagerListState(dataView, groupPagerState)
-        : list,
-    [dataView, groupPagerState, groupedListMode, list],
-  );
+  const toolbarPager = React.useMemo<PagerState>(() => {
+    if (!groupedListMode) {
+      return {
+        total: list.total,
+        page: list.page,
+        pageSize: list.pageSize,
+        hasPrev: list.hasPrev,
+        hasNext: list.hasNext,
+      };
+    }
+    // Group-level pager: Pager derives hasPrev/hasNext from page/total.
+    return {
+      total: groupPagerState?.total ?? 0,
+      page: dataView.state.page,
+      pageSize: dataView.state.pageSize,
+    };
+  }, [
+    dataView.state.page,
+    dataView.state.pageSize,
+    groupPagerState?.total,
+    groupedListMode,
+    list.hasNext,
+    list.hasPrev,
+    list.page,
+    list.pageSize,
+    list.total,
+  ]);
 
   const tableColumns = React.useMemo(
     () => buildColumns(columns, dataView),
@@ -382,7 +405,7 @@ function ListViewBody<TRow extends Row = Row>({
         .join(" ")}
     >
       <DataToolbar
-        list={toolbarList}
+        pager={toolbarPager}
         view={dataView.state.view}
         group={dataView.state.group}
         groupStack={dataView.state.groupStack}
@@ -1041,35 +1064,6 @@ function groupPagerStatesEqual(
   );
 }
 
-function groupPagerListState(
-  dataView: DataViewContextValue,
-  groupState: GroupPagerState | null,
-): UseResourceListResult {
-  const total = groupState?.total ?? 0;
-  const page = dataView.state.page;
-  const pageSize = dataView.state.pageSize;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const setPage = (next: number) => dataView.setPage(next);
-  return {
-    rows: [],
-    total,
-    pageCount,
-    page,
-    pageSize,
-    pageInfo: undefined,
-    hasNext: page < pageCount,
-    hasPrev: page > 1,
-    setPage,
-    firstPage: () => setPage(1),
-    nextPage: () => setPage(page + 1),
-    prevPage: () => setPage(Math.max(1, page - 1)),
-    lastPage: () => setPage(pageCount),
-    fetching: groupState?.fetching ?? false,
-    error: groupState?.error ?? null,
-    refetch: () => {},
-  };
-}
-
 function GroupedListBody<TRow extends Row>({
   model,
   table,
@@ -1385,69 +1379,27 @@ function GroupSection<TRow extends Row>({
           {!list.error && !list.fetching && bucket.count > 0 ? (
             <TableRow>
               <TableCell colSpan={colSpan} className="bg-sheet py-2">
-                <GroupItemPager
-                  label={label}
-                  page={currentPage}
-                  pageSize={GROUPED_LIST_ITEM_PAGE_SIZE}
-                  total={bucket.count}
-                  onPageChange={(next) => onPageChange(bucketKey, next)}
-                />
+                <nav
+                  aria-label={`${label} records`}
+                  className="flex items-center justify-end gap-2 text-13 text-fg-muted"
+                >
+                  <Pager
+                    page={currentPage}
+                    pageSize={GROUPED_LIST_ITEM_PAGE_SIZE}
+                    total={bucket.count}
+                    onPageChange={(next) => onPageChange(bucketKey, next)}
+                    labelElement="span"
+                    previousLabel={`Previous ${label} records`}
+                    nextLabel={`Next ${label} records`}
+                    formatNumber={formatPagerNumber}
+                  />
+                </nav>
               </TableCell>
             </TableRow>
           ) : null}
         </TableBody>
       ) : null}
     </>
-  );
-}
-
-function GroupItemPager({
-  label,
-  page,
-  pageSize,
-  total,
-  onPageChange,
-}: {
-  label: string;
-  page: number;
-  pageSize: number;
-  total: number;
-  onPageChange: (page: number) => void;
-}): React.ReactElement {
-  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(total, page * pageSize);
-  const hasPrev = page > 1;
-  const hasNext = end < total;
-  return (
-    <nav
-      aria-label={`${label} records`}
-      className="flex items-center justify-end gap-2 text-13 text-fg-muted"
-    >
-      <span className="tabular-nums">
-        {start.toLocaleString()}-{end.toLocaleString()} /{" "}
-        {total.toLocaleString()}
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label={`Previous ${label} records`}
-        disabled={!hasPrev}
-        onClick={() => onPageChange(Math.max(1, page - 1))}
-      >
-        <ChevronLeft className="glyph" aria-hidden />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label={`Next ${label} records`}
-        disabled={!hasNext}
-        onClick={() => onPageChange(page + 1)}
-      >
-        <ChevronRight className="glyph" aria-hidden />
-      </Button>
-    </nav>
   );
 }
 

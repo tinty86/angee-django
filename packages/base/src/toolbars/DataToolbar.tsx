@@ -2,8 +2,6 @@ import type { ReactElement, ReactNode } from "react";
 import {
   Calendar,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Grid2X2,
   List,
@@ -13,7 +11,6 @@ import {
   Star,
   X,
 } from "lucide-react";
-import type { UseResourceListResult } from "@angee/sdk";
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
@@ -27,6 +24,7 @@ import {
   PopoverRoot,
   PopoverTrigger,
 } from "../ui/popover";
+import { Pager, type PagerState } from "../ui/pager";
 import type {
   DataViewFilter,
   DataViewGroup,
@@ -35,7 +33,7 @@ import type {
 } from "../views/data-view-model";
 
 export interface DataToolbarProps {
-  list: UseResourceListResult;
+  pager: PagerState;
   view: DataViewKind;
   group?: DataViewGroup | null;
   groupStack?: readonly DataViewGroup[];
@@ -88,7 +86,7 @@ export interface DataViewSwitcherProps {
 }
 
 export function DataToolbar({
-  list,
+  pager,
   view,
   group,
   groupStack,
@@ -110,21 +108,10 @@ export function DataToolbar({
   pagerTotalUnit,
   className,
 }: DataToolbarProps): ReactElement {
-  const start = list.total === undefined || list.total === 0
-    ? 0
-    : (list.page - 1) * list.pageSize + 1;
-  const end = list.total === undefined
-    ? list.page * list.pageSize
-    : Math.min(list.total, list.page * list.pageSize);
   const groups = groupStack ?? (group ? [group] : []);
   const activeFilters = filterOptions.filter((option) =>
     activeFilterIds.includes(option.id),
   );
-  const pageLabel = `${start}-${end}${
-    list.total !== undefined
-      ? ` / ${list.total}${pagerTotalUnit ? ` ${pagerTotalUnit}` : ""}`
-      : ""
-  }`;
 
   return (
     <section
@@ -153,33 +140,12 @@ export function DataToolbar({
         onGroupStackChange={onGroupStackChange}
       />
       <div className="min-w-2 flex-1" />
-      <button
-        type="button"
-        className="h-6 rounded px-1.5 text-13 tabular-nums text-fg outline-none hover:bg-inset focus-visible:focus-ring"
-        aria-label={`${pagerSubject} ${pageLabel}`}
-      >
-        {pageLabel}
-      </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label="Previous page"
-        disabled={!list.hasPrev}
-        onClick={() => onPageChange?.(Math.max(1, list.page - 1))}
-      >
-        <ChevronLeft className="glyph" aria-hidden />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label="Next page"
-        disabled={!list.hasNext}
-        onClick={() => onPageChange?.(list.page + 1)}
-      >
-        <ChevronRight className="glyph" aria-hidden />
-      </Button>
+      <Pager
+        {...pager}
+        subject={pagerSubject}
+        unit={pagerTotalUnit}
+        onPageChange={onPageChange}
+      />
       {view === "list" && visibleFields.length > 0 ? (
         <VisibleFieldsMenu
           fields={visibleFields}
