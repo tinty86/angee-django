@@ -219,7 +219,9 @@
    *  STACKING LAYERS — the canonical z-index ladder. Emits
    *  `z-sticky-cell`, `z-popover`, `z-modal`, etc. Components MUST NOT
    *  use arbitrary `z-[N]` values; reach for the named stop instead.
-   *  Two notes:
+   *  Three notes:
+   *    - Base UI internal stacking variables such as --toast-index may use
+   *      calculated z-index values inside a named page-level layer.
    *    - tooltip and modal-backdrop sit at the same numeric level (100);
    *      separate concepts that never co-render in practice.
    *    - modal is one tick above its own backdrop so the backdrop click

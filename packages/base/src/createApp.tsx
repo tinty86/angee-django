@@ -33,7 +33,7 @@ import {
   type SlotContribution,
 } from "@angee/sdk";
 
-import { ModalsHost } from "./feedback";
+import { ModalsHost, ToastProvider } from "./feedback";
 import type { BreadcrumbItem } from "./chrome/Breadcrumb";
 import { baseIcons } from "./chrome/icon-registry";
 import { enBaseBundle } from "./i18n";
@@ -204,9 +204,11 @@ function AppFrame({
   return (
     <AppRuntimeProvider runtime={runtime}>
       <ModalsHost>
-        <RelayInvalidationProvider client={clients[subscriptionSchema]}>
-          <AuthProvider auth={auth}>{children}</AuthProvider>
-        </RelayInvalidationProvider>
+        <ToastProvider>
+          <RelayInvalidationProvider client={clients[subscriptionSchema]}>
+            <AuthProvider auth={auth}>{children}</AuthProvider>
+          </RelayInvalidationProvider>
+        </ToastProvider>
       </ModalsHost>
     </AppRuntimeProvider>
   );

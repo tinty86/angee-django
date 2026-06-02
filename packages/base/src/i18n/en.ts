@@ -4,6 +4,7 @@
 export const enBaseMessages: Record<string, string> = {
   "search.clear": "Clear search",
   "search.placeholder": "Search...",
+  "toast.dismiss": "Dismiss notification",
 };
 
 export const enBaseBundle = { base: enBaseMessages } as const;
