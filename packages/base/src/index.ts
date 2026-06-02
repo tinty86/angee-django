@@ -23,6 +23,7 @@ export * from "./views";
 export * from "./widgets";
 export * from "./feedback";
 export * from "./toolbars";
+export * from "./page";
 
 // App shell (chrome) and auth surface.
 export * from "./chrome";
