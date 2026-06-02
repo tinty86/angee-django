@@ -7,12 +7,14 @@ import {
 } from "@angee/sdk";
 
 import { Button } from "../ui/button";
+import { ErrorBanner } from "../fragments/ErrorBanner";
 import {
   FieldDescription,
   FieldError,
   FieldLabel,
   FieldRoot,
 } from "../ui/field";
+import { FormActions } from "../ui/form-layout";
 import { Spinner } from "../ui/spinner";
 import {
   useResolvedWidget,
@@ -87,31 +89,44 @@ export function FormView({
     [resolvedFields],
   );
   const baselineValuesRef = React.useRef<Values>(defaultValues);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
   const form = useForm({
     defaultValues,
     onSubmit: async ({ value }) => {
+      setSaveError(null);
       const data = mutationData(value, resolvedFields, {
         baseline: baselineValuesRef.current,
         id,
         isCreate,
       });
-      const saved = await mutate({ data });
-      if (saved) {
-        const savedValues = recordToValues(saved, resolvedFields);
-        baselineValuesRef.current = savedValues;
-        form.reset(savedValues);
-        onSaved?.(saved);
+      try {
+        const saved = await mutate({ data });
+        if (saved) {
+          const savedValues = recordToValues(saved, resolvedFields);
+          baselineValuesRef.current = savedValues;
+          form.reset(savedValues);
+          onSaved?.(saved);
+        }
+      } catch (error) {
+        setSaveError(
+          error instanceof Error ? error.message : "Could not save record.",
+        );
       }
     },
   });
 
   const seededIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
+    setSaveError(null);
+  }, [model, id]);
+
+  React.useEffect(() => {
     if (isCreate) {
       if (seededIdRef.current !== null) {
         seededIdRef.current = null;
         baselineValuesRef.current = defaultValues;
         form.reset(defaultValues);
+        setSaveError(null);
       }
       return;
     }
@@ -121,6 +136,7 @@ export function FormView({
       const recordValues = recordToValues(record, resolvedFields);
       baselineValuesRef.current = recordValues;
       form.reset(recordValues);
+      setSaveError(null);
     }
   }, [defaultValues, isCreate, record, resolvedFields, form]);
 
@@ -160,57 +176,100 @@ export function FormView({
         void form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="min-w-0 self-start">
-          {titleField ? (
-            <form.Field name={titleField.name}>
-              {(api) => (
-                <input
-                  value={String(api.state.value ?? "")}
-                  placeholder="Untitled"
-                  aria-label={fieldAriaLabel(titleField)}
-                  readOnly={titleField.readOnly}
-                  className="block w-full min-w-0 border-0 bg-transparent p-0 text-28 font-semibold leading-9 text-fg outline-none placeholder:text-fg-subtle focus-visible:focus-ring"
-                  onChange={(event) =>
-                    api.handleChange(event.currentTarget.value)
-                  }
-                />
-              )}
-            </form.Field>
-          ) : (
-            <h2 className="truncate text-28 font-semibold leading-9 text-fg">
-              Record
-            </h2>
-          )}
-          {loading ? (
-            <div className="mt-1 flex items-center gap-2 text-13 text-fg-muted">
-              <Spinner size="sm" />
-              Loading...
-            </div>
-          ) : null}
-        </div>
-        {statusField || headerActions ? (
-          <div className="flex min-w-0 flex-col items-end gap-2">
-            {statusField ? (
-              <form.Field name={statusField.name}>
+      <header className="grid gap-3">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0 self-start">
+            {titleField ? (
+              <form.Field name={titleField.name}>
                 {(api) => (
-                  <FieldWidget
-                    field={statusField}
-                    value={api.state.value}
-                    readOnly={statusField.readOnly}
-                    onChange={(next) => api.handleChange(next)}
+                  <input
+                    value={String(api.state.value ?? "")}
+                    placeholder="Untitled"
+                    aria-label={fieldAriaLabel(titleField)}
+                    readOnly={titleField.readOnly}
+                    className="block w-full min-w-0 border-0 bg-transparent p-0 text-28 font-semibold leading-9 text-fg outline-none placeholder:text-fg-subtle focus-visible:focus-ring"
+                    onChange={(event) =>
+                      api.handleChange(event.currentTarget.value)
+                    }
                   />
                 )}
               </form.Field>
-            ) : null}
-            {headerActions ? (
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                {headerActions}
+            ) : (
+              <h2 className="truncate text-28 font-semibold leading-9 text-fg">
+                Record
+              </h2>
+            )}
+            {loading ? (
+              <div className="mt-1 flex items-center gap-2 text-13 text-fg-muted">
+                <Spinner size="sm" />
+                Loading...
               </div>
             ) : null}
           </div>
-        ) : null}
-      </div>
+          {statusField || headerActions ? (
+            <div className="flex min-w-0 flex-col items-end gap-2">
+              {statusField ? (
+                <form.Field name={statusField.name}>
+                  {(api) => (
+                    <FieldWidget
+                      field={statusField}
+                      value={api.state.value}
+                      readOnly={statusField.readOnly}
+                      onChange={(next) => api.handleChange(next)}
+                    />
+                  )}
+                </form.Field>
+              ) : null}
+              {headerActions ? (
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {headerActions}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <form.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isDirty: state.isDirty,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
+          {(state) => {
+            if (!isCreate && !state.isDirty) return null;
+            const isSaving = mutation.fetching || state.isSubmitting;
+            return (
+              <div className="flex min-h-btn-md items-center border-y border-border-subtle py-2">
+                <FormActions align="start" density="compact">
+                  {state.isDirty ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isSaving}
+                      onClick={() => form.reset()}
+                    >
+                      Discard
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={isSaving}
+                    disabled={!state.canSubmit}
+                  >
+                    {submitLabel ?? (isCreate ? "Create" : "Save")}
+                  </Button>
+                </FormActions>
+              </div>
+            );
+          }}
+        </form.Subscribe>
+      </header>
+
+      <ErrorBanner message={saveError} title="Save failed" />
 
       {sections.map((section) => (
         <section
@@ -254,16 +313,6 @@ export function FormView({
           </div>
         </section>
       ))}
-
-      {mutation.error ? (
-        <p className="text-13 text-danger-text">{mutation.error.message}</p>
-      ) : null}
-
-      <div className="flex items-center gap-2">
-        <Button type="submit" variant="primary" loading={mutation.fetching}>
-          {submitLabel ?? (isCreate ? "Create" : "Save")}
-        </Button>
-      </div>
     </form>
   );
 }
