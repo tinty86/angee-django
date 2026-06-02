@@ -36,3 +36,9 @@ export const switchWidget = {
   read: SwitchRead,
   cell: SwitchRead,
 } satisfies WidgetDefinition<boolean>;
+
+export const booleanToggleWidget = {
+  edit: SwitchEdit,
+  read: SwitchRead,
+  cell: SwitchRead,
+} satisfies WidgetDefinition<boolean>;

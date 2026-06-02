@@ -37,3 +37,9 @@ export const selectWidget = {
   read: SelectRead,
   cell: SelectRead,
 } satisfies WidgetDefinition<string>;
+
+export const selectionWidget = {
+  edit: SelectEdit,
+  read: SelectRead,
+  cell: SelectRead,
+} satisfies WidgetDefinition<string>;

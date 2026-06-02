@@ -401,7 +401,7 @@ visual + placement. Per surface:
 - [ ] done [ ] verified [ ] checked by human (final qa) — BoardView/CalendarView/GalleryView/GanttView/TimelineView/TreeView/GraphView/DashboardView + stories
 
 ### 1.4 Widgets (presentational triplets edit/read/cell)
-- [ ] done [ ] verified [ ] checked by human (final qa) — registry + text/textarea/email/url/phone/integer/float/json/boolean/booleanToggle
+- [x] done [x] verified [ ] checked by human (final qa) — registry + text/textarea (existing) + **scalar batch: email/url/phone/integer/float/json/boolean/booleanToggle/selection** — `{edit,read,cell}` triplets on `ui/{number-field,input,checkbox,switch,select,textarea,code,text-link}`, registered by kind. Verified: base+storybook typecheck green, **base vitest 26/26**, zero provenance, `Widgets/Scalar Fields` story renders all in edit/read/cell (url read → link). Remaining: combobox.
 - [ ] done [ ] verified [ ] checked by human (final qa) — date/datetime (+internals), selection/combobox, markdown editor+preview (CodeMirror)
 - [ ] done [ ] verified [ ] checked by human (final qa) — statusBadge/statusbar/ribbon/tagInput(+`tags`)/progressBar/ownerCell/themePicker/many2one/many2many + stories
 
