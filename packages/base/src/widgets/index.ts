@@ -1,17 +1,26 @@
 import { useWidget, type WidgetMap } from "@angee/sdk";
 
 import { booleanWidget } from "./boolean";
+import { comboboxWidget } from "./combobox";
+import { dateWidget } from "./date";
 import { datetimeWidget } from "./datetime";
 import { jsonWidget } from "./json";
 import { markdownEditorWidget, markdownPreviewWidget } from "./markdown";
+import { many2manyWidget } from "./many2many";
+import { many2oneWidget } from "./many2one";
 import { floatWidget, integerWidget } from "./number";
+import { ownerCellWidget } from "./ownerCell";
+import { progressBarWidget } from "./progressBar";
+import { ribbonWidget } from "./ribbon";
 import { emailWidget, phoneWidget, urlWidget } from "./scalarText";
 import { selectionWidget, selectWidget } from "./select";
+import { statusBadgeWidget } from "./statusBadge";
 import { statusbarWidget } from "./statusbar";
 import { booleanToggleWidget, switchWidget } from "./switch";
 import { tagInputWidget } from "./tagInput";
 import { textareaWidget } from "./textarea";
 import { textWidget } from "./text";
+import { themePickerWidget } from "./themePicker";
 import { userRefWidget } from "./userRef";
 import type { WidgetDefinition } from "./types";
 
@@ -33,9 +42,14 @@ export const defaultWidgets = {
   phone: phoneWidget,
   boolean: booleanWidget,
   booleanToggle: booleanToggleWidget,
+  date: dateWidget,
   json: jsonWidget,
   datetime: datetimeWidget,
+  combobox: comboboxWidget,
+  statusBadge: statusBadgeWidget,
+  progressBar: progressBarWidget,
   statusbar: statusbarWidget,
+  ribbon: ribbonWidget,
   tagInput: tagInputWidget,
   "markdown.editor": markdownEditorWidget,
   "markdown.preview": markdownPreviewWidget,
@@ -43,6 +57,10 @@ export const defaultWidgets = {
   selection: selectionWidget,
   switch: switchWidget,
   userRef: userRefWidget,
+  ownerCell: ownerCellWidget,
+  themePicker: themePickerWidget,
+  many2one: many2oneWidget,
+  many2many: many2manyWidget,
 } satisfies WidgetMap;
 
 export function useResolvedWidget(
