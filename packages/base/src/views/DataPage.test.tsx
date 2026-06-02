@@ -42,10 +42,10 @@ import type {
 
 const sdkMocks = vi.hoisted(() => ({
   rows: [
-    { id: "note-1", title: "First" },
-    { id: "note-2", title: "Second" },
-    { id: "note-3", title: "Third" },
-    { id: "note-4", title: "Fourth" },
+    { id: "note-1", title: "First", status: "ACTIVE", priority: "High" },
+    { id: "note-2", title: "Second", status: "ACTIVE", priority: "Low" },
+    { id: "note-3", title: "Third", status: "DRAFT", priority: "Medium" },
+    { id: "note-4", title: "Fourth", status: "ARCHIVED", priority: "Low" },
   ] satisfies Row[],
   mutate: vi.fn(async ({ data }: { data: Row }) => data),
 }));
@@ -198,6 +198,71 @@ describe("DataPage", () => {
     await waitFor(() =>
       expect(boardButton.getAttribute("aria-pressed")).toBe("true"),
     );
+  });
+
+  test("renders grouped board lanes without repeating the group column on cards", async () => {
+    const onSelect = vi.fn();
+    const boardColumns = [
+      { field: "title", header: "Title" },
+      {
+        field: "status",
+        header: "Status",
+        tone: {
+          ACTIVE: "success",
+          DRAFT: "warning",
+          ARCHIVED: "default",
+        },
+      },
+      { field: "priority", header: "Priority" },
+    ] satisfies readonly ListColumn[];
+
+    render(
+      <TestUrlState>
+        <DataPage
+          model="notes.Note"
+          columns={boardColumns}
+          formFields={formFields}
+          defaultGroup={{ field: "status" }}
+          onSelect={onSelect}
+          rowHref={(row) => row.id === "note-1" ? "/notes/note-1" : ""}
+        />
+      </TestUrlState>,
+    );
+
+    await screen.findByRole("button", { name: "Remove group" });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    const activeLane = await screen.findByRole("region", { name: "Active" });
+    const draftLane = await screen.findByRole("region", { name: "Draft" });
+    const archivedLane = await screen.findByRole("region", {
+      name: "Archived",
+    });
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((heading) =>
+        heading.textContent,
+      ),
+    ).toEqual(["Active", "Draft", "Archived"]);
+    expect(within(activeLane).getByRole("heading", { name: "Active" }))
+      .toBeTruthy();
+    expect(within(activeLane).getByText("2")).toBeTruthy();
+    expect(within(draftLane).getByRole("heading", { name: "Draft" }))
+      .toBeTruthy();
+    expect(within(draftLane).getByText("1")).toBeTruthy();
+    expect(within(archivedLane).getByRole("heading", { name: "Archived" }))
+      .toBeTruthy();
+    expect(within(archivedLane).getByText("1")).toBeTruthy();
+
+    const linkedCard = within(activeLane).getByRole("link", { name: /First/ });
+    expect(within(linkedCard).queryByText("Status")).toBeNull();
+    expect(within(linkedCard).queryByText("Active")).toBeNull();
+    expect(within(linkedCard).getByText("Priority")).toBeTruthy();
+    expect(within(linkedCard).getByText("High")).toBeTruthy();
+
+    const clickableCard = within(activeLane).getByRole("button", {
+      name: /Second/,
+    });
+    fireEvent.click(clickableCard);
+    expect(onSelect).toHaveBeenCalledWith("note-2");
   });
 
   test("publishes persistent breadcrumbs for the selected record", async () => {
