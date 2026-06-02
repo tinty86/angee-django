@@ -32,6 +32,9 @@ function AngeeCubeIcon({ size = 20, strokeWidth, ...props }: IconProps) {
     bgColor: null,
     geometry: "cube",
     preset: "gold",
+    // Tight crop: without this the cube sits in the full-lockup viewBox (≈4× too
+    // much padding) and renders as a speck. `pad: 0` fits the viewBox to the cube.
+    pad: 0,
     size: pixelSize,
     strokeWidth: typeof strokeWidth === "number" ? strokeWidth : undefined,
     width: size,
