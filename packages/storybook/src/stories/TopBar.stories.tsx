@@ -20,7 +20,6 @@ export const ConsoleChrome: Story = {
     <ChatterProvider>
       <div className="w-[58rem] overflow-hidden rounded-lg border border-border-on-rail">
         <TopBar
-          title="Angee"
           menuItems={chromeMenuItems}
           showChatterToggle
           showUserMenu

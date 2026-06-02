@@ -3,8 +3,11 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
+  type Cell as TableCellModel,
+  type Column as TableColumn,
   type ColumnDef,
   type Row as TableRowModel,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate } from "@tanstack/react-router";
@@ -30,6 +33,7 @@ import {
   type DataToolbarFilterOption,
   type DataToolbarGroupOption,
 } from "../toolbars";
+import type { DataToolbarVisibleField } from "../toolbars/DataToolbar";
 import { Badge, type BadgeVariant } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -197,6 +201,8 @@ function ListViewBody<TRow extends Row = Row>({
     () => buildColumns(columns, dataView),
     [columns, dataView],
   );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
   const rows = list.rows as readonly TRow[];
   const listState = React.useMemo<ListViewState<TRow>>(
     () => ({
@@ -227,6 +233,8 @@ function ListViewBody<TRow extends Row = Row>({
   const table = useReactTable<TRow>({
     data: rows as TRow[],
     columns: tableColumns,
+    state: { columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row, index) =>
       typeof row.id === "string" ? row.id : String(index),
@@ -238,6 +246,31 @@ function ListViewBody<TRow extends Row = Row>({
     autoResetPageIndex: false,
     autoResetExpanded: false,
   });
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const visibleFields = React.useMemo<readonly DataToolbarVisibleField[]>(
+    () => {
+      const visibleCount = table.getVisibleLeafColumns().length;
+      return table.getAllLeafColumns().map((column) => {
+        const visible = column.getIsVisible();
+        return {
+          id: column.id,
+          label: tableColumnLabel(column),
+          visible,
+          disabled: visible && visibleCount <= 1,
+        };
+      });
+    },
+    [columnVisibility, table],
+  );
+  const toggleVisibleField = React.useCallback(
+    (id: string, visible: boolean) => {
+      const column = table.getColumn(id);
+      if (!column) return;
+      if (!visible && column.getIsVisible() && visibleColumnCount <= 1) return;
+      column.toggleVisibility(visible);
+    },
+    [table, visibleColumnCount],
+  );
 
   const rowModels = table.getRowModel().rows;
   const selectedIds = dataView.state.selectedIds;
@@ -316,12 +349,14 @@ function ListViewBody<TRow extends Row = Row>({
         groupStack={dataView.state.groupStack}
         groupOptions={groupOptions}
         filterOptions={filterOptions}
+        visibleFields={visibleFields}
         activeFilterIds={activeFilterIds}
         filterText={filterText}
         createLabel={createLabel ?? createLabelForModel(model)}
         onCreate={onCreate}
         onClearGroup={() => dataView.setGroupStack([])}
         onGroupStackChange={dataView.setGroupStack}
+        onVisibleFieldToggle={toggleVisibleField}
         onViewChange={dataView.setView}
         onPageChange={setPage}
         onFilterToggle={(id) =>
@@ -390,7 +425,7 @@ function ListViewBody<TRow extends Row = Row>({
               {rowModels.length === 0 && !list.fetching ? (
                 <TableRow>
                   <TableCell
-                    colSpan={Math.max(1, columns.length + 1)}
+                    colSpan={Math.max(1, visibleColumnCount + 1)}
                     className="py-8 text-center text-fg-muted"
                   >
                     {emptyMessage}
@@ -401,7 +436,7 @@ function ListViewBody<TRow extends Row = Row>({
                   {paddingTop > 0 ? (
                     <VirtualPaddingRow
                       height={paddingTop}
-                      colSpan={columns.length + 1}
+                      colSpan={Math.max(1, visibleColumnCount + 1)}
                     />
                   ) : null}
                   {visibleIndexes.map((index) => {
@@ -409,7 +444,7 @@ function ListViewBody<TRow extends Row = Row>({
                     return item
                       ? renderListItem({
                           item,
-                          columns,
+                          colSpan: Math.max(1, visibleColumnCount + 1),
                           dataView,
                           interactive,
                           rowHref,
@@ -421,7 +456,7 @@ function ListViewBody<TRow extends Row = Row>({
                   {paddingBottom > 0 ? (
                     <VirtualPaddingRow
                       height={paddingBottom}
-                      colSpan={columns.length + 1}
+                      colSpan={Math.max(1, visibleColumnCount + 1)}
                     />
                   ) : null}
                 </>
@@ -452,7 +487,10 @@ function buildColumns<TRow extends Row>(
       </SortHeader>
     ),
     cell: ({ row }) => cellContent(column, row.original),
-    meta: { align: column.align ?? "left" },
+    meta: {
+      align: column.align ?? "left",
+      label: column.header ?? column.field,
+    },
   }));
 }
 
@@ -484,27 +522,22 @@ function SortHeader<TRow extends Row>({
 
 function RecordRow<TRow extends Row>({
   row,
-  columns,
   dataView,
   interactive,
   rowHref,
   onRowClick,
 }: {
   row: TableRowModel<TRow>;
-  columns: readonly ColumnDescriptor<TRow>[];
   dataView: DataViewContextValue;
   interactive: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
 }): React.ReactElement {
-  const id = row.id;
-  const selected = dataView.state.selectedIds.has(id);
   const href = rowHref?.(row.original);
   if (href) {
     return (
       <LinkedRecordRow
         row={row}
-        columns={columns}
         dataView={dataView}
         href={href}
       />
@@ -513,7 +546,6 @@ function RecordRow<TRow extends Row>({
   return (
     <PlainRecordRow
       row={row}
-      columns={columns}
       dataView={dataView}
       interactive={interactive}
       onRowClick={onRowClick}
@@ -523,12 +555,10 @@ function RecordRow<TRow extends Row>({
 
 function LinkedRecordRow<TRow extends Row>({
   row,
-  columns,
   dataView,
   href,
 }: {
   row: TableRowModel<TRow>;
-  columns: readonly ColumnDescriptor<TRow>[];
   dataView: DataViewContextValue;
   href: string;
 }): React.ReactElement {
@@ -573,12 +603,12 @@ function LinkedRecordRow<TRow extends Row>({
           }
         />
       </TableCell>
-      {columns.map((column, index) => (
+      {row.getVisibleCells().map((cell) => (
         <TableCell
-          key={column.field}
-          className={ALIGN_CLASS[column.align ?? "left"]}
+          key={cell.id}
+          className={ALIGN_CLASS[alignOf(cell.column.columnDef)]}
         >
-          {cellContent(column, row.original)}
+          {renderCell(cell)}
         </TableCell>
       ))}
     </TableRow>
@@ -587,13 +617,11 @@ function LinkedRecordRow<TRow extends Row>({
 
 function PlainRecordRow<TRow extends Row>({
   row,
-  columns,
   dataView,
   interactive,
   onRowClick,
 }: {
   row: TableRowModel<TRow>;
-  columns: readonly ColumnDescriptor<TRow>[];
   dataView: DataViewContextValue;
   interactive: boolean;
   onRowClick?: (row: TRow) => void;
@@ -617,25 +645,25 @@ function PlainRecordRow<TRow extends Row>({
           }
         />
       </TableCell>
-      {columns.map((column, index) => (
+      {row.getVisibleCells().map((cell, index) => (
         <TableCell
-          key={column.field}
-          className={ALIGN_CLASS[column.align ?? "left"]}
+          key={cell.id}
+          className={ALIGN_CLASS[alignOf(cell.column.columnDef)]}
         >
           {interactive && index === 0 && onRowClick ? (
             <button
               type="button"
               className="block w-full min-w-0 rounded-sm text-left text-inherit outline-none focus-visible:focus-ring"
-              aria-label={`Open ${rowActionLabel(column, row.original)}`}
+              aria-label={`Open ${rowActionLabelForTableColumn(cell.column, row.original)}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onRowClick(row.original);
               }}
             >
-              {cellContent(column, row.original)}
+              {renderCell(cell)}
             </button>
           ) : (
-            cellContent(column, row.original)
+            renderCell(cell)
           )}
         </TableCell>
       ))}
@@ -743,7 +771,7 @@ type ListRenderItem<TRow extends Row> =
 
 function renderListItem<TRow extends Row>({
   item,
-  columns,
+  colSpan,
   dataView,
   interactive,
   rowHref,
@@ -751,7 +779,7 @@ function renderListItem<TRow extends Row>({
   groupCounts,
 }: {
   item: ListRenderItem<TRow>;
-  columns: readonly ColumnDescriptor<TRow>[];
+  colSpan: number;
   dataView: DataViewContextValue;
   interactive: boolean;
   rowHref?: (row: TRow) => string;
@@ -766,7 +794,7 @@ function renderListItem<TRow extends Row>({
         rows={item.group.rows}
         count={groupCounts.get(groupPathKey(item.group.path))}
         depth={item.group.depth}
-        colSpan={columns.length + 1}
+        colSpan={colSpan}
       />
     );
   }
@@ -774,7 +802,6 @@ function renderListItem<TRow extends Row>({
     <RecordRow
       key={item.row.id}
       row={item.row}
-      columns={columns}
       dataView={dataView}
       interactive={interactive}
       rowHref={rowHref}
@@ -1041,11 +1068,23 @@ function cellContent<TRow extends Row>(
   return displayValue(value);
 }
 
-function rowActionLabel<TRow extends Row>(
-  column: ColumnDescriptor<TRow>,
+function renderCell<TRow extends Row>(
+  cell: TableCellModel<TRow, unknown>,
+): React.ReactNode {
+  return flexRender(cell.column.columnDef.cell, cell.getContext());
+}
+
+function tableColumnLabel<TRow extends Row>(
+  column: TableColumn<TRow, unknown>,
+): React.ReactNode {
+  return columnMeta(column.columnDef).label ?? column.id;
+}
+
+function rowActionLabelForTableColumn<TRow extends Row>(
+  column: TableColumn<TRow, unknown>,
   row: TRow,
 ): string {
-  const value = readPath(row, column.field);
+  const value = readPath(row, column.id);
   if (Array.isArray(value)) {
     const label = value.map((item) => String(item)).join(", ").trim();
     return label || "record";
@@ -1073,8 +1112,17 @@ function displayValue(value: unknown): React.ReactNode {
 }
 
 function alignOf<TRow extends Row>(column: ColumnDef<TRow>): PageColumnAlign {
-  const meta = column.meta as { align?: PageColumnAlign } | undefined;
-  return meta?.align ?? "left";
+  return columnMeta(column).align ?? "left";
+}
+
+function columnMeta<TRow extends Row>(
+  column: ColumnDef<TRow>,
+): { align?: PageColumnAlign; label?: React.ReactNode } {
+  return (
+    column.meta as
+      | { align?: PageColumnAlign; label?: React.ReactNode }
+      | undefined
+  ) ?? {};
 }
 
 function nextSort(
