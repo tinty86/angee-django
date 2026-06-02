@@ -52,6 +52,45 @@ checklist in §10; file-level surface in the P1 UI Inventory (bottom).
 
 ---
 
+## ⚠ Open visual issues — consolidated (user-flagged "still many", 2026-06-02)
+
+The single tracked list of unresolved look&feel/behavior gaps, so none scatter.
+Each is driven by the standard cadence (Codex → arch + react + visual-vs-mockup
+review → render-verify on live `:5173` vs mockup `:5174`).
+
+- [ ] **V1 — grey band above content (every console page).** **Root cause
+  confirmed:** `console-grid` (`packages/base/src/styles/index.css:341`) reserves
+  a `control` grid row (`--spacing-control-h`) but `ConsoleShell.tsx` renders
+  nothing into `area-control` → a fixed-height empty grey strip between the
+  breadcrumb and the content. The breadcrumb row (`area-crumbs`, white `bg-sheet`)
+  is also doing weak double-duty as the page header. **Fix:** render the intended
+  page control band into `area-control` — a dense page header + page-level actions
+  matching mockup `:5174` (preferred), or drop the row via the existing
+  `console-grid-no-control` utility if no band is wanted. (= §10 1.1
+  empty-band/weak-header.)
+- [ ] **V2 — aggregate chain (grouped list).** Stage-1 chained group-by is wired
+  (`groupStack`); OPEN against real data: nested year→month buckets with backend
+  counts/totals + per-group and footer aggregate rollups. The screenshot shows
+  only a bare count chip (10/10/8) per group — the richer column aggregates +
+  nested rollup chain still need wiring/polish.
+- [ ] **V3 — FormView save reverts without reload (BROKEN, framework-level).**
+  After save, fields revert to old/undefined values until a manual reload; root
+  cause is the SDK urql graphcache not normalizing the mutation result into the
+  cache. Affects every form/view/subscription → fix in the SDK cache/mutation
+  layer, not per-form.
+- [ ] **V4 — FormView chrome remainder.** Smart-buttons, More/Actions menu,
+  notebook tabs not built. (DONE: dirty-only Save+Discard top band, nav guard,
+  inline title, sheet layout.)
+- [ ] **V5 — FormView record pager scope.** Prev/Next navigates the whole table
+  ("1 of 10,052") instead of the filtered+sorted list slice.
+- [ ] **V6 — general fidelity vs mockup.** Density, real page header, focus/border
+  states (umbrella; V1 is its headline instance).
+- [ ] **V7 — right-edge bleed (triage).** A thin purple underline is clipped at
+  the far right of the topbar/content in the notes screenshot (~x≈1830); confirm
+  whether it's a real overflow / scrollbar artifact or expected.
+
+---
+
 > **Reconcile with the single source of truth.** `.agents/plans/notes-auth-lift.md` is
 > "the one plan." This file is a focused sub-plan for one workstream; it must not
 > contradict it. In particular it is **gated by that plan's open decision D-A — view-state

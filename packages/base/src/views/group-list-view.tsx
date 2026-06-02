@@ -2,6 +2,10 @@ import * as React from "react";
 import type { Row } from "@angee/sdk";
 
 import {
+  ControlBand,
+  controlBandItemClassName,
+} from "../shell/ControlBand";
+import {
   DataToolbar,
   type DataToolbarGroupOption,
 } from "../toolbars";
@@ -185,108 +189,113 @@ function GroupListViewBody<TRow extends Row = Row>({
   const interactive = Boolean(onRowClick || rowHref);
 
   return (
-    <div
-      className={[
-        "overflow-hidden rounded-md border border-border bg-sheet",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <DataToolbar
-        pager={toolbarPager}
-        view={dataView.state.view}
-        group={dataView.state.group}
-        groupStack={dataView.state.groupStack}
-        groupOptions={groupOptions}
-        filterOptions={filterOptions}
-        visibleFields={surface.visibleFields}
-        activeFilterIds={activeFilterIds}
-        filterText={filterText}
-        createLabel={createLabel ?? createLabelForModel(model)}
-        onCreate={onCreate}
-        onClearGroup={() => dataView.setGroupStack([])}
-        onGroupStackChange={dataView.setGroupStack}
-        onVisibleFieldToggle={surface.toggleVisibleField}
-        onViewChange={dataView.setView}
-        onPageChange={setPage}
-        pagerSubject={groupedListMode ? "Groups" : undefined}
-        pagerTotalUnit={groupedListMode ? "groups" : undefined}
-        onFilterToggle={(id) =>
-          dataView.setFilter(
-            nextFacetFilter(dataView.state.filter, filterOptions, id),
-          )
-        }
-        onFilterTextChange={(value) =>
-          dataView.setFilter(nextTextFilter(dataView.state.filter, value))
-        }
-      />
-      {surface.selectedIds.size > 0 ? (
-        <SelectionBar
-          count={surface.selectedIds.size}
-          onClear={dataView.clearSelectedIds}
+    <>
+      <ControlBand>
+        <DataToolbar
+          className={controlBandItemClassName}
+          pager={toolbarPager}
+          view={dataView.state.view}
+          group={dataView.state.group}
+          groupStack={dataView.state.groupStack}
+          groupOptions={groupOptions}
+          filterOptions={filterOptions}
+          visibleFields={surface.visibleFields}
+          activeFilterIds={activeFilterIds}
+          filterText={filterText}
+          createLabel={createLabel ?? createLabelForModel(model)}
+          onCreate={onCreate}
+          onClearGroup={() => dataView.setGroupStack([])}
+          onGroupStackChange={dataView.setGroupStack}
+          onVisibleFieldToggle={surface.toggleVisibleField}
+          onViewChange={dataView.setView}
+          onPageChange={setPage}
+          pagerSubject={groupedListMode ? "Groups" : undefined}
+          pagerTotalUnit={groupedListMode ? "groups" : undefined}
+          onFilterToggle={(id) =>
+            dataView.setFilter(
+              nextFacetFilter(dataView.state.filter, filterOptions, id),
+            )
+          }
+          onFilterTextChange={(value) =>
+            dataView.setFilter(nextTextFilter(dataView.state.filter, value))
+          }
         />
-      ) : null}
-      {groupedListMode ? (
-        <GroupedListBody
-          model={model}
-          table={surface.table}
-          tableColumns={surface.tableColumns}
-          columnVisibility={surface.columnVisibility}
-          visibleColumnCount={surface.visibleColumnCount}
-          dataView={dataView}
-          groupDimensions={groupDimensions}
-          requestedFields={surface.requestedFields}
-          mergedFilter={surface.mergedFilter}
-          sortOrder={surface.sortOrder}
-          order={order}
-          interactive={interactive}
-          rowHref={rowHref}
-          onRowClick={onRowClick}
-          emptyMessage={emptyMessage}
-          onPagerStateChange={handleGroupPagerStateChange}
-        />
-      ) : surface.list.error ? (
-        <div className="px-3 py-6 text-13 text-danger-text">
-          {surface.list.error.message}
-        </div>
-      ) : dataView.state.view === "board" ? (
-        <BoardView
-          columns={columns}
-          groups={surface.groupedRows}
-          dataView={dataView}
-          selectedIds={surface.selectedIds}
-          interactive={interactive}
-          emptyMessage={emptyMessage}
-          rowHref={rowHref}
-          onRowClick={onRowClick}
-        />
-      ) : (
-        <FlatListBody
-          table={surface.table}
-          rowModels={surface.rowModels}
-          listItems={surface.listItems}
-          tableScrollRef={surface.tableScrollRef}
-          rowVirtualizer={surface.rowVirtualizer}
-          visibleColumnCount={surface.visibleColumnCount}
-          allPageSelected={surface.allPageSelected}
-          somePageSelected={surface.somePageSelected}
-          onPageSelectionChange={surface.setPageSelection}
-          dataView={dataView}
-          interactive={interactive}
-          rowHref={rowHref}
-          onRowClick={onRowClick}
-          emptyMessage={emptyMessage}
-          fetching={surface.list.fetching}
-        />
-      )}
-      {!groupedListMode && surface.list.fetching ? (
-        <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
-          <Spinner size="sm" />
-          Loading...
-        </div>
-      ) : null}
-    </div>
+      </ControlBand>
+      <div
+        className={[
+          "min-h-0 overflow-hidden bg-sheet",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {surface.selectedIds.size > 0 ? (
+          <SelectionBar
+            count={surface.selectedIds.size}
+            onClear={dataView.clearSelectedIds}
+          />
+        ) : null}
+        {groupedListMode ? (
+          <GroupedListBody
+            model={model}
+            table={surface.table}
+            tableColumns={surface.tableColumns}
+            columnVisibility={surface.columnVisibility}
+            visibleColumnCount={surface.visibleColumnCount}
+            dataView={dataView}
+            groupDimensions={groupDimensions}
+            requestedFields={surface.requestedFields}
+            mergedFilter={surface.mergedFilter}
+            sortOrder={surface.sortOrder}
+            order={order}
+            interactive={interactive}
+            rowHref={rowHref}
+            onRowClick={onRowClick}
+            emptyMessage={emptyMessage}
+            onPagerStateChange={handleGroupPagerStateChange}
+          />
+        ) : surface.list.error ? (
+          <div className="px-3 py-6 text-13 text-danger-text">
+            {surface.list.error.message}
+          </div>
+        ) : dataView.state.view === "board" ? (
+          <BoardView
+            columns={columns}
+            groups={surface.groupedRows}
+            dataView={dataView}
+            selectedIds={surface.selectedIds}
+            interactive={interactive}
+            emptyMessage={emptyMessage}
+            rowHref={rowHref}
+            onRowClick={onRowClick}
+          />
+        ) : (
+          <FlatListBody
+            table={surface.table}
+            rowModels={surface.rowModels}
+            listItems={surface.listItems}
+            tableScrollRef={surface.tableScrollRef}
+            rowVirtualizer={surface.rowVirtualizer}
+            visibleColumnCount={surface.visibleColumnCount}
+            allPageSelected={surface.allPageSelected}
+            somePageSelected={surface.somePageSelected}
+            onPageSelectionChange={surface.setPageSelection}
+            dataView={dataView}
+            interactive={interactive}
+            rowHref={rowHref}
+            onRowClick={onRowClick}
+            emptyMessage={emptyMessage}
+            fetching={surface.list.fetching}
+          />
+        )}
+        {!groupedListMode && surface.list.fetching ? (
+          <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
+            <Spinner size="sm" />
+            Loading...
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 

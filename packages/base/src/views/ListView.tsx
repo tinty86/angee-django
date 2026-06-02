@@ -1,6 +1,10 @@
 import * as React from "react";
 import type { Row } from "@angee/sdk";
 
+import {
+  ControlBand,
+  controlBandItemClassName,
+} from "../shell/ControlBand";
 import { DataToolbar } from "../toolbars";
 import type { PagerState } from "../ui/pager";
 import { Spinner } from "../ui/spinner";
@@ -121,68 +125,73 @@ function ListViewBody<TRow extends Row = Row>({
   const interactive = Boolean(onRowClick || rowHref);
 
   return (
-    <div
-      className={[
-        "overflow-hidden rounded-md border border-border bg-sheet",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <DataToolbar
-        pager={toolbarPager}
-        filterOptions={filterOptions}
-        visibleFields={surface.visibleFields}
-        activeFilterIds={activeFilterIds}
-        filterText={filterText}
-        createLabel={createLabel ?? createLabelForModel(model)}
-        onCreate={onCreate}
-        onVisibleFieldToggle={surface.toggleVisibleField}
-        onPageChange={setPage}
-        onFilterToggle={(id) =>
-          dataView.setFilter(
-            nextFacetFilter(dataView.state.filter, filterOptions, id),
-          )
-        }
-        onFilterTextChange={(value) =>
-          dataView.setFilter(nextTextFilter(dataView.state.filter, value))
-        }
-      />
-      {surface.selectedIds.size > 0 ? (
-        <SelectionBar
-          count={surface.selectedIds.size}
-          onClear={dataView.clearSelectedIds}
+    <>
+      <ControlBand>
+        <DataToolbar
+          className={controlBandItemClassName}
+          pager={toolbarPager}
+          filterOptions={filterOptions}
+          visibleFields={surface.visibleFields}
+          activeFilterIds={activeFilterIds}
+          filterText={filterText}
+          createLabel={createLabel ?? createLabelForModel(model)}
+          onCreate={onCreate}
+          onVisibleFieldToggle={surface.toggleVisibleField}
+          onPageChange={setPage}
+          onFilterToggle={(id) =>
+            dataView.setFilter(
+              nextFacetFilter(dataView.state.filter, filterOptions, id),
+            )
+          }
+          onFilterTextChange={(value) =>
+            dataView.setFilter(nextTextFilter(dataView.state.filter, value))
+          }
         />
-      ) : null}
-      {surface.list.error ? (
-        <div className="px-3 py-6 text-13 text-danger-text">
-          {surface.list.error.message}
-        </div>
-      ) : (
-        <FlatListBody
-          table={surface.table}
-          rowModels={surface.rowModels}
-          listItems={surface.listItems}
-          tableScrollRef={surface.tableScrollRef}
-          rowVirtualizer={surface.rowVirtualizer}
-          visibleColumnCount={surface.visibleColumnCount}
-          allPageSelected={surface.allPageSelected}
-          somePageSelected={surface.somePageSelected}
-          onPageSelectionChange={surface.setPageSelection}
-          dataView={dataView}
-          interactive={interactive}
-          rowHref={rowHref}
-          onRowClick={onRowClick}
-          emptyMessage={emptyMessage}
-          fetching={surface.list.fetching}
-        />
-      )}
-      {surface.list.fetching ? (
-        <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
-          <Spinner size="sm" />
-          Loading...
-        </div>
-      ) : null}
-    </div>
+      </ControlBand>
+      <div
+        className={[
+          "min-h-0 overflow-hidden bg-sheet",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {surface.selectedIds.size > 0 ? (
+          <SelectionBar
+            count={surface.selectedIds.size}
+            onClear={dataView.clearSelectedIds}
+          />
+        ) : null}
+        {surface.list.error ? (
+          <div className="px-3 py-6 text-13 text-danger-text">
+            {surface.list.error.message}
+          </div>
+        ) : (
+          <FlatListBody
+            table={surface.table}
+            rowModels={surface.rowModels}
+            listItems={surface.listItems}
+            tableScrollRef={surface.tableScrollRef}
+            rowVirtualizer={surface.rowVirtualizer}
+            visibleColumnCount={surface.visibleColumnCount}
+            allPageSelected={surface.allPageSelected}
+            somePageSelected={surface.somePageSelected}
+            onPageSelectionChange={surface.setPageSelection}
+            dataView={dataView}
+            interactive={interactive}
+            rowHref={rowHref}
+            onRowClick={onRowClick}
+            emptyMessage={emptyMessage}
+            fetching={surface.list.fetching}
+          />
+        )}
+        {surface.list.fetching ? (
+          <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
+            <Spinner size="sm" />
+            Loading...
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
