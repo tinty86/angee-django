@@ -45,8 +45,8 @@ checklist in §10; file-level surface in the P1 UI Inventory (bottom).
 
 **Autonomous loop active:** `/loop` cron `bc7f168e` fires every 15 min — each fire checks Codex progress; if idle, runs the next §10 slice via Codex + reviewers (anchored to exact mockup/P1 sources, screenshot-vs-mockup gated); when the whole lift is done, builds e2e for all logins (alice/bob/admin) exercising every function/button.
 
-**Next action / in-flight:** Icon slices committed (`4740a6a`, `bd4c934` real Angee mark). **Slice 1.0 (Storybook) committed** (`packages/storybook/`, Storybook 10 + react-vite; CSF stories Button + TopMenu; preview decorator seeds `baseIcons` into `AppRuntimeProvider` so icons resolve in stories; `storybook build` succeeded). Fixes applied during accept: Codex left a broken typecheck (`@types/node` divergence + checkJs on the `.mjs` config) → aligned `@types/node` to workspace `^22` and narrowed tsconfig to TS sources; workspace typecheck green; main app restored (a Codex `pnpm install` had reshuffled vite's store and 500'd the running dev server — restart fixed it).
-**PENDING next fire:** (a) run `architecture-reviewer` + `react-reviewer` on slice 1.0; (b) start Storybook + screenshot a story to confirm it renders with icons; (c) **review item:** Codex diverged storybook's toolchain to upgrade targets (vite 8 / TS 6 / @vitejs/plugin-react 6) vs the workspace (vite 6 / TS 5.9) — decide align vs leave (Storybook 10 likely needs vite ≥7). Then advance **1.1 `page/` layout** (the empty-band/weak-header fix).
+**Next action / in-flight:** Icon slices committed (`4740a6a`, `bd4c934` real Angee mark). **Slice 1.0 (Storybook) ACCEPTED + committed** (`f709f0d` scaffold, `e1867a4` review-fixes). Full cadence ran: Codex lift → both reviewers (found a self-inflicted toolchain fork: unused `@vitejs/plugin-react@6` forced vite 8, plus `react-router-dom`/TS 6 divergence; and a TopMenu story that threw — no `NuqsAdapter`) → fixed (dropped the unused deps, realigned vite ^6 / TS ^5.7, added `NuqsTestingAdapter` to the preview decorator, `@types/node` ^22, tsconfig scoped to TS sources) → verified: workspace typecheck green, Storybook (`:6006`) runs, Button + TopMenu stories **render with icons** (screenshot `test-results/sb-topmenu.png`). Lesson reinforced: verify stories by rendering, not just typecheck.
+**Next (architect, reprioritized):** **Upgrade the WHOLE workspace to latest NOW** — don't pin packages back. The storybook vite^6/TS^5.7 pins (`e1867a4`) are temporary; the real fix is leveling the workspace UP (vite→8, @vitejs/plugin-react→6, vitest→4, happy-dom→20, typescript→6, @types/node→25, @urql/core→6, @urql/exchange-graphcache→9, lucide-react→1.17, @graphql-codegen/cli→latest), then storybook needs no pins. This promotes the former "Carryover" phase to the front. Verify: workspace typecheck + base/sdk tests + app (`:5173`) + storybook (`:6006`) all green. THEN advance **§10 1.1 `page/` layout** (the empty-band/weak-header/density fix), screenshot-vs-mockup gated.
 
 ---
 
@@ -337,10 +337,10 @@ don't copy (tokens/visual-layout exempt per override). Goal: enhanced, cleaner, 
 ## STAGE 1 — All visual components in Storybook (no backend)
 
 ### 1.0 Storybook & visual tooling
-- [ ] done [ ] verified [ ] checked by human (final qa) — Stand up a clean Storybook (new `storybook-host`-style package) loading our tokens/theme via one entry stylesheet; runs locally
-- [ ] done [ ] verified [ ] checked by human (final qa) — Visual-review harness: screenshot a story + the mockup screen (`:5174`) and compare; per-component parity log
-- [ ] done [ ] verified [ ] checked by human (final qa) — Story conventions (CSF template) + a "kitchen-sink" overview story
-- [ ] done [ ] verified [ ] checked by human (final qa) — Base icons resolve in Storybook (static `baseIcons` fallback in `useIcon`, or a base-runtime decorator) — `Glyph` currently needs createApp seeding (carried from the icon slice)
+- [x] done [x] verified [ ] checked by human (final qa) — Stand up a clean Storybook — `packages/storybook/` (Storybook 10 + react-vite, vite 6 / TS 5.7 aligned to workspace); loads tokens via `@angee/base/styles.css`; runs at `:6006`
+- [x] done [ ] verified [ ] checked by human (final qa) — Visual-review harness: Playwright screenshot of a story (`test-results/sb-story.mjs`) + compare to mockup (`:5174`); per-component parity log TBD
+- [x] done [ ] verified [ ] checked by human (final qa) — Story conventions (CSF) established (Button + TopMenu); kitchen-sink overview story TBD
+- [x] done [x] verified [ ] checked by human (final qa) — Base icons resolve in Storybook via a preview decorator seeding `baseIcons` into `AppRuntimeProvider` (TopMenu story renders icons)
 
 ### 1.1 Foundation — tokens / layout / primitives / fragments
 - [x] done [x] verified [ ] checked by human (final qa) — Design tokens at P1 parity (185 vars identical; ours cleaner) — no copy needed
