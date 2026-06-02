@@ -4,9 +4,12 @@ import {
   Activity,
   Archive,
   Bell,
+  CircleCheck,
   CircleHelp,
+  CircleX,
   FileText,
   Home,
+  Info,
   LayoutDashboard,
   List,
   LogOut,
@@ -14,6 +17,8 @@ import {
   Search,
   Shield,
   Star,
+  TriangleAlert,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -34,16 +39,21 @@ export const baseIcons = {
   archive: Archive,
   auth: Shield,
   bell: Bell,
+  "circle-check": CircleCheck,
+  "circle-x": CircleX,
   comments: MessageCircle,
   file: FileText,
   help: CircleHelp,
   home: Home,
+  info: Info,
   "layout-dashboard": LayoutDashboard,
   list: List,
   "log-out": LogOut,
   notes: FileText,
   search: Search,
   star: Star,
+  "triangle-alert": TriangleAlert,
+  x: X,
 } satisfies Readonly<Record<string, IconComponent>>;
 
 export function useIcon(name: string): IconComponent | null {
