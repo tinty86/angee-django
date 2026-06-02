@@ -11,6 +11,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
   "channels>=4.0",
+  "cryptography>=44",
   "daphne>=4.0",
   "django-import-export>=4.3",
   "django-reversion>=5.1",

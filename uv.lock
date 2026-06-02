@@ -291,6 +291,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "channels" },
+    { name = "cryptography" },
     { name = "daphne" },
     { name = "django" },
     { name = "django-choices-field" },
@@ -318,6 +319,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "channels", specifier = ">=4.0" },
+    { name = "cryptography", specifier = ">=44" },
     { name = "daphne", specifier = ">=4.0" },
     { name = "django", specifier = ">=6.0" },
     { name = "django-choices-field", specifier = ">=4.0.0" },

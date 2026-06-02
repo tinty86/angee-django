@@ -35,7 +35,7 @@ Dependency changes must update this file in the same change.
 | django-sqids | Opaque external IDs | `SqidMixin` and GraphQL boundary scalar |
 | django-simple-history | Shadow history tables and revert | `HistoryMixin` marker |
 | django-reversion | Versioned field snapshots and revert | `RevisionMixin` marker, `revisioned_fields` |
-| cryptography | Encryption primitives | `EncryptedTextField(secret=True)` |
+| cryptography | Encryption primitives | `EncryptedField` (Fernet at rest, secret-by-type) |
 | django-import-export + tablib | Resource import/export resources, tabular formats, row cleaning, and row results | Tiered manifests, xref ledger, and frozen-tier policy |
 | django-ninja | Typed REST routing and Pydantic I/O | Rare sidecar mounting for callbacks, webhooks, health checks, and presigned upload flows |
 | pydantic | REST payload schemas | Nothing; used inside sidecars |
