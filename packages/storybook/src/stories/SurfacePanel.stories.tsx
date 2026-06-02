@@ -1,0 +1,44 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { Button, Glyph, ListItem, SurfacePanel } from "@angee/base";
+
+const meta = {
+  title: "Fragments/SurfacePanel",
+  component: SurfacePanel,
+  parameters: { layout: "padded" },
+  args: {
+    children: <div />,
+    title: "Release queue",
+  },
+} satisfies Meta<typeof SurfacePanel>;
+
+export default meta;
+
+type Story = StoryObj<typeof meta>;
+
+export const Panel: Story = {
+  render: () => (
+    <SurfacePanel
+      actions={
+        <Button size="sm" variant="secondary">
+          <Glyph name="plus" />
+          Add
+        </Button>
+      }
+      summary="4 pending"
+      title="Release queue"
+    >
+      <div className="divide-y divide-border-subtle">
+        <ListItem
+          meta="Framework build"
+          status={{ label: "Ready", variant: "success" }}
+          title="Base fragments"
+        />
+        <ListItem
+          meta="Storybook review"
+          status={{ label: "Draft", variant: "info" }}
+          title="Console panels"
+        />
+      </div>
+    </SurfacePanel>
+  ),
+};
