@@ -3,11 +3,7 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
-  type Cell as TableCellModel,
-  type Column as TableColumn,
-  type ColumnDef,
   type Row as TableRowModel,
-  type Table as TableModel,
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -16,19 +12,10 @@ import {
   useResourceList,
   useResourceGroupBy,
   type AggregateBucket,
-  type GroupByDimension,
   type ResourceTypeName,
   type Row,
   type UseResourceListOptions,
 } from "@angee/sdk";
-import { format, formatDistanceToNow } from "date-fns";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
 
 import {
   DataToolbar,
@@ -36,12 +23,10 @@ import {
   type DataToolbarGroupOption,
 } from "../toolbars";
 import type { DataToolbarVisibleField } from "../toolbars/DataToolbar";
-import { cn } from "../lib/cn";
-import { Badge, CountBadge, type BadgeVariant } from "../ui/badge";
+import { CountBadge, type BadgeVariant } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Chip } from "../ui/chip";
-import { Pager, type PagerState } from "../ui/pager";
+import type { PagerState } from "../ui/pager";
 import { Spinner } from "../ui/spinner";
 import { StatusDot } from "../ui/status-icon";
 import {
@@ -64,13 +49,38 @@ import {
   type DataViewFilter,
   type DataViewGroup,
 } from "./data-view-model";
-import type {
-  ColumnDescriptor,
-  PageColumnAlign,
-} from "./page";
+import {
+  GroupedListBody,
+  groupPagerStatesEqual,
+  type GroupPagerState,
+} from "./grouped-list";
+import {
+  ALIGN_CLASS,
+  GROUP_ROW_HEIGHT,
+  LIST_VIEW_SCROLL_BUDGET,
+  RECORD_ROW_HEIGHT,
+  RecordRow,
+  TABLE_SCROLL_STYLE,
+  alignOf,
+  buildColumns,
+  bucketValueLabels,
+  cellContent,
+  dataViewGroupToAggregateDimension,
+  groupFieldLabel,
+  groupKey,
+  looksLikeDateField,
+  readPath,
+  statusLabel,
+  tableColumnLabel,
+  type ListRenderItem,
+  type RowGroup,
+} from "./list-internals";
+import type { ColumnDescriptor } from "./page";
 
-export type ColumnAlign = PageColumnAlign;
-export type ListColumn<TRow extends Row = Row> = ColumnDescriptor<TRow>;
+export type {
+  ColumnAlign,
+  ListColumn,
+} from "./list-internals";
 
 export interface ListViewProps<TRow extends Row = Row> {
   model: string;
@@ -100,26 +110,12 @@ export interface ListViewState<TRow extends Row = Row> {
   fetching: boolean;
 }
 
-const ALIGN_CLASS: Record<PageColumnAlign, string> = {
-  left: "text-left",
-  center: "text-center",
-  right: "text-right",
-};
-const LIST_VIEW_SCROLL_BUDGET = "calc(100vh - 12rem)";
-const TABLE_SCROLL_STYLE: React.CSSProperties = {
-  maxHeight: LIST_VIEW_SCROLL_BUDGET,
-};
 const BOARD_SCROLL_STYLE: React.CSSProperties = {
   height: LIST_VIEW_SCROLL_BUDGET,
   maxHeight: LIST_VIEW_SCROLL_BUDGET,
 };
 const BOARD_CARD_SHELL_CLASS =
   "block w-full rounded-lg text-left text-inherit outline-none focus-visible:focus-ring";
-const GROUPED_LIST_ITEM_PAGE_SIZE = 20;
-
-function formatPagerNumber(value: number): string {
-  return value.toLocaleString();
-}
 
 export function ListView<TRow extends Row = Row>(
   props: ListViewProps<TRow>,
@@ -560,202 +556,6 @@ function ListViewBody<TRow extends Row = Row>({
   );
 }
 
-function buildColumns<TRow extends Row>(
-  columns: readonly ColumnDescriptor<TRow>[],
-  dataView: DataViewContextValue,
-): ColumnDef<TRow>[] {
-  return columns.map((column) => ({
-    id: column.field,
-    header: () => (
-      <SortHeader column={column} dataView={dataView}>
-        {column.header ?? column.field}
-      </SortHeader>
-    ),
-    cell: ({ row }) => cellContent(column, row.original),
-    meta: {
-      align: column.align ?? "left",
-      label: column.header ?? column.field,
-    },
-  }));
-}
-
-function SortHeader<TRow extends Row>({
-  column,
-  dataView,
-  children,
-}: {
-  column: ColumnDescriptor<TRow>;
-  dataView: DataViewContextValue;
-  children: React.ReactNode;
-}): React.ReactElement {
-  if (column.sortable === false) return <>{children}</>;
-  const sort = dataView.state.sort;
-  const active = sort?.field === column.field;
-  const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <button
-      type="button"
-      className="inline-flex min-w-0 items-center gap-1 rounded text-left outline-none hover:text-fg focus-visible:focus-ring"
-      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-      onClick={() => dataView.setSort(nextSort(sort, column.field))}
-    >
-      <span className="truncate">{children}</span>
-      <Icon className="size-3 text-fg-subtle" aria-hidden />
-    </button>
-  );
-}
-
-function RecordRow<TRow extends Row>({
-  row,
-  dataView,
-  interactive,
-  rowHref,
-  onRowClick,
-}: {
-  row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
-  interactive: boolean;
-  rowHref?: (row: TRow) => string;
-  onRowClick?: (row: TRow) => void;
-}): React.ReactElement {
-  const href = rowHref?.(row.original);
-  if (href) {
-    return (
-      <LinkedRecordRow
-        row={row}
-        dataView={dataView}
-        href={href}
-      />
-    );
-  }
-  return (
-    <PlainRecordRow
-      row={row}
-      dataView={dataView}
-      interactive={interactive}
-      onRowClick={onRowClick}
-    />
-  );
-}
-
-function LinkedRecordRow<TRow extends Row>({
-  row,
-  dataView,
-  href,
-}: {
-  row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
-  href: string;
-}): React.ReactElement {
-  const id = row.id;
-  const selected = dataView.state.selectedIds.has(id);
-  const navigate = useNavigate();
-  const openHref = React.useCallback(
-    (event: React.MouseEvent<HTMLTableRowElement>) => {
-      if (isInteractiveTarget(event.target)) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        window.open(href, "_blank", "noopener");
-        return;
-      }
-      event.preventDefault();
-      void navigate({ to: href });
-    },
-    [href, navigate],
-  );
-  return (
-    <TableRow
-      interactive
-      role="link"
-      tabIndex={0}
-      data-selected={selected ? "" : undefined}
-      onClick={openHref}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" || event.target !== event.currentTarget) {
-          return;
-        }
-        event.preventDefault();
-        void navigate({ to: href });
-      }}
-    >
-      <TableCell className="w-8">
-        <Checkbox
-          size="sm"
-          aria-label="Select row"
-          checked={selected}
-          onClick={(event) => event.stopPropagation()}
-          onCheckedChange={(checked) =>
-            dataView.toggleSelectedId(id, checked)
-          }
-        />
-      </TableCell>
-      {row.getVisibleCells().map((cell) => (
-        <TableCell
-          key={cell.id}
-          className={ALIGN_CLASS[alignOf(cell.column.columnDef)]}
-        >
-          {renderCell(cell)}
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-}
-
-function PlainRecordRow<TRow extends Row>({
-  row,
-  dataView,
-  interactive,
-  onRowClick,
-}: {
-  row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
-  interactive: boolean;
-  onRowClick?: (row: TRow) => void;
-}): React.ReactElement {
-  const id = row.id;
-  const selected = dataView.state.selectedIds.has(id);
-  return (
-    <TableRow
-      interactive={interactive}
-      data-selected={selected ? "" : undefined}
-      onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-    >
-      <TableCell className="w-8">
-        <Checkbox
-          size="sm"
-          aria-label="Select row"
-          checked={selected}
-          onClick={(event) => event.stopPropagation()}
-          onCheckedChange={(checked) =>
-            dataView.toggleSelectedId(id, checked)
-          }
-        />
-      </TableCell>
-      {row.getVisibleCells().map((cell, index) => (
-        <TableCell
-          key={cell.id}
-          className={ALIGN_CLASS[alignOf(cell.column.columnDef)]}
-        >
-          {interactive && index === 0 && onRowClick ? (
-            <button
-              type="button"
-              className="block w-full min-w-0 rounded-sm text-left text-inherit outline-none focus-visible:focus-ring"
-              aria-label={`Open ${rowActionLabelForTableColumn(cell.column, row.original)}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onRowClick(row.original);
-              }}
-            >
-              {renderCell(cell)}
-            </button>
-          ) : (
-            renderCell(cell)
-          )}
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-}
-
 function BoardRows<TRow extends Row>({
   columns,
   groups,
@@ -938,13 +738,6 @@ function laneDotTone<TRow extends Row>(
   return column.tone[label] ?? "default";
 }
 
-const GROUP_ROW_HEIGHT = 32;
-const RECORD_ROW_HEIGHT = 40;
-
-type ListRenderItem<TRow extends Row> =
-  | { kind: "group"; group: RowGroup<TRow> }
-  | { kind: "row"; row: TableRowModel<TRow> };
-
 function renderListItem<TRow extends Row>({
   item,
   colSpan,
@@ -1046,363 +839,6 @@ function GroupHeader<TRow extends Row>({
   );
 }
 
-interface GroupPagerState {
-  total: number;
-  fetching: boolean;
-  error: Error | null;
-}
-
-function groupPagerStatesEqual(
-  left: GroupPagerState | null,
-  right: GroupPagerState,
-): boolean {
-  return (
-    left !== null &&
-    left.total === right.total &&
-    left.fetching === right.fetching &&
-    left.error === right.error
-  );
-}
-
-function GroupedListBody<TRow extends Row>({
-  model,
-  table,
-  tableColumns,
-  columnVisibility,
-  visibleColumnCount,
-  dataView,
-  groupDimensions,
-  requestedFields,
-  mergedFilter,
-  sortOrder,
-  order,
-  interactive,
-  rowHref,
-  onRowClick,
-  emptyMessage,
-  onPagerStateChange,
-}: {
-  model: string;
-  table: TableModel<TRow>;
-  tableColumns: readonly ColumnDef<TRow>[];
-  columnVisibility: VisibilityState;
-  visibleColumnCount: number;
-  dataView: DataViewContextValue;
-  groupDimensions: readonly GroupByDimension[];
-  requestedFields: readonly string[];
-  mergedFilter: UseResourceListOptions<ResourceTypeName>["filter"];
-  sortOrder: ReturnType<typeof dataViewSortToResourceOrder>;
-  order: UseResourceListOptions<ResourceTypeName>["order"];
-  interactive: boolean;
-  rowHref?: (row: TRow) => string;
-  onRowClick?: (row: TRow) => void;
-  emptyMessage: React.ReactNode;
-  onPagerStateChange: (state: GroupPagerState) => void;
-}): React.ReactElement {
-  const groupAggregation = useResourceGroupBy(model, {
-    dimensions: groupDimensions,
-    filter: mergedFilter,
-    page: dataView.state.page,
-    pageSize: dataView.state.pageSize,
-    withFilterEcho: true,
-  });
-  React.useEffect(() => {
-    onPagerStateChange({
-      total: groupAggregation.totalCount,
-      fetching: groupAggregation.fetching,
-      error: groupAggregation.error,
-    });
-  }, [
-    groupAggregation.error,
-    groupAggregation.fetching,
-    groupAggregation.totalCount,
-    onPagerStateChange,
-  ]);
-
-  // stableBucketKey maps are intentionally not pruned; old entries restore state when groups reappear.
-  const [expandedKeys, setExpandedKeys] = React.useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const [pageByKey, setPageByKey] = React.useState<Record<string, number>>({});
-  const toggleExpanded = React.useCallback((key: string) => {
-    setExpandedKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-  const setGroupPage = React.useCallback((key: string, page: number) => {
-    setPageByKey((current) => ({
-      ...current,
-      [key]: normaliseLocalPage(page),
-    }));
-  }, []);
-  const colSpan = Math.max(1, visibleColumnCount + 1);
-  const hasBuckets = groupAggregation.buckets.length > 0;
-
-  return (
-    <>
-      <div className="overflow-auto" style={TABLE_SCROLL_STYLE}>
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {/* Grouped mode omits page-level select-all; per-row selection still works. */}
-                <TableHead sticky className="w-8" />
-                {group.headers.map((header) => (
-                  <TableHead
-                    sticky
-                    key={header.id}
-                    className={ALIGN_CLASS[alignOf(header.column.columnDef)]}
-                  >
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          {groupAggregation.error ? (
-            <TableBody>
-              <TableRow>
-                <TableCell
-                  colSpan={colSpan}
-                  className="py-6 text-danger-text"
-                >
-                  {groupAggregation.error.message}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          ) : !hasBuckets && !groupAggregation.fetching ? (
-            <TableBody>
-              <TableRow>
-                <TableCell
-                  colSpan={colSpan}
-                  className="py-8 text-center text-fg-muted"
-                >
-                  {emptyMessage}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          ) : (
-            groupAggregation.buckets.map((bucket) => {
-              const key = stableBucketKey(bucket);
-              return (
-                <GroupSection
-                  key={key}
-                  model={model}
-                  bucket={bucket}
-                  bucketKey={key}
-                  groupStack={dataView.state.groupStack}
-                  tableColumns={tableColumns}
-                  columnVisibility={columnVisibility}
-                  colSpan={colSpan}
-                  dataView={dataView}
-                  requestedFields={requestedFields}
-                  sortOrder={sortOrder}
-                  order={order}
-                  interactive={interactive}
-                  rowHref={rowHref}
-                  onRowClick={onRowClick}
-                  expanded={expandedKeys.has(key)}
-                  page={pageByKey[key] ?? 1}
-                  onToggle={toggleExpanded}
-                  onPageChange={setGroupPage}
-                />
-              );
-            })
-          )}
-        </Table>
-      </div>
-      {groupAggregation.fetching ? (
-        <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
-          <Spinner size="sm" />
-          Loading...
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-function GroupSection<TRow extends Row>({
-  model,
-  bucket,
-  bucketKey,
-  groupStack,
-  tableColumns,
-  columnVisibility,
-  colSpan,
-  dataView,
-  requestedFields,
-  sortOrder,
-  order,
-  interactive,
-  rowHref,
-  onRowClick,
-  expanded,
-  page,
-  onToggle,
-  onPageChange,
-}: {
-  model: string;
-  bucket: AggregateBucket;
-  bucketKey: string;
-  groupStack: readonly DataViewGroup[];
-  tableColumns: readonly ColumnDef<TRow>[];
-  columnVisibility: VisibilityState;
-  colSpan: number;
-  dataView: DataViewContextValue;
-  requestedFields: readonly string[];
-  sortOrder: ReturnType<typeof dataViewSortToResourceOrder>;
-  order: UseResourceListOptions<ResourceTypeName>["order"];
-  interactive: boolean;
-  rowHref?: (row: TRow) => string;
-  onRowClick?: (row: TRow) => void;
-  expanded: boolean;
-  page: number;
-  onToggle: (key: string) => void;
-  onPageChange: (key: string, page: number) => void;
-}): React.ReactElement {
-  const headerId = React.useId();
-  const regionId = React.useId();
-  const expandable = bucket.filter !== undefined && bucket.filter !== null;
-  const label = bucketLabel(bucket, groupStack);
-  const pageCount = Math.max(
-    1,
-    Math.ceil(bucket.count / GROUPED_LIST_ITEM_PAGE_SIZE),
-  );
-  const currentPage = Math.min(page, pageCount);
-  const list = useResourceList(model, {
-    fields: requestedFields,
-    filter: bucket.filter ?? undefined,
-    order: sortOrder ?? order,
-    page: currentPage,
-    pageSize: GROUPED_LIST_ITEM_PAGE_SIZE,
-    enabled: expanded && expandable,
-  });
-  const rows = list.rows as readonly TRow[];
-  // Lazy per-group fetches need row models here; onColumnVisibilityChange is omitted because parent visibility is read-only.
-  const table = useReactTable<TRow>({
-    data: rows as TRow[],
-    columns: tableColumns as ColumnDef<TRow>[],
-    state: { columnVisibility },
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (row, index) =>
-      typeof row.id === "string" ? row.id : String(index),
-    autoResetPageIndex: false,
-    autoResetExpanded: false,
-  });
-  const rowModels = table.getRowModel().rows;
-
-  return (
-    <>
-      <TableBody>
-        <TableRow>
-          <TableCell colSpan={colSpan} className="h-9 bg-sheet-2 p-0">
-            <button
-              id={headerId}
-              type="button"
-              className={cn(
-                "flex min-h-9 w-full min-w-0 items-center gap-3 px-3 py-1.5 text-left text-13 outline-none focus-visible:focus-ring",
-                expandable
-                  ? "text-fg hover:bg-inset"
-                  : "cursor-not-allowed text-fg-muted",
-              )}
-              aria-expanded={expandable ? expanded : false}
-              aria-controls={expandable ? regionId : undefined}
-              aria-disabled={!expandable}
-              onClick={() => {
-                if (expandable) onToggle(bucketKey);
-              }}
-            >
-              {expanded && expandable ? (
-                <ChevronDown className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-              ) : (
-                <ChevronRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-              )}
-              <span className="min-w-0 flex-1 truncate font-semibold">
-                {label}
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-2">
-                <CountBadge value={bucket.count} />
-                {!expandable ? (
-                  <span className="text-13 font-normal text-fg-muted">
-                    Items unavailable
-                  </span>
-                ) : null}
-              </span>
-            </button>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-      {expanded && expandable ? (
-        <TableBody id={regionId}>
-          {list.error ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="py-4 text-danger-text">
-                {list.error.message}
-              </TableCell>
-            </TableRow>
-          ) : list.fetching ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="py-4 text-fg-muted">
-                <span className="inline-flex items-center gap-2">
-                  <Spinner size="sm" />
-                  Loading...
-                </span>
-              </TableCell>
-            </TableRow>
-          ) : rowModels.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={colSpan}
-                className="py-4 text-center text-fg-muted"
-              >
-                No records in this group.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rowModels.map((row) => (
-              <RecordRow
-                key={row.id}
-                row={row}
-                dataView={dataView}
-                interactive={interactive}
-                rowHref={rowHref}
-                onRowClick={onRowClick}
-              />
-            ))
-          )}
-          {!list.error && !list.fetching && bucket.count > 0 ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="bg-sheet py-2">
-                <nav
-                  aria-label={`${label} records`}
-                  className="flex items-center justify-end gap-2 text-13 text-fg-muted"
-                >
-                  <Pager
-                    page={currentPage}
-                    pageSize={GROUPED_LIST_ITEM_PAGE_SIZE}
-                    total={bucket.count}
-                    onPageChange={(next) => onPageChange(bucketKey, next)}
-                    labelElement="span"
-                    previousLabel={`Previous ${label} records`}
-                    nextLabel={`Next ${label} records`}
-                    formatNumber={formatPagerNumber}
-                  />
-                </nav>
-              </TableCell>
-            </TableRow>
-          ) : null}
-        </TableBody>
-      ) : null}
-    </>
-  );
-}
-
 function SelectionBar({
   count,
   onClear,
@@ -1419,15 +855,6 @@ function SelectionBar({
     </div>
   );
 }
-
-type RowGroup<TRow extends Row> = {
-  key: string;
-  label: string | null;
-  path: readonly string[];
-  depth: number;
-  rows: readonly TableRowModel<TRow>[];
-  children: readonly RowGroup<TRow>[];
-};
 
 function groupRows<TRow extends Row>(
   rows: readonly TableRowModel<TRow>[],
@@ -1509,42 +936,6 @@ function flattenLeaves<TRow extends Row>(group: RowGroup<TRow>): RowGroup<TRow>[
   return group.children.flatMap(flattenLeaves);
 }
 
-function groupKey(value: unknown, group: DataViewGroup): string {
-  if (value == null) return "No value";
-  const date = parseDate(value);
-  if (!date) return typeof value === "string" ? statusLabel(value) : String(value);
-  if (group.granularity === "year") return String(date.getFullYear());
-  if (group.granularity === "quarter") {
-    const quarter = Math.floor(date.getMonth() / 3) + 1;
-    return `Q${quarter} ${date.getFullYear()}`;
-  }
-  if (group.granularity === "month") {
-    return format(date, "MMMM yyyy");
-  }
-  if (group.granularity === "week") {
-    return `Week of ${format(date, "MMMM d, yyyy")}`;
-  }
-  return format(date, "MMMM d, yyyy");
-}
-
-function dataViewGroupToAggregateDimension(
-  group: DataViewGroup,
-): GroupByDimension {
-  return {
-    field: graphQLEnumValue(group.field),
-    key: aggregateKeyField(group),
-    ...(group.granularity
-      ? { granularity: group.granularity.toUpperCase() }
-      : {}),
-  };
-}
-
-function aggregateKeyField(group: DataViewGroup): string {
-  return group.granularity
-    ? `${group.field}${titleCase(group.granularity).replace(/\s+/g, "")}`
-    : group.field;
-}
-
 function buildGroupCountMap(
   buckets: readonly AggregateBucket[],
   groupStack: readonly DataViewGroup[],
@@ -1566,155 +957,6 @@ function groupPathKey(path: readonly string[]): string {
   return JSON.stringify(path);
 }
 
-function stableBucketKey(bucket: AggregateBucket): string {
-  return stableSerialize(bucket.key ?? null);
-}
-
-function bucketLabel(
-  bucket: AggregateBucket,
-  groupStack: readonly DataViewGroup[],
-): string {
-  const labels = bucketValueLabels(bucket, groupStack);
-  if (labels.length === 0) return "All records";
-  if (labels.length === 1) return labels[0] ?? "All records";
-  return labels
-    .map((label, index) => {
-      const group = groupStack[index];
-      return group ? `${groupFieldLabel(group.field)}: ${label}` : label;
-    })
-    .join(" / ");
-}
-
-function bucketValueLabels(
-  bucket: AggregateBucket,
-  groupStack: readonly DataViewGroup[],
-): string[] {
-  return groupStack.map((group) => {
-    const value = bucket.key?.[aggregateKeyField(group)];
-    return groupKey(value, group);
-  });
-}
-
-function normaliseLocalPage(page: number): number {
-  if (!Number.isFinite(page)) return 1;
-  return Math.max(1, Math.floor(page));
-}
-
-function stableSerialize(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableSerialize).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
-      .join(",")}}`;
-  }
-  if (value === undefined) return "undefined";
-  return JSON.stringify(value);
-}
-
-function graphQLEnumValue(field: string): string {
-  return field
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[-\s]+/g, "_")
-    .toUpperCase();
-}
-
-function cellContent<TRow extends Row>(
-  column: ColumnDescriptor<TRow>,
-  row: TRow,
-): React.ReactNode {
-  if (column.render) return column.render(row);
-  const value = readPath(row, column.field);
-  if (column.tone) {
-    const label = value == null ? "" : String(value);
-    const tone = column.tone[label] ?? "default";
-    return <Badge variant={tone}>{label ? statusLabel(label) : "-"}</Badge>;
-  }
-  if (Array.isArray(value)) {
-    return (
-      <span className="inline-flex min-w-0 flex-wrap items-center gap-1">
-        {value.map((item, index) => (
-          <Chip key={`${String(item)}:${index}`} tone="info" size="sm">
-            {String(item)}
-          </Chip>
-        ))}
-      </span>
-    );
-  }
-  const date = looksLikeDateField(column.field) ? parseDate(value) : null;
-  if (date) return formatDistanceToNow(date, { addSuffix: true });
-  return displayValue(value);
-}
-
-function renderCell<TRow extends Row>(
-  cell: TableCellModel<TRow, unknown>,
-): React.ReactNode {
-  return flexRender(cell.column.columnDef.cell, cell.getContext());
-}
-
-function tableColumnLabel<TRow extends Row>(
-  column: TableColumn<TRow, unknown>,
-): React.ReactNode {
-  return columnMeta(column.columnDef).label ?? column.id;
-}
-
-function rowActionLabelForTableColumn<TRow extends Row>(
-  column: TableColumn<TRow, unknown>,
-  row: TRow,
-): string {
-  const value = readPath(row, column.id);
-  if (Array.isArray(value)) {
-    const label = value.map((item) => String(item)).join(", ").trim();
-    return label || "record";
-  }
-  if (typeof value === "string" && value.trim()) return value;
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  return "record";
-}
-
-function readPath(row: Row, path: string): unknown {
-  let current: unknown = row;
-  for (const key of path.split(".")) {
-    if (current == null || typeof current !== "object") return undefined;
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
-}
-
-function displayValue(value: unknown): React.ReactNode {
-  if (value == null) return "";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function alignOf<TRow extends Row>(column: ColumnDef<TRow>): PageColumnAlign {
-  return columnMeta(column).align ?? "left";
-}
-
-function columnMeta<TRow extends Row>(
-  column: ColumnDef<TRow>,
-): { align?: PageColumnAlign; label?: React.ReactNode } {
-  return (
-    column.meta as
-      | { align?: PageColumnAlign; label?: React.ReactNode }
-      | undefined
-  ) ?? {};
-}
-
-function nextSort(
-  current: DataViewContextValue["state"]["sort"],
-  field: string,
-): DataViewContextValue["state"]["sort"] {
-  if (current?.field !== field) return { field, dir: "asc" };
-  if (current.dir === "asc") return { field, dir: "desc" };
-  return null;
-}
-
 function setPageSelection(
   dataView: DataViewContextValue,
   ids: readonly string[],
@@ -1726,15 +968,6 @@ function setPageSelection(
     else next.delete(id);
   }
   dataView.setSelectedIds(next);
-}
-
-function isInteractiveTarget(target: EventTarget): boolean {
-  return target instanceof HTMLElement
-    && Boolean(
-      target.closest(
-        "a,button,input,select,textarea,label,[role='button'],[role='menuitem'],[role='checkbox']",
-      ),
-    );
 }
 
 function mergeFilters(
@@ -1913,30 +1146,4 @@ function nextTextFilter(filter: DataViewFilter, value: string): DataViewFilter {
 function createLabelForModel(model: string): string {
   const name = model.split(".").at(-1) ?? "record";
   return `New ${groupFieldLabel(name).toLowerCase()}`;
-}
-
-function groupFieldLabel(field: string): string {
-  const label = titleCase(field);
-  return label.endsWith(" At") ? label.slice(0, -3) : label;
-}
-
-function statusLabel(value: string): string {
-  return titleCase(value.toLowerCase());
-}
-
-function titleCase(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function looksLikeDateField(field: string): boolean {
-  return /(?:At|Date|On)$/.test(field);
-}
-
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? null : date;
 }

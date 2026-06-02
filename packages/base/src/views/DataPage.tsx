@@ -25,6 +25,7 @@ import {
   type ListViewState,
 } from "./ListView";
 import { FormView, type FormField, type FormViewProps } from "./FormView";
+import { readPath } from "./list-internals";
 import {
   DataViewProvider,
   useDataView,
@@ -580,15 +581,6 @@ function recordBreadcrumbLabel<TRow extends Row>({
     formFields.find((field) => field.title)?.name ?? columns[0]?.field;
   const value = titlePath && row ? readPath(row, titlePath) : null;
   return breadcrumbValue(value) ?? titleCase(model.split(".").at(-1) ?? "Record");
-}
-
-function readPath(row: Row, path: string): unknown {
-  let current: unknown = row;
-  for (const key of path.split(".")) {
-    if (current == null || typeof current !== "object") return undefined;
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
 }
 
 function breadcrumbValue(value: unknown): React.ReactNode | null {
