@@ -1,17 +1,7 @@
 import * as React from "react";
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type Row as TableRowModel,
-  type VisibilityState,
-} from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import type { Row as TableRowModel } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  useResourceList,
-  useResourceGroupBy,
-  type AggregateBucket,
   type ResourceTypeName,
   type Row,
   type UseResourceListOptions,
@@ -22,21 +12,11 @@ import {
   type DataToolbarFilterOption,
   type DataToolbarGroupOption,
 } from "../toolbars";
-import type { DataToolbarVisibleField } from "../toolbars/DataToolbar";
 import { CountBadge, type BadgeVariant } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import type { PagerState } from "../ui/pager";
 import { Spinner } from "../ui/spinner";
 import { StatusDot } from "../ui/status-icon";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../ui/table";
 import {
   DataViewProvider,
   useDataView,
@@ -45,38 +25,32 @@ import {
 } from "./data-view-context";
 import {
   dataViewGroupsEqual,
-  dataViewSortToResourceOrder,
   type DataViewFilter,
   type DataViewGroup,
 } from "./data-view-model";
+import {
+  useDataViewSurface,
+  type ListViewState,
+} from "./data-view-surface";
 import {
   GroupedListBody,
   groupPagerStatesEqual,
   type GroupPagerState,
 } from "./grouped-list";
 import {
-  ALIGN_CLASS,
-  GROUP_ROW_HEIGHT,
+  FlatListBody,
   LIST_VIEW_SCROLL_BUDGET,
-  RECORD_ROW_HEIGHT,
-  RecordRow,
-  TABLE_SCROLL_STYLE,
-  alignOf,
-  buildColumns,
-  bucketValueLabels,
   cellContent,
   dataViewGroupToAggregateDimension,
   groupFieldLabel,
-  groupKey,
   looksLikeDateField,
   readPath,
   statusLabel,
-  tableColumnLabel,
-  type ListRenderItem,
   type RowGroup,
 } from "./list-internals";
 import type { ColumnDescriptor } from "./page";
 
+export type { ListViewState } from "./data-view-surface";
 export type {
   ColumnAlign,
   ListColumn,
@@ -97,17 +71,6 @@ export interface ListViewProps<TRow extends Row = Row> {
   rowHref?: (row: TRow) => string;
   emptyMessage?: React.ReactNode;
   className?: string;
-}
-
-export interface ListViewState<TRow extends Row = Row> {
-  rows: readonly TRow[];
-  total: number | undefined;
-  page: number;
-  pageSize: number;
-  pageCount: number | undefined;
-  hasNext: boolean;
-  hasPrev: boolean;
-  fetching: boolean;
 }
 
 const BOARD_SCROLL_STYLE: React.CSSProperties = {
@@ -160,12 +123,6 @@ function ListViewBody<TRow extends Row = Row>({
 }: ListViewProps<TRow> & {
   dataView: DataViewContextValue;
 }): React.ReactElement {
-  React.useEffect(() => {
-    if (pageSize && dataView.state.pageSize !== pageSize) {
-      dataView.setPageSize(pageSize);
-    }
-  }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
-
   const handledDefaultGroupRef = React.useRef<DataViewGroup | null>(null);
   React.useEffect(() => {
     if (!defaultGroup) {
@@ -182,23 +139,23 @@ function ListViewBody<TRow extends Row = Row>({
     if (dataView.state.group === null) dataView.setGroup(defaultGroup);
   }, [dataView.setGroup, dataView.state.group, defaultGroup]);
 
-  const requestedFields = React.useMemo(() => {
-    const paths = new Set<string>(["id"]);
-    for (const column of columns) paths.add(column.field);
-    for (const extra of fields ?? []) paths.add(extra);
-    return [...paths];
-  }, [columns, fields]);
-
-  const mergedFilter = React.useMemo(
-    () => mergeFilters(filter, dataView.state.filter),
-    [dataView.state.filter, filter],
-  );
   const groupDimensions = React.useMemo(
     () => dataView.state.groupStack.map(dataViewGroupToAggregateDimension),
     [dataView.state.groupStack],
   );
   const groupedListMode =
     dataView.state.view === "list" && groupDimensions.length > 0;
+  const surface = useDataViewSurface({
+    model,
+    columns,
+    fields,
+    filter,
+    order,
+    pageSize,
+    dataView,
+    enabled: !groupedListMode,
+    onListStateChange,
+  });
   const [groupPagerState, setGroupPagerState] =
     React.useState<GroupPagerState | null>(null);
   const handleGroupPagerStateChange = React.useCallback(
@@ -209,32 +166,14 @@ function ListViewBody<TRow extends Row = Row>({
     },
     [],
   );
-  const groupAggregation = useResourceGroupBy(model, {
-    dimensions: groupDimensions,
-    filter: mergedFilter,
-    enabled: dataView.state.view === "board" && groupDimensions.length > 0,
-  });
-  const groupCounts = React.useMemo(
-    () => buildGroupCountMap(groupAggregation.buckets, dataView.state.groupStack),
-    [dataView.state.groupStack, groupAggregation.buckets],
-  );
-  const sortOrder = dataViewSortToResourceOrder(dataView.state.sort);
-  const list = useResourceList(model, {
-    fields: requestedFields,
-    filter: mergedFilter,
-    order: sortOrder ?? order,
-    pageSize: dataView.state.pageSize,
-    page: dataView.state.page,
-    enabled: !groupedListMode,
-  });
   const toolbarPager = React.useMemo<PagerState>(() => {
     if (!groupedListMode) {
       return {
-        total: list.total,
-        page: list.page,
-        pageSize: list.pageSize,
-        hasPrev: list.hasPrev,
-        hasNext: list.hasNext,
+        total: surface.list.total,
+        page: surface.list.page,
+        pageSize: surface.list.pageSize,
+        hasPrev: surface.list.hasPrev,
+        hasNext: surface.list.hasNext,
       };
     }
     // Group-level pager: Pager derives hasPrev/hasNext from page/total.
@@ -248,133 +187,19 @@ function ListViewBody<TRow extends Row = Row>({
     dataView.state.pageSize,
     groupPagerState?.total,
     groupedListMode,
-    list.hasNext,
-    list.hasPrev,
-    list.page,
-    list.pageSize,
-    list.total,
+    surface.list.hasNext,
+    surface.list.hasPrev,
+    surface.list.page,
+    surface.list.pageSize,
+    surface.list.total,
   ]);
-
-  const tableColumns = React.useMemo(
-    () => buildColumns(columns, dataView),
-    [columns, dataView],
-  );
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
-  const rows = list.rows as readonly TRow[];
-  const listState = React.useMemo<ListViewState<TRow>>(
-    () => ({
-      rows,
-      total: list.total,
-      page: list.page,
-      pageSize: list.pageSize,
-      pageCount: list.pageCount,
-      hasNext: list.hasNext,
-      hasPrev: list.hasPrev,
-      fetching: list.fetching,
-    }),
-    [
-      rows,
-      list.total,
-      list.page,
-      list.pageSize,
-      list.pageCount,
-      list.hasNext,
-      list.hasPrev,
-      list.fetching,
-    ],
-  );
-  React.useEffect(() => {
-    onListStateChange?.(listState);
-  }, [listState, onListStateChange]);
-
-  const table = useReactTable<TRow>({
-    data: rows as TRow[],
-    columns: tableColumns,
-    state: { columnVisibility },
-    onColumnVisibilityChange: setColumnVisibility,
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (row, index) =>
-      typeof row.id === "string" ? row.id : String(index),
-    // Pagination/sort/filter/grouping are owned by the data-view (URL) state, not the
-    // table. Without this, TanStack Table auto-resets its own page index whenever the
-    // `data` reference changes; that reset fires `onStateChange` → re-render → new
-    // `data` identity → reset again, an infinite loop that hard-locks WebKit when a
-    // re-render storm (grouped rows + opening the filter popover) keeps it fed.
-    autoResetPageIndex: false,
-    autoResetExpanded: false,
-  });
-  const visibleColumnCount = table.getVisibleLeafColumns().length;
-  const visibleFields = React.useMemo<readonly DataToolbarVisibleField[]>(
-    () => {
-      const visibleCount = table.getVisibleLeafColumns().length;
-      return table.getAllLeafColumns().map((column) => {
-        const visible = column.getIsVisible();
-        return {
-          id: column.id,
-          label: tableColumnLabel(column),
-          visible,
-          disabled: visible && visibleCount <= 1,
-        };
-      });
-    },
-    [columnVisibility, table],
-  );
-  const toggleVisibleField = React.useCallback(
-    (id: string, visible: boolean) => {
-      const column = table.getColumn(id);
-      if (!column) return;
-      if (!visible && column.getIsVisible() && visibleColumnCount <= 1) return;
-      column.toggleVisibility(visible);
-    },
-    [table, visibleColumnCount],
-  );
-
-  const rowModels = table.getRowModel().rows;
-  const selectedIds = dataView.state.selectedIds;
-  const pageIds = rows.flatMap((row, index) =>
-    typeof row.id === "string" ? [row.id] : [String(index)],
-  );
-  const allPageSelected =
-    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
-  const somePageSelected = pageIds.some((id) => selectedIds.has(id));
-  const groupedRows = React.useMemo(
-    () => groupRows(rowModels, dataView.state.groupStack),
-    [dataView.state.groupStack, rowModels],
-  );
-  const listItems = React.useMemo(
-    () => flattenListItems(groupedRows),
-    [groupedRows],
-  );
-  const tableScrollRef = React.useRef<HTMLDivElement | null>(null);
-  const rowVirtualizer = useVirtualizer({
-    count: listItems.length,
-    getScrollElement: () => tableScrollRef.current,
-    initialRect: { width: 1024, height: 600 },
-    estimateSize: (index) =>
-      listItems[index]?.kind === "group" ? GROUP_ROW_HEIGHT : RECORD_ROW_HEIGHT,
-    overscan: 10,
-  });
-  const virtualItems = rowVirtualizer.getVirtualItems();
-  const visibleIndexes = virtualItems.length > 0
-    ? virtualItems.map((item) => item.index)
-    : listItems.slice(0, Math.min(listItems.length, 20)).map((_, index) => index);
-  const firstVirtualItem = virtualItems[0];
-  const lastVirtualItem = virtualItems[virtualItems.length - 1];
-  const paddingTop = firstVirtualItem?.start ?? 0;
-  const paddingBottom = Math.max(
-    0,
-    virtualItems.length > 0
-      ? rowVirtualizer.getTotalSize() - (lastVirtualItem?.end ?? 0)
-      : estimatedListHeight(listItems.slice(visibleIndexes.length)),
-  );
   const groupOptions = React.useMemo(
     () => buildGroupOptions(columns, defaultGroup),
     [columns, defaultGroup],
   );
   const filterOptions = React.useMemo(
-    () => buildFilterOptions(columns, rows),
-    [columns, rows],
+    () => buildFilterOptions(columns, surface.rows),
+    [columns, surface.rows],
   );
   const activeFilterIds = activeFilterIdsFor(
     dataView.state.filter,
@@ -407,14 +232,14 @@ function ListViewBody<TRow extends Row = Row>({
         groupStack={dataView.state.groupStack}
         groupOptions={groupOptions}
         filterOptions={filterOptions}
-        visibleFields={visibleFields}
+        visibleFields={surface.visibleFields}
         activeFilterIds={activeFilterIds}
         filterText={filterText}
         createLabel={createLabel ?? createLabelForModel(model)}
         onCreate={onCreate}
         onClearGroup={() => dataView.setGroupStack([])}
         onGroupStackChange={dataView.setGroupStack}
-        onVisibleFieldToggle={toggleVisibleField}
+        onVisibleFieldToggle={surface.toggleVisibleField}
         onViewChange={dataView.setView}
         onPageChange={setPage}
         pagerSubject={groupedListMode ? "Groups" : undefined}
@@ -428,24 +253,24 @@ function ListViewBody<TRow extends Row = Row>({
           dataView.setFilter(nextTextFilter(dataView.state.filter, value))
         }
       />
-      {selectedIds.size > 0 ? (
+      {surface.selectedIds.size > 0 ? (
         <SelectionBar
-          count={selectedIds.size}
+          count={surface.selectedIds.size}
           onClear={dataView.clearSelectedIds}
         />
       ) : null}
       {groupedListMode ? (
         <GroupedListBody
           model={model}
-          table={table}
-          tableColumns={tableColumns}
-          columnVisibility={columnVisibility}
-          visibleColumnCount={visibleColumnCount}
+          table={surface.table}
+          tableColumns={surface.tableColumns}
+          columnVisibility={surface.columnVisibility}
+          visibleColumnCount={surface.visibleColumnCount}
           dataView={dataView}
           groupDimensions={groupDimensions}
-          requestedFields={requestedFields}
-          mergedFilter={mergedFilter}
-          sortOrder={sortOrder}
+          requestedFields={surface.requestedFields}
+          mergedFilter={surface.mergedFilter}
+          sortOrder={surface.sortOrder}
           order={order}
           interactive={interactive}
           rowHref={rowHref}
@@ -453,100 +278,39 @@ function ListViewBody<TRow extends Row = Row>({
           emptyMessage={emptyMessage}
           onPagerStateChange={handleGroupPagerStateChange}
         />
-      ) : list.error ? (
+      ) : surface.list.error ? (
         <div className="px-3 py-6 text-13 text-danger-text">
-          {list.error.message}
+          {surface.list.error.message}
         </div>
       ) : dataView.state.view === "board" ? (
         <BoardRows
           columns={columns}
-          groups={groupedRows}
+          groups={surface.groupedRows}
           groupStack={dataView.state.groupStack}
           emptyMessage={emptyMessage}
           rowHref={rowHref}
           onRowClick={onRowClick}
         />
       ) : (
-        <div
-          ref={tableScrollRef}
-          className="overflow-auto"
-          style={TABLE_SCROLL_STYLE}
-        >
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((group) => (
-                <TableRow key={group.id}>
-                  <TableHead sticky className="w-8">
-                    <Checkbox
-                      size="sm"
-                      aria-label="Select all rows on this page"
-                      checked={allPageSelected}
-                      indeterminate={!allPageSelected && somePageSelected}
-                      onCheckedChange={(checked) =>
-                        setPageSelection(dataView, pageIds, checked)
-                      }
-                    />
-                  </TableHead>
-                  {group.headers.map((header) => (
-                    <TableHead
-                      sticky
-                      key={header.id}
-                      className={ALIGN_CLASS[alignOf(header.column.columnDef)]}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {rowModels.length === 0 && !list.fetching ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={Math.max(1, visibleColumnCount + 1)}
-                    className="py-8 text-center text-fg-muted"
-                  >
-                    {emptyMessage}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <>
-                  {paddingTop > 0 ? (
-                    <VirtualPaddingRow
-                      height={paddingTop}
-                      colSpan={Math.max(1, visibleColumnCount + 1)}
-                    />
-                  ) : null}
-                  {visibleIndexes.map((index) => {
-                    const item = listItems[index];
-                    return item
-                      ? renderListItem({
-                          item,
-                          colSpan: Math.max(1, visibleColumnCount + 1),
-                          dataView,
-                          interactive,
-                          rowHref,
-                          onRowClick,
-                          groupCounts,
-                        })
-                      : null;
-                  })}
-                  {paddingBottom > 0 ? (
-                    <VirtualPaddingRow
-                      height={paddingBottom}
-                      colSpan={Math.max(1, visibleColumnCount + 1)}
-                    />
-                  ) : null}
-                </>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <FlatListBody
+          table={surface.table}
+          rowModels={surface.rowModels}
+          listItems={surface.listItems}
+          tableScrollRef={surface.tableScrollRef}
+          rowVirtualizer={surface.rowVirtualizer}
+          visibleColumnCount={surface.visibleColumnCount}
+          allPageSelected={surface.allPageSelected}
+          somePageSelected={surface.somePageSelected}
+          onPageSelectionChange={surface.setPageSelection}
+          dataView={dataView}
+          interactive={interactive}
+          rowHref={rowHref}
+          onRowClick={onRowClick}
+          emptyMessage={emptyMessage}
+          fetching={surface.list.fetching}
+        />
       )}
-      {!groupedListMode && list.fetching ? (
+      {!groupedListMode && surface.list.fetching ? (
         <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
           <Spinner size="sm" />
           Loading...
@@ -738,107 +502,6 @@ function laneDotTone<TRow extends Row>(
   return column.tone[label] ?? "default";
 }
 
-function renderListItem<TRow extends Row>({
-  item,
-  colSpan,
-  dataView,
-  interactive,
-  rowHref,
-  onRowClick,
-  groupCounts,
-}: {
-  item: ListRenderItem<TRow>;
-  colSpan: number;
-  dataView: DataViewContextValue;
-  interactive: boolean;
-  rowHref?: (row: TRow) => string;
-  onRowClick?: (row: TRow) => void;
-  groupCounts: ReadonlyMap<string, number>;
-}): React.ReactElement {
-  if (item.kind === "group") {
-    return (
-      <GroupHeader
-        key={`group:${item.group.key}`}
-        label={item.group.label ?? ""}
-        rows={item.group.rows}
-        count={groupCounts.get(groupPathKey(item.group.path))}
-        depth={item.group.depth}
-        colSpan={colSpan}
-      />
-    );
-  }
-  return (
-    <RecordRow
-      key={item.row.id}
-      row={item.row}
-      dataView={dataView}
-      interactive={interactive}
-      rowHref={rowHref}
-      onRowClick={onRowClick}
-    />
-  );
-}
-
-function VirtualPaddingRow({
-  height,
-  colSpan,
-}: {
-  height: number;
-  colSpan: number;
-}): React.ReactElement {
-  return (
-    <TableRow aria-hidden="true" className="border-0">
-      <TableCell
-        colSpan={colSpan}
-        className="p-0"
-        style={{ height }}
-      />
-    </TableRow>
-  );
-}
-
-function GroupHeader<TRow extends Row>({
-  label,
-  rows,
-  count,
-  depth,
-  colSpan,
-}: {
-  label: string;
-  rows: readonly TableRowModel<TRow>[];
-  count: number | undefined;
-  depth: number;
-  colSpan: number;
-}): React.ReactElement {
-  const rowCount = count ?? rows.length;
-  const words = count === undefined
-    ? rows.reduce((total, row) => {
-        const value = readPath(row.original, "wordCount");
-        return total + (typeof value === "number" ? value : 0);
-      }, 0)
-    : 0;
-  return (
-    <TableRow>
-      <TableCell colSpan={colSpan} className="h-8 bg-sheet-2 py-1.5">
-        <div className="flex items-center justify-between gap-3 text-13">
-          <span
-            className="inline-flex items-center gap-2 font-semibold text-fg"
-            style={{ paddingLeft: `${depth * 1.25}rem` }}
-          >
-            <span>{label}</span>
-            <span className="font-normal text-fg-muted">
-              {rowCount.toLocaleString()}
-            </span>
-          </span>
-          <span className="text-fg-muted">
-            {words > 0 ? `${words.toLocaleString()} words` : ""}
-          </span>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-}
-
 function SelectionBar({
   count,
   onClear,
@@ -856,126 +519,9 @@ function SelectionBar({
   );
 }
 
-function groupRows<TRow extends Row>(
-  rows: readonly TableRowModel<TRow>[],
-  groupStack: readonly DataViewGroup[],
-  depth = 0,
-  parentPath: readonly string[] = [],
-): readonly RowGroup<TRow>[] {
-  const [group, ...rest] = groupStack;
-  if (!group) {
-    return [{
-      key: groupPathKey(parentPath) || "root",
-      label: null,
-      path: parentPath,
-      depth,
-      rows,
-      children: [],
-    }];
-  }
-  const groups = new Map<string, TableRowModel<TRow>[]>();
-  for (const row of rows) {
-    const key = groupKey(readPath(row.original, group.field), group);
-    const next = groups.get(key) ?? [];
-    next.push(row);
-    groups.set(key, next);
-  }
-  return [...groups.entries()].map(([label, groupRows]) => {
-    const path = [...parentPath, label];
-    return {
-      key: groupPathKey(path),
-      label,
-      path,
-      depth,
-      rows: groupRows,
-      children: groupRows.length > 0
-        ? groupRowsByRest(groupRows, rest, depth + 1, path)
-        : [],
-    };
-  });
-}
-
-function groupRowsByRest<TRow extends Row>(
-  rows: readonly TableRowModel<TRow>[],
-  groupStack: readonly DataViewGroup[],
-  depth: number,
-  parentPath: readonly string[],
-): readonly RowGroup<TRow>[] {
-  return groupRows(rows, groupStack, depth, parentPath).filter(
-    (group) => group.label !== null || group.children.length > 0,
-  );
-}
-
-function flattenListItems<TRow extends Row>(
-  groups: readonly RowGroup<TRow>[],
-): ListRenderItem<TRow>[] {
-  const output: ListRenderItem<TRow>[] = [];
-  for (const group of groups) {
-    if (group.label !== null) output.push({ kind: "group", group });
-    if (group.children.length > 0) {
-      output.push(...flattenListItems(group.children));
-    } else {
-      for (const row of group.rows) output.push({ kind: "row", row });
-    }
-  }
-  return output;
-}
-
-function estimatedListHeight<TRow extends Row>(
-  items: readonly ListRenderItem<TRow>[],
-): number {
-  return items.reduce(
-    (height, item) =>
-      height + (item.kind === "group" ? GROUP_ROW_HEIGHT : RECORD_ROW_HEIGHT),
-    0,
-  );
-}
-
 function flattenLeaves<TRow extends Row>(group: RowGroup<TRow>): RowGroup<TRow>[] {
   if (group.children.length === 0) return [group];
   return group.children.flatMap(flattenLeaves);
-}
-
-function buildGroupCountMap(
-  buckets: readonly AggregateBucket[],
-  groupStack: readonly DataViewGroup[],
-): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-  if (groupStack.length === 0) return counts;
-  for (const bucket of buckets) {
-    const labels: string[] = [];
-    for (const label of bucketValueLabels(bucket, groupStack)) {
-      labels.push(label);
-      const key = groupPathKey(labels);
-      counts.set(key, (counts.get(key) ?? 0) + bucket.count);
-    }
-  }
-  return counts;
-}
-
-function groupPathKey(path: readonly string[]): string {
-  return JSON.stringify(path);
-}
-
-function setPageSelection(
-  dataView: DataViewContextValue,
-  ids: readonly string[],
-  checked: boolean,
-): void {
-  const next = new Set(dataView.state.selectedIds);
-  for (const id of ids) {
-    if (checked) next.add(id);
-    else next.delete(id);
-  }
-  dataView.setSelectedIds(next);
-}
-
-function mergeFilters(
-  base: UseResourceListOptions<ResourceTypeName>["filter"],
-  view: DataViewFilter,
-): UseResourceListOptions<ResourceTypeName>["filter"] {
-  if (!base) return Object.keys(view).length > 0 ? view : undefined;
-  return { ...base, ...view };
 }
 
 function buildGroupOptions<TRow extends Row>(

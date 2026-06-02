@@ -9,7 +9,9 @@ import {
   type Column as TableColumn,
   type ColumnDef,
   type Row as TableRowModel,
+  type Table as TableModel,
 } from "@tanstack/react-table";
+import type { Virtualizer } from "@tanstack/react-virtual";
 import { useNavigate } from "@tanstack/react-router";
 import type {
   AggregateBucket,
@@ -27,7 +29,11 @@ import { Badge } from "../ui/badge";
 import { Checkbox } from "../ui/checkbox";
 import { Chip } from "../ui/chip";
 import {
+  Table,
+  TableBody,
   TableCell,
+  TableHead,
+  TableHeader,
   TableRow,
 } from "../ui/table";
 import type { DataViewContextValue } from "./data-view-context";
@@ -64,6 +70,134 @@ export const TABLE_SCROLL_STYLE: React.CSSProperties = {
 };
 export const GROUP_ROW_HEIGHT = 32;
 export const RECORD_ROW_HEIGHT = 40;
+
+export interface FlatListBodyProps<TRow extends Row> {
+  table: TableModel<TRow>;
+  rowModels: readonly TableRowModel<TRow>[];
+  listItems: readonly ListRenderItem<TRow>[];
+  tableScrollRef: React.RefObject<HTMLDivElement | null>;
+  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  visibleColumnCount: number;
+  allPageSelected: boolean;
+  somePageSelected: boolean;
+  onPageSelectionChange: (checked: boolean) => void;
+  dataView: DataViewContextValue;
+  interactive: boolean;
+  rowHref?: (row: TRow) => string;
+  onRowClick?: (row: TRow) => void;
+  emptyMessage: React.ReactNode;
+  fetching: boolean;
+}
+
+export function FlatListBody<TRow extends Row>({
+  table,
+  rowModels,
+  listItems,
+  tableScrollRef,
+  rowVirtualizer,
+  visibleColumnCount,
+  allPageSelected,
+  somePageSelected,
+  onPageSelectionChange,
+  dataView,
+  interactive,
+  rowHref,
+  onRowClick,
+  emptyMessage,
+  fetching,
+}: FlatListBodyProps<TRow>): React.ReactElement {
+  const colSpan = Math.max(1, visibleColumnCount + 1);
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const visibleIndexes = virtualItems.length > 0
+    ? virtualItems.map((item) => item.index)
+    : listItems.slice(0, Math.min(listItems.length, 20)).map((_, index) => index);
+  const firstVirtualItem = virtualItems[0];
+  const lastVirtualItem = virtualItems[virtualItems.length - 1];
+  const paddingTop = firstVirtualItem?.start ?? 0;
+  const paddingBottom = Math.max(
+    0,
+    virtualItems.length > 0
+      ? rowVirtualizer.getTotalSize() - (lastVirtualItem?.end ?? 0)
+      : estimatedListHeight(listItems.slice(visibleIndexes.length)),
+  );
+  return (
+    <div
+      ref={tableScrollRef}
+      className="overflow-auto"
+      style={TABLE_SCROLL_STYLE}
+    >
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((group) => (
+            <TableRow key={group.id}>
+              <TableHead sticky className="w-8">
+                <Checkbox
+                  size="sm"
+                  aria-label="Select all rows on this page"
+                  checked={allPageSelected}
+                  indeterminate={!allPageSelected && somePageSelected}
+                  onCheckedChange={onPageSelectionChange}
+                />
+              </TableHead>
+              {group.headers.map((header) => (
+                <TableHead
+                  sticky
+                  key={header.id}
+                  className={ALIGN_CLASS[alignOf(header.column.columnDef)]}
+                >
+                  {flexRender(
+                    header.column.columnDef.header,
+                    header.getContext(),
+                  )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {rowModels.length === 0 && !fetching ? (
+            <TableRow>
+              <TableCell
+                colSpan={colSpan}
+                className="py-8 text-center text-fg-muted"
+              >
+                {emptyMessage}
+              </TableCell>
+            </TableRow>
+          ) : (
+            <>
+              {paddingTop > 0 ? (
+                <VirtualPaddingRow
+                  height={paddingTop}
+                  colSpan={colSpan}
+                />
+              ) : null}
+              {visibleIndexes.map((index) => {
+                const item = listItems[index];
+                return item
+                  ? renderListItem({
+                      item,
+                      colSpan,
+                      dataView,
+                      interactive,
+                      rowHref,
+                      onRowClick,
+                    })
+                  : null;
+              })}
+              {paddingBottom > 0 ? (
+                <VirtualPaddingRow
+                  height={paddingBottom}
+                  colSpan={colSpan}
+                />
+              ) : null}
+            </>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 export function buildColumns<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
@@ -258,6 +392,110 @@ function PlainRecordRow<TRow extends Row>({
         </TableCell>
       ))}
     </TableRow>
+  );
+}
+
+function renderListItem<TRow extends Row>({
+  item,
+  colSpan,
+  dataView,
+  interactive,
+  rowHref,
+  onRowClick,
+}: {
+  item: ListRenderItem<TRow>;
+  colSpan: number;
+  dataView: DataViewContextValue;
+  interactive: boolean;
+  rowHref?: (row: TRow) => string;
+  onRowClick?: (row: TRow) => void;
+}): React.ReactElement {
+  if (item.kind === "group") {
+    return (
+      <GroupHeader
+        key={`group:${item.group.key}`}
+        label={item.group.label ?? ""}
+        rows={item.group.rows}
+        depth={item.group.depth}
+        colSpan={colSpan}
+      />
+    );
+  }
+  return (
+    <RecordRow
+      key={item.row.id}
+      row={item.row}
+      dataView={dataView}
+      interactive={interactive}
+      rowHref={rowHref}
+      onRowClick={onRowClick}
+    />
+  );
+}
+
+function VirtualPaddingRow({
+  height,
+  colSpan,
+}: {
+  height: number;
+  colSpan: number;
+}): React.ReactElement {
+  return (
+    <TableRow aria-hidden="true" className="border-0">
+      <TableCell
+        colSpan={colSpan}
+        className="p-0"
+        style={{ height }}
+      />
+    </TableRow>
+  );
+}
+
+function GroupHeader<TRow extends Row>({
+  label,
+  rows,
+  depth,
+  colSpan,
+}: {
+  label: string;
+  rows: readonly TableRowModel<TRow>[];
+  depth: number;
+  colSpan: number;
+}): React.ReactElement {
+  const rowCount = rows.length;
+  const words = rows.reduce((total, row) => {
+    const value = readPath(row.original, "wordCount");
+    return total + (typeof value === "number" ? value : 0);
+  }, 0);
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan} className="h-8 bg-sheet-2 py-1.5">
+        <div className="flex items-center justify-between gap-3 text-13">
+          <span
+            className="inline-flex items-center gap-2 font-semibold text-fg"
+            style={{ paddingLeft: `${depth * 1.25}rem` }}
+          >
+            <span>{label}</span>
+            <span className="font-normal text-fg-muted">
+              {rowCount.toLocaleString()}
+            </span>
+          </span>
+          <span className="text-fg-muted">
+            {words > 0 ? `${words.toLocaleString()} words` : ""}
+          </span>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function estimatedListHeight<TRow extends Row>(
+  items: readonly ListRenderItem<TRow>[],
+): number {
+  return items.reduce(
+    (height, item) =>
+      height + (item.kind === "group" ? GROUP_ROW_HEIGHT : RECORD_ROW_HEIGHT),
+    0,
   );
 }
 
