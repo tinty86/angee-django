@@ -90,5 +90,21 @@ export class NotesPage extends PageObject {
   async openFirstNote(): Promise<void> {
     await this.rows.first().click();
     await this.page.waitForURL(/\/notes\/.+/, { timeout: 10000 });
+    await this.page.locator(".cm-content").first().waitFor({ timeout: 15000 });
+  }
+
+  // --- record form (dirty-save) ---
+  get saveButton(): Locator {
+    return this.page.getByRole("button", { name: /^Save$/ });
+  }
+  get discardButton(): Locator {
+    return this.page.getByRole("button", { name: /^Discard$/ });
+  }
+
+  /** Type into the markdown body to mark the form dirty. */
+  async editBody(text: string): Promise<void> {
+    const body = this.page.locator(".cm-content").first();
+    await body.click();
+    await this.page.keyboard.type(text);
   }
 }
