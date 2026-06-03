@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any, cast
 
 from asgiref.sync import sync_to_async
@@ -21,6 +22,25 @@ from angee.iam.oidc.errors import (
     INVALID_STATE,
     OidcFlowError,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class LoginCompletion:
+    """Resolved user and verified claims from one completed OIDC login flow."""
+
+    user: AbstractBaseUser
+    claims: dict[str, Any]
+    next_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class LinkCompletion:
+    """Linked account, captured user, and verified claims from one OIDC link flow."""
+
+    account: models.Model
+    user: AbstractBaseUser
+    claims: dict[str, Any]
+    next_path: str
 
 
 def resolve(oauth_client: Any, *, sub: str, email: str | None, claims: dict[str, Any]) -> AbstractBaseUser:
@@ -102,8 +122,8 @@ def complete_login(
     code: str,
     state_token: str,
     redirect_uri: str,
-) -> AbstractBaseUser:
-    """Complete an OIDC login redirect and return the resolved IAM user."""
+) -> LoginCompletion:
+    """Complete an OIDC login redirect and return the resolved user with claims."""
 
     record = state.consume(state_token)
     _validate_state_record(oauth_client, record, redirect_uri)
@@ -122,7 +142,8 @@ def complete_login(
     sub = claims.get("sub")
     if not sub:
         raise OidcFlowError(INVALID_ID_TOKEN, 400)
-    return resolve(oauth_client, sub=str(sub), email=_claim_email(claims), claims=claims)
+    user = resolve(oauth_client, sub=str(sub), email=_claim_email(claims), claims=claims)
+    return LoginCompletion(user=user, claims=claims, next_path=_record_next_path(record))
 
 
 async def acomplete_login(
@@ -131,7 +152,7 @@ async def acomplete_login(
     code: str,
     state_token: str,
     redirect_uri: str,
-) -> AbstractBaseUser:
+) -> LoginCompletion:
     """Async wrapper for ``complete_login`` that keeps sync ORM work thread-sensitive."""
 
     return await sync_to_async(complete_login, thread_sensitive=True)(
@@ -149,8 +170,8 @@ def complete_link(
     code: str,
     state_token: str,
     redirect_uri: str,
-) -> models.Model:
-    """Complete an authenticated account-link redirect and return the external account."""
+) -> LinkCompletion:
+    """Complete an authenticated account-link redirect and return the linked account."""
 
     del user
     record = state.consume(state_token)
@@ -189,14 +210,22 @@ def complete_link(
             identity_claims=claims,
             display_name=_display_name(claims, email),
         )
-        Credential.objects.upsert_for_user(
+        credential = Credential.objects.upsert_for_user(
             link_user,
             oauth_client,
             "oauth",
             tokens,
             external_account=account,
         )
-    return cast(models.Model, account)
+        account.credentials_provider = oauth_client
+        account.credential = credential
+        account.save(update_fields=["credentials_provider", "credential", "updated_at"])
+    return LinkCompletion(
+        account=cast(models.Model, account),
+        user=link_user,
+        claims=claims,
+        next_path=_record_next_path(record),
+    )
 
 
 async def acomplete_link(
@@ -206,7 +235,7 @@ async def acomplete_link(
     code: str,
     state_token: str,
     redirect_uri: str,
-) -> models.Model:
+) -> LinkCompletion:
     """Async wrapper for ``complete_link`` that keeps sync ORM work thread-sensitive."""
 
     return await sync_to_async(complete_link, thread_sensitive=True)(
@@ -314,6 +343,12 @@ def _claim_email(claims: dict[str, Any]) -> str | None:
 
     value = claims.get("email")
     return str(value) if value else None
+
+
+def _record_next_path(record: state.StateRecord) -> str:
+    """Return the stored post-flow redirect path with the public default."""
+
+    return record.next_path or "/"
 
 
 def _link_state_user(record: state.StateRecord) -> AbstractBaseUser:

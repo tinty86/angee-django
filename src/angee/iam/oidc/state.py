@@ -26,6 +26,7 @@ class StateRecord:
     nonce: str
     code_verifier: str | None
     created_at: datetime
+    next_path: str = ""
 
 
 def issue(
@@ -33,6 +34,7 @@ def issue(
     redirect_uri: str,
     *,
     user_id: str | None = None,
+    next_path: str = "",
 ) -> tuple[str, StateRecord]:
     """Create and cache one single-use OIDC state record."""
 
@@ -48,6 +50,7 @@ def issue(
         if getattr(oauth_client, "supports_pkce", False)
         else None,
         created_at=timezone.now(),
+        next_path=next_path,
     )
     cache.set(_cache_key(state_token), record, timeout=_state_ttl_seconds())
     return state_token, record

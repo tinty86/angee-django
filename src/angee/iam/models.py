@@ -318,6 +318,20 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
     email = models.EmailField(blank=True)
     display_name = models.CharField(max_length=255, blank=True)
     avatar_url = models.URLField(blank=True)
+    credentials_provider = models.ForeignKey(
+        "iam.OAuthClient",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    credential = models.ForeignKey(
+        "iam.Credential",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     status = StateField(choices_enum=AccountStatus, default=AccountStatus.ACTIVE)
     capability_statuses = models.JSONField(default=dict)
     identity_claims = models.JSONField(default=dict)
@@ -346,6 +360,13 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
 
         vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
         return f"{vendor_slug}:{self.external_id}"
+
+    @property
+    def credential_status(self) -> str:
+        """Return the current OAuth credential status, if this account has one."""
+
+        credential = getattr(self, "credential", None)
+        return "" if credential is None else str(getattr(credential, "status", "") or "")
 
     def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
         """Record one capability contribution, recompute this account, and persist.
@@ -542,6 +563,36 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
             return self.display_name
         vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
         return f"{vendor_slug} ({self.environment})"
+
+    @property
+    def configuration_state(self) -> str:
+        """Return this OAuth client's operator-facing configuration readiness."""
+
+        if not self.is_enabled:
+            return "disabled"
+        if not self.client_id:
+            return "needs_client"
+        if not self.discovery_url and not (self.authorize_endpoint and self.token_endpoint):
+            return "needs_endpoints"
+        return "ready"
+
+    @property
+    def vendor_label(self) -> str:
+        """Return the linked vendor display label."""
+
+        vendor = getattr(self, "vendor", None)
+        if vendor is None:
+            return ""
+        return str(getattr(vendor, "display_name", "") or "")
+
+    @property
+    def vendor_slug(self) -> str:
+        """Return the linked vendor slug."""
+
+        vendor = getattr(self, "vendor", None)
+        if vendor is None:
+            return ""
+        return str(getattr(vendor, "slug", "") or "")
 
 
 class CredentialManager(RebacManager):

@@ -16,10 +16,12 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.utils.http import url_has_allowed_host_and_scheme
 from rebac import PermissionDenied, system_context
 from rebac.managers import RebacManager
 from strawberry import auto, relay
 from strawberry.permission import BasePermission
+from strawberry.scalars import JSON
 
 from angee.base.deletion import DeletionPreview
 from angee.base.graphql import AngeeNode, OffsetPaginated
@@ -29,7 +31,7 @@ from angee.iam import identity
 from angee.iam.credentials import CredentialKind
 from angee.iam.oidc import client as client_module
 from angee.iam.oidc import state
-from angee.iam.oidc.errors import OidcFlowError
+from angee.iam.oidc.errors import INVALID_STATE, OidcFlowError
 
 try:
     User = apps.get_model("iam", "User")
@@ -112,6 +114,24 @@ class OAuthClientType(AngeeNode):
 
         return _string_list(cast(Any, self).allowed_email_domains)
 
+    @strawberry_django.field
+    def configuration_state(self) -> str:
+        """Return this OAuth client's operator-facing configuration readiness."""
+
+        return str(cast(Any, self).configuration_state)
+
+    @strawberry_django.field
+    def vendor_label(self) -> str:
+        """Return the linked vendor display label."""
+
+        return str(cast(Any, self).vendor_label)
+
+    @strawberry_django.field
+    def vendor_slug(self) -> str:
+        """Return the linked vendor slug."""
+
+        return str(cast(Any, self).vendor_slug)
+
 
 @strawberry_django.type(ExternalAccount)
 class ExternalAccountType(AngeeNode):
@@ -126,6 +146,12 @@ class ExternalAccountType(AngeeNode):
     last_used_at: auto
     created_at: auto
     updated_at: auto
+
+    @strawberry_django.field
+    def credential_status(self) -> str:
+        """Return the current OAuth credential status, if this account has one."""
+
+        return str(cast(Any, self).credential_status)
 
 
 @strawberry_django.type(Credential)
@@ -191,8 +217,10 @@ class AvailableConnection:
 class OidcStartPayload:
     """Result returned by OIDC login/link start mutations."""
 
-    authorize_url: str
-    state: str
+    authorize_url: str = ""
+    state: str = ""
+    error: str | None = None
+    error_code: str | None = None
 
 
 @strawberry.type
@@ -201,6 +229,41 @@ class LoginPayload:
 
     ok: bool
     user: UserType | None = None
+
+
+@strawberry.type
+class LoginCompletePayload:
+    """Result returned by OIDC login completion."""
+
+    ok: bool
+    user: UserType | None = None
+    intent: str = "login"
+    next: str = "/"
+    claims: JSON | None = None
+    error: str | None = None
+    error_code: str | None = None
+
+
+@strawberry.type
+class LinkAccountResult:
+    """Result returned by OIDC account-link completion."""
+
+    account: ExternalAccountType | None = None
+    user: UserType | None = None
+    intent: str = ""
+    next: str = "/"
+    claims: JSON | None = None
+    error: str | None = None
+    error_code: str | None = None
+
+
+@strawberry.type
+class UnlinkAccountResult:
+    """Result returned by account unlink mutation."""
+
+    ok: bool
+    error: str | None = None
+    error_code: str | None = None
 
 
 @strawberry.input
@@ -313,12 +376,15 @@ _ADMIN_PERMISSION_CLASSES: list[type[BasePermission]] = [PlatformAdminPermission
 def _available_connections(
     info: strawberry.Info,
 ) -> QuerySet[Any]:
-    """Return enabled OAuth clients for the public connection picker."""
+    """Return enabled and configured OIDC clients for the public connection picker."""
 
     del info
     return cast(
         QuerySet[Any],
-        OAuthClient.objects.system_context(reason="iam.graphql.available_connections").filter(is_enabled=True),
+        OAuthClient.objects.system_context(reason="iam.graphql.available_connections")
+        .filter(is_enabled=True, is_oidc=True)
+        .exclude(client_id="")
+        .exclude(discovery_url="", authorize_endpoint=""),
     )
 
 
@@ -333,7 +399,7 @@ def _my_connected_accounts(
         Credential.objects.filter(
             user=user,
             external_account__isnull=False,
-        ).rebac_select_related("external_account"),
+        ).rebac_select_related("external_account", "external_account__credential"),
     )
 
 
@@ -352,7 +418,7 @@ def _console_external_accounts(
     """Return admin-visible external accounts with guarded vendor joins."""
 
     del info
-    return cast(QuerySet[Any], ExternalAccount.objects.rebac_select_related("vendor"))
+    return cast(QuerySet[Any], ExternalAccount.objects.rebac_select_related("vendor", "credential"))
 
 
 def _console_credentials(
@@ -467,11 +533,21 @@ class IAMMutation:
         info: strawberry.Info,
         oauth_client_sqid: str,
         redirect_uri: str,
+        next: str = "/",
     ) -> OidcStartPayload:
         """Start an OIDC login flow for an enabled login-capable OAuth client."""
 
-        oauth_client = _enabled_oidc_oauth_client(oauth_client_sqid)
-        return _start_oidc_flow(_request(info), oauth_client, redirect_uri)
+        request = _request(info)
+        try:
+            oauth_client = _enabled_oidc_oauth_client(oauth_client_sqid)
+            return _start_oidc_flow(
+                request,
+                oauth_client,
+                redirect_uri,
+                next_path=_coerce_next_path(next, request),
+            )
+        except OidcFlowError as error:
+            return _oidc_start_error(error)
 
     @strawberry.mutation
     def login_complete(
@@ -480,20 +556,28 @@ class IAMMutation:
         code: str,
         state: str,
         redirect_uri: str,
-    ) -> LoginPayload:
+    ) -> LoginCompletePayload:
         """Complete an OIDC login flow and bind the user to the session."""
 
         request = _request(info)
-        oauth_client = _oauth_client_for_remembered_state(request, state)
-        user = identity.complete_login(
-            oauth_client,
-            code=code,
-            state_token=state,
-            redirect_uri=redirect_uri,
+        try:
+            oauth_client = _oauth_client_for_remembered_state(request, state)
+            result = identity.complete_login(
+                oauth_client,
+                code=code,
+                state_token=state,
+                redirect_uri=redirect_uri,
+            )
+            with system_context(reason="iam.oidc.login"):
+                auth_login(request, result.user)
+        except OidcFlowError as error:
+            return LoginCompletePayload(ok=False, error=str(error), error_code=error.code)
+        return LoginCompletePayload(
+            ok=True,
+            user=cast(UserType, result.user),
+            next=result.next_path,
+            claims=cast(JSON, result.claims),
         )
-        with system_context(reason="iam.oidc.login"):
-            auth_login(request, user)
-        return LoginPayload(ok=True, user=cast(UserType, user))
 
     @strawberry.mutation
     def link_account_start(
@@ -501,17 +585,23 @@ class IAMMutation:
         info: strawberry.Info,
         oauth_client_sqid: str,
         redirect_uri: str,
+        next: str = "/",
     ) -> OidcStartPayload:
         """Start an authenticated OIDC account-link flow."""
 
         user = _session_user(info)
-        oauth_client = _enabled_oidc_oauth_client(oauth_client_sqid)
-        return _start_oidc_flow(
-            _request(info),
-            oauth_client,
-            redirect_uri,
-            user_id=str(user.pk),
-        )
+        request = _request(info)
+        try:
+            oauth_client = _enabled_oidc_oauth_client(oauth_client_sqid)
+            return _start_oidc_flow(
+                request,
+                oauth_client,
+                redirect_uri,
+                user_id=str(user.pk),
+                next_path=_coerce_next_path(next, request),
+            )
+        except OidcFlowError as error:
+            return _oidc_start_error(error)
 
     @strawberry.mutation
     def link_account_complete(
@@ -520,55 +610,67 @@ class IAMMutation:
         code: str,
         state: str,
         redirect_uri: str,
-    ) -> ExternalAccountType:
+    ) -> LinkAccountResult:
         """Complete an authenticated OIDC account-link flow."""
 
         request = _request(info)
         _session_user(info)
-        oauth_client = _oauth_client_for_remembered_state(request, state)
-        account = identity.complete_link(
-            oauth_client,
-            code=code,
-            state_token=state,
-            redirect_uri=redirect_uri,
+        try:
+            oauth_client = _oauth_client_for_remembered_state(request, state)
+            result = identity.complete_link(
+                oauth_client,
+                code=code,
+                state_token=state,
+                redirect_uri=redirect_uri,
+            )
+        except OidcFlowError as error:
+            return LinkAccountResult(error=str(error), error_code=error.code)
+        return LinkAccountResult(
+            account=cast(ExternalAccountType, result.account),
+            user=cast(UserType, result.user),
+            intent="link",
+            next=result.next_path,
+            claims=cast(JSON, result.claims),
         )
-        return cast(ExternalAccountType, account)
 
     @strawberry.mutation
     def unlink_account(
         self,
         info: strawberry.Info,
         external_account_sqid: str,
-    ) -> bool:
+    ) -> UnlinkAccountResult:
         """Remove this session user's credential link to an external account."""
 
         user = _session_user(info)
-        with system_context(reason="iam.graphql.unlink_account.lookup"):
-            credential = (
-                Credential.objects.select_related(
-                    "oauth_client",
-                    "external_account",
+        try:
+            with system_context(reason="iam.graphql.unlink_account.lookup"):
+                credential = (
+                    Credential.objects.select_related(
+                        "oauth_client",
+                        "external_account",
+                    )
+                    .filter(
+                        user=user,
+                        external_account__sqid=external_account_sqid,
+                    )
+                    .first()
                 )
-                .filter(
-                    user=user,
-                    external_account__sqid=external_account_sqid,
+            if credential is None:
+                return UnlinkAccountResult(ok=False)
+            if _would_remove_only_oidc_sign_in_method(user, credential):
+                raise OidcFlowError("only_sign_in_method", 409)
+            _revoke_remote_oauth_token(credential)
+            external_account = credential.external_account
+            with system_context(reason="iam.graphql.unlink_account"), transaction.atomic():
+                revoke_owner(external_account, user)
+                deleted, _details = (
+                    Credential.objects.filter(pk=credential.pk)
+                    .with_action("delete")
+                    .delete()
                 )
-                .first()
-            )
-        if credential is None:
-            return False
-        if _would_remove_only_oidc_sign_in_method(user, credential):
-            raise OidcFlowError("only_sign_in_method", 409)
-        _revoke_remote_oauth_token(credential)
-        external_account = credential.external_account
-        with system_context(reason="iam.graphql.unlink_account"), transaction.atomic():
-            revoke_owner(external_account, user)
-            deleted, _details = (
-                Credential.objects.filter(pk=credential.pk)
-                .with_action("delete")
-                .delete()
-            )
-        return deleted > 0
+            return UnlinkAccountResult(ok=deleted > 0)
+        except OidcFlowError as error:
+            return UnlinkAccountResult(ok=False, error=str(error), error_code=error.code)
 
 
 def _would_remove_only_oidc_sign_in_method(user: Any, credential: Any) -> bool:
@@ -709,10 +811,16 @@ def _start_oidc_flow(
     redirect_uri: str,
     *,
     user_id: str | None = None,
+    next_path: str = "/",
 ) -> OidcStartPayload:
     """Issue state, remember its OAuth client, and return the authorize URL."""
 
-    state_token, record = state.issue(oauth_client, redirect_uri, user_id=user_id)
+    state_token, record = state.issue(
+        oauth_client,
+        redirect_uri,
+        user_id=user_id,
+        next_path=next_path,
+    )
     _remember_flow_oauth_client(request, state_token, oauth_client)
     authorize_url = client_module.build_authorize_url(
         oauth_client,
@@ -723,6 +831,26 @@ def _start_oidc_flow(
         code_challenge=_pkce_challenge(record.code_verifier),
     )
     return OidcStartPayload(authorize_url=authorize_url, state=state_token)
+
+
+def _oidc_start_error(error: OidcFlowError) -> OidcStartPayload:
+    """Return a typed start-flow error payload."""
+
+    return OidcStartPayload(error=str(error), error_code=error.code)
+
+
+def _coerce_next_path(value: str, request: HttpRequest) -> str:
+    """Return a same-host post-flow redirect path, defaulting unsafe values to ``/``."""
+
+    if not value:
+        return "/"
+    if url_has_allowed_host_and_scheme(
+        value,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return value
+    return "/"
 
 
 def _remember_flow_oauth_client(
@@ -748,7 +876,7 @@ def _oauth_client_for_remembered_state(
     oauth_client_sqid = session.pop(key, None)
     session.modified = True
     if not oauth_client_sqid:
-        raise ValueError("OIDC state is not bound to this session.")
+        raise OidcFlowError(INVALID_STATE, 400)
     return _enabled_oidc_oauth_client(str(oauth_client_sqid))
 
 
@@ -849,6 +977,9 @@ schemas = {
             AvailableConnection,
             AvailableConnectionVendor,
             OidcStartPayload,
+            LoginCompletePayload,
+            LinkAccountResult,
+            UnlinkAccountResult,
         ],
     },
     "console": {
@@ -863,6 +994,9 @@ schemas = {
             AvailableConnection,
             AvailableConnectionVendor,
             OidcStartPayload,
+            LoginCompletePayload,
+            LinkAccountResult,
+            UnlinkAccountResult,
         ],
     },
 }

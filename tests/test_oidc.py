@@ -482,16 +482,21 @@ def test_complete_link_populates_credential_token_fields(
     monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: {})
 
     before = timezone.now()
-    account = identity.complete_link(
+    result = identity.complete_link(
         oauth_client,
         link_user,
         code="code",
         state_token=state_token,
         redirect_uri="https://app.example/callback",
     )
+    account = result.account
 
     with system_context(reason="test oidc assertions"):
         credential = Credential.objects.get(user=link_user, oauth_client=oauth_client, external_account=account)
+    account.refresh_from_db()
+    assert account.credentials_provider_id == oauth_client.pk
+    assert account.credential_id == credential.pk
+    assert account.credential_status == "active"
     assert credential.expires_at is not None
     assert before + timedelta(seconds=119) <= credential.expires_at <= timezone.now() + timedelta(seconds=121)
     assert credential.granted_scopes == ["openid", "email", "profile"]
@@ -565,15 +570,21 @@ def test_userinfo_claims_merge_into_login_and_link_claims(
     monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: userinfo_claims)
     monkeypatch.setattr(identity, "resolve", resolve_user)
 
-    login_state, _login_record = oidc_state.issue(oauth_client, "https://app.example/callback")
-    resolved = identity.complete_login(
+    login_state, _login_record = oidc_state.issue(
+        oauth_client,
+        "https://app.example/callback",
+        next_path="/login-next",
+    )
+    login_result = identity.complete_login(
         oauth_client,
         code="code",
         state_token=login_state,
         redirect_uri="https://app.example/callback",
     )
 
-    assert resolved.pk == link_user.pk
+    assert login_result.user.pk == link_user.pk
+    assert login_result.claims == expected_claims
+    assert login_result.next_path == "/login-next"
     assert captured["oauth_client"] == oauth_client
     assert captured["sub"] == "sub-merged"
     assert captured["email"] == "id-token@example.com"
@@ -583,16 +594,21 @@ def test_userinfo_claims_merge_into_login_and_link_claims(
         oauth_client,
         "https://app.example/callback",
         user_id=str(link_user.pk),
+        next_path="/link-next",
     )
-    account = identity.complete_link(
+    link_result = identity.complete_link(
         oauth_client,
         link_user,
         code="code",
         state_token=link_state,
         redirect_uri="https://app.example/callback",
     )
+    account = link_result.account
 
     account.refresh_from_db()
+    assert link_result.user.pk == link_user.pk
+    assert link_result.claims == expected_claims
+    assert link_result.next_path == "/link-next"
     assert account.identity_claims == expected_claims
 
 
@@ -670,13 +686,14 @@ def test_complete_link_binds_to_state_user_after_session_swap(
     )
     monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: {})
 
-    account = identity.complete_link(
+    result = identity.complete_link(
         oauth_client,
         swapped_user,
         code="code",
         state_token=state_token,
         redirect_uri="https://app.example/callback",
     )
+    account = result.account
 
     with system_context(reason="test oidc assertions"):
         owner = ExternalAccount.objects.owner_for(account)
