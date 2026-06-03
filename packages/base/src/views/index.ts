@@ -30,6 +30,18 @@ export {
   type AggregatePanelProps,
   type AggregateDimension,
 } from "./AggregatePanel";
+export {
+  DeletePreviewDialog,
+  type DeletePreviewDialogProps,
+} from "./DeletePreviewDialog";
+export {
+  DeletePreviewTree,
+  type DeletePreviewTreeProps,
+} from "./DeletePreviewTree";
+export {
+  useBulkDelete,
+  type UseBulkDeleteResult,
+} from "./useBulkDelete";
 export * from "./data-view-model";
 export * from "./data-view-context";
 export {

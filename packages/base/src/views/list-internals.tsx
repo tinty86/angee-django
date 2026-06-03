@@ -84,16 +84,33 @@ export const RECORD_ROW_HEIGHT = 40;
 export function SelectionBar({
   count,
   onClear,
+  onDelete,
+  deletePending = false,
 }: {
   count: number;
   onClear: () => void;
+  onDelete?: () => void;
+  deletePending?: boolean;
 }): React.ReactElement {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-brand px-3 py-2 text-13 text-on-brand">
       <span>{count} selected</span>
-      <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-        Clear
-      </Button>
+      <div className="flex items-center gap-2">
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            pending={deletePending}
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        ) : null}
+        <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
     </div>
   );
 }

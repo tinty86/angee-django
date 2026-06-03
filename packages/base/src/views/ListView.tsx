@@ -14,6 +14,7 @@ import {
   useDataViewMaybe,
   type DataViewContextValue,
 } from "./data-view-context";
+import { DeletePreviewDialog } from "./DeletePreviewDialog";
 import { useDataViewSurface } from "./data-view-surface";
 import {
   FlatListBody,
@@ -28,6 +29,7 @@ import {
   nextTextFilter,
   textFilterValue,
 } from "./list-view-utils";
+import { useBulkDelete } from "./useBulkDelete";
 
 export type { ListViewState } from "./data-view-surface";
 export type {
@@ -123,6 +125,11 @@ function ListViewBody<TRow extends Row = Row>({
   );
   const filterText = textFilterValue(dataView.state.filter);
   const interactive = Boolean(onRowClick || rowHref);
+  const bulkDelete = useBulkDelete(
+    model,
+    surface.selectedIds,
+    dataView.clearSelectedIds,
+  );
 
   return (
     <>
@@ -160,6 +167,8 @@ function ListViewBody<TRow extends Row = Row>({
           <SelectionBar
             count={surface.selectedIds.size}
             onClear={dataView.clearSelectedIds}
+            onDelete={bulkDelete.deleteInitiate}
+            deletePending={bulkDelete.isPending}
           />
         ) : null}
         {surface.list.error ? (
@@ -191,6 +200,17 @@ function ListViewBody<TRow extends Row = Row>({
             <Spinner size="sm" />
             Loading...
           </div>
+        ) : null}
+        {bulkDelete.isPreviewOpen && bulkDelete.previewState ? (
+          <DeletePreviewDialog
+            preview={bulkDelete.previewState}
+            recordCount={bulkDelete.previewRecordCount}
+            blockedRecordCount={bulkDelete.previewBlockedRecordCount}
+            overflowCount={bulkDelete.previewOverflowCount}
+            isPending={bulkDelete.isPending}
+            onConfirm={bulkDelete.onConfirm}
+            onCancel={bulkDelete.onCancel}
+          />
         ) : null}
       </div>
     </>

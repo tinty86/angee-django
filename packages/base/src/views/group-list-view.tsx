@@ -22,6 +22,7 @@ import {
   dataViewGroupsEqual,
   type DataViewGroup,
 } from "./data-view-model";
+import { DeletePreviewDialog } from "./DeletePreviewDialog";
 import { useDataViewSurface } from "./data-view-surface";
 import {
   GroupedListBody,
@@ -45,6 +46,7 @@ import {
   textFilterValue,
 } from "./list-view-utils";
 import type { ColumnDescriptor } from "./page";
+import { useBulkDelete } from "./useBulkDelete";
 
 // GroupListView is a superset of the lean list: it owns the grouping-only
 // `defaultGroup` (seeded here, its sole owner — DataPage just forwards it).
@@ -187,6 +189,11 @@ function GroupListViewBody<TRow extends Row = Row>({
 
   const filterText = textFilterValue(dataView.state.filter);
   const interactive = Boolean(onRowClick || rowHref);
+  const bulkDelete = useBulkDelete(
+    model,
+    surface.selectedIds,
+    dataView.clearSelectedIds,
+  );
 
   return (
     <>
@@ -233,6 +240,8 @@ function GroupListViewBody<TRow extends Row = Row>({
           <SelectionBar
             count={surface.selectedIds.size}
             onClear={dataView.clearSelectedIds}
+            onDelete={bulkDelete.deleteInitiate}
+            deletePending={bulkDelete.isPending}
           />
         ) : null}
         {groupedListMode ? (
@@ -295,6 +304,17 @@ function GroupListViewBody<TRow extends Row = Row>({
             <Spinner size="sm" />
             Loading...
           </div>
+        ) : null}
+        {bulkDelete.isPreviewOpen && bulkDelete.previewState ? (
+          <DeletePreviewDialog
+            preview={bulkDelete.previewState}
+            recordCount={bulkDelete.previewRecordCount}
+            blockedRecordCount={bulkDelete.previewBlockedRecordCount}
+            overflowCount={bulkDelete.previewOverflowCount}
+            isPending={bulkDelete.isPending}
+            onConfirm={bulkDelete.onConfirm}
+            onCancel={bulkDelete.onCancel}
+          />
         ) : null}
       </div>
     </>

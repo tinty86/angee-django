@@ -81,10 +81,15 @@ describe("assembleMutationDocument", () => {
   test("delete returns the cascade DeletePreview shape", () => {
     const document = assembleMutationDocument("Sale", "delete", []);
     expect(document).toBe(
-      "mutation deleteSale($id: ID!) { deleteSale(id: $id) { " +
+      "mutation deleteSale($id: ID!, $confirm: Boolean) { deleteSale(id: $id, confirm: $confirm) { " +
         "totalDeletedCount hasBlockers " +
-        "deleted { label count } updated { label count } blocked { label count } } }",
+        "deleted { label count } updated { label count } blocked { label count } " +
+        "root { label objectLabel objectId " +
+        "children { label objectLabel objectId " +
+        "children { label objectLabel objectId } } } } }",
     );
+    expect(document).toContain("confirm: $confirm");
+    expect(document).toContain("root { label objectLabel objectId");
     expectValid(document);
   });
 });

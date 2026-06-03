@@ -33,7 +33,7 @@ import {
   Breadcrumb,
   BreadcrumbProvider,
 } from "../chrome/Breadcrumb";
-import { ModalsHost } from "../feedback";
+import { ModalsHost, ToastProvider } from "../feedback";
 import { parseFlatSearch, stringifyFlatSearch } from "../createApp";
 import { DataPage } from "./DataPage";
 import type { FormField } from "./FormView";
@@ -824,7 +824,9 @@ function TestUrlState({
 function TestUrlStateRoot(): ReactElement {
   return (
     <ModalsHost>
-      <Outlet />
+      <ToastProvider>
+        <Outlet />
+      </ToastProvider>
     </ModalsHost>
   );
 }

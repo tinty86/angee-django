@@ -195,11 +195,14 @@ export function assembleListDocument(
 
 export type MutationAction = "create" | "update" | "delete";
 
-// The cascade summary a delete returns: counts grouped by model label, plus
-// whether anything blocked the delete.
+// The cascade summary a delete returns: counts grouped by model label, plus a
+// bounded tree of records the backend would delete.
 const DELETE_PREVIEW_SELECTION =
   "totalDeletedCount hasBlockers " +
-  "deleted { label count } updated { label count } blocked { label count }";
+  "deleted { label count } updated { label count } blocked { label count } " +
+  "root { label objectLabel objectId " +
+  "children { label objectLabel objectId " +
+  "children { label objectLabel objectId } } }";
 
 /**
  * Verb-first CRUD mutation. `create` takes a `<Type>Input`; `update` takes a
@@ -215,7 +218,10 @@ export function assembleMutationDocument(
   const typeName = typeNameForModel(modelLabel);
   const op = `${action}${typeName}`;
   if (action === "delete") {
-    return `mutation ${op}($id: ID!) { ${op}(id: $id) { ${DELETE_PREVIEW_SELECTION} } }`;
+    return (
+      `mutation ${op}($id: ID!, $confirm: Boolean) { ` +
+      `${op}(id: $id, confirm: $confirm) { ${DELETE_PREVIEW_SELECTION} } }`
+    );
   }
   const inputType = action === "create" ? `${typeName}Input` : `${typeName}Patch`;
   const selection = printSelection(buildSelection(fieldPaths));

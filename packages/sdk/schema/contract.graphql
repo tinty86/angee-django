@@ -233,12 +233,20 @@ type DeletePreviewGroup {
   count: Int!
 }
 
+type DeletePreviewNode {
+  label: String!
+  objectLabel: String!
+  objectId: String
+  children: [DeletePreviewNode!]!
+}
+
 type DeletePreview {
   totalDeletedCount: Int!
   deleted: [DeletePreviewGroup!]!
   updated: [DeletePreviewGroup!]!
   blocked: [DeletePreviewGroup!]!
   hasBlockers: Boolean!
+  root: DeletePreviewNode!
 }
 
 type Viewer implements Node {
@@ -286,7 +294,7 @@ type Mutation {
   logout: Boolean!
   createSale(data: SaleInput!): Sale!
   updateSale(data: SalePatch!): Sale!
-  deleteSale(id: ID!): DeletePreview!
+  deleteSale(id: ID!, confirm: Boolean! = true): DeletePreview!
 }
 
 type Subscription {

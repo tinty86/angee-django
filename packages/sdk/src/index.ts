@@ -60,8 +60,16 @@ export {
   type UseResourceRecordResult,
   type ResourceMutate,
   type ResourceMutationVariables,
+  type ResourceMutationResult,
 } from "./resource-hooks";
-export type { Row, PageInfo, PageResult } from "./resource-result";
+export type {
+  Row,
+  PageInfo,
+  PageResult,
+  DeletePreview,
+  DeletePreviewGroup,
+  DeletePreviewNode,
+} from "./resource-result";
 
 // Aggregates.
 export {
