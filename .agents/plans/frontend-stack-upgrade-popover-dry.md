@@ -115,9 +115,17 @@ review → render-verify on live `:5173` vs mockup `:5174`).
   control band alongside Save/Discard (V4). Verified live.
 - [ ] **V6 — general fidelity vs mockup.** Density, real page header, focus/border
   states (umbrella; V1 is its headline instance).
-- [ ] **V7 — right-edge bleed (triage).** A thin purple underline is clipped at
-  the far right of the topbar/content in the notes screenshot (~x≈1830); confirm
-  whether it's a real overflow / scrollbar artifact or expected.
+- [x] **V7 — right-edge bleed. DONE (root flagged).** The clipped purple
+  underline was the **Chatter** tablist (Angee/Comments/Activity): its 3 tabs are
+  ~269px but the panel gives ~253px with `overflow-x: visible`, so the last tab's
+  active underline bled past the panel edge. Fixed by tightening the tabs
+  (`px-2`/`font-medium`, matching the reference) + `overflow-x-auto min-w-0` on
+  the tablist so it clips cleanly + scrolls instead of bleeding. **Deeper root
+  flagged (separate follow-up):** the chatter renders at its MIN width (260px),
+  not the 332px default — its resize `Panel.onResize → updateWidth` feeds the
+  panel size (aside − handle) back into the aside `width`, collapsing it to min
+  on mount. Fixing that (so the chatter is 332 and all 3 tabs fit without scroll)
+  touches the resize wiring and is out of this minor triage's scope.
 - [x] **V8 — group order ignored the column sort. DONE.** A grouped list's
   column sort only ordered within-group rows; the buckets ignored it. Wired an
   optional group `orderBy` through `assembleGroupByDocument` + `useResourceGroupBy`
