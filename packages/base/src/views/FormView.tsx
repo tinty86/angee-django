@@ -774,7 +774,7 @@ function recordSubtitleParts(
 ): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const recordId = presentValue(record?.id) ?? presentValue(id);
-  if (recordId !== undefined) parts.push(shortRecordId(String(recordId)));
+  if (recordId !== undefined) parts.push(recordIdLabel(String(recordId)));
   if (record) {
     // Reads conventional metadata names until Row exposes typed metadata.
     const created = recordValue(record, ["createdAt", "created_at", "created"]);
@@ -809,6 +809,29 @@ function presentValue(value: unknown): unknown | undefined {
   if (value == null) return undefined;
   if (typeof value === "string" && value.trim() === "") return undefined;
   return value;
+}
+
+/**
+ * Prefer the human-facing public id in the subtitle. A relay global id encodes
+ * `Type:publicId`, so decode it to that suffix (e.g. the sqid); otherwise fall
+ * back to a short slice of whatever identifier the record carries.
+ */
+function recordIdLabel(value: string): string {
+  return globalIdSuffix(value) ?? shortRecordId(value);
+}
+
+function globalIdSuffix(value: string): string | null {
+  let decoded: string;
+  try {
+    decoded = typeof atob === "function" ? atob(value.trim()) : "";
+  } catch {
+    return null;
+  }
+  const separator = decoded.indexOf(":");
+  if (separator <= 0) return null;
+  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(decoded.slice(0, separator))) return null;
+  const suffix = decoded.slice(separator + 1).trim();
+  return suffix === "" ? null : suffix;
 }
 
 function shortRecordId(value: string): string {
