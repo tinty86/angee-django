@@ -31,12 +31,15 @@ createApp({
   addons: [notes, authAddon, iam, operator],
   shells: {
     console: { chrome: ConsoleShell },
-    public: { chrome: ({ children }) => children, requireAuth: false },
+    public: { chrome: ({ children }) => children, requireAuth: false, schema: "public" },
   },
   schemas: {
     public: { url: "/graphql/public/", cache: cacheConfigFromSDL(publicSDL) },
     console: { url: "/graphql/console/", cache: cacheConfigFromSDL(consoleSDL) },
   },
+  // The console is the primary surface, so it is the default schema; the public
+  // login shell pins itself back to the public client above.
+  defaultSchema: "console",
   slots: [
     {
       slot: AUTH_LOGIN_CARD_FOOTER_SLOT,

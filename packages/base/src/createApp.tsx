@@ -20,6 +20,7 @@ import {
   AppRuntimeProvider,
   AuthProvider,
   GraphQLClientProvider,
+  GraphQLProvider,
   RelayInvalidationProvider,
   composeAddons,
   mergeSlotContributions,
@@ -66,6 +67,12 @@ export interface ShellConfig {
   chrome: ComponentType<ShellChromeProps>;
   /** Gate routes behind sign-in. Defaults to `true` for every shell but `public`. */
   requireAuth?: boolean;
+  /**
+   * GraphQL schema this shell's routes read from; reads inside the shell inherit
+   * that client. Defaults to the app's `defaultSchema`, so the common console
+   * surface needs no override and only the public shell pins itself to `public`.
+   */
+  schema?: string;
 }
 
 export interface CreateAppInput {
@@ -152,6 +159,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
           page={pageByRoute.get(route.name)}
           chromeProps={chromePropsByRoute.get(route.name)}
           shells={input.shells}
+          defaultSchema={defaultSchema}
         />
       ),
     }),
@@ -251,17 +259,26 @@ function RouteScreen({
   page: Page,
   chromeProps,
   shells,
+  defaultSchema,
 }: {
   route: AddonRoute;
   page: ComponentType | undefined;
   chromeProps: Omit<ShellChromeProps, "children"> | undefined;
   shells: Record<string, ShellConfig>;
+  defaultSchema: string;
 }): ReactNode {
   const shell = shells[route.shell];
+  const clients = useSchemaClients();
   const Chrome = shell?.chrome ?? PassthroughChrome;
   const requireAuth = shell?.requireAuth ?? route.shell !== "public";
   const body = <Chrome {...chromeProps}>{Page ? <Page /> : null}</Chrome>;
-  return requireAuth ? <RequireAuth>{body}</RequireAuth> : body;
+  const gated = requireAuth ? <RequireAuth>{body}</RequireAuth> : body;
+  // Bind the route to its shell's schema client, so reads inside inherit it.
+  return (
+    <GraphQLProvider clients={clients} schema={shell?.schema ?? defaultSchema}>
+      {gated}
+    </GraphQLProvider>
+  );
 }
 
 /** Gate a subtree behind sign-in; bounce to `/login` while or after resolving. */
