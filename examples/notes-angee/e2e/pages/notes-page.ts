@@ -28,9 +28,32 @@ export class NotesPage extends PageObject {
   }
 
   // --- pager ---
-  /** The "Records N-M / total" label (a control in the pager). */
+  /** The top pager label. In a flat list it reads "Records N-M / total"; in a
+   *  grouped list it pages the groups and reads "Groups N-M / total groups". */
   get recordsLabel(): Locator {
-    return this.page.locator('[aria-label^="Records "]').first();
+    return this.page
+      .locator('[aria-label^="Records "], [aria-label^="Groups "]')
+      .first();
+  }
+  /** A collapsed group-header disclosure in a grouped list. */
+  get groupHeaders(): Locator {
+    return this.page.locator('tbody tr [aria-expanded]');
+  }
+  /** The group-header disclosure for the group whose row contains `label`. */
+  groupHeader(label: string): Locator {
+    return this.page
+      .locator("tbody tr", { hasText: label })
+      .locator("[aria-expanded]")
+      .first();
+  }
+  /** Expand a group by label and wait for its lazily-fetched records. */
+  async expandGroup(label: string): Promise<void> {
+    await this.groupHeader(label).click();
+    await this.recordRows.first().waitFor({ state: "visible", timeout: 12000 });
+  }
+  /** The top group pager label, e.g. "Groups 1-4 / 4 groups". */
+  get groupPagerLabel(): Locator {
+    return this.page.locator('[aria-label^="Groups "]').first();
   }
   get nextPageButton(): Locator {
     return this.page.getByRole("button", { name: /next page/i });
@@ -91,9 +114,13 @@ export class NotesPage extends PageObject {
     await this.page.getByText("Group by", { exact: false }).first().waitFor();
   }
 
-  /** Navigate to the first record's form by clicking its row. Targets a record
-   *  row specifically so a grouped list's header rows don't get clicked. */
+  /** Navigate to the first record's form. The list groups + folds by default,
+   *  so expand the first group to reveal records, then click a record row. */
   async openFirstNote(): Promise<void> {
+    if (!(await this.recordRows.first().isVisible().catch(() => false))) {
+      await this.groupHeaders.first().click();
+      await this.recordRows.first().waitFor({ state: "visible", timeout: 10000 });
+    }
     await this.recordRows.first().click();
     await this.page.waitForURL(/\/notes\/.+/, { timeout: 10000 });
     await this.page.locator(".cm-content").first().waitFor({ timeout: 15000 });
@@ -129,9 +156,14 @@ export class NotesPage extends PageObject {
   statusStep(label: string): Locator {
     return this.page.getByText(label, { exact: true });
   }
-  /** A notebook tab by name; the body field renders in the first ("Body") tab. */
-  notebookTab(name: string | RegExp): Locator {
-    return this.page.getByRole("tab", { name });
+  /** The record form's body editor (markdown), rendered inline in the sheet. */
+  get bodyEditor(): Locator {
+    return this.page.locator(".cm-content").first();
+  }
+  /** The view toolbar (shell control band) that hosts the dirty Save/Discard
+   *  plus the record pager + view switcher when a record is open. */
+  get controlBand(): Locator {
+    return this.page.locator(".area-control");
   }
 
   /** Edit the title input — a reliable way to mark the form dirty. */

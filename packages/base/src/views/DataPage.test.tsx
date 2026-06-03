@@ -33,31 +33,176 @@ import {
   Breadcrumb,
   BreadcrumbProvider,
 } from "../chrome/Breadcrumb";
-import { ModalsHost } from "../feedback";
+import { ModalsHost, ToastProvider } from "../feedback";
 import { parseFlatSearch, stringifyFlatSearch } from "../createApp";
 import { DataPage } from "./DataPage";
 import type { FormField } from "./FormView";
-import type { ListColumn } from "./ListView";
+import {
+  ListView,
+  type ListColumn,
+} from "./ListView";
+import { GroupListView } from "./group-list-view";
 import type {
-  Row,
+  AggregateBucket,
+  GroupByDimension,
   ResourceTypeName,
+  UseAggregateOptions,
+  Row,
+  UseGroupByOptions,
   UseResourceListOptions,
   UseResourceListResult,
 } from "@angee/sdk";
 
 const sdkMocks = vi.hoisted(() => ({
   rows: [
-    { id: "note-1", title: "First", status: "ACTIVE", priority: "High" },
-    { id: "note-2", title: "Second", status: "ACTIVE", priority: "Low" },
-    { id: "note-3", title: "Third", status: "DRAFT", priority: "Medium" },
-    { id: "note-4", title: "Fourth", status: "ARCHIVED", priority: "Low" },
+    {
+      id: "note-1",
+      title: "First",
+      status: "ACTIVE",
+      priority: "High",
+      wordCount: 10,
+      updatedAt: "2026-01-03T10:00:00.000Z",
+    },
+    {
+      id: "note-2",
+      title: "Second",
+      status: "ACTIVE",
+      priority: "Low",
+      wordCount: 20,
+      updatedAt: "2026-02-03T10:00:00.000Z",
+    },
+    {
+      id: "note-3",
+      title: "Third",
+      status: "DRAFT",
+      priority: "Medium",
+      wordCount: 5,
+      updatedAt: "2026-03-03T10:00:00.000Z",
+    },
+    {
+      id: "note-4",
+      title: "Fourth",
+      status: "ARCHIVED",
+      priority: "Low",
+      wordCount: 8,
+      updatedAt: "2026-04-03T10:00:00.000Z",
+    },
   ] satisfies Row[],
+  aggregateCalls: [] as Array<UseAggregateOptions<ResourceTypeName>>,
+  groupByCalls: [] as Array<UseGroupByOptions<ResourceTypeName>>,
   mutate: vi.fn(async ({ data }: { data: Row }) => data),
 }));
 
 vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   const ReactRuntime = await import("react");
+  function filteredRows(
+    rows: readonly Row[],
+    filter: UseResourceListOptions<ResourceTypeName>["filter"],
+  ): readonly Row[] {
+    if (!filter) return rows;
+    return rows.filter((row) =>
+      Object.entries(filter as Record<string, unknown>).every(
+        ([field, lookup]) => matchesLookup(readPath(row, field), lookup),
+      ),
+    );
+  }
+  function matchesLookup(value: unknown, lookup: unknown): boolean {
+    if (!lookup || typeof lookup !== "object" || Array.isArray(lookup)) {
+      return value === lookup;
+    }
+    const record = lookup as Record<string, unknown>;
+    if ("exact" in record) return value === record.exact;
+    if (Array.isArray(record.inList)) return record.inList.includes(value);
+    if (typeof record.iContains === "string") {
+      return String(value ?? "")
+        .toLowerCase()
+        .includes(record.iContains.toLowerCase());
+    }
+    return true;
+  }
+  function readPath(row: Row, path: string): unknown {
+    let current: unknown = row;
+    for (const key of path.split(".")) {
+      if (current == null || typeof current !== "object") return undefined;
+      current = (current as Record<string, unknown>)[key];
+    }
+    return current;
+  }
+  function groupBuckets(
+    rows: readonly Row[],
+    dimensions: readonly GroupByDimension[],
+    baseFilter: UseGroupByOptions<ResourceTypeName>["filter"],
+    measures: UseGroupByOptions<ResourceTypeName>["measures"],
+  ): readonly AggregateBucket[] {
+    const buckets = new Map<string, AggregateBucket>();
+    for (const row of rows) {
+      const key: Record<string, unknown> = {};
+      const filter = { ...(baseFilter as Record<string, unknown> | undefined) };
+      for (const dimension of dimensions) {
+        const keyField = dimension.key ?? dimension.field;
+        const sourceField = sourceFieldForAggregateKey(keyField);
+        const value = readPath(row, sourceField);
+        key[keyField] = value;
+        filter[sourceField] = { exact: value };
+      }
+      const bucketKey = JSON.stringify(key);
+      const current = buckets.get(bucketKey);
+      if (current) {
+        buckets.set(
+          bucketKey,
+          applyMeasures({ ...current, count: current.count + 1 }, row, measures),
+        );
+      } else {
+        buckets.set(
+          bucketKey,
+          applyMeasures({ key, count: 1, filter }, row, measures),
+        );
+      }
+    }
+    return [...buckets.values()];
+  }
+  function aggregateBucket(
+    rows: readonly Row[],
+    measures: UseAggregateOptions<ResourceTypeName>["measures"],
+  ): AggregateBucket {
+    return rows.reduce<AggregateBucket>(
+      (bucket, row) => applyMeasures(bucket, row, measures),
+      { key: null, count: rows.length },
+    );
+  }
+  function applyMeasures(
+    bucket: AggregateBucket,
+    row: Row,
+    measures: UseGroupByOptions<ResourceTypeName>["measures"],
+  ): AggregateBucket {
+    let next = bucket;
+    for (const measure of measures ?? []) {
+      if (measure.op !== "sum") continue;
+      const value = numberValue(readPath(row, measure.field));
+      const current = numberValue(next.sum?.[measure.field]);
+      next = {
+        ...next,
+        sum: {
+          ...next.sum,
+          [measure.field]: current + value,
+        },
+      };
+    }
+    return next;
+  }
+  function numberValue(value: unknown): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  }
+  function sourceFieldForAggregateKey(key: string): string {
+    const field = key.replace(/(?:Day|Week|Month|Quarter|Year)$/, "");
+    if (!field.includes("_")) {
+      return `${field.charAt(0).toLowerCase()}${field.slice(1)}`;
+    }
+    return field
+      .toLowerCase()
+      .replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+  }
   return {
     ...actual,
     useResourceList: (
@@ -65,9 +210,13 @@ vi.mock("@angee/sdk", async (importOriginal) => {
       options: UseResourceListOptions<ResourceTypeName>,
     ): UseResourceListResult => {
       const pageSize = options.pageSize ?? 50;
+      const active = options.enabled !== false;
+      const matchingRows = active
+        ? filteredRows(sdkMocks.rows, options.filter)
+        : [];
       const pageCount = Math.max(
         1,
-        Math.ceil(sdkMocks.rows.length / pageSize),
+        Math.ceil(matchingRows.length / pageSize),
       );
       const requestedPage = Math.min(
         pageCount,
@@ -78,7 +227,7 @@ vi.mock("@angee/sdk", async (importOriginal) => {
         setPageState(requestedPage);
       }, [requestedPage]);
       const visiblePage = Math.min(page, pageCount);
-      const rows = sdkMocks.rows.slice(
+      const rows = matchingRows.slice(
         (visiblePage - 1) * pageSize,
         visiblePage * pageSize,
       );
@@ -87,7 +236,7 @@ vi.mock("@angee/sdk", async (importOriginal) => {
       };
       return {
         rows,
-        total: sdkMocks.rows.length,
+        total: active ? matchingRows.length : undefined,
         pageCount,
         page: visiblePage,
         pageSize,
@@ -110,13 +259,54 @@ vi.mock("@angee/sdk", async (importOriginal) => {
       error: null,
       refetch: vi.fn(),
     }),
-    useResourceGroupBy: () => ({
-      count: 0,
-      totalCount: 0,
-      buckets: [],
-      fetching: false,
-      error: null,
-    }),
+    useResourceGroupBy: (
+      _model: string,
+      options: UseGroupByOptions<ResourceTypeName>,
+    ) => {
+      sdkMocks.groupByCalls.push(options);
+      if (options.enabled === false || options.dimensions.length === 0) {
+        return {
+          count: 0,
+          totalCount: 0,
+          buckets: [],
+          fetching: false,
+          error: null,
+        };
+      }
+      const buckets = groupBuckets(
+        filteredRows(sdkMocks.rows, options.filter),
+        options.dimensions,
+        options.filter,
+        options.measures,
+      );
+      const pageSize = options.pageSize ?? buckets.length;
+      const page = Math.max(1, options.page ?? 1);
+      const visibleBuckets = buckets.slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
+      return {
+        count: visibleBuckets.reduce((total, bucket) => total + bucket.count, 0),
+        totalCount: buckets.length,
+        buckets: visibleBuckets,
+        fetching: false,
+        error: null,
+      };
+    },
+    useResourceAggregate: (
+      _model: string,
+      options: UseAggregateOptions<ResourceTypeName>,
+    ) => {
+      sdkMocks.aggregateCalls.push(options);
+      const active = options.enabled !== false;
+      return {
+        aggregate: active
+          ? aggregateBucket(filteredRows(sdkMocks.rows, options.filter), options.measures)
+          : null,
+        fetching: false,
+        error: null,
+      };
+    },
     useResourceMutation: () => [
       sdkMocks.mutate,
       { fetching: false, error: null },
@@ -143,6 +333,26 @@ describe("DataPage", () => {
       cleanup();
       await nextTask();
     });
+  });
+
+  test("renders the lean ListView as a flat list without group controls", async () => {
+    render(
+      <TestUrlState searchParams="?view=board&group=status">
+        {/* Lean ListView ignores grouping/board even when the URL carries them,
+            and its type no longer accepts defaultGroup. */}
+        <ListView model="notes.Note" columns={columns} />
+      </TestUrlState>,
+    );
+
+    expect(await screen.findByText("First")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Board view" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove group" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Filter and favorites" }),
+    );
+
+    expect(screen.queryByText("Group by")).toBeNull();
   });
 
   test("renders record navigation and reuses the view switcher in record chrome", async () => {
@@ -231,6 +441,7 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={boardColumns}
           formFields={formFields}
+          list={GroupListView}
           onSelect={onSelect}
           rowHref={(row) => row.id === "note-1" ? "/notes/note-1" : ""}
         />
@@ -345,6 +556,7 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={[...columns, { field: "updatedAt", header: "Updated At" }]}
           formFields={formFields}
+          list={GroupListView}
           defaultGroup={{ field: "updatedAt", granularity: "day" }}
         />
       </TestUrlState>,
@@ -362,6 +574,87 @@ describe("DataPage", () => {
     );
   });
 
+  test("renders grouped lists folded and expands group items lazily", async () => {
+    const onSelect = vi.fn();
+
+    render(
+      <TestUrlState searchParams="?group=status&pageSize=2">
+        <DataPage
+          model="notes.Note"
+          columns={columns}
+          formFields={formFields}
+          list={GroupListView}
+          onSelect={onSelect}
+        />
+      </TestUrlState>,
+    );
+
+    await screen.findByRole("button", { name: "Groups 1-2 / 3 groups" });
+    const activeGroup = await screen.findByRole("button", { name: /Active/ });
+    expect(activeGroup.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Open First" })).toBeNull();
+
+    fireEvent.click(activeGroup);
+
+    await waitFor(() =>
+      expect(activeGroup.getAttribute("aria-expanded")).toBe("true"),
+    );
+    expect(await screen.findByRole("button", { name: "Open First" }))
+      .toBeTruthy();
+    expect(screen.getByText("1-2 / 2")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open First" }));
+    expect(onSelect).toHaveBeenCalledWith("note-1");
+  });
+
+  test("renders grouped list aggregate measures and a grand total footer", async () => {
+    sdkMocks.groupByCalls.length = 0;
+    sdkMocks.aggregateCalls.length = 0;
+    const measuredColumns = [
+      { field: "title", header: "Title" },
+      { field: "status", header: "Status" },
+      {
+        field: "wordCount",
+        header: "Word Count",
+        align: "right",
+        aggregate: "sum",
+      },
+    ] satisfies readonly ListColumn[];
+
+    render(
+      <TestUrlState searchParams="?group=status&pageSize=10">
+        <DataPage
+          model="notes.Note"
+          columns={measuredColumns}
+          formFields={formFields}
+          list={GroupListView}
+        />
+      </TestUrlState>,
+    );
+
+    const activeGroup = await screen.findByRole("button", { name: /Active/ });
+    expect(within(activeGroup).getByText("30 words")).toBeTruthy();
+    expect(
+      (await screen.findByLabelText("Total Word Count: 43 words")).textContent,
+    ).toBe("43 words");
+    expect(
+      sdkMocks.groupByCalls.some((call) =>
+        call.measures?.some(
+          (measure) =>
+            measure.op === "sum" && measure.field === "wordCount",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      sdkMocks.aggregateCalls.some((call) =>
+        call.measures?.some(
+          (measure) =>
+            measure.op === "sum" && measure.field === "wordCount",
+        ),
+      ),
+    ).toBe(true);
+  });
+
   test("paginates through the URL-owned data view state", async () => {
     const onUrlUpdate = vi.fn();
     render(
@@ -373,18 +666,19 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={[...columns, { field: "updatedAt", header: "Updated At" }]}
           formFields={formFields}
+          list={GroupListView}
           pageSize={2}
           defaultGroup={{ field: "updatedAt", granularity: "day" }}
         />
       </TestUrlState>,
     );
 
-    await screen.findByRole("button", { name: "Records 1-2 / 4" });
+    await screen.findByRole("button", { name: "Groups 1-2 / 4 groups" });
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Records 3-4 / 4" }),
+        screen.getByRole("button", { name: "Groups 3-4 / 4 groups" }),
       ).toBeTruthy(),
     );
     await waitFor(() => {
@@ -401,13 +695,14 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={[...columns, { field: "updatedAt", header: "Updated At" }]}
           formFields={formFields}
+          list={GroupListView}
           pageSize={2}
           defaultGroup={{ field: "updatedAt", granularity: "day" }}
         />
       </TestUrlState>,
     );
 
-    await screen.findByRole("button", { name: "Records 1-2 / 4" });
+    await screen.findByRole("button", { name: "Groups 1-2 / 4 groups" });
     await screen.findByRole("button", { name: "Remove group" });
     await waitFor(() => {
       const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
@@ -427,13 +722,14 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={[...columns, { field: "updatedAt", header: "Updated At" }]}
           formFields={formFields}
+          list={GroupListView}
           pageSize={2}
           defaultGroup={{ field: "updatedAt", granularity: "day" }}
         />
       </TestUrlState>,
     );
 
-    await screen.findByRole("button", { name: "Records 3-4 / 4" });
+    await screen.findByRole("button", { name: "Groups 3-4 / 4 groups" });
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Filter, group, favorites",
@@ -446,7 +742,7 @@ describe("DataPage", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Records 1-2 / 4" }),
+        screen.getByRole("button", { name: "Groups 1-2 / 4 groups" }),
       ).toBeTruthy(),
     );
     await waitFor(() => {
@@ -463,6 +759,7 @@ describe("DataPage", () => {
           model="notes.Note"
           columns={[...columns, { field: "updatedAt", header: "Updated At" }]}
           formFields={formFields}
+          list={GroupListView}
           defaultGroup={{ field: "updatedAt", granularity: "day" }}
         />
       </TestUrlState>,
@@ -527,7 +824,9 @@ function TestUrlState({
 function TestUrlStateRoot(): ReactElement {
   return (
     <ModalsHost>
-      <Outlet />
+      <ToastProvider>
+        <Outlet />
+      </ToastProvider>
     </ModalsHost>
   );
 }

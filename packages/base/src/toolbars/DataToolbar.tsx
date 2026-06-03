@@ -2,8 +2,6 @@ import type { ReactElement, ReactNode } from "react";
 import {
   Calendar,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Grid2X2,
   List,
@@ -13,7 +11,6 @@ import {
   Star,
   X,
 } from "lucide-react";
-import type { UseResourceListResult } from "@angee/sdk";
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
@@ -27,6 +24,7 @@ import {
   PopoverRoot,
   PopoverTrigger,
 } from "../ui/popover";
+import { Pager, type PagerState } from "../ui/pager";
 import type {
   DataViewFilter,
   DataViewGroup,
@@ -35,8 +33,8 @@ import type {
 } from "../views/data-view-model";
 
 export interface DataToolbarProps {
-  list: UseResourceListResult;
-  view: DataViewKind;
+  pager: PagerState;
+  view?: DataViewKind;
   group?: DataViewGroup | null;
   groupStack?: readonly DataViewGroup[];
   groupOptions?: readonly DataToolbarGroupOption[];
@@ -53,6 +51,8 @@ export interface DataToolbarProps {
   onVisibleFieldToggle?: (id: string, visible: boolean) => void;
   onPageChange?: (page: number) => void;
   onViewChange?: (view: DataViewKind) => void;
+  pagerSubject?: string;
+  pagerTotalUnit?: string;
   className?: string;
 }
 
@@ -86,11 +86,11 @@ export interface DataViewSwitcherProps {
 }
 
 export function DataToolbar({
-  list,
+  pager,
   view,
   group,
   groupStack,
-  groupOptions = [],
+  groupOptions,
   filterOptions = [],
   visibleFields = [],
   activeFilterIds = [],
@@ -104,19 +104,22 @@ export function DataToolbar({
   onVisibleFieldToggle,
   onPageChange,
   onViewChange,
+  pagerSubject = "Records",
+  pagerTotalUnit,
   className,
 }: DataToolbarProps): ReactElement {
-  const start = list.total === undefined || list.total === 0
-    ? 0
-    : (list.page - 1) * list.pageSize + 1;
-  const end = list.total === undefined
-    ? list.page * list.pageSize
-    : Math.min(list.total, list.page * list.pageSize);
-  const groups = groupStack ?? (group ? [group] : []);
+  const groupControls =
+    groupOptions !== undefined
+    || groupStack !== undefined
+    || group !== undefined
+    || onGroupStackChange !== undefined
+    || onClearGroup !== undefined;
+  const toolbarGroupOptions = groupOptions ?? [];
+  const groups = groupControls ? groupStack ?? (group ? [group] : []) : [];
   const activeFilters = filterOptions.filter((option) =>
     activeFilterIds.includes(option.id),
   );
-  const pageLabel = `${start}-${end}${list.total !== undefined ? ` / ${list.total}` : ""}`;
+  const currentView = view ?? "list";
 
   return (
     <section
@@ -134,7 +137,8 @@ export function DataToolbar({
       ) : null}
       <FilterPicker
         groups={groups}
-        groupOptions={groupOptions}
+        groupControls={groupControls}
+        groupOptions={toolbarGroupOptions}
         activeFilters={activeFilters}
         activeFilterIds={activeFilterIds}
         filterOptions={filterOptions}
@@ -145,40 +149,21 @@ export function DataToolbar({
         onGroupStackChange={onGroupStackChange}
       />
       <div className="min-w-2 flex-1" />
-      <button
-        type="button"
-        className="h-6 rounded px-1.5 text-13 tabular-nums text-fg outline-none hover:bg-inset focus-visible:focus-ring"
-        aria-label={`Records ${pageLabel}`}
-      >
-        {pageLabel}
-      </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label="Previous page"
-        disabled={!list.hasPrev}
-        onClick={() => onPageChange?.(Math.max(1, list.page - 1))}
-      >
-        <ChevronLeft className="glyph" aria-hidden />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="iconSm"
-        aria-label="Next page"
-        disabled={!list.hasNext}
-        onClick={() => onPageChange?.(list.page + 1)}
-      >
-        <ChevronRight className="glyph" aria-hidden />
-      </Button>
-      {view === "list" && visibleFields.length > 0 ? (
+      <Pager
+        {...pager}
+        subject={pagerSubject}
+        unit={pagerTotalUnit}
+        onPageChange={onPageChange}
+      />
+      {currentView === "list" && visibleFields.length > 0 ? (
         <VisibleFieldsMenu
           fields={visibleFields}
           onToggle={onVisibleFieldToggle}
         />
       ) : null}
-      <DataViewSwitcher view={view} onViewChange={onViewChange} />
+      {view && onViewChange ? (
+        <DataViewSwitcher view={view} onViewChange={onViewChange} />
+      ) : null}
     </section>
   );
 }
@@ -233,6 +218,7 @@ function VisibleFieldsMenu({
 
 function FilterPicker({
   groups,
+  groupControls,
   groupOptions,
   filterOptions,
   activeFilters,
@@ -244,6 +230,7 @@ function FilterPicker({
   onGroupStackChange,
 }: {
   groups: readonly DataViewGroup[];
+  groupControls: boolean;
   groupOptions: readonly DataToolbarGroupOption[];
   filterOptions: readonly DataToolbarFilterOption[];
   activeFilters: readonly DataToolbarFilterOption[];
@@ -290,14 +277,21 @@ function FilterPicker({
         />
         <PopoverTrigger
           className="grid size-6 shrink-0 place-content-center rounded text-fg-muted outline-none transition-colors hover:bg-sheet hover:text-fg focus-visible:focus-ring"
-          aria-label="Filter, group, favorites"
+          aria-label={
+            groupControls ? "Filter, group, favorites" : "Filter and favorites"
+          }
         >
           <ChevronDown className="size-3" aria-hidden />
         </PopoverTrigger>
       </div>
       <PopoverPortal>
         <PopoverPositioner sideOffset={6} align="start">
-          <PopoverContent className="grid w-[45rem] max-w-[calc(100vw-2rem)] grid-cols-3">
+          <PopoverContent
+            className={cn(
+              "grid max-w-[calc(100vw-2rem)]",
+              groupControls ? "w-[45rem] grid-cols-3" : "w-[30rem] grid-cols-2",
+            )}
+          >
             <PickerColumn icon={<Filter className="size-3.5" />} title="Filters">
               {filterOptions.length === 0 ? (
                 <PickerMuted>No filters</PickerMuted>
@@ -318,24 +312,26 @@ function FilterPicker({
                 Add custom filter
               </PickerButton>
             </PickerColumn>
-            <PickerColumn
-              icon={<SlidersHorizontal className="size-3.5" />}
-              title="Group by"
-            >
-              {groupOptions.map((option) => (
-                <GroupOptionButton
-                  key={option.id}
-                  option={option}
-                  groups={groups}
-                  onGroupStackChange={onGroupStackChange}
-                />
-              ))}
-              <PickerDivider />
-              <PickerButton muted>
-                <Plus className="size-3" aria-hidden />
-                Add custom group
-              </PickerButton>
-            </PickerColumn>
+            {groupControls ? (
+              <PickerColumn
+                icon={<SlidersHorizontal className="size-3.5" />}
+                title="Group by"
+              >
+                {groupOptions.map((option) => (
+                  <GroupOptionButton
+                    key={option.id}
+                    option={option}
+                    groups={groups}
+                    onGroupStackChange={onGroupStackChange}
+                  />
+                ))}
+                <PickerDivider />
+                <PickerButton muted>
+                  <Plus className="size-3" aria-hidden />
+                  Add custom group
+                </PickerButton>
+              </PickerColumn>
+            ) : null}
             <PickerColumn icon={<Star className="size-3.5" />} title="Favorites">
               <PickerButton muted>
                 <Plus className="size-3" aria-hidden />

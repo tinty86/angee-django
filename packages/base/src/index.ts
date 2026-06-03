@@ -42,6 +42,7 @@ export * from "./ui/label";
 export * from "./ui/input";
 export * from "./ui/textarea";
 export * from "./ui/select";
+export * from "./ui/pager";
 export * from "./ui/checkbox";
 export * from "./ui/switch";
 export * from "./ui/slider";
