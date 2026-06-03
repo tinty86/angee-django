@@ -81,7 +81,7 @@ const reminderField = {
   widget: "datetime",
 } satisfies FormField;
 const ownerField = {
-  name: "createdBy",
+  name: "createdByLabel",
   label: "Owner",
   widget: "userRef",
   readOnly: true,
