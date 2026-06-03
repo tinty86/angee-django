@@ -243,18 +243,6 @@ function DataPageBody<TRow extends Row = Row>({
       }}
     />
   ) : null;
-  const recordToolbar = open ? (
-    <div className="flex min-h-11 items-center gap-2 border-b border-border-subtle bg-sheet px-3 py-2">
-      {!hideCreate && onSelect ? (
-        <Button type="button" variant="primary" size="sm" onClick={() => onSelect(null)}>
-          {createLabelForModel(model)}
-        </Button>
-      ) : null}
-      <div className="min-w-2 flex-1" />
-      {recordHeaderActions}
-    </div>
-  ) : null;
-
   const list = (
     <ListComponent
       model={model}
@@ -297,6 +285,7 @@ function DataPageBody<TRow extends Row = Row>({
       groups={formGroups}
       returning={returning}
       onSaved={handleSaved}
+      toolbar={recordHeaderActions}
     />
   ) : null;
 
@@ -327,8 +316,7 @@ function DataPageBody<TRow extends Row = Row>({
         <>
           {listStateOnly}
           <div className="overflow-hidden rounded-md border border-border bg-sheet">
-            {recordToolbar}
-            <div className="px-6 py-8">{recordForm}</div>
+            {recordForm}
           </div>
         </>
       ) : (
@@ -416,7 +404,8 @@ function ListStateProbe<TRow extends Row>({
 }
 
 interface RecordNavigation {
-  current: number;
+  /** Undefined when the open record isn't in the loaded slice (grouped/deep). */
+  current?: number;
   total: number;
   onPrev?: () => void;
   onNext?: () => void;
@@ -454,10 +443,16 @@ function RecordPager({
       className="flex items-center gap-2 text-13 text-fg-muted"
     >
       <span className="whitespace-nowrap tabular-nums">
-        <span className="font-medium text-fg">
-          {navigation.current.toLocaleString()}
-        </span>{" "}
-        of {navigation.total.toLocaleString()}
+        {navigation.current !== undefined ? (
+          <>
+            <span className="font-medium text-fg">
+              {navigation.current.toLocaleString()}
+            </span>{" "}
+            of {navigation.total.toLocaleString()}
+          </>
+        ) : (
+          <>of {navigation.total.toLocaleString()}</>
+        )}
       </span>
       <div className="flex items-center gap-1">
         <Button
@@ -504,7 +499,12 @@ function buildRecordNavigation<TRow extends Row>({
 }): RecordNavigation | null {
   if (creating || typeof recordId !== "string" || !listState) return null;
   const index = listState.rows.findIndex((row) => rowId(row) === recordId);
-  if (index < 0) return null;
+  if (index < 0) {
+    // The open record isn't in the loaded slice (e.g. a grouped list or a deep
+    // record). Keep the pager visible with the filtered total; page-local
+    // Prev/Next can't resolve neighbors here, so they stay disabled.
+    return { total: listState.total ?? listState.rows.length };
+  }
 
   const current = (listState.page - 1) * listState.pageSize + index + 1;
   const total = listState.total ?? Math.max(current, listState.rows.length);

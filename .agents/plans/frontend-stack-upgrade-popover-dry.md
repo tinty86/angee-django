@@ -92,11 +92,27 @@ review → render-verify on live `:5173` vs mockup `:5174`).
   (the single baseline authority, reassigned only on seed/save/create-reset) +
   guard comment. Browser-free regression test added (fails pre-fix). Reviewed
   (react+arch, no blockers); live-verified the title persists post-save, 0 errors.
-- [ ] **V4 — FormView chrome remainder.** Smart-buttons, More/Actions menu,
-  notebook tabs not built. (DONE: dirty-only Save+Discard top band, nav guard,
-  inline title, sheet layout.)
-- [ ] **V5 — FormView record pager scope.** Prev/Next navigates the whole table
-  ("1 of 10,052") instead of the filtered+sorted list slice.
+- [x] **V4 — FormView layout (redefined by user). DONE.** User: "we do not need
+  tabs but i want the layout of the form of p1 — with the save discard dirty
+  buttons in the view tool bar." Removed the notebook/Tabs (body renders inline
+  as a full-width section); the P1 sheet layout stays (title row + status stepper
+  + 2-col details grid + body); the dirty-only Save/Discard moved OUT of the form
+  into the shell control band (the view toolbar) via a `ControlBand` portal, with
+  a brand-soft highlight when dirty and Save submitting through `handleSubmit()`
+  (it's portaled outside the `<form>`). FormView gained a `toolbar` prop;
+  DataPage feeds the record pager + view switcher into it and dropped its
+  in-content record toolbar. Removed all notebook machinery + the
+  `FORM_VIEW_NOTEBOOK_SLOT` export. (Deferred, not requested: smart-buttons /
+  More-actions menu — need record-relation data.) Reviewed (react+arch, no
+  blockers); live-verified (no tabs, body inline, Save/Discard in toolbar, save
+  persists, 0 errors).
+- [x] **V5 — FormView record pager scope (total-only + page-local). DONE.** The
+  pager used to vanish over a grouped list (the flat one-page probe couldn't
+  locate a record opened from an old date-group). Now `buildRecordNavigation`
+  always returns a nav when a record is open: it shows the filtered total
+  ("of N"), with page-local Prev/Next when the record is in the loaded slice and
+  disabled otherwise (no position query, per the chosen scope). Lives in the
+  control band alongside Save/Discard (V4). Verified live.
 - [ ] **V6 — general fidelity vs mockup.** Density, real page header, focus/border
   states (umbrella; V1 is its headline instance).
 - [ ] **V7 — right-edge bleed (triage).** A thin purple underline is clipped at
