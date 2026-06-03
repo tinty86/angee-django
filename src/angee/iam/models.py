@@ -13,7 +13,7 @@ from django.contrib.auth.models import UnicodeUsernameValidator
 from django.db import models, transaction
 from django.utils import timezone
 from django_sqids import SqidsField
-from rebac import RelationshipTuple, app_settings, system_context, to_object_ref, to_subject_ref, write_relationships
+from rebac import app_settings, system_context, to_object_ref
 from rebac.managers import RebacManager
 from rebac.models import active_relationship_model
 from rebac.permissions_mixin import RebacPermissionsMixin
@@ -21,6 +21,7 @@ from rebac.permissions_mixin import RebacPermissionsMixin
 from angee.base.fields import EncryptedField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
+from angee.base.relations import grant_owner
 from angee.iam.credentials import CredentialKind, handler_for
 
 
@@ -273,7 +274,7 @@ class AccountManager(RebacManager):
                 create_defaults=create_values,
             )
             if owner is not None and (created or self.owner_for(instance) is None):
-                _grant_owner_relation(instance, owner)
+                grant_owner(instance, owner)
         return instance
 
     def owner_for(self, account: Any) -> AbstractBaseUser | None:
@@ -609,7 +610,7 @@ class CredentialManager(RebacManager):
                 create_defaults=create_values,
             )
             if created:
-                _grant_owner_relation(instance, user)
+                grant_owner(instance, user)
         return instance
 
 
@@ -719,20 +720,3 @@ def _validated_manager_values(
         raise ValueError(f"Unknown {model.__name__} field(s): {names}")
     return dict(values)
 
-
-def _grant_owner_relation(resource: Any, owner: Any) -> None:
-    """Write one ``owner`` relationship tuple for a newly created resource.
-
-    Runs inside the caller's ambient ``system_context`` + ``transaction.atomic``
-    so the owner grant commits or rolls back together with the row it owns.
-    """
-
-    write_relationships(
-        [
-            RelationshipTuple(
-                resource=to_object_ref(resource),
-                relation="owner",
-                subject=to_subject_ref(owner),
-            )
-        ]
-    )

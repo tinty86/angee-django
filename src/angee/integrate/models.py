@@ -1,16 +1,26 @@
-"""Abstract source bases for domain-owned integration capabilities."""
+"""Source models for Angee's integration runtime primitives.
+
+Migration note: account-scoped webhook subscriptions now cascade with their
+account; a human must run ``uv run examples/notes-angee/manage.py makemigrations integrate``.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
 
+from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
+from django_sqids import SqidsField
+from rebac import system_context
+from rebac.managers import RebacManager
 
-from angee.base.fields import StateField
+from angee.base.fields import EncryptedField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
+from angee.base.relations import grant_owner
+from angee.integrate.validators import validate_public_url
 
 
 class CapabilityStatus(models.TextChoices):
@@ -58,10 +68,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         self.last_error = error
         self.last_error_at = reported_at if error else None
 
-        # ExternalAccount owns persistence for the account-level rollup.
-        note_capability_status = getattr(self.account, "note_capability_status", None)
-        if callable(note_capability_status):
-            note_capability_status(capability_key=str(self.pk), status=status, error=error)
+        self.account.note_capability_status(capability_key=str(self.pk), status=status, error=error)
 
 
 class Bridge(Capability):
@@ -164,3 +171,56 @@ class Bridge(Capability):
         """Return the next polling timestamp from this bridge's interval."""
 
         return now + timedelta(seconds=int(self.poll_interval))
+
+
+class WebhookSubscriptionManager(RebacManager):
+    """Manager for webhook subscriptions and their owner relationship grants."""
+
+    def create(self, **kwargs: Any) -> Any:
+        """Create a subscription, then grant its owner under a narrow bypass.
+
+        The create itself stays REBAC-authorized (the integrate/webhook_subscription
+        ``create`` permission gates it); only the owner-relation write — which no
+        actor holds permission for — runs under ``system_context``.
+        """
+
+        with transaction.atomic():
+            instance = super().create(**kwargs)
+            with system_context(reason="integrate.webhook_subscription.owner_grant"):
+                grant_owner(instance, instance.owner)
+        return instance
+
+
+class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
+    """Outbound webhook endpoint owned by one user."""
+
+    sqid = SqidsField(real_field_name="id", prefix="whs", min_length=8)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="webhook_subscriptions",
+    )
+    target_url = models.URLField(max_length=2048, validators=(validate_public_url,))
+    secret = EncryptedField()
+    event_kinds = models.JSONField(default=list)
+    impl_app_filter = models.JSONField(default=list)
+    account_filter = models.ForeignKey(
+        "iam.ExternalAccount",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    enabled = models.BooleanField(default=True, db_index=True)
+    last_delivery_at = models.DateTimeField(null=True, blank=True)
+    last_delivery_status = models.CharField(max_length=64, blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    consecutive_failures = models.PositiveIntegerField(default=0)
+
+    objects = WebhookSubscriptionManager()
+
+    class Meta:
+        """Django model options for webhook subscriptions."""
+
+        abstract = False
+        rebac_resource_type = "integrate/webhook_subscription"
+        rebac_id_attr = "sqid"

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from types import ModuleType
-
-from django.utils.functional import cached_property
-
 from angee.base.apps import BaseAddonConfig
 
 
@@ -16,10 +12,11 @@ class IntegrateConfig(BaseAddonConfig):
     name = "angee.integrate"
     label = "integrate"
     depends_on = ("iam",)
-    rebac_schema = None
+    rebac_schema = "permissions.zed"
 
-    @cached_property
-    def source_models_module(self) -> ModuleType | None:
-        """Keep Capability/Bridge import-only; domain addons emit concrete subclasses."""
+    def _is_source_model(self, value: type) -> bool:
+        """Keep import-only capability bases out of runtime emission."""
 
-        return None
+        if value.__name__ in {"Capability", "Bridge"}:
+            return False
+        return super()._is_source_model(value)
