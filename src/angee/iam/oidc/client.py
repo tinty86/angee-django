@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib import error, parse, request
 
 import jwt
+from django.conf import settings
+from django.core.cache import cache
 from jwt import PyJWKClient
 from jwt.exceptions import PyJWKClientError, PyJWTError
 
@@ -21,6 +24,7 @@ from angee.iam.oidc.errors import (
 )
 
 HTTP_TIMEOUT_SECONDS = 10
+_DEFAULT_DISCOVERY_TTL_SECONDS = 3600
 _BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -38,6 +42,7 @@ _ALLOWED_JWT_ALGORITHMS = (
     "RS256",
     "ES256",
 )
+_DISCOVERY_CACHE_PREFIX = "angee.iam.oidc.discovery:"
 
 
 def fetch_discovery(oauth_client: object) -> dict[str, Any]:
@@ -46,12 +51,18 @@ def fetch_discovery(oauth_client: object) -> dict[str, Any]:
     discovery_url = str(getattr(oauth_client, "discovery_url", "") or "")
     if not discovery_url:
         return {}
-    try:
-        discovery = _get_json(discovery_url)
-    except OidcFlowError:
-        raise
-    except Exception as exc:
-        raise OidcFlowError(DISCOVERY_FAILED, 400) from exc
+    cache_key = _discovery_cache_key(discovery_url)
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict):
+        discovery = cached
+    else:
+        try:
+            discovery = _get_json(discovery_url)
+        except OidcFlowError:
+            raise
+        except Exception as exc:
+            raise OidcFlowError(DISCOVERY_FAILED, 400) from exc
+        cache.set(cache_key, discovery, timeout=_discovery_ttl_seconds())
     for oauth_client_field, discovery_field in _DISCOVERY_FIELDS.items():
         if getattr(oauth_client, oauth_client_field, ""):
             continue
@@ -73,12 +84,15 @@ def build_authorize_url(
     """Return the provider authorization URL for one OIDC code flow."""
 
     authorize_endpoint = _endpoint(oauth_client, "authorize_endpoint", "authorization_endpoint")
+    effective_scopes = list(scopes)
+    if "openid" not in effective_scopes:
+        effective_scopes.insert(0, "openid")
     query: dict[str, str] = {
         "client_id": str(getattr(oauth_client, "client_id", "")),
         "nonce": nonce,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": " ".join(scopes),
+        "scope": " ".join(effective_scopes),
         "state": state,
     }
     if getattr(oauth_client, "supports_pkce", False) and code_challenge:
@@ -172,21 +186,31 @@ def verify_id_token(
 
 
 def fetch_userinfo(oauth_client: object, access_token: str) -> dict[str, Any]:
-    """Fetch userinfo claims with one OAuth access token."""
+    """Best-effort fetch of userinfo claims with one OAuth access token."""
 
     if not access_token:
-        raise OidcFlowError(USERINFO_FAILED, 400)
-    userinfo_endpoint = _endpoint(oauth_client, "userinfo_endpoint", "userinfo_endpoint")
+        return {}
+    userinfo_endpoint = str(getattr(oauth_client, "userinfo_endpoint", "") or "")
+    if not userinfo_endpoint:
+        try:
+            discovery = fetch_discovery(oauth_client)
+        except Exception:
+            return {}
+        userinfo_endpoint = str(
+            getattr(oauth_client, "userinfo_endpoint", "")
+            or discovery.get("userinfo_endpoint", "")
+            or ""
+        )
+    if not userinfo_endpoint:
+        return {}
     try:
         return _get_json(
             userinfo_endpoint,
             headers={"Authorization": f"Bearer {access_token}"},
             error_code=USERINFO_FAILED,
         )
-    except OidcFlowError:
-        raise
-    except Exception as exc:
-        raise OidcFlowError(USERINFO_FAILED, 400) from exc
+    except Exception:
+        return {}
 
 
 def revoke_token(oauth_client: object, token: str) -> None:
@@ -261,7 +285,13 @@ def _post_form(url: str, fields: Mapping[str, str]) -> dict[str, Any]:
     try:
         with request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as response:
             return _loads_json(response.read(), error_code=TOKEN_EXCHANGE_FAILED)
-    except (error.HTTPError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except error.HTTPError as exc:
+        raise OidcFlowError(
+            TOKEN_EXCHANGE_FAILED,
+            exc.code,
+            body=_http_error_body(exc),
+        ) from exc
+    except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise OidcFlowError(TOKEN_EXCHANGE_FAILED, 400) from exc
 
 
@@ -289,6 +319,32 @@ def _loads_json(payload: bytes, *, error_code: str) -> dict[str, Any]:
     if not isinstance(decoded, dict):
         raise OidcFlowError(error_code, 400)
     return decoded
+
+
+def _discovery_cache_key(discovery_url: str) -> str:
+    """Return the cache key for one OIDC discovery URL."""
+
+    digest = hashlib.sha256(discovery_url.encode("utf-8")).hexdigest()
+    return f"{_DISCOVERY_CACHE_PREFIX}{digest}"
+
+
+def _discovery_ttl_seconds() -> int:
+    """Return the configured lifetime for cached OIDC discovery documents."""
+
+    return int(getattr(settings, "ANGEE_IAM_OIDC_DISCOVERY_TTL", _DEFAULT_DISCOVERY_TTL_SECONDS))
+
+
+def _http_error_body(exc: error.HTTPError) -> Any:
+    """Return a JSON or text response body from an HTTP error."""
+
+    payload = exc.read()
+    if not payload:
+        return ""
+    text = payload.decode("utf-8", errors="replace")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return text
 
 
 def _audience_matches(value: object, expected: str) -> bool:

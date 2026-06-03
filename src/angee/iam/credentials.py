@@ -9,9 +9,11 @@ columns and delegates kind-specific behavior here.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import Any, ClassVar
 
 from django.db import models
+from django.utils import timezone
 
 
 class CredentialKind(models.TextChoices):
@@ -28,6 +30,11 @@ class CredentialKindHandler:
 
     def validate(self, material: dict[str, Any]) -> None:
         """Validate ``material`` before it is stored."""
+
+    def upsert_fields(self, material: dict[str, Any]) -> dict[str, Any]:
+        """Return common credential fields derived from ``material``."""
+
+        return {}
 
     def auth_headers(self, credential: Any) -> dict[str, str]:
         """Return HTTP auth headers for ``credential``."""
@@ -83,6 +90,24 @@ class OAuthCredentialHandler(CredentialKindHandler):
 
         material = self.reveal(credential)
         return {"Authorization": f"Bearer {material['access_token']}"}
+
+    def upsert_fields(self, material: dict[str, Any]) -> dict[str, Any]:
+        """Return persisted credential metadata derived from an OAuth token response."""
+
+        fields: dict[str, Any] = {}
+        now = timezone.now()
+        if "expires_in" in material:
+            try:
+                fields["expires_at"] = now + timedelta(seconds=int(material["expires_in"]))
+            except (TypeError, ValueError):
+                pass
+        scope = material.get("scope")
+        if isinstance(scope, str):
+            fields["granted_scopes"] = scope.split()
+        if material.get("access_token"):
+            fields["last_refresh_at"] = now
+            fields["last_refresh_status"] = "ok"
+        return fields
 
     def refresh(self, credential: Any) -> None:
         """Refresh OAuth tokens."""

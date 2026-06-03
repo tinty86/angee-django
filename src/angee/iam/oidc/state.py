@@ -6,12 +6,13 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime
 
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
 from angee.iam.oidc.errors import INVALID_STATE, OidcFlowError
 
-STATE_TTL_SECONDS = 600
+_DEFAULT_STATE_TTL_SECONDS = 600
 _CACHE_PREFIX = "angee.iam.oidc.state:"
 
 
@@ -48,7 +49,7 @@ def issue(
         else None,
         created_at=timezone.now(),
     )
-    cache.set(_cache_key(state_token), record, timeout=STATE_TTL_SECONDS)
+    cache.set(_cache_key(state_token), record, timeout=_state_ttl_seconds())
     return state_token, record
 
 
@@ -67,3 +68,9 @@ def _cache_key(state_token: str) -> str:
     """Return the cache key for one opaque state token."""
 
     return f"{_CACHE_PREFIX}{state_token}"
+
+
+def _state_ttl_seconds() -> int:
+    """Return the configured lifetime for one OIDC state record."""
+
+    return int(getattr(settings, "ANGEE_IAM_OIDC_STATE_TTL", _DEFAULT_STATE_TTL_SECONDS))

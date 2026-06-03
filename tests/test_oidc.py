@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 from urllib import parse
@@ -14,10 +15,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import connection
+from django.utils import timezone
 from rebac import system_context
 
 from angee.iam import identity
-from angee.iam.models import AccountStatus
+from angee.iam.models import AccountStatus, CredentialStatus
 from angee.iam.oidc import client as oidc_client
 from angee.iam.oidc import state as oidc_state
 from angee.iam.oidc.errors import (
@@ -58,6 +60,56 @@ def test_discovery_fallback_fills_blank_authorize_endpoint(monkeypatch: pytest.M
     assert url.startswith("https://issuer.example/oauth/authorize?")
 
 
+def test_fetch_discovery_caches_document_by_discovery_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Discovery cache hits avoid a second discovery document fetch."""
+
+    discovery_url = "https://cached.example/.well-known/openid-configuration"
+    oauth_client = _stub_oauth_client(
+        issuer="",
+        authorize_endpoint="",
+        token_endpoint="",
+        userinfo_endpoint="",
+        jwks_uri="",
+        discovery_url=discovery_url,
+    )
+    cached_documents: dict[str, dict[str, Any]] = {}
+    cache_gets: list[str] = []
+    cache_sets: list[tuple[str, int | None]] = []
+    fetches: list[str] = []
+
+    def cache_get(key: str) -> dict[str, Any] | None:
+        cache_gets.append(key)
+        return cached_documents.get(key)
+
+    def cache_set(key: str, value: dict[str, Any], timeout: int | None = None) -> None:
+        cache_sets.append((key, timeout))
+        cached_documents[key] = value
+
+    def get_json(url: str, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
+        del headers
+        fetches.append(url)
+        return {
+            "issuer": "https://cached.example",
+            "authorization_endpoint": "https://cached.example/oauth/authorize",
+            "token_endpoint": "https://cached.example/oauth/token",
+            "userinfo_endpoint": "https://cached.example/oauth/userinfo",
+            "jwks_uri": "https://cached.example/oauth/jwks",
+        }
+
+    monkeypatch.setattr(oidc_client.cache, "get", cache_get)
+    monkeypatch.setattr(oidc_client.cache, "set", cache_set)
+    monkeypatch.setattr(oidc_client, "_get_json", get_json)
+
+    first = oidc_client.fetch_discovery(oauth_client)
+    second = oidc_client.fetch_discovery(oauth_client)
+
+    assert first == second
+    assert fetches == [discovery_url]
+    assert len(cache_gets) == 2
+    assert len(cache_sets) == 1
+    assert cache_sets[0][1] == 3600
+
+
 def test_authorize_url_contains_state_nonce_and_pkce() -> None:
     """Authorize URL includes state, nonce, and PKCE parameters when supported."""
 
@@ -78,6 +130,21 @@ def test_authorize_url_contains_state_nonce_and_pkce() -> None:
     assert query["nonce"] == [record.nonce]
     assert query["code_challenge"] == ["challenge"]
     assert query["code_challenge_method"] == ["S256"]
+
+
+def test_authorize_url_prepends_openid_when_scope_is_absent() -> None:
+    """Authorize URL adds the required OIDC scope when configured scopes omit it."""
+
+    url = oidc_client.build_authorize_url(
+        _stub_oauth_client(),
+        state="state-token",
+        nonce="nonce-token",
+        redirect_uri="https://app.example/callback",
+        scopes=("email", "profile"),
+    )
+    query = parse.parse_qs(parse.urlsplit(url).query)
+
+    assert query["scope"] == ["openid email profile"]
 
 
 def test_verify_id_token_rejects_bad_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -314,6 +381,31 @@ def test_resolver_create_on_login_provisions_user_and_external_account(
 
 
 @pytest.mark.django_db(transaction=True)
+def test_resolver_create_on_login_sets_user_names_from_claims(
+    oidc_tables: None,
+) -> None:
+    """Provisioned users receive first and last names from OIDC name claims."""
+
+    _vendor, oauth_client = _vendor_and_oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
+
+    user = identity.resolve(
+        oauth_client,
+        sub="sub-named",
+        email="named@example.com",
+        claims={
+            "sub": "sub-named",
+            "email": "named@example.com",
+            "email_verified": True,
+            "given_name": "Ada",
+            "family_name": "Lovelace",
+        },
+    )
+
+    assert user.first_name == "Ada"
+    assert user.last_name == "Lovelace"
+
+
+@pytest.mark.django_db(transaction=True)
 def test_async_resolver_create_on_login_provisions_user_and_external_account(
     oidc_tables: None,
 ) -> None:
@@ -361,6 +453,150 @@ def test_resolver_disallowed_domain_raises_403(
 
 
 @pytest.mark.django_db(transaction=True)
+def test_complete_link_populates_credential_token_fields(
+    oidc_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Credential link persists token-derived expiry, scopes, and refresh telemetry."""
+
+    link_user = get_user_model().objects.create_user(username="token-fields", email="tokens@example.com")
+    _vendor, oauth_client = _vendor_and_oauth_client()
+    state_token, _record = oidc_state.issue(
+        oauth_client,
+        "https://app.example/callback",
+        user_id=str(link_user.pk),
+    )
+    tokens = {
+        "access_token": "access-token",
+        "refresh_token": "refresh-token",
+        "id_token": "id-token",
+        "expires_in": "120",
+        "scope": "openid email profile",
+    }
+    monkeypatch.setattr(identity.client_module, "exchange_code", lambda *args, **kwargs: tokens)
+    monkeypatch.setattr(
+        identity.client_module,
+        "verify_id_token",
+        lambda *args, **kwargs: {"sub": "sub-token-fields", "email": "tokens@example.com"},
+    )
+    monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: {})
+
+    before = timezone.now()
+    account = identity.complete_link(
+        oauth_client,
+        link_user,
+        code="code",
+        state_token=state_token,
+        redirect_uri="https://app.example/callback",
+    )
+
+    with system_context(reason="test oidc assertions"):
+        credential = Credential.objects.get(user=link_user, oauth_client=oauth_client, external_account=account)
+    assert credential.expires_at is not None
+    assert before + timedelta(seconds=119) <= credential.expires_at <= timezone.now() + timedelta(seconds=121)
+    assert credential.granted_scopes == ["openid", "email", "profile"]
+    assert credential.last_refresh_at is not None
+    assert credential.last_refresh_status == "ok"
+    assert credential.reveal()["refresh_token"] == "refresh-token"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credential_upsert_reasserts_active_status(
+    oidc_tables: None,
+) -> None:
+    """Re-upserting an OAuth credential reactivates a previously revoked row."""
+
+    user = get_user_model().objects.create_user(username="reactivated", email="reactivated@example.com")
+    _vendor, oauth_client = _vendor_and_oauth_client()
+    credential = Credential.objects.upsert_for_user(user, oauth_client, "oauth", {"access_token": "first-token"})
+    with system_context(reason="test oidc setup"):
+        Credential.objects.filter(pk=credential.pk).update(status=CredentialStatus.REVOKED)
+
+    updated = Credential.objects.upsert_for_user(user, oauth_client, "oauth", {"access_token": "second-token"})
+
+    updated.refresh_from_db()
+    assert updated.status == CredentialStatus.ACTIVE
+    assert updated.reveal()["access_token"] == "second-token"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_userinfo_claims_merge_into_login_and_link_claims(
+    oidc_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Userinfo claims enrich ID-token claims before login resolve and account link."""
+
+    link_user = get_user_model().objects.create_user(username="merged-claims", email="merged@example.com")
+    _vendor, oauth_client = _vendor_and_oauth_client()
+    token_response = {"access_token": "access", "id_token": "id-token"}
+    id_claims = {
+        "sub": "sub-merged",
+        "email": "id-token@example.com",
+        "preferred_username": "id-token-name",
+    }
+    userinfo_claims = {
+        "email": "userinfo@example.com",
+        "preferred_username": "userinfo-name",
+        "groups": ["ops"],
+    }
+    expected_claims = {
+        "sub": "sub-merged",
+        "email": "id-token@example.com",
+        "preferred_username": "id-token-name",
+        "groups": ["ops"],
+    }
+    captured: dict[str, Any] = {}
+
+    def resolve_user(
+        oauth_client_arg: Any,
+        *,
+        sub: str,
+        email: str | None,
+        claims: dict[str, Any],
+    ) -> Any:
+        captured["oauth_client"] = oauth_client_arg
+        captured["sub"] = sub
+        captured["email"] = email
+        captured["claims"] = claims
+        return link_user
+
+    monkeypatch.setattr(identity.client_module, "exchange_code", lambda *args, **kwargs: token_response)
+    monkeypatch.setattr(identity.client_module, "verify_id_token", lambda *args, **kwargs: id_claims)
+    monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: userinfo_claims)
+    monkeypatch.setattr(identity, "resolve", resolve_user)
+
+    login_state, _login_record = oidc_state.issue(oauth_client, "https://app.example/callback")
+    resolved = identity.complete_login(
+        oauth_client,
+        code="code",
+        state_token=login_state,
+        redirect_uri="https://app.example/callback",
+    )
+
+    assert resolved.pk == link_user.pk
+    assert captured["oauth_client"] == oauth_client
+    assert captured["sub"] == "sub-merged"
+    assert captured["email"] == "id-token@example.com"
+    assert captured["claims"] == expected_claims
+
+    link_state, _link_record = oidc_state.issue(
+        oauth_client,
+        "https://app.example/callback",
+        user_id=str(link_user.pk),
+    )
+    account = identity.complete_link(
+        oauth_client,
+        link_user,
+        code="code",
+        state_token=link_state,
+        redirect_uri="https://app.example/callback",
+    )
+
+    account.refresh_from_db()
+    assert account.identity_claims == expected_claims
+
+
+@pytest.mark.django_db(transaction=True)
 def test_complete_link_rejects_account_owned_by_another_user(
     oidc_tables: None,
     monkeypatch: pytest.MonkeyPatch,
@@ -392,6 +628,7 @@ def test_complete_link_rejects_account_owned_by_another_user(
         "verify_id_token",
         lambda *args, **kwargs: {"sub": "sub-linked", "email": "other@example.com"},
     )
+    monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: {})
 
     with pytest.raises(OidcFlowError) as exc_info:
         identity.complete_link(
@@ -431,6 +668,7 @@ def test_complete_link_binds_to_state_user_after_session_swap(
         "verify_id_token",
         lambda *args, **kwargs: {"sub": "sub-swapped", "email": "start@example.com"},
     )
+    monkeypatch.setattr(identity.client_module, "fetch_userinfo", lambda *args, **kwargs: {})
 
     account = identity.complete_link(
         oauth_client,

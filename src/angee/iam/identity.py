@@ -71,7 +71,7 @@ def resolve(oauth_client: Any, *, sub: str, email: str | None, claims: dict[str,
             and _domain_allowed(oauth_client, normalized_email)
             and (_email_verified(claims) or not normalized_email)
         ):
-            user = _create_user_for_identity(normalized_email, sub)
+            user = _create_user_for_identity(normalized_email, sub, claims=claims)
             Account.objects.link(
                 oauth_client.vendor,
                 sub,
@@ -118,6 +118,7 @@ def complete_login(
         str(tokens.get("id_token", "")),
         nonce=record.nonce,
     )
+    claims = _claims_with_userinfo(oauth_client, tokens, claims)
     sub = claims.get("sub")
     if not sub:
         raise OidcFlowError(INVALID_ID_TOKEN, 400)
@@ -166,6 +167,7 @@ def complete_link(
         str(tokens.get("id_token", "")),
         nonce=record.nonce,
     )
+    claims = _claims_with_userinfo(oauth_client, tokens, claims)
     sub = claims.get("sub")
     if not sub:
         raise OidcFlowError(INVALID_ID_TOKEN, 400)
@@ -245,11 +247,16 @@ def _find_user_by_email(email: str) -> AbstractBaseUser | None:
     return cast(AbstractBaseUser | None, user)
 
 
-def _create_user_for_identity(email: str, sub: str) -> AbstractBaseUser:
+def _create_user_for_identity(email: str, sub: str, *, claims: dict[str, Any]) -> AbstractBaseUser:
     """Create a non-superuser IAM user for one OIDC identity."""
 
     UserModel = get_user_model()
     username = _available_username(UserModel, email or f"oidc-{sub}")
+    user_fields: dict[str, Any] = {}
+    if given_name := claims.get("given_name"):
+        user_fields["first_name"] = str(given_name)
+    if family_name := claims.get("family_name"):
+        user_fields["last_name"] = str(family_name)
     return cast(
         AbstractBaseUser,
         UserModel.objects.create_user(
@@ -258,8 +265,25 @@ def _create_user_for_identity(email: str, sub: str) -> AbstractBaseUser:
             password=None,
             is_staff=False,
             is_superuser=False,
+            **user_fields,
         ),
     )
+
+
+def _claims_with_userinfo(
+    oauth_client: Any,
+    tokens: dict[str, Any],
+    claims: dict[str, Any],
+) -> dict[str, Any]:
+    """Return ID-token claims enriched by best-effort userinfo claims."""
+
+    userinfo = client_module.fetch_userinfo(
+        oauth_client,
+        str(tokens.get("access_token", "") or ""),
+    )
+    if not userinfo:
+        return claims
+    return {**userinfo, **claims}
 
 
 def _available_username(UserModel: Any, seed: str) -> str:

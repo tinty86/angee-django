@@ -555,6 +555,7 @@ class CredentialManager(RebacManager):
             "external_account",
             "status",
             "expires_at",
+            "granted_scopes",
             "last_refresh_at",
             "last_refresh_status",
         }
@@ -581,11 +582,15 @@ class CredentialManager(RebacManager):
         if owned := self.operation_fields & fields.keys():
             names = ", ".join(sorted(owned))
             raise ValueError(f"Credential field(s) are owned by upsert_for_user: {names}")
-        update_values = _validated_manager_values(
-            self.model,
-            fields,
-            allowed=self.caller_fields,
+        update_values = handler.upsert_fields(material)
+        update_values.update(
+            _validated_manager_values(
+                self.model,
+                fields,
+                allowed=self.caller_fields,
+            )
         )
+        update_values["status"] = CredentialStatus.ACTIVE
         material_value = json.dumps(material, sort_keys=True, separators=(",", ":"))
         operation_values = {
             "kind": kind_value,
@@ -597,6 +602,7 @@ class CredentialManager(RebacManager):
             "external_account": external_account,
             "status": CredentialStatus.ACTIVE,
             "expires_at": None,
+            "granted_scopes": [],
             "last_refresh_at": None,
             "last_refresh_status": "",
             **operation_values,
@@ -639,6 +645,7 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
     material = EncryptedField()
     status = StateField(choices_enum=CredentialStatus, default=CredentialStatus.ACTIVE)
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    granted_scopes = models.JSONField(default=list)
     last_refresh_at = models.DateTimeField(null=True, blank=True)
     last_refresh_status = models.CharField(max_length=32, blank=True)
 

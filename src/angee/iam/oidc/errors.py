@@ -1,5 +1,8 @@
 """OIDC flow errors surfaced to callers as stable codes."""
 
+from __future__ import annotations
+
+from typing import Any
 
 INVALID_STATE = "invalid_state"
 DISCOVERY_FAILED = "discovery_failed"
@@ -13,7 +16,15 @@ IDENTITY_RESOLUTION_FAILED = "identity_resolution_failed"
 class OidcFlowError(Exception):
     """Exception carrying a stable OIDC failure code and HTTP status."""
 
-    def __init__(self, code: str, http_status: int = 400, message: str | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        http_status: int = 400,
+        message: str | None = None,
+        *,
+        body: Any = None,
+    ) -> None:
         self.code = code
         self.http_status = http_status
+        self.body = body
         super().__init__(message or code)
