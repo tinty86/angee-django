@@ -11,6 +11,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
   "channels>=4.0",
+  "cryptography>=44",
   "daphne>=4.0",
   "django-import-export>=4.3",
   "django-reversion>=5.1",
@@ -18,6 +19,7 @@ dependencies = [
   "django-sqids>=0.1",
   "django-zed-rebac[strawberry-django]>=0.10.0",
   "django>=6.0",
+  "pyjwt[crypto]>=2.12",
   "pyyaml>=6",
   "strawberry-graphql>=0.270",
   "strawberry-django-aggregates>=0.4.1",

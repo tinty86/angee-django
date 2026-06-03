@@ -97,8 +97,8 @@ class DeletionPreview:
             deleted_counts[queryset.model] = deleted_counts.get(queryset.model, 0) + count
 
         updated_counts: dict[type[models.Model], int] = {}
-        for (field, _value), object_groups in collector.field_updates.items():
-            model = field.model
+        for (model_field, _value), object_groups in collector.field_updates.items():
+            model = model_field.model
             updated_counts[model] = updated_counts.get(model, 0) + sum(len(group) for group in object_groups)
         return cls(
             total_deleted_count=sum(deleted_counts.values()),

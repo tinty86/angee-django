@@ -11,6 +11,7 @@ INSTALLED_APPS = [
     "simple_history",
     "angee.base.apps.BaseConfig",
     "angee.iam.apps.IAMConfig",
+    "angee.integrate.apps.IntegrateConfig",
 ]
 DATABASES = {
     "default": {

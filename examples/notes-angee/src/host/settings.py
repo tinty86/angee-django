@@ -36,7 +36,7 @@ if str(RUNTIME_DIR.parent) not in sys.path:
 # addons adopt it, so every entrypoint (runserver, migrate, schema, …) shares
 # this configuration.
 COMPOSED_SETTINGS = compose_defaults(
-    addons=("example.notes", "angee.operator"),
+    addons=("angee.iam", "angee.integrate", "angee.operator", "example.notes"),
     runtime_dir=RUNTIME_DIR,
     root_urlconf="host.urls",
     asgi_application="host.asgi.application",

@@ -12,8 +12,18 @@ class IAMConfig(BaseAddonConfig):
     name = "angee.iam"
     label = "iam"
     depends_on = ("base",)
-    settings_defaults = {"AUTH_USER_MODEL": "iam.User"}
-    """IAM owns the swappable user model it emits as the composed default."""
+    settings_defaults = {
+        "AUTH_USER_MODEL": "iam.User",
+        "ANGEE_IAM_OAUTH_CLIENTS": (),
+        "ANGEE_IAM_OIDC_DISCOVERY_TTL": 3600,
+        "ANGEE_IAM_OIDC_STATE_TTL": 600,
+    }
+    """IAM owns the user model and optional settings-sourced OAuth/OIDC client registrations."""
+
+    resources = {
+        "master": ({"path": "resources/master/010_iam.vendor.yaml", "adopt": "slug"},),
+    }
+    """Default vendor catalogue, adopted by slug so reloads stay idempotent."""
 
     def ready(self) -> None:
         """Wire IAM-owned REBAC relationships after app population."""
