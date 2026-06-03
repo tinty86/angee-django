@@ -221,6 +221,6 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
     class Meta:
         """Django model options for webhook subscriptions."""
 
-        abstract = False
+        abstract = True
         rebac_resource_type = "integrate/webhook_subscription"
         rebac_id_attr = "sqid"
