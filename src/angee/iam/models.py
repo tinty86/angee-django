@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -34,6 +34,58 @@ class AccountStatus(models.TextChoices):
     ERROR = "error", "Error"
     DISABLED = "disabled", "Disabled"
 
+    @classmethod
+    def from_value(cls, value: object) -> AccountStatus:
+        """Return the member for one string or enum account-status value."""
+
+        raw = str(getattr(value, "value", value))
+        try:
+            return cast(AccountStatus, cls(raw))
+        except ValueError as error:
+            raise ValueError(f"Unsupported account status for rollup: {raw}") from error
+
+    @classmethod
+    def from_capability(cls, status: object) -> AccountStatus:
+        """Return the account status one capability status contributes to the rollup."""
+
+        raw = str(getattr(status, "value", status))
+        mapping = {
+            "active": cls.from_value(cls.ACTIVE),
+            "paused": cls.from_value(cls.DISABLED),
+            "disabled": cls.from_value(cls.DISABLED),
+            "error": cls.from_value(cls.ERROR),
+        }
+        try:
+            return mapping[raw]
+        except KeyError as error:
+            raise ValueError(f"Unsupported capability status for account rollup: {raw}") from error
+
+    @classmethod
+    def rollup(cls, statuses: Iterable[object]) -> AccountStatus:
+        """Return the most severe account status across capability contributions."""
+
+        members = tuple(cls.from_value(status) for status in statuses)
+        return max(members, key=lambda member: member.precedence) if members else cls.from_value(cls.ACTIVE)
+
+    @property
+    def precedence(self) -> int:
+        """Return rollup precedence — the highest wins when statuses combine."""
+
+        order = (
+            AccountStatus.ACTIVE,
+            AccountStatus.DISABLED,
+            AccountStatus.ERROR,
+            AccountStatus.EXPIRED,
+            AccountStatus.REVOKED,
+        )
+        return order.index(self)
+
+    @property
+    def is_error(self) -> bool:
+        """Return whether this status is an error, expiry, or revocation state."""
+
+        return self in (AccountStatus.ERROR, AccountStatus.EXPIRED, AccountStatus.REVOKED)
+
 
 class CredentialStatus(models.TextChoices):
     """Lifecycle state for per-user credential material."""
@@ -41,26 +93,6 @@ class CredentialStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     EXPIRED = "expired", "Expired"
     REVOKED = "revoked", "Revoked"
-
-
-_ACCOUNT_STATUS_PRECEDENCE: dict[str, int] = {
-    "active": 0,
-    "disabled": 1,
-    "error": 2,
-    "expired": 3,
-    "revoked": 4,
-}
-_CAPABILITY_ACCOUNT_STATUS: dict[str, AccountStatus] = {
-    "active": AccountStatus.ACTIVE,  # type: ignore[dict-item]
-    "paused": AccountStatus.DISABLED,  # type: ignore[dict-item]
-    "disabled": AccountStatus.DISABLED,  # type: ignore[dict-item]
-    "error": AccountStatus.ERROR,  # type: ignore[dict-item]
-}
-_ACCOUNT_ERROR_STATUSES = {
-    AccountStatus.ERROR,
-    AccountStatus.EXPIRED,
-    AccountStatus.REVOKED,
-}
 
 
 class UserManager(RebacManager, BaseUserManager):
@@ -378,16 +410,16 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
         """
 
         reported_at = timezone.now()
-        incoming_status = _capability_account_status(status)
+        incoming_status = AccountStatus.from_capability(status)
         capability_statuses = dict(self.capability_statuses or {})
         # Deleted capabilities can leave stale contributions until pruning has an owner.
         capability_statuses[str(capability_key)] = incoming_status.value
-        rolled_status = _rollup_account_status(capability_statuses.values())
+        rolled_status = AccountStatus.rollup(capability_statuses.values())
 
         self.capability_statuses = capability_statuses
         self.status = rolled_status
         self.last_used_at = reported_at
-        if rolled_status in _ACCOUNT_ERROR_STATUSES:
+        if rolled_status.is_error:
             if error:
                 self.last_error = error
             self.last_error_at = reported_at
@@ -745,37 +777,6 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
         """Return authorization headers through the kind handler."""
 
         return self.handler.auth_headers(self)
-
-
-def _capability_account_status(status: Any) -> AccountStatus:
-    value = _choice_value(status)
-    try:
-        return _CAPABILITY_ACCOUNT_STATUS[value]
-    except KeyError as error:
-        raise ValueError(f"Unsupported capability status for account rollup: {value}") from error
-
-
-def _rollup_account_status(statuses: Iterable[Any]) -> AccountStatus:
-    account_statuses = tuple(_account_status(status) for status in statuses)
-    if not account_statuses:
-        return AccountStatus.ACTIVE  # type: ignore[return-value]
-    return max(account_statuses, key=_account_status_precedence)
-
-
-def _account_status_precedence(status: AccountStatus) -> int:
-    return _ACCOUNT_STATUS_PRECEDENCE[status.value]
-
-
-def _account_status(status: Any) -> AccountStatus:
-    value = _choice_value(status)
-    try:
-        return AccountStatus(value)
-    except ValueError as error:
-        raise ValueError(f"Unsupported account status for rollup: {value}") from error
-
-
-def _choice_value(value: Any) -> str:
-    return str(getattr(value, "value", value))
 
 
 def _validated_manager_values(
