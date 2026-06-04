@@ -44,6 +44,16 @@ COMPOSED_SETTINGS = compose_defaults(
 )
 globals().update(COMPOSED_SETTINGS)
 
+# The host owns where its operator daemon lives and the admin bearer that mints
+# per-actor tokens — deployment facts the stack exports into the environment
+# (see angee.yaml). The operator addon reads these from settings, never from the
+# environment directly.
+ANGEE_OPERATOR_GRAPHQL_ENDPOINT = os.environ.get("ANGEE_OPERATOR_GRAPHQL_ENDPOINT")
+ANGEE_OPERATOR_URL = os.environ.get("ANGEE_OPERATOR_URL")
+ANGEE_OPERATOR_TOKEN = os.environ.get("ANGEE_OPERATOR_TOKEN") or os.environ.get(
+    "ANGEE_SECRET_OPERATOR_TOKEN"
+)
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

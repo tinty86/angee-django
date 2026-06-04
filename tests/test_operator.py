@@ -11,31 +11,25 @@ from rebac import SubjectRef
 from angee.operator import schema as operator_schema
 from angee.operator.daemon import OperatorDaemon
 
-_TOKEN_ENV_KEYS = ("ANGEE_OPERATOR_TOKEN", "ANGEE_SECRET_OPERATOR_TOKEN")
-_URL_ENV_KEYS = ("ANGEE_OPERATOR_GRAPHQL_ENDPOINT", "ANGEE_OPERATOR_URL")
 _CONNECTION_QUERY = "{ operatorConnection { endpoint token } }"
 _ACTOR = SubjectRef.of("auth/user", "abc")
 
 
-@pytest.fixture
-def clean_operator_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drop operator endpoint/token env so resolution stays deterministic."""
-
-    for key in (*_TOKEN_ENV_KEYS, *_URL_ENV_KEYS):
-        monkeypatch.delenv(key, raising=False)
-
-
 # --- endpoint resolution ------------------------------------------------------
+#
+# The daemon resolves purely from Django settings; the host owns the env→settings
+# bridge (its ``settings.py`` reads the operator vars the stack exports). pytest's
+# ``settings`` fixture isolates settings per test, so resolution is deterministic
+# without scrubbing the process environment.
 
 
-def test_endpoint_defaults_to_same_origin_proxy(clean_operator_env: None) -> None:
+def test_endpoint_defaults_to_same_origin_proxy() -> None:
     """With nothing configured the endpoint is the CORS-free proxy default."""
 
     assert OperatorDaemon.from_settings().endpoint == "/operator/graphql"
 
 
 def test_endpoint_full_setting_wins_without_doubling_graphql(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
 ) -> None:
     """A full endpoint is returned verbatim, not re-suffixed."""
@@ -46,7 +40,6 @@ def test_endpoint_full_setting_wins_without_doubling_graphql(
 
 
 def test_endpoint_base_url_gains_one_graphql_suffix(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
 ) -> None:
     """A base URL is suffixed with a single ``/graphql``."""
@@ -56,22 +49,10 @@ def test_endpoint_base_url_gains_one_graphql_suffix(
     assert OperatorDaemon.from_settings().endpoint == "http://localhost:9000/graphql"
 
 
-def test_endpoint_reads_base_url_from_environment(
-    clean_operator_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A base URL resolves from the environment when no setting is present."""
-
-    monkeypatch.setenv("ANGEE_OPERATOR_URL", "http://daemon:9000")
-
-    assert OperatorDaemon.from_settings().endpoint == "http://daemon:9000/graphql"
-
-
 # --- admin bearer -------------------------------------------------------------
 
 
 def test_admin_bearer_prefers_setting(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
 ) -> None:
     """A configured setting is the resolved admin bearer."""
@@ -81,18 +62,7 @@ def test_admin_bearer_prefers_setting(
     assert OperatorDaemon.from_settings().admin_bearer == "from-settings"
 
 
-def test_admin_bearer_falls_back_to_secret_env(
-    clean_operator_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The secret env key is the final fallback for the admin bearer."""
-
-    monkeypatch.setenv("ANGEE_SECRET_OPERATOR_TOKEN", "from-secret-env")
-
-    assert OperatorDaemon.from_settings().admin_bearer == "from-secret-env"
-
-
-def test_admin_bearer_absent_is_none(clean_operator_env: None) -> None:
+def test_admin_bearer_absent_is_none() -> None:
     """No configured bearer resolves to ``None``."""
 
     assert OperatorDaemon.from_settings().admin_bearer is None
@@ -102,7 +72,6 @@ def test_admin_bearer_absent_is_none(clean_operator_env: None) -> None:
 
 
 def test_mint_token_posts_actor_scope_ttl_and_returns_token(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -127,7 +96,6 @@ def test_mint_token_posts_actor_scope_ttl_and_returns_token(
 
 
 def test_mint_token_derives_host_from_full_graphql_endpoint(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -148,7 +116,6 @@ def test_mint_token_derives_host_from_full_graphql_endpoint(
 
 
 def test_mint_token_preserves_mount_prefix(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -173,7 +140,6 @@ def test_mint_token_preserves_mount_prefix(
 
 
 def test_mint_token_strips_only_trailing_graphql_from_prefixed_endpoint(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,14 +159,13 @@ def test_mint_token_strips_only_trailing_graphql_from_prefixed_endpoint(
     assert seen["url"] == "https://host/operator/tokens/mint"
 
 
-def test_mint_token_none_when_unconfigured(clean_operator_env: None) -> None:
+def test_mint_token_none_when_unconfigured() -> None:
     """No bearer or reachable host hides the connection."""
 
     assert OperatorDaemon.from_settings().mint_token("auth/user:abc") is None
 
 
 def test_mint_token_none_on_transport_error(
-    clean_operator_env: None,
     settings: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

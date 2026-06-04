@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
+from graphql import build_client_schema, get_introspection_query, print_schema
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class OperatorDaemon:
         return cls(
             endpoint=cls._with_graphql_path(endpoint_url or base_url or _DEFAULT_BASE),
             server_base=cls._server_base(endpoint_url, base_url),
-            admin_bearer=cls._setting("ANGEE_OPERATOR_TOKEN", "ANGEE_SECRET_OPERATOR_TOKEN"),
+            admin_bearer=cls._setting("ANGEE_OPERATOR_TOKEN"),
             scope=tuple(str(item) for item in getattr(settings, "ANGEE_OPERATOR_TOKEN_SCOPE", ())),
             ttl=str(getattr(settings, "ANGEE_OPERATOR_TOKEN_TTL", _DEFAULT_TTL)),
         )
@@ -89,8 +89,6 @@ class OperatorDaemon:
 
         if self.admin_bearer is None or self.server_base is None:
             return None
-        from graphql import build_client_schema, get_introspection_query, print_schema
-
         try:
             data = self._post_json(
                 self._with_graphql_path(self.server_base),
@@ -120,16 +118,17 @@ class OperatorDaemon:
             return json.loads(response.read().decode())
 
     @staticmethod
-    def _setting(name: str, *fallback_env: str) -> str | None:
-        """Return the first non-empty value from the setting then the env keys."""
+    def _setting(name: str) -> str | None:
+        """Return the named Django setting as a non-empty string, or ``None``.
 
-        candidates = (
-            getattr(settings, name, None),
-            *(os.environ.get(key) for key in (name, *fallback_env)),
-        )
-        for raw in candidates:
-            if raw is not None and (text := str(raw).strip()):
-                return text
+        The host owns the env→settings bridge (its ``settings.py`` reads the
+        operator deployment vars the stack exports); the daemon reads only
+        settings, never the environment.
+        """
+
+        raw = getattr(settings, name, None)
+        if raw is not None and (text := str(raw).strip()):
+            return text
         return None
 
     @staticmethod
