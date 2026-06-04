@@ -5,7 +5,8 @@ import { resolveBaseURL } from "./env";
 export interface E2EConfigOptions {
   /** Directory holding specs and the auth setup, relative to the config. */
   testDir?: string;
-  /** Extra Playwright config merged over the framework defaults (shallow). */
+  /** Extra Playwright config; `use` deep-merges over the framework defaults so
+   * `baseURL` survives, `projects` is replaced only when explicitly provided. */
   overrides?: PlaywrightTestConfig;
 }
 
@@ -27,6 +28,9 @@ export function defineE2EConfig(
   options: E2EConfigOptions = {},
 ): PlaywrightTestConfig {
   const isCI = Boolean(process.env.CI);
+  // Pull framework-owned seams out of the flat spread so a consumer override
+  // can't silently drop baseURL or the setup dependency (e2e-003).
+  const { use: useOverride, projects: projectsOverride, ...restOverrides } = options.overrides ?? {};
   return defineConfig({
     testDir: options.testDir ?? "tests",
     fullyParallel: true,
@@ -37,8 +41,9 @@ export function defineE2EConfig(
       baseURL: resolveBaseURL(),
       trace: "on-first-retry",
       screenshot: "only-on-failure",
+      ...useOverride,
     },
-    projects: [
+    projects: projectsOverride ?? [
       { name: "setup", testMatch: /.*\.setup\.ts/ },
       {
         name: "chromium",
@@ -46,6 +51,6 @@ export function defineE2EConfig(
         dependencies: ["setup"],
       },
     ],
-    ...options.overrides,
+    ...restOverrides,
   });
 }

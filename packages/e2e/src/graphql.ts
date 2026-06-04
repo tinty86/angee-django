@@ -2,7 +2,6 @@ import type { APIRequestContext } from "@playwright/test";
 
 /** GraphQL endpoints and the CSRF endpoint, reached through the SPA origin. */
 export const PUBLIC_GRAPHQL_PATH = "/graphql/public/";
-export const CONSOLE_GRAPHQL_PATH = "/graphql/console/";
 export const CSRF_PATH = "/auth/csrf/";
 
 export interface GraphQLError {

@@ -1,5 +1,4 @@
-import { expect, type Locator } from "@playwright/test";
-import { PageObject } from "@angee/e2e";
+import { expect, type Locator, PageObject } from "@angee/e2e";
 
 /** The `/notes` data-view page: list/board, toolbar controls, and the pager. */
 export class NotesPage extends PageObject {
