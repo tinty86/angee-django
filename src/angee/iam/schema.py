@@ -23,9 +23,7 @@ from strawberry import auto, relay
 from strawberry.permission import BasePermission
 from strawberry.scalars import JSON
 
-from angee.base.deletion import DeletionPreview
-from angee.base.graphql import AngeeNode, OffsetPaginated
-from angee.base.graphql.crud import DeletePreview
+from angee.base.graphql import AngeeNode, OffsetPaginated, crud
 from angee.base.relations import revoke_owner
 from angee.iam import identity
 from angee.iam.credentials import CredentialKind
@@ -713,81 +711,27 @@ def _revoke_remote_oauth_token(credential: Any) -> None:
         return
 
 
-@strawberry.type
-class IAMVendorMutation:
-    """Admin mutations for the vendor catalogue.
+_VENDOR_MUTATION = crud(
+    VendorType,
+    create=VendorInput,
+    update=VendorPatch,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="vendor",
+    write_context="iam.graphql.vendor",
+)
+"""Admin vendor CRUD: const-admin gated by ``PlatformAdminPermission``, written elevated."""
 
-    Hand-rolled (not ``crud()``) on purpose: the writes run under
-    ``system_context``, gated by :class:`PlatformAdminPermission`. ``crud()``
-    relies on REBAC's per-row write-gate, but ``auth/vendor``'s const-backed
-    ``create = admin->member`` is unsatisfiable for a table-backed row — the
-    sqid is only computed after the insert, so the create check always sees an
-    empty resource id and fails closed for everyone. The const-admin reach is
-    therefore enforced at the GraphQL layer and the insert runs elevated, the
-    same shape the IAM managers use (``AccountManager.link`` /
-    ``CredentialManager.upsert_for_user`` create under ``system_context``).
-    """
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def create_vendor(self, data: VendorInput) -> VendorType:
-        """Create one vendor after the console admin gate passes."""
-
-        with system_context(reason="iam.graphql.vendor.create"):
-            return cast(VendorType, Vendor.objects.create(**_input_values(data, _VENDOR_FIELDS)))
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def update_vendor(self, data: VendorPatch) -> VendorType:
-        """Update one vendor after the console admin gate passes."""
-
-        with system_context(reason="iam.graphql.vendor.update"):
-            vendor = _resolve_public_id(Vendor, data.id)
-            _assign_values(vendor, _input_values(data, _VENDOR_FIELDS))
-            vendor.save()
-        return cast(VendorType, vendor)
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def delete_vendor(self, id: relay.GlobalID) -> DeletePreview:
-        """Delete one vendor after the console admin gate passes."""
-
-        return _delete_instance(Vendor, id, reason="iam.graphql.vendor.delete")
-
-
-@strawberry.type
-class IAMOAuthClientMutation:
-    """Admin mutations for non-secret OAuth/OIDC client registration.
-
-    Hand-rolled under ``system_context`` for the same reason as
-    :class:`IAMVendorMutation`: the const-backed ``create`` gate cannot apply to
-    a not-yet-inserted row, so the const-admin gate lives at the GraphQL layer.
-    """
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def create_oauth_client(self, data: OAuthClientInput) -> OAuthClientType:
-        """Create one OAuth client after the console admin gate passes."""
-
-        with system_context(reason="iam.graphql.oauth_client.create"):
-            values = _input_values(data, _OAUTH_CLIENT_FIELDS)
-            values["vendor"] = _resolve_public_id(Vendor, data.vendor)
-            return cast(OAuthClientType, OAuthClient.objects.create(**values))
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def update_oauth_client(self, data: OAuthClientPatch) -> OAuthClientType:
-        """Update one OAuth client after the console admin gate passes."""
-
-        with system_context(reason="iam.graphql.oauth_client.update"):
-            oauth_client = _resolve_public_id(OAuthClient, data.id)
-            values = _input_values(data, _OAUTH_CLIENT_FIELDS)
-            if data.vendor is not strawberry.UNSET and data.vendor is not None:
-                values["vendor"] = _resolve_public_id(Vendor, data.vendor)
-            _assign_values(oauth_client, values)
-            oauth_client.save()
-        return cast(OAuthClientType, oauth_client)
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def delete_oauth_client(self, id: relay.GlobalID) -> DeletePreview:
-        """Delete one OAuth client after the console admin gate passes."""
-
-        return _delete_instance(OAuthClient, id, reason="iam.graphql.oauth_client.delete")
+_OAUTH_CLIENT_MUTATION = crud(
+    OAuthClientType,
+    create=OAuthClientInput,
+    update=OAuthClientPatch,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="oauth_client",
+    write_context="iam.graphql.oauth_client",
+)
+"""Admin OAuth-client CRUD: same elevated const-admin shape as the vendor surface."""
 
 
 def _request(info: strawberry.Info) -> HttpRequest:
@@ -921,73 +865,6 @@ def _string_list(value: object) -> list[str]:
     return [str(item) for item in value]
 
 
-_VENDOR_FIELDS = frozenset({"slug", "display_name", "website_url", "icon", "description"})
-_OAUTH_CLIENT_FIELDS = frozenset(
-    {
-        "display_name",
-        "environment",
-        "client_id",
-        "issuer",
-        "authorize_endpoint",
-        "token_endpoint",
-        "revoke_endpoint",
-        "userinfo_endpoint",
-        "jwks_uri",
-        "discovery_url",
-        "is_oidc",
-        "is_enabled",
-        "scopes_catalogue",
-        "default_scopes",
-        "supports_refresh",
-        "refresh_rotates",
-        "supports_pkce",
-        "max_refresh_age_seconds",
-        "link_on_email_match",
-        "create_on_login",
-        "allowed_email_domains",
-    }
-)
-
-
-def _input_values(data: object, fields: frozenset[str]) -> dict[str, Any]:
-    """Return set Strawberry input values for one field set."""
-
-    values: dict[str, Any] = {}
-    for name in fields:
-        value = getattr(data, name, strawberry.UNSET)
-        if value is strawberry.UNSET:
-            continue
-        values[name] = value
-    return values
-
-
-def _assign_values(instance: Any, values: dict[str, Any]) -> None:
-    """Assign values to a Django model instance."""
-
-    for name, value in values.items():
-        setattr(instance, name, value)
-
-
-def _resolve_public_id(model: Any, global_id: relay.GlobalID) -> Any:
-    """Resolve one Relay global ID to a model instance."""
-
-    instance = model.from_public_id(global_id.node_id)
-    if instance is None:
-        raise ValueError(f"{model._meta.object_name} {global_id.node_id!r} was not found")
-    return instance
-
-
-def _delete_instance(model: Any, global_id: relay.GlobalID, *, reason: str) -> DeletePreview:
-    """Delete one instance and return the standard deletion preview payload."""
-
-    with system_context(reason=reason), transaction.atomic():
-        instance = _resolve_public_id(model, global_id)
-        preview = DeletionPreview.from_instance(instance)
-        if not preview.has_blockers:
-            instance.delete()
-    return DeletePreview.from_domain(preview)
-
-
 schemas = {
     "public": {
         "query": [IAMQuery, IAMConnectionsQuery],
@@ -1008,7 +885,7 @@ schemas = {
     },
     "console": {
         "query": [IAMQuery, IAMConsoleQuery],
-        "mutation": [IAMMutation, IAMVendorMutation, IAMOAuthClientMutation],
+        "mutation": [IAMMutation, _VENDOR_MUTATION, _OAUTH_CLIENT_MUTATION],
         "types": [
             UserType,
             VendorType,

@@ -8,7 +8,10 @@ import strawberry
 import strawberry_django
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models, transaction
+from rebac import system_context
 from strawberry import relay
+from strawberry.extensions.field_extension import FieldExtension, SyncExtensionResolver
+from strawberry.types import Info
 
 from angee.base.deletion import (
     DeletionPreview,
@@ -17,6 +20,29 @@ from angee.base.deletion import (
 )
 from angee.base.graphql.introspection import django_model, surface_name
 from angee.base.models import instance_from_public_id
+
+
+class _SystemContextWrite(FieldExtension):
+    """Run an elevated CRUD write under ``system_context``, after the field's gate.
+
+    ``crud(..., write_context=…)`` attaches this to create/update/delete for an
+    admin console surface whose REBAC per-row ``create`` gate can't apply to a
+    not-yet-inserted row (the sqid only exists post-insert). The ``permission_classes``
+    on the field are the authorization (checked first, with the request actor); this
+    extension then runs the write elevated so the unsatisfiable per-row gate is bypassed —
+    the same shape the IAM managers use for const-admin writes.
+    """
+
+    def __init__(self, reason: str) -> None:
+        """Store the ``system_context`` reason recorded for the elevated write."""
+
+        self._reason = reason
+
+    def resolve(self, next_: SyncExtensionResolver, source: Any, info: Info, **kwargs: Any) -> Any:
+        """Resolve the wrapped write under ``system_context``."""
+
+        with system_context(reason=self._reason):
+            return next_(source, info, **kwargs)
 
 
 @strawberry.type
@@ -89,8 +115,14 @@ def crud(
     delete: bool = False,
     name: str | None = None,
     permission_classes: list[type] | None = None,
+    write_context: str | None = None,
 ) -> type:
-    """Return a Strawberry mutation surface for one Django model type."""
+    """Return a Strawberry mutation surface for one Django model type.
+
+    ``write_context`` runs the create/update/delete writes under ``system_context``
+    (with that reason), gated by ``permission_classes`` — for admin console surfaces
+    whose const-backed per-row REBAC ``create`` cannot apply to a not-yet-inserted row.
+    """
 
     model = django_model(node)
     singular = name or model._meta.model_name
@@ -104,6 +136,11 @@ def crud(
         annotations[attr] = annotation
         namespace[attr] = field
 
+    def write_extensions() -> list[FieldExtension] | None:
+        """Return a fresh elevated-write extension list when a write context is set."""
+
+        return [_SystemContextWrite(write_context)] if write_context else None
+
     if create is not None:
         add(
             "create",
@@ -111,6 +148,7 @@ def crud(
             strawberry_django.mutations.create(
                 create,
                 permission_classes=permission_classes,
+                extensions=write_extensions(),
             ),
         )
     if update is not None:
@@ -120,6 +158,7 @@ def crud(
             strawberry_django.mutations.update(
                 update,
                 permission_classes=permission_classes,
+                extensions=write_extensions(),
             ),
         )
     if delete:
@@ -129,6 +168,7 @@ def crud(
             strawberry.mutation(
                 resolver=_delete_resolver(model),
                 permission_classes=permission_classes,
+                extensions=write_extensions() or [],
             ),
         )
 

@@ -530,15 +530,15 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
     discovery_url = models.URLField(blank=True)
     is_oidc = models.BooleanField(default=False, db_index=True)
     is_enabled = models.BooleanField(default=True, db_index=True)
-    scopes_catalogue = models.JSONField(default=list)
-    default_scopes = models.JSONField(default=list)
+    scopes_catalogue = models.JSONField(default=list, blank=True)
+    default_scopes = models.JSONField(default=list, blank=True)
     supports_refresh = models.BooleanField(default=True)
     refresh_rotates = models.BooleanField(default=False)
     supports_pkce = models.BooleanField(default=True)
     max_refresh_age_seconds = models.PositiveIntegerField(null=True, blank=True)
     link_on_email_match = models.BooleanField(default=False)
     create_on_login = models.BooleanField(default=False)
-    allowed_email_domains = models.JSONField(default=list)
+    allowed_email_domains = models.JSONField(default=list, blank=True)
 
     objects = OAuthClientManager()
 
@@ -710,7 +710,7 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
     material = EncryptedField()
     status = StateField(choices_enum=CredentialStatus, default=CredentialStatus.ACTIVE)
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    granted_scopes = models.JSONField(default=list)
+    granted_scopes = models.JSONField(default=list, blank=True)
     last_refresh_at = models.DateTimeField(null=True, blank=True)
     last_refresh_status = models.CharField(max_length=32, blank=True)
 
