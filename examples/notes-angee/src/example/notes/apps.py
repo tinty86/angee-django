@@ -16,7 +16,7 @@ class NotesConfig(BaseAddonConfig):
     depends_on = ("base",)
     resources: ClassVar[ResourceManifest] = {
         "demo": (
-            "resources/demo/010_auth.user.yaml",
+            "resources/demo/010_iam.user.yaml",
             "resources/demo/020_notes.note.yaml",
         ),
     }

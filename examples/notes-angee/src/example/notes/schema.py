@@ -143,7 +143,7 @@ def _rebac_scoped(info: strawberry.Info | None = None) -> QuerySet[Any]:
 
     queryset = Note.objects.all().on_field_deny("allow")
     try:
-        cast(Any, queryset)._apply_scope_in_place()
+        queryset.apply_ambient_scope()
     except MissingActorError:
         return cast(QuerySet[Any], queryset.none())
     return cast(QuerySet[Any], queryset)
@@ -210,7 +210,7 @@ _AGGREGATE_TYPES = [
 def _scoped_note_by_id(id: relay.GlobalID) -> Any | None:
     """Return the actor-visible note addressed by relay id, if any."""
 
-    return _rebac_scoped().filter(**Note._public_id_lookup(id.node_id)).first()
+    return _rebac_scoped().filter(**Note.public_id_lookup(id.node_id)).first()
 
 
 def _user_public_id(user_id: Any) -> strawberry.ID | None:
@@ -221,16 +221,19 @@ def _user_public_id(user_id: Any) -> strawberry.ID | None:
     return strawberry.ID(public_id_of(User(id=user_id)))
 
 
+_NOTE_SCHEMA_BUCKET = {
+    "query": [NotesQuery],
+    "mutation": [crud(NoteType, create=NoteInput, update=NotePatch, delete=True)],
+    "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
+}
+
+
 schemas = {
     "public": {
-        "query": [NotesQuery],
-        "mutation": [crud(NoteType, create=NoteInput, update=NotePatch, delete=True)],
-        "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
+        **_NOTE_SCHEMA_BUCKET,
     },
     "console": {
-        "query": [NotesQuery],
-        "mutation": [crud(NoteType, create=NoteInput, update=NotePatch, delete=True)],
+        **_NOTE_SCHEMA_BUCKET,
         "subscription": [changes(Note, field="noteChanged")],
-        "types": [NoteType, NoteRevision, *_AGGREGATE_TYPES],
     },
 }

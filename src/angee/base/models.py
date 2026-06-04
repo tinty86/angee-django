@@ -8,14 +8,37 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models.utils import make_model_tuple
 from rebac import RebacMixin
+from rebac.managers import RebacManager, RebacQuerySet
 
 from angee.base.mixins import TimestampMixin
 
 _ModelT = TypeVar("_ModelT", bound=models.Model)
 
 
+class AngeeQuerySet(RebacQuerySet[_ModelT]):
+    """QuerySet API shared by Angee source and runtime models."""
+
+    def apply_ambient_scope(self) -> Self:
+        """Eagerly apply REBAC row scope using the queryset or ambient actor."""
+
+        self._apply_scope_in_place()
+        return self
+
+
+class AngeeManager(RebacManager.from_queryset(AngeeQuerySet)):  # type: ignore[misc]
+    """Manager backed by AngeeQuerySet."""
+
+    def get_queryset(self) -> AngeeQuerySet[Any]:
+        """Return the base Angee queryset for this manager's model."""
+
+        return cast(AngeeQuerySet[Any], super().get_queryset())
+
+
 class AngeeModel(TimestampMixin, RebacMixin):
     """Abstract base model for Angee source and runtime models."""
+
+    objects = AngeeManager()
+    """Default REBAC manager with Angee queryset conveniences."""
 
     extends: str | None = None
     """Optional ``app_label.ModelName`` target this source model extends."""
@@ -96,7 +119,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
         if value == "":
             return None
 
-        lookup = cls._public_id_lookup(value)
+        lookup = cls.public_id_lookup(value)
         try:
             instance = cls._default_manager.filter(**lookup).first()
         except TypeError, ValueError:
@@ -104,12 +127,18 @@ class AngeeModel(TimestampMixin, RebacMixin):
         return cast(Self | None, instance)
 
     @classmethod
-    def _public_id_lookup(cls, value: str) -> dict[str, Any]:
+    def public_id_lookup(cls, value: str) -> dict[str, Any]:
         """Return the Django lookup for this model's public identifier."""
 
         if _has_model_field(cls, "sqid"):
             return {"sqid": value}
         return {cls._meta.pk.name: value}
+
+    @classmethod
+    def _public_id_lookup(cls, value: str) -> dict[str, Any]:
+        """Return the Django lookup for this model's public identifier."""
+
+        return cls.public_id_lookup(value)
 
 
 def instance_from_public_id(model: type[_ModelT], value: str) -> _ModelT | None:

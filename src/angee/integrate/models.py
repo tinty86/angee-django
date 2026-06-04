@@ -24,6 +24,7 @@ from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
 from angee.base.net import validate_public_url
 from angee.base.relations import grant_owner
+from angee.integrate.events import EventKind
 from angee.integrate.webhooks import PinnedWebhookClient, WebhookDeliveryError
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         reported_at = timezone.now()
         self.status = status  # type: ignore[assignment]  # StateField descriptor unmodeled by django-stubs
         self.last_used_at = reported_at
-        self.last_used_status = str(status.value if isinstance(status, CapabilityStatus) else status)
+        self.last_used_status = str(status)
         self.last_error = error
         self.last_error_at = reported_at if error else None
 
@@ -112,12 +113,12 @@ class Bridge(Capability):
         with transaction.atomic():
             self.save(update_fields=["last_sync_started_at", "updated_at"])
 
-    def record_sync(self, result: Any, *, now: datetime) -> None:
+    def record_sync(self, result: int, *, now: datetime) -> None:
         """Persist one successful scheduler sync result and healthy status report."""
 
         self.last_sync_completed_at = now
         self.last_sync_status = "ok"
-        self.last_sync_items = result if isinstance(result, int) and not isinstance(result, bool) else 0
+        self.last_sync_items = result
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
             self.report_status(status="active")
@@ -158,7 +159,7 @@ class Bridge(Capability):
                 ]
             )
 
-    def sync(self) -> Any:
+    def sync(self) -> int:
         """Synchronize this bridge with its external system."""
 
         raise NotImplementedError("Bridge subclasses must implement sync().")
@@ -217,7 +218,7 @@ class WebhookSubscriptionManager(RebacManager):
     def deliver_event(
         self,
         *,
-        kind: Any,
+        kind: EventKind,
         payload: Any,
         impl_app: str = "",
         account: Any | None = None,
@@ -229,13 +230,12 @@ class WebhookSubscriptionManager(RebacManager):
         itself; this method only owns the row-set loop and the success/error tally.
         """
 
-        kind_value = str(getattr(kind, "value", kind))
         body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         delivered = 0
         errors = 0
         with system_context(reason="integrate.webhooks.deliver"):
             for subscription in self.filter(enabled=True).order_by("pk"):
-                if not subscription.matches(kind=kind_value, impl_app=impl_app, account=account):
+                if not subscription.matches(kind=kind, impl_app=impl_app, account=account):
                     continue
                 try:
                     status = subscription.deliver(body)
