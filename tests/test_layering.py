@@ -7,10 +7,10 @@ from pathlib import Path
 
 from angee.base.apps import BaseAddonConfig
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "angee"
-BASE = SRC / "base"
-RESOURCES = SRC / "resources"
-COMPOSE = SRC / "compose"
+ROOT = Path(__file__).resolve().parents[1]
+BASE = ROOT / "angee" / "base"
+COMPOSE = ROOT / "angee" / "compose"
+RESOURCES = ROOT / "addons" / "angee" / "resources"  # resources is a base addon
 
 
 def _module_imports(path: Path) -> set[str]:

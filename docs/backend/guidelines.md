@@ -113,7 +113,8 @@ Rules that follow from the layering:
   `AppConfig` module is imported in app-populate phase 1, before the registry is
   ready, so it must defer importing model classes (and signal wiring that pulls
   them in) until a method runs after `ready()`. Mark such a deferral with a
-  comment naming the reason; everywhere else, hoist. Within `src/angee` these are
+  comment naming the reason; everywhere else, hoist. Within Angee's own source
+  (`angee/` and `addons/angee/`) these are
   the only function-local imports allowed — phase-1 deferrals and `TYPE_CHECKING`
   blocks. Probe optional or generated modules with `importlib.util.find_spec`
   (verifying each parent first) rather than `try/except ImportError`, so an absent
@@ -126,7 +127,7 @@ Rules that follow from the layering:
   rule targets ordinary modules).
 - When restructuring or lifting existing code, reconstruct each module from its
   contract, tests, and these guidelines — do not paste or mechanically port the
-  old code, and do not keep the old modules importable inside `src/angee`.
+  old code, and do not keep the old modules importable inside the `angee` namespace.
 - Source models are abstract. Concrete apps are emitted by the composer.
 - Keep Django `Meta` for Django and library-owned options such as
   `rebac_resource_type`; Angee extension facts live on the owning model class.
@@ -183,9 +184,10 @@ override and passes explicit paths to the helper. Anchor host defaults to a
 fixed location via `__file__` (e.g. the repo-root control directory), never to
 the current working directory.
 
-Keep `angee` as a namespace package. Do not add `src/angee/__init__.py`; split
-addon distributions must be able to contribute packages under the shared
-`angee.*` namespace.
+Keep `angee` as a namespace package. Do not add an `__init__.py` at either
+namespace root (`angee/` for the framework, `addons/angee/` for the base
+addons); split addon distributions must be able to contribute packages under the
+shared `angee.*` namespace.
 
 Avoid `__all__` unless a module has a concrete star-import or compatibility
 requirement. Public API should usually be obvious from module names, object
@@ -222,7 +224,7 @@ handoff:
 
 ```sh
 uv run ruff check . --no-cache
-uv run mypy src/
+uv run mypy angee addons
 uv run pytest
 uv run examples/notes-angee/manage.py angee build --check
 ```

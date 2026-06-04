@@ -329,6 +329,7 @@ type TemplateInputDescriptor {
   immutable: Boolean!
   generated: Boolean!
   default: String
+  question: Boolean!
 }
 
 input WorkspaceCreateInput {

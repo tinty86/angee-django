@@ -37,17 +37,24 @@ stack DRY.
 
 A map by role, not a file inventory — each addon's `AppConfig` and module
 docstrings own the current contract, and this points to the owner. Everything is
-an addon: `src/angee/` holds the framework core and base addons, and the example
-shows a host composing a consumer addon on top.
+an addon: the framework core lives at `angee/` and the base addons at
+`addons/angee/` — two source roots sharing the one `angee.*` namespace, so the
+directories mirror the eventual `django-angee` / `django-angee-addons` split
+without changing any import. The example shows a host composing a consumer addon
+on top.
 
 ```text
 .
-├── src/angee/              # `django-angee` — the framework core and base addons
+├── angee/                  # `django-angee` — framework core + composer (PEP 420 namespace, no __init__.py)
 │   ├── base/               # framework core addon: runtime foundation, app contracts, GraphQL buckets
-│   ├── compose/            # the composer — emits the concrete runtime (`manage.py angee build`)
-│   ├── iam/                # IAM base addon — identity and the swappable user model
-│   └── resources/          # resources base addon — tiered data import/export (`resources` command)
-├── packages/               # frontend workspace (pnpm)
+│   └── compose/            # the composer — emits the concrete runtime (`manage.py angee build`)
+├── addons/angee/           # base addons shipped with Angee — same `angee.*` namespace, built on the core
+│   ├── iam/                # IAM base addon — identity, the swappable user model, connections, OIDC login
+│   ├── resources/          # resources base addon — tiered data import/export (`resources` command)
+│   ├── operator/           # operator base addon — bridge to the local operator daemon + admin console
+│   └── integrate/          # integration base addon — thin capability/bridge runtime seam
+│       └── …               # an addon may carry a co-located `web/` (e.g. `iam/web` = `@angee/iam`)
+├── packages/               # frontend workspace (pnpm) — the shared React layer (`angee-react`)
 │   ├── sdk/                # `@angee/sdk` — headless bindings
 │   ├── base/               # `@angee/base` — the single rendered (styled) binding
 │   └── e2e/                # `@angee/e2e` — Playwright e2e harness (`docs/testing/e2e.md`)

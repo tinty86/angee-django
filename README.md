@@ -78,7 +78,8 @@ workspaces), see **[Get Started](docs/howto/getstarted.md#i-have-access--now-wha
 
 ## What's inside
 
-- **`django-angee`** (`src/angee/`) — the backend framework core and base addons
+- **`django-angee`** — the backend framework core + composer (`angee/`) and the
+  base addons (`addons/angee/`), sharing the one `angee.*` namespace
   (composition, GraphQL, REBAC, resources).
 - **`@angee/sdk`** (`packages/sdk/`) — the headless frontend bindings.
 - **`@angee/base`** (`packages/base/`) — the single rendered (styled) binding.

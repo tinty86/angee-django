@@ -38,14 +38,25 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/angee"]
+# Two source roots merge into the one `angee` PEP 420 namespace: the framework
+# core at ./angee, the base addons at ./addons/angee. `dev-mode-dirs` pins both
+# roots on the editable path — hatchling otherwise drops the repo-root entry, so
+# `angee.base` would not resolve when `manage.py` runs from the example dir.
+packages = ["angee", "addons/angee"]
+dev-mode-dirs = [".", "addons"]
 artifacts = [
-  "src/angee/**/*.csv",
-  "src/angee/**/*.pyi",
-  "src/angee/**/*.typed",
-  "src/angee/**/*.yaml",
-  "src/angee/**/*.yml",
-  "src/angee/**/*.zed",
+  "angee/**/*.csv",
+  "angee/**/*.pyi",
+  "angee/**/*.typed",
+  "angee/**/*.yaml",
+  "angee/**/*.yml",
+  "angee/**/*.zed",
+  "addons/angee/**/*.csv",
+  "addons/angee/**/*.pyi",
+  "addons/angee/**/*.typed",
+  "addons/angee/**/*.yaml",
+  "addons/angee/**/*.yml",
+  "addons/angee/**/*.zed",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -53,10 +64,11 @@ only-include = [
   "AGENTS.md",
   "LICENSE",
   "README.md",
+  "addons",
+  "angee",
   "docs",
   "examples",
   "pyproject.toml",
-  "src",
   "tests",
   "uv.lock",
 ]
@@ -65,14 +77,17 @@ only-include = [
 cache_dir = ".pytest_cache"
 DJANGO_SETTINGS_MODULE = "tests.settings"
 python_files = ["test_*.py"]
-testpaths = ["tests", "src/angee/resources/tests"]
-pythonpath = [".", "src", "examples/notes-angee/src"]
+testpaths = ["tests", "addons/angee/resources/tests"]
+pythonpath = [".", "addons", "examples/notes-angee/src"]
 addopts = "-ra --strict-markers --import-mode=importlib"
 
 [tool.ruff]
 line-length = 120
 target-version = "py314"
 cache-dir = ".ruff_cache"
+# First-party roots so isort classifies `angee.*` correctly across both source
+# roots (framework at ., base addons at addons/) and the example project.
+src = [".", "addons", "examples/notes-angee/src"]
 exclude = [
   ".angee",
   ".git",
@@ -96,5 +111,5 @@ python_version = "3.14"
 cache_dir = ".mypy_cache"
 explicit_package_bases = true
 ignore_missing_imports = true
-mypy_path = ["src"]
+mypy_path = [".", "addons"]
 warn_unused_ignores = true

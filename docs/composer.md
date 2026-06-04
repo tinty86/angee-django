@@ -94,11 +94,11 @@ non-Angee directory can never abort app population; the explicit `angee build`
 
 ## Owners
 
-- Emit hook and ordering rationale: `src/angee/compose/apps.py`.
-- Rendering, emission, drift, cleanup: `src/angee/compose/runtime.py`
+- Emit hook and ordering rationale: `angee/compose/apps.py`.
+- Rendering, emission, drift, cleanup: `angee/compose/runtime.py`
   (`AngeeRuntime`).
-- Adopt hook and addon manifest: `src/angee/base/apps.py` (`BaseAddonConfig`).
-- App set, `MIGRATION_MODULES`, settings defaults: `src/angee/base/settings.py`
+- Adopt hook and addon manifest: `angee/base/apps.py` (`BaseAddonConfig`).
+- App set, `MIGRATION_MODULES`, settings defaults: `angee/base/settings.py`
   (`compose_defaults`).
-- Discovery and ordering: `src/angee/base/discovery.py`.
+- Discovery and ordering: `angee/base/discovery.py`.
 - Vocabulary: `docs/glossary.md`. Layering rules: `docs/backend/guidelines.md`.
