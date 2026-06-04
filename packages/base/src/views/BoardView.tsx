@@ -11,10 +11,10 @@ import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
 import {
   LIST_VIEW_SCROLL_BUDGET,
-  cellContent,
+  ListCellContent,
   readPath,
   type RowGroup,
-} from "./list-internals";
+} from "./ListInternals";
 import type { ColumnDescriptor } from "./page";
 
 const BOARD_SCROLL_STYLE: React.CSSProperties = {
@@ -174,7 +174,7 @@ function BoardRowCard<TRow extends Row>({
       <article className="grid gap-2 rounded-lg border border-border-subtle bg-sheet p-3 shadow-xs transition hover:-translate-y-0.5 hover:border-border hover:shadow-md">
         {titleColumn ? (
           <span className="block min-w-0 truncate text-sm font-semibold text-fg">
-            {cellContent(titleColumn, row.original)}
+            <ListCellContent column={titleColumn} row={row.original} />
           </span>
         ) : null}
         {detailColumns.map((column) => (
@@ -186,7 +186,7 @@ function BoardRowCard<TRow extends Row>({
               {column.header ?? column.field}
             </span>
             <span className="min-w-0 text-right text-fg">
-              {cellContent(column, row.original)}
+              <ListCellContent column={column} row={row.original} />
             </span>
           </div>
         ))}

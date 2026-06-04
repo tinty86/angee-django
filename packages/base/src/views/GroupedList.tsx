@@ -1,6 +1,6 @@
 // Server-driven grouped list body: folded group buckets recurse one axis at a
 // time; only leaf buckets fetch records via the cumulative bucket filter echo.
-// Imports the shared seam from ./list-internals and Pager from ../ui/pager;
+// Imports the shared seam from ./ListInternals and Pager from ../ui/pager;
 // must NOT import ListView (ListView depends on this module, not vice versa).
 import * as React from "react";
 import {
@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "../lib/cn";
+import { titleCase } from "../lib/titleCase";
 import { CountBadge } from "../ui/badge";
 import { Pager } from "../ui/pager";
 import { Spinner } from "../ui/spinner";
@@ -55,9 +56,8 @@ import {
   groupOrderByForSort,
   groupFieldLabel,
   measureValue,
-  titleCase,
   type GroupMeasure,
-} from "./list-internals";
+} from "./ListInternals";
 import type { ColumnDescriptor } from "./page";
 
 const GROUPED_LIST_ITEM_PAGE_SIZE = 20;

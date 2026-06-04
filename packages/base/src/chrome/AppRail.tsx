@@ -9,12 +9,9 @@ import { AppChooser } from "./AppChooser";
 import { Glyph } from "./Glyph";
 import { useIcon } from "./icon-registry";
 import {
-  buildMenuTree,
-  menuItemIcon,
-  menuItemLabel,
-  menuItemTarget,
-  railMenuItems,
   type ChromeMenuItem,
+  type ChromeMenuNode,
+  MenuTree,
 } from "./menu-tree";
 
 export interface AppRailProps {
@@ -27,8 +24,8 @@ const RAIL_BUTTON_ACTIVE =
   "bg-rail-hi text-on-rail-hi before:absolute before:-left-[7px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-r-2 before:bg-brand before:content-['']";
 
 export function AppRail({ className }: AppRailProps): ReactElement {
-  const tree = buildMenuTree(useMenus() as readonly ChromeMenuItem[]);
-  const items = railMenuItems(tree);
+  const tree = MenuTree.from(useMenus() as readonly ChromeMenuItem[]);
+  const items = tree.railMenuItems();
   return (
     <aside
       className={cn(
@@ -50,11 +47,11 @@ export function AppRail({ className }: AppRailProps): ReactElement {
   );
 }
 
-function RailItem({ item }: { item: ChromeMenuItem }): ReactElement | null {
-  const iconName = menuItemIcon(item);
-  const to = menuItemTarget(item);
+function RailItem({ item }: { item: ChromeMenuNode }): ReactElement | null {
+  const iconName = item.iconName;
+  const to = item.target;
   if (!to) return null;
-  const label = menuItemLabel(item);
+  const label = item.displayLabel;
   return (
     <Tooltip label={label} side="right">
       <Link

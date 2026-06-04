@@ -27,6 +27,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 
+import { titleCase } from "../lib/titleCase";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -39,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
+import { useResolvedWidget } from "../widgets";
 import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
 import type {
@@ -261,7 +263,9 @@ export function buildColumns<TRow extends Row>(
         {column.header ?? column.field}
       </SortHeader>
     ),
-    cell: ({ row }) => cellContent(column, row.original),
+    cell: ({ row }) => (
+      <ListCellContent column={column} row={row.original} />
+    ),
     meta: {
       align: column.align ?? "left",
       label: column.header ?? column.field,
@@ -269,6 +273,31 @@ export function buildColumns<TRow extends Row>(
       aggregate: column.aggregate,
     },
   }));
+}
+
+export function ListCellContent<TRow extends Row>({
+  column,
+  row,
+}: {
+  column: ColumnDescriptor<TRow>;
+  row: TRow;
+}): React.ReactNode {
+  const widget = useResolvedWidget(column.widget ?? "");
+  if (!column.render && widget?.cell) {
+    const Cell = widget.cell;
+    return (
+      <Cell
+        value={readPath(row, column.field)}
+        row={row}
+        field={{
+          name: column.field,
+          label: column.header,
+        }}
+        readOnly
+      />
+    );
+  }
+  return cellContent(column, row);
 }
 
 function SortHeader<TRow extends Row>({
@@ -860,13 +889,6 @@ export function groupFieldLabel(field: string): string {
 
 export function statusLabel(value: string): string {
   return titleCase(value.toLowerCase());
-}
-
-export function titleCase(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function looksLikeDateField(field: string): boolean {

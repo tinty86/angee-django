@@ -7,17 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type {
-  ResourceTypeName,
-  UseResourceListOptions,
-} from "@angee/sdk";
 
 import {
-  createDataViewState,
-  dataViewReducer,
+  DataViewState,
   dataViewSearchToState,
   dataViewStateToSearch,
-  dataViewStateToResourceListOptions,
   mergeDataViewSearch,
   type DataViewAction,
   type DataViewFilter,
@@ -25,7 +19,6 @@ import {
   type DataViewInitialState,
   type DataViewKind,
   type DataViewSort,
-  type DataViewState,
 } from "./data-view-model";
 
 export interface DataViewContextValue {
@@ -40,12 +33,6 @@ export interface DataViewContextValue {
   toggleSelectedId: (id: string, selected?: boolean) => void;
   clearSelectedIds: () => void;
   setView: (view: DataViewKind) => void;
-  resourceListOptions: <TName extends ResourceTypeName = ResourceTypeName>(
-    input: {
-      fields: readonly string[];
-      enabled?: boolean;
-    },
-  ) => UseResourceListOptions<TName>;
 }
 
 export interface DataViewProviderProps {
@@ -54,10 +41,7 @@ export interface DataViewProviderProps {
 }
 
 const DataViewContext = createContext<DataViewContextValue | null>(null);
-type DataViewActions = Omit<
-  DataViewContextValue,
-  "state" | "resourceListOptions"
->;
+type DataViewActions = Omit<DataViewContextValue, "state">;
 type DataViewNavigate = (options: {
   search: (current: Record<string, unknown>) => Record<string, unknown>;
   replace?: boolean;
@@ -79,7 +63,7 @@ export function DataViewProvider({
     [search, initialState],
   );
   const state = useMemo<DataViewState>(
-    () => ({ ...queryState, selectedIds }),
+    () => queryState.withSelectedIds(selectedIds),
     [queryState, selectedIds],
   );
 
@@ -93,7 +77,7 @@ export function DataViewProvider({
       void navigate({
         search: (current) => {
           const currentState = dataViewSearchToState(current, initialState);
-          const next = dataViewReducer(currentState, action);
+          const next = currentState.reduce(action);
           return mergeDataViewSearch(current, dataViewStateToSearch(next));
         },
         // View-state writes replace history so filter/sort/page churn does not
@@ -105,22 +89,13 @@ export function DataViewProvider({
   );
 
   const actions = useMemo(() => createDataViewActions(dispatch), [dispatch]);
-  const resourceListOptions = useCallback(
-    <TName extends ResourceTypeName = ResourceTypeName>(input: {
-      fields: readonly string[];
-      enabled?: boolean;
-    }): UseResourceListOptions<TName> =>
-      dataViewStateToResourceListOptions(state, input),
-    [state],
-  );
 
   const value = useMemo<DataViewContextValue>(
     () => ({
       state,
       ...actions,
-      resourceListOptions,
     }),
-    [actions, resourceListOptions, state],
+    [actions, state],
   );
 
   return (
@@ -161,10 +136,7 @@ function reduceSelectedIds(
   selectedIds: ReadonlySet<string>,
   action: DataViewAction,
 ): ReadonlySet<string> {
-  return dataViewReducer(
-    createDataViewState({ selectedIds }),
-    action,
-  ).selectedIds;
+  return DataViewState.create({ selectedIds }).reduce(action).selectedIds;
 }
 
 function createDataViewActions(

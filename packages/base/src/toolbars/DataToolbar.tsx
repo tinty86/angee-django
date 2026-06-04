@@ -14,6 +14,7 @@ import {
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { titleCase } from "../lib/titleCase";
 import { Button } from "../ui/button";
 import { Chip } from "../ui/chip";
 import { DropdownMenu } from "../ui/dropdown-menu";
@@ -544,13 +545,6 @@ const DEFAULT_GRANULARITIES: readonly DataViewGroupGranularity[] = [
   "week",
   "day",
 ];
-
-function titleCase(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 function groupFieldLabel(field: string): string {
   const label = titleCase(field);

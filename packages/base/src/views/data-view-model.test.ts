@@ -1,17 +1,14 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  createDataViewState,
-  dataViewReducer,
+  DataViewState,
   dataViewSearchToState,
-  dataViewSortToResourceOrder,
   dataViewStateToSearch,
-  dataViewStateToResourceListOptions,
 } from "./data-view-model";
 
 describe("data-view model", () => {
   test("round-trips flat URL search state", () => {
-    const state = createDataViewState({
+    const state = DataViewState.create({
       page: 3,
       pageSize: 20,
       sort: { field: "updatedAt", dir: "desc" },
@@ -58,7 +55,7 @@ describe("data-view model", () => {
   });
 
   test("omits default search values", () => {
-    expect(dataViewStateToSearch(createDataViewState())).toEqual({});
+    expect(dataViewStateToSearch(DataViewState.create())).toEqual({});
   });
 
   test("parses Router search strings without JSON-quoting URL values", () => {
@@ -85,27 +82,27 @@ describe("data-view model", () => {
   });
 
   test("resets page and clears selection when query scope changes", () => {
-    const state = createDataViewState({
+    const state = DataViewState.create({
       page: 4,
       pageSize: 20,
       selectedIds: ["note-1"],
     });
 
-    const sorted = dataViewReducer(state, {
+    const sorted = state.reduce({
       type: "setSort",
       sort: { field: "title", dir: "asc" },
     });
     expect(sorted.page).toBe(1);
     expect([...sorted.selectedIds]).toEqual([]);
 
-    const filtered = dataViewReducer(sorted, {
+    const filtered = sorted.reduce({
       type: "setFilter",
       filter: { title: { iContains: "beta" } },
     });
     expect(filtered.page).toBe(1);
     expect(filtered.filter).toEqual({ title: { iContains: "beta" } });
 
-    const resized = dataViewReducer(filtered, {
+    const resized = filtered.reduce({
       type: "setPageSize",
       pageSize: 500,
     });
@@ -114,44 +111,31 @@ describe("data-view model", () => {
   });
 
   test("updates selected ids as local row state", () => {
-    const state = createDataViewState();
+    const state = DataViewState.create();
 
-    const selected = dataViewReducer(state, {
+    const selected = state.reduce({
       type: "toggleSelectedId",
       id: "note-1",
     });
     expect([...selected.selectedIds]).toEqual(["note-1"]);
 
-    const cleared = dataViewReducer(selected, {
+    const cleared = selected.reduce({
       type: "toggleSelectedId",
       id: "note-1",
     });
     expect([...cleared.selectedIds]).toEqual([]);
   });
 
-  test("maps view state onto SDK offset list options", () => {
-    const state = createDataViewState({
+  test("maps view sort onto SDK resource order", () => {
+    const state = DataViewState.create({
       page: 2,
       pageSize: 20,
       sort: { field: "updatedAt", dir: "desc" },
       filter: { title: { iContains: "alpha" } },
     });
 
-    expect(dataViewSortToResourceOrder(state.sort)).toEqual({
+    expect(state.resourceOrder()).toEqual({
       updatedAt: "DESC",
-    });
-    expect(
-      dataViewStateToResourceListOptions(state, {
-        fields: ["id", "title"],
-        enabled: false,
-      }),
-    ).toEqual({
-      fields: ["id", "title"],
-      pageSize: 20,
-      page: 2,
-      filter: { title: { iContains: "alpha" } },
-      order: { updatedAt: "DESC" },
-      enabled: false,
     });
   });
 });

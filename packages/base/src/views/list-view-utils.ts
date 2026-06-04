@@ -1,12 +1,15 @@
 import type { Row } from "@angee/sdk";
 
 import type { DataToolbarFilterOption } from "../toolbars";
-import type { DataViewFilter } from "./data-view-model";
+import {
+  Filter,
+  type DataViewFilter,
+} from "./data-view-model";
 import {
   groupFieldLabel,
   readPath,
   statusLabel,
-} from "./list-internals";
+} from "./ListInternals";
 import type { ColumnDescriptor } from "./page";
 
 export function buildFilterOptions<TRow extends Row>(
@@ -14,7 +17,7 @@ export function buildFilterOptions<TRow extends Row>(
   rows: readonly TRow[],
 ): readonly DataToolbarFilterOption[] {
   return columns.flatMap((column) => {
-    if (column.field !== "status" && !column.tone) return [];
+    if (!supportsChoiceFacet(column)) return [];
     return statusValues(column, rows).map((value) => ({
       id: `${column.field}:${value}`,
       label: statusLabel(value),
@@ -28,41 +31,38 @@ function statusValues<TRow extends Row>(
   column: ColumnDescriptor<TRow>,
   rows: readonly TRow[],
 ): string[] {
-  const values = new Set<string>();
   if (column.tone) {
-    for (const key of Object.keys(column.tone)) {
-      if (key === key.toUpperCase()) values.add(key);
-    }
+    const toneValues = Object.keys(column.tone).filter(
+      (key) => key === key.toUpperCase(),
+    );
+    if (toneValues.length > 0) return toneValues;
   }
-  if (values.size === 0) {
-    for (const row of rows) {
-      const value = readPath(row, column.field);
-      if (typeof value === "string" && value.trim()) values.add(value);
-    }
+  const values = new Set<string>();
+  for (const row of rows) {
+    const value = readPath(row, column.field);
+    if (typeof value === "string" && value.trim()) values.add(value);
   }
-  return [...values].sort(compareStatusValue);
+  return [...values].sort((left, right) => left.localeCompare(right));
 }
 
-const STATUS_ORDER = ["DRAFT", "IN_REVIEW", "ACTIVE", "ARCHIVED"];
-
-function compareStatusValue(left: string, right: string): number {
-  const leftIndex = STATUS_ORDER.indexOf(left.toUpperCase());
-  const rightIndex = STATUS_ORDER.indexOf(right.toUpperCase());
-  if (leftIndex !== -1 || rightIndex !== -1) {
-    return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex)
-      - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
-  }
-  return left.localeCompare(right);
+export function supportsChoiceFacet<TRow extends Row>(
+  column: ColumnDescriptor<TRow>,
+): boolean {
+  if (column.tone) return true;
+  // TODO: derive facet/group fields from addon/schema choices, not a
+  // hardcoded lifecycle status field.
+  return column.field === "status";
 }
 
 export function activeFilterIdsFor(
   filter: DataViewFilter,
   options: readonly DataToolbarFilterOption[],
 ): readonly string[] {
+  const value = Filter.from(filter);
   return options.flatMap((option) => {
-    const facet = facetFilter(option);
+    const facet = Filter.facetFromFilter(option.filter);
     if (!facet) return [];
-    return statusFilterValues(filter, facet.field).includes(facet.value)
+    return value.facetValues(facet.field).includes(facet.value)
       ? [option.id]
       : [];
   });
@@ -74,60 +74,17 @@ export function nextFacetFilter(
   id: string,
 ): DataViewFilter {
   const option = options.find((candidate) => candidate.id === id);
-  const facet = option ? facetFilter(option) : null;
+  const facet = option ? Filter.facetFromFilter(option.filter) : null;
   if (!facet) return filter;
-  const current = statusFilterValues(filter, facet.field);
-  const nextValues = current.includes(facet.value)
-    ? current.filter((value) => value !== facet.value)
-    : [...current, facet.value];
-  const next = { ...filter };
-  if (nextValues.length === 0) {
-    delete next[facet.field];
-  } else if (nextValues.length === 1) {
-    next[facet.field] = { exact: nextValues[0] };
-  } else {
-    next[facet.field] = { inList: nextValues };
-  }
-  return next;
-}
-
-function facetFilter(
-  option: DataToolbarFilterOption,
-): { field: string; value: string } | null {
-  const entry = Object.entries(option.filter)[0];
-  if (!entry) return null;
-  const [field, lookup] = entry;
-  if (!field || !lookup || typeof lookup !== "object" || Array.isArray(lookup)) {
-    return null;
-  }
-  const exact = (lookup as Record<string, unknown>).exact;
-  return typeof exact === "string" ? { field, value: exact } : null;
-}
-
-function statusFilterValues(filter: DataViewFilter, field: string): readonly string[] {
-  const lookup = filter[field];
-  if (!lookup || typeof lookup !== "object" || Array.isArray(lookup)) return [];
-  const exact = (lookup as Record<string, unknown>).exact;
-  if (typeof exact === "string") return [exact];
-  const inList = (lookup as Record<string, unknown>).inList;
-  return Array.isArray(inList)
-    ? inList.filter((value): value is string => typeof value === "string")
-    : [];
+  return Filter.from(filter).toggleFacet(facet);
 }
 
 export function textFilterValue(filter: DataViewFilter): string {
-  const title = filter.title;
-  if (!title || typeof title !== "object" || Array.isArray(title)) return "";
-  const value = (title as Record<string, unknown>).iContains;
-  return typeof value === "string" ? value : "";
+  return Filter.from(filter).textTerm();
 }
 
 export function nextTextFilter(filter: DataViewFilter, value: string): DataViewFilter {
-  const next = { ...filter };
-  const trimmed = value.trim();
-  if (trimmed) next.title = { iContains: trimmed };
-  else delete next.title;
-  return next;
+  return Filter.from(filter).withTextTerm(value);
 }
 
 export function createLabelForModel(model: string): string {

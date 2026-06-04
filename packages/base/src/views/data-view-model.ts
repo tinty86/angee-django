@@ -1,8 +1,6 @@
 import {
   DEFAULT_PAGE_SIZE,
   clampPageSize,
-  type ResourceTypeName,
-  type UseResourceListOptions,
 } from "@angee/sdk";
 
 export const DATA_VIEW_KINDS = ["list", "board"] as const;
@@ -20,8 +18,29 @@ export type DataViewGroupGranularity =
   (typeof DATA_VIEW_GROUP_GRANULARITIES)[number];
 export type DataViewSortDirection = "asc" | "desc";
 export type DataViewOrderDirection = "ASC" | "DESC";
-export type DataViewFilter = Record<string, unknown>;
+export const DATA_VIEW_LOOKUP_OPERATORS = [
+  "exact",
+  "inList",
+  "iContains",
+] as const;
+export type DataViewLookupOperator =
+  (typeof DATA_VIEW_LOOKUP_OPERATORS)[number];
+export type DataViewFilterPrimitive = string | number | boolean | null;
+export type DataViewFilterValue =
+  | DataViewFilterPrimitive
+  | readonly DataViewFilterValue[]
+  | DataViewLookup
+  | DataViewFilter;
+export type DataViewLookup = {
+  [operator in DataViewLookupOperator]?: DataViewFilterValue;
+};
+export type DataViewFilter = {
+  [field: string]: DataViewFilterValue;
+};
 export type DataViewResourceOrder = Record<string, DataViewOrderDirection>;
+// TODO: derive the text-search field from addon/schema title metadata, not a
+// hardcoded product title field.
+export const DEFAULT_TEXT_FILTER_FIELD = "title";
 
 export interface DataViewSort {
   field: string;
@@ -33,17 +52,6 @@ export interface DataViewGroup {
   granularity?: DataViewGroupGranularity;
 }
 
-export interface DataViewState {
-  page: number;
-  pageSize: number;
-  sort: DataViewSort | null;
-  filter: DataViewFilter;
-  group: DataViewGroup | null;
-  groupStack: readonly DataViewGroup[];
-  selectedIds: ReadonlySet<string>;
-  view: DataViewKind;
-}
-
 export interface DataViewInitialState {
   page?: number;
   pageSize?: number;
@@ -53,6 +61,308 @@ export interface DataViewInitialState {
   groupStack?: readonly DataViewGroup[];
   selectedIds?: Iterable<string>;
   view?: DataViewKind;
+}
+
+export type DataViewAction =
+  | { type: "setPage"; page: number }
+  | { type: "setPageSize"; pageSize: number }
+  | { type: "setSort"; sort: DataViewSort | null }
+  | { type: "setFilter"; filter: DataViewFilter }
+  | { type: "setGroup"; group: DataViewGroup | null }
+  | { type: "setGroupStack"; groupStack: readonly DataViewGroup[] }
+  | { type: "setSelectedIds"; selectedIds: Iterable<string> }
+  | { type: "toggleSelectedId"; id: string; selected?: boolean }
+  | { type: "clearSelectedIds" }
+  | { type: "setView"; view: DataViewKind };
+
+export interface FilterFacet {
+  field: string;
+  value: string;
+}
+
+export class Filter {
+  readonly value: DataViewFilter;
+
+  constructor(value: DataViewFilter = {}) {
+    this.value = { ...value };
+  }
+
+  static from(value: DataViewFilter | undefined): Filter {
+    return new Filter(value);
+  }
+
+  static facetFromFilter(filter: DataViewFilter): FilterFacet | null {
+    const [entry] = Object.entries(filter);
+    if (!entry) return null;
+    const [field, value] = entry;
+    const lookup = isDataViewLookup(value) ? value : null;
+    const exact = lookup?.exact;
+    return typeof exact === "string" ? { field, value: exact } : null;
+  }
+
+  hasEntries(): boolean {
+    return Object.keys(this.value).length > 0;
+  }
+
+  facetValues(field: string): readonly string[] {
+    const lookup = this.lookup(field);
+    const exact = lookup?.exact;
+    if (typeof exact === "string") return [exact];
+    const inList = lookup?.inList;
+    return Array.isArray(inList)
+      ? inList.filter((value): value is string => typeof value === "string")
+      : [];
+  }
+
+  toggleFacet(facet: FilterFacet): DataViewFilter {
+    const current = this.facetValues(facet.field);
+    const nextValues = current.includes(facet.value)
+      ? current.filter((value) => value !== facet.value)
+      : [...current, facet.value];
+    const next = { ...this.value };
+    if (nextValues.length === 0) {
+      delete next[facet.field];
+    } else if (nextValues.length === 1) {
+      next[facet.field] = { exact: nextValues[0] };
+    } else {
+      next[facet.field] = { inList: nextValues };
+    }
+    return next;
+  }
+
+  textTerm(field = DEFAULT_TEXT_FILTER_FIELD): string {
+    const value = this.lookup(field)?.iContains;
+    return typeof value === "string" ? value : "";
+  }
+
+  withTextTerm(value: string, field = DEFAULT_TEXT_FILTER_FIELD): DataViewFilter {
+    const next = { ...this.value };
+    const trimmed = value.trim();
+    if (trimmed) next[field] = { iContains: trimmed };
+    else delete next[field];
+    return next;
+  }
+
+  private lookup(field: string): DataViewLookup | null {
+    const value = this.value[field];
+    return isDataViewLookup(value) ? value : null;
+  }
+}
+
+export class DataViewState {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly sort: DataViewSort | null;
+  readonly filter: DataViewFilter;
+  readonly group: DataViewGroup | null;
+  readonly groupStack: readonly DataViewGroup[];
+  readonly selectedIds: ReadonlySet<string>;
+  readonly view: DataViewKind;
+
+  constructor(initial: DataViewInitialState = {}) {
+    const groupStack = DataViewState.normaliseGroupStack(
+      initial.groupStack ?? (initial.group ? [initial.group] : []),
+    );
+    this.page = DataViewState.normalisePage(initial.page);
+    this.pageSize = clampPageSize(
+      initial.pageSize ?? DEFAULT_DATA_VIEW_PAGE_SIZE,
+    );
+    this.sort = initial.sort ? DataViewState.normaliseSort(initial.sort) : null;
+    this.filter = DataViewState.normaliseFilter(initial.filter);
+    this.group = groupStack[0] ?? null;
+    this.groupStack = groupStack;
+    this.selectedIds = new Set(initial.selectedIds ?? []);
+    this.view = initial.view ?? "list";
+  }
+
+  static create(initial: DataViewInitialState = {}): DataViewState {
+    return new DataViewState(initial);
+  }
+
+  static fromSearch(
+    search: DataViewSearch | Record<string, unknown>,
+    initial: DataViewInitialState = {},
+  ): DataViewState {
+    const base = DataViewState.create(initial);
+    const page = parseSearchInteger(search.page);
+    const pageSize = parseSearchInteger(search.pageSize);
+    const sort = parseSearchSort(search.sort);
+    const filter = parseSearchFilter(search.filter);
+    const group = parseSearchGroup(search.group);
+    const then = parseSearchGroupStack(search.then);
+    const view = parseSearchView(search.view);
+    return DataViewState.create({
+      ...base.toInitialState(),
+      page: page ?? base.page,
+      pageSize: pageSize ?? base.pageSize,
+      sort: sort ?? base.sort,
+      filter: filter ?? base.filter,
+      group: group ?? base.group,
+      groupStack:
+        group || then
+          ? [
+              ...(group ? [group] : []),
+              ...(then ?? []),
+            ]
+          : base.groupStack,
+      view: view ?? base.view,
+    });
+  }
+
+  reduce(action: DataViewAction): DataViewState {
+    switch (action.type) {
+      case "setPage":
+        return this.with({ page: DataViewState.normalisePage(action.page) });
+      case "setPageSize":
+        return this.resetQueryScope({
+          pageSize: clampPageSize(action.pageSize),
+        });
+      case "setSort":
+        return this.resetQueryScope({
+          sort: action.sort ? DataViewState.normaliseSort(action.sort) : null,
+        });
+      case "setFilter":
+        return this.resetQueryScope({
+          filter: DataViewState.normaliseFilter(action.filter),
+        });
+      case "setGroup":
+        return this.resetQueryScope({
+          group: action.group ? DataViewState.normaliseGroup(action.group) : null,
+          groupStack: action.group
+            ? [DataViewState.normaliseGroup(action.group)]
+            : [],
+        });
+      case "setGroupStack": {
+        const groupStack = DataViewState.normaliseGroupStack(action.groupStack);
+        return this.resetQueryScope({
+          group: groupStack[0] ?? null,
+          groupStack,
+        });
+      }
+      case "setSelectedIds":
+        return this.with({ selectedIds: new Set(action.selectedIds) });
+      case "toggleSelectedId":
+        return this.with({
+          selectedIds: DataViewState.toggledSelectedIds(
+            this.selectedIds,
+            action,
+          ),
+        });
+      case "clearSelectedIds":
+        return this.with({ selectedIds: new Set() });
+      case "setView":
+        return this.with({ view: action.view });
+    }
+  }
+
+  toSearch(): DataViewSearch {
+    const search: DataViewSearch = {};
+    if (this.page !== 1) search.page = this.page;
+    if (this.pageSize !== DEFAULT_DATA_VIEW_PAGE_SIZE) {
+      search.pageSize = this.pageSize;
+    }
+    if (this.sort) search.sort = serializeDataViewSort(this.sort);
+    if (this.hasFilter()) search.filter = JSON.stringify(this.filter);
+    if (this.group) search.group = serializeDataViewGroup(this.group);
+    if (this.groupStack.length > 1) {
+      search.then = serializeDataViewGroupStack(this.groupStack.slice(1));
+    }
+    if (this.view !== "list") search.view = this.view;
+    return search;
+  }
+
+  hasFilter(): boolean {
+    return Filter.from(this.filter).hasEntries();
+  }
+
+  resourceOrder(): DataViewResourceOrder | undefined {
+    if (!this.sort) return undefined;
+    return { [this.sort.field]: this.sort.dir === "asc" ? "ASC" : "DESC" };
+  }
+
+  withSelectedIds(selectedIds: Iterable<string>): DataViewState {
+    return this.with({ selectedIds: new Set(selectedIds) });
+  }
+
+  static normaliseGroupStack(
+    groups: readonly DataViewGroup[],
+  ): readonly DataViewGroup[] {
+    const seen = new Set<string>();
+    const normalised: DataViewGroup[] = [];
+    for (const group of groups) {
+      const next = DataViewState.normaliseGroup(group);
+      const key = serializeDataViewGroup(next);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalised.push(next);
+    }
+    return normalised;
+  }
+
+  private with(initial: DataViewInitialState): DataViewState {
+    return DataViewState.create({
+      ...this.toInitialState(),
+      ...initial,
+    });
+  }
+
+  private resetQueryScope(initial: DataViewInitialState): DataViewState {
+    return DataViewState.create({
+      ...this.toInitialState(),
+      ...initial,
+      page: 1,
+      selectedIds: [],
+    });
+  }
+
+  private toInitialState(): DataViewInitialState {
+    return {
+      page: this.page,
+      pageSize: this.pageSize,
+      sort: this.sort,
+      filter: this.filter,
+      group: this.group,
+      groupStack: this.groupStack,
+      selectedIds: this.selectedIds,
+      view: this.view,
+    };
+  }
+
+  private static toggledSelectedIds(
+    selectedIds: ReadonlySet<string>,
+    action: Extract<DataViewAction, { type: "toggleSelectedId" }>,
+  ): ReadonlySet<string> {
+    const next = new Set(selectedIds);
+    const shouldSelect = action.selected ?? !next.has(action.id);
+    if (shouldSelect) next.add(action.id);
+    else next.delete(action.id);
+    return next;
+  }
+
+  private static normalisePage(page: number | undefined): number {
+    if (page === undefined || !Number.isFinite(page)) return 1;
+    return Math.max(1, Math.floor(page));
+  }
+
+  private static normaliseSort(sort: DataViewSort): DataViewSort {
+    return {
+      field: sort.field,
+      dir: sort.dir === "desc" ? "desc" : "asc",
+    };
+  }
+
+  private static normaliseGroup(group: DataViewGroup): DataViewGroup {
+    return {
+      field: group.field,
+      ...(group.granularity ? { granularity: group.granularity } : {}),
+    };
+  }
+
+  private static normaliseFilter(
+    filter: DataViewFilter | undefined,
+  ): DataViewFilter {
+    return Filter.from(filter).value;
+  }
 }
 
 const DATA_VIEW_SEARCH_SHAPE = {
@@ -71,128 +381,15 @@ export const DATA_VIEW_SEARCH_KEYS = Object.keys(
   DATA_VIEW_SEARCH_SHAPE,
 ) as DataViewSearchKey[];
 
-export type DataViewAction =
-  | { type: "setPage"; page: number }
-  | { type: "setPageSize"; pageSize: number }
-  | { type: "setSort"; sort: DataViewSort | null }
-  | { type: "setFilter"; filter: DataViewFilter }
-  | { type: "setGroup"; group: DataViewGroup | null }
-  | { type: "setGroupStack"; groupStack: readonly DataViewGroup[] }
-  | { type: "setSelectedIds"; selectedIds: Iterable<string> }
-  | { type: "toggleSelectedId"; id: string; selected?: boolean }
-  | { type: "clearSelectedIds" }
-  | { type: "setView"; view: DataViewKind };
-
-export function createDataViewState(
-  initial: DataViewInitialState = {},
-): DataViewState {
-  const groupStack = normaliseGroupStack(
-    initial.groupStack ?? (initial.group ? [initial.group] : []),
-  );
-  return {
-    page: normalisePage(initial.page),
-    pageSize: clampPageSize(
-      initial.pageSize ?? DEFAULT_DATA_VIEW_PAGE_SIZE,
-    ),
-    sort: initial.sort ? normaliseSort(initial.sort) : null,
-    filter: normaliseFilter(initial.filter),
-    group: groupStack[0] ?? null,
-    groupStack,
-    selectedIds: new Set(initial.selectedIds ?? []),
-    view: initial.view ?? "list",
-  };
-}
-
-export function dataViewReducer(
-  state: DataViewState,
-  action: DataViewAction,
-): DataViewState {
-  switch (action.type) {
-    case "setPage":
-      return { ...state, page: normalisePage(action.page) };
-    case "setPageSize":
-      return resetQueryScope({
-        ...state,
-        pageSize: clampPageSize(action.pageSize),
-      });
-    case "setSort":
-      return resetQueryScope({
-        ...state,
-        sort: action.sort ? normaliseSort(action.sort) : null,
-      });
-    case "setFilter":
-      return resetQueryScope({
-        ...state,
-        filter: normaliseFilter(action.filter),
-      });
-    case "setGroup":
-      return resetQueryScope({
-        ...state,
-        group: action.group ? normaliseGroup(action.group) : null,
-        groupStack: action.group ? [normaliseGroup(action.group)] : [],
-      });
-    case "setGroupStack": {
-      const groupStack = normaliseGroupStack(action.groupStack);
-      return resetQueryScope({
-        ...state,
-        group: groupStack[0] ?? null,
-        groupStack,
-      });
-    }
-    case "setSelectedIds":
-      return { ...state, selectedIds: new Set(action.selectedIds) };
-    case "toggleSelectedId":
-      return { ...state, selectedIds: toggledSelectedIds(state.selectedIds, action) };
-    case "clearSelectedIds":
-      return { ...state, selectedIds: new Set() };
-    case "setView":
-      return { ...state, view: action.view };
-  }
-}
-
 export function dataViewStateToSearch(state: DataViewState): DataViewSearch {
-  const search: DataViewSearch = {};
-  if (state.page !== 1) search.page = state.page;
-  if (state.pageSize !== DEFAULT_DATA_VIEW_PAGE_SIZE) {
-    search.pageSize = state.pageSize;
-  }
-  if (state.sort) search.sort = serializeDataViewSort(state.sort);
-  if (hasFilter(state.filter)) search.filter = JSON.stringify(state.filter);
-  if (state.group) search.group = serializeDataViewGroup(state.group);
-  if (state.groupStack.length > 1) {
-    search.then = serializeDataViewGroupStack(state.groupStack.slice(1));
-  }
-  if (state.view !== "list") search.view = state.view;
-  return search;
+  return state.toSearch();
 }
 
 export function dataViewSearchToState(
   search: DataViewSearch | Record<string, unknown>,
   initial: DataViewInitialState = {},
 ): DataViewState {
-  const base = createDataViewState(initial);
-  const page = parseSearchInteger(search.page);
-  const pageSize = parseSearchInteger(search.pageSize);
-  const sort = parseSearchSort(search.sort);
-  const filter = parseSearchFilter(search.filter);
-  const group = parseSearchGroup(search.group);
-  const then = parseSearchGroupStack(search.then);
-  const view = parseSearchView(search.view);
-  return createDataViewState({
-    page: page ?? base.page,
-    pageSize: pageSize ?? base.pageSize,
-    sort: sort ?? base.sort,
-    filter: filter ?? base.filter,
-    group: group ?? base.group,
-    groupStack:
-      group || then
-        ? [
-            ...(group ? [group] : []),
-            ...(then ?? []),
-          ]
-        : base.groupStack,
-    view: view ?? base.view,
-  });
+  return DataViewState.fromSearch(search, initial);
 }
 
 export function mergeDataViewSearch(
@@ -208,91 +405,6 @@ export function mergeDataViewSearch(
     }
   }
   return merged;
-}
-
-export function dataViewSortToResourceOrder(
-  sort: DataViewSort | null,
-): DataViewResourceOrder | undefined {
-  if (!sort) return undefined;
-  return { [sort.field]: sort.dir === "asc" ? "ASC" : "DESC" };
-}
-
-export function dataViewStateToResourceListOptions<
-  TName extends ResourceTypeName = ResourceTypeName,
->(
-  state: DataViewState,
-  input: {
-    fields: readonly string[];
-    enabled?: boolean;
-  },
-): UseResourceListOptions<TName> {
-  const options: UseResourceListOptions<TName> = {
-    fields: input.fields,
-    pageSize: state.pageSize,
-    page: state.page,
-  };
-  if (hasFilter(state.filter)) options.filter = state.filter;
-  const order = dataViewSortToResourceOrder(state.sort);
-  if (order) options.order = order;
-  if (input.enabled !== undefined) options.enabled = input.enabled;
-  return options;
-}
-
-function resetQueryScope(state: DataViewState): DataViewState {
-  return { ...state, page: 1, selectedIds: new Set() };
-}
-
-function toggledSelectedIds(
-  selectedIds: ReadonlySet<string>,
-  action: Extract<DataViewAction, { type: "toggleSelectedId" }>,
-): ReadonlySet<string> {
-  const next = new Set(selectedIds);
-  const shouldSelect = action.selected ?? !next.has(action.id);
-  if (shouldSelect) next.add(action.id);
-  else next.delete(action.id);
-  return next;
-}
-
-function normalisePage(page: number | undefined): number {
-  if (page === undefined || !Number.isFinite(page)) return 1;
-  return Math.max(1, Math.floor(page));
-}
-
-function normaliseSort(sort: DataViewSort): DataViewSort {
-  return {
-    field: sort.field,
-    dir: sort.dir === "desc" ? "desc" : "asc",
-  };
-}
-
-function normaliseGroup(group: DataViewGroup): DataViewGroup {
-  return {
-    field: group.field,
-    ...(group.granularity ? { granularity: group.granularity } : {}),
-  };
-}
-
-function normaliseGroupStack(
-  groups: readonly DataViewGroup[],
-): readonly DataViewGroup[] {
-  const seen = new Set<string>();
-  const normalised: DataViewGroup[] = [];
-  for (const group of groups) {
-    const next = normaliseGroup(group);
-    const key = serializeDataViewGroup(next);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    normalised.push(next);
-  }
-  return normalised;
-}
-
-function normaliseFilter(filter: DataViewFilter | undefined): DataViewFilter {
-  return filter ? { ...filter } : {};
-}
-
-function hasFilter(filter: DataViewFilter): boolean {
-  return Object.keys(filter).length > 0;
 }
 
 // The model emits numbers in memory; reads also accept URL-stringified values.
@@ -365,7 +477,7 @@ function parseDataViewGroupStack(value: string): readonly DataViewGroup[] | null
   if (!value) return [];
   const groups = value.split(",").map(parseDataViewGroup);
   if (groups.some((group) => group === null)) return null;
-  return normaliseGroupStack(groups as DataViewGroup[]);
+  return DataViewState.normaliseGroupStack(groups as DataViewGroup[]);
 }
 
 function serializeDataViewGroupStack(
@@ -394,6 +506,15 @@ function isDataViewKind(value: string): value is DataViewKind {
 function dataViewFilterFromUnknown(value: unknown): DataViewFilter | null {
   if (!isDataViewFilter(value)) return null;
   return value as DataViewFilter;
+}
+
+function isDataViewLookup(value: unknown): value is DataViewLookup {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const record = value as Partial<Record<DataViewLookupOperator, unknown>>;
+  return DATA_VIEW_LOOKUP_OPERATORS.some((operator) =>
+    Object.prototype.hasOwnProperty.call(record, operator),
+  );
 }
 
 function isDataViewFilter(value: unknown): value is DataViewFilter {

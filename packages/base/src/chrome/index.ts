@@ -26,17 +26,12 @@ export {
 } from "./icon-registry";
 export {
   buildMenuTree,
-  menuItemIcon,
-  menuItemLabel,
-  menuItemMatchesPath,
-  menuItemTarget,
-  railMenuItems,
-  topMenuItems,
   type ChromeMenuGroup,
   type ChromeMenuItem,
+  ChromeMenuNode,
   type ChromeMenuStatus,
   type ChromeMenuTone,
-  type MenuTree,
+  MenuTree,
 } from "./menu-tree";
 export {
   Spotlight,

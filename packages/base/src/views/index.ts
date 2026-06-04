@@ -13,7 +13,7 @@ export {
 export {
   GroupListView,
   type GroupListViewProps,
-} from "./group-list-view";
+} from "./GroupListView";
 export {
   FormView,
   type FormViewProps,

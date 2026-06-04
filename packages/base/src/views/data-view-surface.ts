@@ -22,7 +22,6 @@ import {
 import type { DataToolbarVisibleField } from "../toolbars/DataToolbar";
 import type { DataViewContextValue } from "./data-view-context";
 import {
-  dataViewSortToResourceOrder,
   type DataViewFilter,
   type DataViewGroup,
   type DataViewResourceOrder,
@@ -36,7 +35,7 @@ import {
   tableColumnLabel,
   type ListRenderItem,
   type RowGroup,
-} from "./list-internals";
+} from "./ListInternals";
 import type { ColumnDescriptor } from "./page";
 
 type ListFilter = UseResourceListOptions<ResourceTypeName>["filter"];
@@ -120,7 +119,7 @@ export function useDataViewSurface<TRow extends Row = Row>({
     [dataView.state.filter, filter],
   );
   const sortOrder = React.useMemo(
-    () => dataViewSortToResourceOrder(dataView.state.sort),
+    () => dataView.state.resourceOrder(),
     [dataView.state.sort],
   );
   const list = useResourceList(model, {

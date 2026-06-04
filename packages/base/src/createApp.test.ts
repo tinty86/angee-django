@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { parseFlatSearch, stringifyFlatSearch } from "./createApp";
 import {
-  dataViewReducer,
   dataViewSearchToState,
   dataViewStateToSearch,
   mergeDataViewSearch,
@@ -46,7 +45,7 @@ describe("createApp search codec", () => {
       "?tab=archive&page=2&view=board&group=status:year",
     );
     const currentState = dataViewSearchToState(current);
-    const nextState = dataViewReducer(currentState, {
+    const nextState = currentState.reduce({
       type: "setSort",
       sort: { field: "title", dir: "asc" },
     });

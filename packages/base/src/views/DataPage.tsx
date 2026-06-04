@@ -10,6 +10,7 @@ import {
   type BreadcrumbItem,
 } from "../chrome/Breadcrumb";
 import { cn } from "../lib/cn";
+import { titleCase } from "../lib/titleCase";
 import { DataViewSwitcher } from "../toolbars";
 import { Button } from "../ui/button";
 import {
@@ -25,14 +26,13 @@ import {
   type ListViewState,
 } from "./ListView";
 import { FormView, type FormField, type FormViewProps } from "./FormView";
-import { readPath } from "./list-internals";
+import { readPath } from "./ListInternals";
 import {
   DataViewProvider,
   useDataView,
   useDataViewMaybe,
 } from "./data-view-context";
 import {
-  dataViewSortToResourceOrder,
   type DataViewFilter,
   type DataViewGroup,
   type DataViewKind,
@@ -366,7 +366,7 @@ function ListStateProbe<TRow extends Row>({
     () => mergeFilters(filter, dataView.state.filter),
     [dataView.state.filter, filter],
   );
-  const sortOrder = dataViewSortToResourceOrder(dataView.state.sort);
+  const sortOrder = dataView.state.resourceOrder();
   const list = useResourceList(model, {
     fields: requestedFields,
     filter: mergedFilter,
@@ -581,13 +581,6 @@ function breadcrumbValue(value: unknown): React.ReactNode | null {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return null;
-}
-
-function titleCase(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function rowId(row: Row | undefined): string | null {

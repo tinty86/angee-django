@@ -41,7 +41,7 @@ import {
   ListView,
   type ListColumn,
 } from "./ListView";
-import { GroupListView } from "./group-list-view";
+import { GroupListView } from "./GroupListView";
 import type {
   AggregateBucket,
   GroupByDimension,

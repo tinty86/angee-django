@@ -23,16 +23,11 @@ import { Tooltip } from "../ui/tooltip";
 import { AngeeMark } from "./AngeeMark";
 import { Glyph } from "./Glyph";
 import {
-  buildMenuTree,
-  menuItemIcon,
-  menuItemLabel,
-  menuItemMatchesPath,
-  menuItemTarget,
-  railMenuItems,
   type ChromeMenuGroup,
   type ChromeMenuItem,
   type ChromeMenuStatus,
   type ChromeMenuTone,
+  MenuTree,
 } from "./menu-tree";
 
 export interface AppChooserItem {
@@ -180,18 +175,18 @@ export function AppChooser({
 export function appChooserItemsFromMenuItems(
   items: readonly ChromeMenuItem[],
 ): readonly AppChooserItem[] {
-  const tree = buildMenuTree(items);
-  return railMenuItems(tree).flatMap((item) => {
-    const target = menuItemTarget(item);
+  const tree = MenuTree.from(items);
+  return tree.railMenuItems().flatMap((item) => {
+    const target = item.target;
     if (!target) return [];
     return [{
       id: item.id,
-      label: menuItemLabel(item),
+      label: item.displayLabel,
       to: target,
       badge: item.badge,
       description: item.description,
       group: item.group,
-      icon: menuItemIcon(item),
+      icon: item.iconName,
       status: item.status,
       tone: item.tone,
     }];
@@ -315,7 +310,9 @@ function filterAppChooserItems(
 }
 
 function itemMatchesPath(item: AppChooserItem, pathname: string): boolean {
-  return menuItemMatchesPath({ id: item.id, to: item.to }, pathname);
+  const target = item.to;
+  if (!target || target === "#") return false;
+  return pathname === target || pathname.startsWith(`${target}/`);
 }
 
 function toneClass(tone: ChromeMenuTone | undefined): string {

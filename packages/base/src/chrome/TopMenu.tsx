@@ -4,21 +4,16 @@ import { useMenus } from "@angee/sdk";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { cn } from "../lib/cn";
-import { useDataViewMaybe, type DataViewFilter } from "../views";
+import type { DataViewFilter } from "../views";
 import { Glyph } from "./Glyph";
 import {
   NavigationMenu,
   navigationMenuVariants,
 } from "../ui/navigation-menu";
 import {
-  appSectionItems,
-  buildMenuTree,
-  menuItemIcon,
-  menuItemLabel,
-  menuItemMatchesPath,
-  menuItemTarget,
-  topMenuItems,
   type ChromeMenuItem,
+  type ChromeMenuNode,
+  MenuTree,
 } from "./menu-tree";
 
 const TOP_TAB_IDS = ["all", "starred", "archive"] as const;
@@ -72,7 +67,6 @@ function TopMenuTabs({
   className?: string;
   tabs?: readonly TopMenuTab[];
 }): ReactElement | null {
-  const dataView = useDataViewMaybe();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(TOP_TAB_IDS).withDefault("all"),
@@ -93,7 +87,6 @@ function TopMenuTabs({
           active={activeTab === tab.id}
           onSelect={() => {
             void setActiveTab(tab.id);
-            dataView?.setFilter(tab.filter);
           }}
         />
       ))}
@@ -112,11 +105,11 @@ function TopMenuLinks({
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const tree = buildMenuTree(items ?? runtimeItems);
+  const tree = MenuTree.from(items ?? runtimeItems);
   // An explicit `items` list is a shell scoping its own nav — render it as given.
   // The default top bar is the *active app's* sections: the rail switches apps,
   // the top bar navigates within the one you're in, so a sibling app never leaks.
-  const menuItems = items ? topMenuItems(tree) : appSectionItems(tree, pathname);
+  const menuItems = items ? tree.railMenuItems() : tree.appSectionItems(pathname);
   const hasPopup = menuItems.some((item) => Boolean(item.children?.length));
 
   if (!menuItems.length) return null;
@@ -146,14 +139,14 @@ function TopMenuLinkItem({
   item,
   pathname,
 }: {
-  item: ChromeMenuItem;
+  item: ChromeMenuNode;
   pathname: string;
 }): ReactElement {
-  const children = item.children?.filter((child) => menuItemTarget(child)) ?? [];
+  const children = item.targetedChildren;
   const active = menuItemIsActive(item, pathname);
-  const target = menuItemTarget(item);
-  const label = menuItemLabel(item);
-  const icon = menuItemIcon(item);
+  const target = item.target;
+  const label = item.displayLabel;
+  const icon = item.iconName;
 
   if (children.length) {
     return (
@@ -209,9 +202,9 @@ function TopMenuPanelLink({
   item,
 }: {
   active: boolean;
-  item: ChromeMenuItem;
+  item: ChromeMenuNode;
 }): ReactElement | null {
-  const target = menuItemTarget(item);
+  const target = item.target;
   if (!target) return null;
   return (
     <Link
@@ -223,11 +216,11 @@ function TopMenuPanelLink({
       )}
     >
       <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded bg-brand-soft text-brand-soft-text">
-        <Glyph name={menuItemIcon(item)} />
+        <Glyph name={item.iconName} />
       </span>
       <span className="min-w-0">
         <span className="block truncate text-13 font-semibold">
-          {menuItemLabel(item)}
+          {item.displayLabel}
         </span>
         {item.description ? (
           <span className="block truncate text-xs text-fg-muted">
@@ -262,9 +255,9 @@ function TopMenuTabButton({
   );
 }
 
-function menuItemIsActive(item: ChromeMenuItem, pathname: string): boolean {
+function menuItemIsActive(item: ChromeMenuNode, pathname: string): boolean {
   return (
-    menuItemMatchesPath(item, pathname) ||
-    Boolean(item.children?.some((child) => menuItemMatchesPath(child, pathname)))
+    item.matchesPath(pathname) ||
+    Boolean(item.children?.some((child) => child.matchesPath(pathname)))
   );
 }
