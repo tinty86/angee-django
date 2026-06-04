@@ -21,6 +21,15 @@ export {
 
 // Data-bound views.
 export * from "./views";
+export {
+  GraphView,
+  type GraphViewEdge,
+  type GraphViewEdgeStyle,
+  type GraphViewLayout,
+  type GraphViewNode,
+  type GraphViewNodeStyle,
+  type GraphViewProps,
+} from "./views/GraphView";
 export * from "./widgets";
 export * from "./feedback";
 export * from "./toolbars";

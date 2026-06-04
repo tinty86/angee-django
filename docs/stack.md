@@ -81,6 +81,8 @@ Dependency changes must update this file in the same change.
 | react-day-picker | Calendar | Date widgets |
 | react-resizable-panels | Split panes | Shell and inspector layouts |
 | CodeMirror 6 | Text and Markdown editor | Markdown widget |
+| @xyflow/react | node/edge graph canvas | `@angee/base` `GraphView` shell |
+| @dagrejs/dagre | directed-graph layout | `@angee/base` `GraphView` node placement |
 | @dnd-kit | Drag and drop | Board and rail interactions |
 
 ## Tooling

@@ -23,12 +23,25 @@ class IAMGraphQLTests(TransactionTestCase):
 
     def setUp(self) -> None:
         call_command("rebac", "sync", verbosity=0)
-        call_command("resources", "load", "demo", allow_non_dev=True, verbosity=0)
+        call_command("resources", "load", include_demo=True, allow_non_dev=True, verbosity=0)
         with system_context(reason="test-setup"):
             self.welcome = Note.objects.get(title="Welcome to Angee")
             self.alice = User.objects.get(username="alice")
             self.bob = User.objects.get(username="bob")
             self.admin = User.objects.get(username="admin")
+            self.named_owner = User.objects.create_user(
+                username="named-owner",
+                email="named-owner@example.com",
+                password="!",
+                first_name="Named",
+                last_name="Owner",
+            )
+            self.named_note = Note.objects.create(
+                title="Named owner note",
+                body="Display label fixture",
+                created_by=self.named_owner,
+                updated_by=self.bob,
+            )
         self.client = Client()
 
     def test_login_current_user_and_logout_use_session_cookie(self) -> None:
@@ -198,6 +211,60 @@ class IAMGraphQLTests(TransactionTestCase):
                 "updatedBy": self.alice.public_id,
             },
         )
+
+    def test_note_audit_labels_are_strings_without_user_projection(self) -> None:
+        self.login(self.client, "admin")
+        notes = self.graphql(
+            """
+            query {
+              notes(pagination: { limit: 100 }) {
+                results {
+                  title
+                  createdBy
+                  createdByLabel
+                  updatedBy
+                  updatedByLabel
+                }
+              }
+            }
+            """
+        )["data"]["notes"]["results"]
+        named = next(node for node in notes if node["title"] == self.named_note.title)
+        planning = next(node for node in notes if node["title"] == "Quarterly planning")
+
+        self.assertEqual(named["createdBy"], self.named_owner.public_id)
+        self.assertEqual(named["createdByLabel"], "Named Owner")
+        self.assertEqual(named["updatedBy"], self.bob.public_id)
+        self.assertEqual(named["updatedByLabel"], "bob")
+        self.assertEqual(planning["createdBy"], self.alice.public_id)
+        self.assertEqual(planning["createdByLabel"], "alice")
+        self.assertEqual(planning["updatedBy"], self.admin.public_id)
+        self.assertEqual(planning["updatedByLabel"], "admin")
+
+        note_type = self.graphql(
+            """
+            query {
+              __type(name: "NoteType") {
+                fields {
+                  name
+                  type { kind name }
+                }
+              }
+            }
+            """
+        )["data"]["__type"]
+        fields = {
+            field["name"]: field["type"]
+            for field in note_type["fields"]
+        }
+
+        self.assertEqual(fields["createdBy"], {"kind": "SCALAR", "name": "ID"})
+        self.assertEqual(fields["updatedBy"], {"kind": "SCALAR", "name": "ID"})
+        self.assertEqual(fields["createdByLabel"], {"kind": "SCALAR", "name": "String"})
+        self.assertEqual(fields["updatedByLabel"], {"kind": "SCALAR", "name": "String"})
+        self.assertNotIn("user", fields)
+        self.assertNotIn("email", fields)
+        self.assertNotIn("isStaff", fields)
 
     def test_note_revisions_are_actor_scoped(self) -> None:
         with system_context(reason="test-setup"):

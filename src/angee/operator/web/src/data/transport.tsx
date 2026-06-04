@@ -1,8 +1,6 @@
 import { Spinner } from "@angee/base";
-import { bearerAuth, createUrqlClient, useSchemaClients } from "@angee/sdk";
+import { useSchemaClients } from "@angee/sdk";
 import {
-  cacheExchange,
-  fetchExchange,
   Provider as UrqlProvider,
   useMutation,
   useQuery,
@@ -23,6 +21,7 @@ import {
 } from "react";
 
 import { OPERATOR_CONNECTION_QUERY, SNAPSHOT_QUERY } from "./documents";
+import { createOperatorClient } from "./operator-client";
 import type {
   OperatorConnectionInfo,
   OperatorSnapshot,
@@ -31,7 +30,7 @@ import type {
 } from "./types";
 
 const CONSOLE_SCHEMA = "console";
-const POLL_INTERVAL_MS = 2_000;
+const POLL_INTERVAL_MS = 5_000;
 // Daemon connection tokens are short-lived (the daemon mints with a ~30m TTL).
 // Refresh the bridge token well before then and rebuild the daemon client, so a
 // long-running console never degrades to a dead token.
@@ -127,16 +126,9 @@ export function OperatorTransportProvider({
   const endpoint = state.kind === "ready" ? state.connection.endpoint : null;
   const token = state.kind === "ready" ? state.connection.token : null;
   // Rebuilt whenever the token rotates, so daemon requests carry the live bearer.
-  // The SDK client factory owns transport; the operator contributes only its
-  // bearer auth and a document-cache stack (the daemon polls in v1 — TODO(F5):
-  // wire its SSE/WS subscription transport when it lands).
   const daemonClient = useMemo(() => {
     if (!endpoint || !token) return null;
-    return createUrqlClient({
-      url: endpoint,
-      auth: bearerAuth(token),
-      exchanges: [cacheExchange, fetchExchange],
-    });
+    return createOperatorClient({ endpoint, token });
   }, [endpoint, token]);
 
   if (state.kind === "loading") {
@@ -233,13 +225,22 @@ export function useOperatorSnapshot(
   });
 
   const reexecuteRef = useRef(reexecute);
+  const fetchingRef = useRef(result.fetching);
   useEffect(() => {
     reexecuteRef.current = reexecute;
-  }, [reexecute]);
+    fetchingRef.current = result.fetching;
+  }, [reexecute, result.fetching]);
 
   useEffect(() => {
     const intervalId = globalThis.setInterval(() => {
-      reexecuteRef.current({ requestPolicy: "network-only" });
+      // Skip the tick while a request is already in flight. The daemon's
+      // git-backed resolvers (sources, gitOps) can take longer than the poll
+      // interval, and a network-only reexecute aborts the pending request — so
+      // an unconditional poll would cancel each fetch before it ever resolves
+      // and the snapshot would never settle.
+      if (!fetchingRef.current) {
+        reexecuteRef.current({ requestPolicy: "network-only" });
+      }
     }, POLL_INTERVAL_MS);
     return () => globalThis.clearInterval(intervalId);
   }, []);

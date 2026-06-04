@@ -15,6 +15,19 @@ export {
   type GroupListViewProps,
 } from "./GroupListView";
 export {
+  RowsListView,
+  type RowsListViewProps,
+} from "./RowsListView";
+export {
+  GraphView,
+  type GraphViewEdge,
+  type GraphViewEdgeStyle,
+  type GraphViewLayout,
+  type GraphViewNode,
+  type GraphViewNodeStyle,
+  type GraphViewProps,
+} from "./GraphView";
+export {
   FormView,
   type FormViewProps,
   type FormField,
@@ -44,6 +57,7 @@ export {
 } from "./useBulkDelete";
 export * from "./data-view-model";
 export * from "./data-view-context";
+export type { StringIdRow } from "./data-view-surface";
 export {
   Action as PageAction,
   Column as PageColumn,

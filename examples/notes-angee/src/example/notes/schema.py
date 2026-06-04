@@ -9,6 +9,7 @@ import strawberry
 import strawberry_django
 from django.apps import apps
 from django.db.models import QuerySet
+from rebac import system_context
 from rebac.errors import MissingActorError
 from strawberry import auto, relay
 from strawberry_django_aggregates import AggregateBuilder
@@ -40,11 +41,23 @@ class NoteType(AngeeNode):
 
         return _user_public_id(self.created_by_id)
 
+    @strawberry_django.field(only=["created_by_id"])
+    def created_by_label(self) -> str | None:
+        """Return the creator's display label - no user object exposed."""
+
+        return _user_label(self.created_by_id)
+
     @strawberry_django.field(only=["updated_by_id"])
     def updated_by(self) -> strawberry.ID | None:
         """Return the updater's public id without exposing the user object."""
 
         return _user_public_id(self.updated_by_id)
+
+    @strawberry_django.field(only=["updated_by_id"])
+    def updated_by_label(self) -> str | None:
+        """Return the updater's display label - no user object exposed."""
+
+        return _user_label(self.updated_by_id)
 
 
 @strawberry.type
@@ -219,6 +232,29 @@ def _user_public_id(user_id: Any) -> strawberry.ID | None:
     if user_id is None:
         return None
     return strawberry.ID(public_id_of(User(id=user_id)))
+
+
+def _user_label(user_id: Any) -> str | None:
+    """Return a user's display label (name) without exposing the user object.
+
+    Resolved under ``system_context`` (the elevation the User-owning IAM addon
+    uses for server-side reads) so an actor-scoped note query never pulls a
+    guarded User row into its own queryset (REBAC rejects that); only a display
+    string leaves the resolver, never the user object. Intended for the
+    single-record form — not selected as a list column.
+    """
+
+    if user_id is None:
+        return None
+    with system_context(reason="notes.graphql.user_label"):
+        user = (
+            User.objects.filter(pk=user_id)
+            .only("first_name", "last_name", "username")
+            .first()
+        )
+    if user is None:
+        return None
+    return str(user.get_full_name() or user.username)
 
 
 _NOTE_SCHEMA_BUCKET = {

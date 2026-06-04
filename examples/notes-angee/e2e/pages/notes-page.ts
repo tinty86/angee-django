@@ -113,8 +113,8 @@ export class NotesPage extends PageObject {
     await this.page.getByText("Group by", { exact: false }).first().waitFor();
   }
 
-  /** Navigate to the first record's form. The list groups + folds by default,
-   *  so expand the first group to reveal records, then click a record row. */
+  /** Navigate to the first record's form. The list is flat by default (records
+   *  visible immediately); the group-expand is a fallback for grouped views. */
   async openFirstNote(): Promise<void> {
     if (!(await this.recordRows.first().isVisible().catch(() => false))) {
       await this.groupHeaders.first().click();
@@ -171,6 +171,15 @@ export class NotesPage extends PageObject {
     await this.page.keyboard.type(text);
   }
 
+  /** The tag-input control (the tagInput widget). */
+  get tagInput(): Locator {
+    return this.page.getByRole("textbox", { name: "Tags" });
+  }
+  /** A chatter-rail tab by name (Angee / Comments / Activity). */
+  chatterTab(name: string): Locator {
+    return this.page.getByRole("tab", { name: new RegExp(name, "i") });
+  }
+
   // --- chrome ---
   get globalSearch(): Locator {
     return this.page.getByRole("search");
@@ -187,5 +196,41 @@ export class NotesPage extends PageObject {
   async openCreateForm(): Promise<void> {
     await this.newNoteButton.click();
     await this.titleInput.waitFor({ state: "visible", timeout: 10000 });
+  }
+
+  // --- bulk delete (list selection) ---
+  get rowCheckboxes(): Locator {
+    return this.page.getByRole("checkbox", { name: "Select row" });
+  }
+  /** The selection bar's "N selected" count text. */
+  get selectionCount(): Locator {
+    return this.page.getByText(/\d+ selected/);
+  }
+  /** The selection bar's danger Delete button (only the list-level one). */
+  get bulkDeleteButton(): Locator {
+    return this.page.getByRole("button", { name: "Delete", exact: true });
+  }
+  get deleteDialog(): Locator {
+    return this.page.getByRole("dialog");
+  }
+  /** The cascade-preview dialog title, e.g. "Delete 3 records?". */
+  get deleteDialogTitle(): Locator {
+    return this.page.getByText(/Delete \d+ records\?/);
+  }
+  get deleteDialogCancel(): Locator {
+    return this.page.getByRole("button", { name: "Cancel", exact: true });
+  }
+
+  /** Expand the first group if needed, then tick `count` record checkboxes. */
+  async selectRecords(count: number): Promise<void> {
+    if (!(await this.rowCheckboxes.first().isVisible().catch(() => false))) {
+      await this.groupHeaders.first().click();
+      await this.rowCheckboxes
+        .first()
+        .waitFor({ state: "visible", timeout: 10000 });
+    }
+    for (let index = 0; index < count; index += 1) {
+      await this.rowCheckboxes.nth(index).click();
+    }
   }
 }

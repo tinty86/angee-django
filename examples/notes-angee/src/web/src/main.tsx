@@ -7,6 +7,7 @@ import {
 } from "@angee/base";
 import { cacheConfigFromSDL } from "@angee/sdk";
 import notes from "@angee-example/notes-web";
+import iam from "@angee/iam";
 import operator from "@angee/operator";
 
 import publicSDL from "../../runtime/schemas/public.graphql?raw";
@@ -27,15 +28,22 @@ const authAddon: BaseAddon = {
 };
 
 createApp({
-  addons: [notes, authAddon, operator],
+  addons: [notes, authAddon, iam, operator],
   shells: {
     console: { chrome: ConsoleShell },
-    public: {},
+    // Chrome defaults to PassthroughChrome and a public-keyed shell is
+    // unauthenticated by default (createApp owns both), but the schema must be
+    // pinned: defaultSchema is "console", so the public login shell points back
+    // to the public client explicitly.
+    public: { schema: "public" },
   },
   schemas: {
     public: { url: "/graphql/public/", cache: cacheConfigFromSDL(publicSDL) },
     console: { url: "/graphql/console/", cache: cacheConfigFromSDL(consoleSDL) },
   },
+  // The console is the primary surface, so it is the default schema; the public
+  // login shell pins itself back to the public client above.
+  defaultSchema: "console",
   slots: [
     {
       slot: AUTH_LOGIN_CARD_FOOTER_SLOT,
