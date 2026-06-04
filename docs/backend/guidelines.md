@@ -80,6 +80,9 @@ Rules that follow from the layering:
 ## Rules
 
 - Domain behavior lives on models, managers, and querysets.
+- Manager/QuerySet canon: chainable read scopes live on a `*QuerySet` exposed
+  through `Manager.from_queryset(...)`. Factories and mutations stay on the
+  manager that owns the write.
 - Source model discovery should follow Django model inheritance and explicit
   model-owned declarations, not naming or field-shape heuristics.
 - Put behavior on the object that owns the shape, the Django way: coerce values

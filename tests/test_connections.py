@@ -226,8 +226,8 @@ def test_oauth_client_manager_syncs_shape_and_secret_from_settings(settings: Any
 
 
 @pytest.mark.django_db(transaction=True)
-def test_iam_oauth_clients_command_runs_the_settings_sync(settings: Any) -> None:
-    """The ``iam_oauth_clients`` command is a thin trigger for ``sync_from_settings``."""
+def test_oauth_clients_command_runs_the_settings_sync(settings: Any) -> None:
+    """The ``oauth_clients`` command is a thin trigger for ``sync_from_settings``."""
 
     created_models = _create_missing_tables()
     try:
@@ -243,7 +243,7 @@ def test_iam_oauth_clients_command_runs_the_settings_sync(settings: Any) -> None
             },
         )
 
-        call_command("iam_oauth_clients", verbosity=0)
+        call_command("oauth_clients", verbosity=0)
 
         with system_context(reason="test assertions"):
             oauth_client = OAuthClient.objects.get(vendor__slug="github", environment="prod")

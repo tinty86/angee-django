@@ -14,7 +14,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from django_sqids import SqidsField
 from rebac import app_settings, system_context, to_object_ref
-from rebac.managers import RebacManager
+from rebac.managers import RebacManager, RebacQuerySet
 from rebac.models import active_relationship_model
 from rebac.permissions_mixin import RebacPermissionsMixin
 
@@ -253,7 +253,16 @@ class Vendor(SqidMixin, AuditMixin, AngeeModel):
         return self.display_name or self.slug
 
 
-class AccountManager(RebacManager):
+class AccountQuerySet(RebacQuerySet[Any]):
+    """REBAC-scoped reads for external accounts."""
+
+    def console_external_accounts(self) -> AccountQuerySet:
+        """Return admin-visible external accounts with guarded vendor joins."""
+
+        return cast(AccountQuerySet, self.rebac_select_related("vendor", "credential"))
+
+
+class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: ignore[misc]
     """Manager for idempotent external account linking.
 
     Actor-less framework writes run under ``system_context``; update paths do not maintain ``updated_by``.
@@ -400,6 +409,16 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
         credential = getattr(self, "credential", None)
         return "" if credential is None else str(getattr(credential, "status", "") or "")
 
+    @staticmethod
+    def display_name_from_claims(claims: Mapping[str, Any], email: str) -> str:
+        """Return the best display label from verified identity claims."""
+
+        for key in ("name", "preferred_username", "given_name"):
+            value = claims.get(key)
+            if value:
+                return str(value)
+        return email
+
     def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
         """Record one capability contribution, recompute this account, and persist.
 
@@ -443,7 +462,32 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
             )
 
 
-class OAuthClientManager(RebacManager):
+class OAuthClientQuerySet(RebacQuerySet[Any]):
+    """REBAC-scoped reads for OAuth client registration."""
+
+    def available_connections(self) -> OAuthClientQuerySet:
+        """Return enabled and configured OIDC clients for the public connection picker."""
+
+        return cast(
+            OAuthClientQuerySet,
+            self.system_context(reason="iam.graphql.available_connections")
+            .filter(is_enabled=True, is_oidc=True)
+            .exclude(client_id="")
+            .exclude(discovery_url="", authorize_endpoint="")
+            .annotate(
+                picker_vendor_slug=models.F("vendor__slug"),
+                picker_vendor_display_name=models.F("vendor__display_name"),
+                picker_vendor_icon=models.F("vendor__icon"),
+            ),
+        )
+
+    def console_oauth_clients(self) -> OAuthClientQuerySet:
+        """Return admin-visible OAuth clients with guarded vendor joins."""
+
+        return cast(OAuthClientQuerySet, self.rebac_select_related("vendor"))
+
+
+class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # type: ignore[misc]
     """Manager for settings-sourced OAuth/OIDC client registration."""
 
     seed_fields = frozenset(
@@ -626,8 +670,100 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
             return ""
         return str(getattr(vendor, "slug", "") or "")
 
+    @property
+    def default_scope_values(self) -> list[str]:
+        """Return the configured default OAuth scopes as strings."""
 
-class CredentialManager(RebacManager):
+        return self._string_list(self.default_scopes)
+
+    @property
+    def scopes_catalogue_values(self) -> list[str]:
+        """Return the advertised OAuth scopes as strings."""
+
+        return self._string_list(self.scopes_catalogue)
+
+    @property
+    def allowed_email_domain_values(self) -> list[str]:
+        """Return the login domain allow-list as strings."""
+
+        return self._string_list(self.allowed_email_domains)
+
+    def allows_email_domain(self, email: str | None) -> bool:
+        """Return whether ``email`` is allowed by this client's domain policy."""
+
+        allowed_domains = {
+            domain.strip().lower()
+            for domain in self.allowed_email_domain_values
+            if domain.strip()
+        }
+        if not allowed_domains:
+            return True
+        if not email or "@" not in email:
+            return False
+        return email.rsplit("@", 1)[1].lower() in allowed_domains
+
+    def _string_list(self, value: object) -> list[str]:
+        """Return one JSON-backed column value as a string list."""
+
+        if not isinstance(value, (list, tuple)):
+            return []
+        return [str(item) for item in value]
+
+
+class CredentialQuerySet(RebacQuerySet[Any]):
+    """REBAC-scoped reads for credential health and connected accounts."""
+
+    def connected_for(self, user: Any) -> CredentialQuerySet:
+        """Return ``user``'s external-account-backed credentials.
+
+        Each row is a credential whose ``external_account`` (and that account's
+        ``credential``) is preloaded under the ambient actor's scope. Owns the
+        "what counts as a connected account" predicate for the self-service
+        connected-accounts surface.
+        """
+
+        return cast(
+            CredentialQuerySet,
+            self.filter(
+                user=user,
+                external_account__isnull=False,
+            ).rebac_select_related("external_account", "external_account__credential"),
+        )
+
+    def console_credentials(self) -> CredentialQuerySet:
+        """Return admin-visible credential health with guarded FK joins."""
+
+        return cast(
+            CredentialQuerySet,
+            self.rebac_select_related(
+                "oauth_client",
+                "oauth_client__vendor",
+                "external_account",
+                "external_account__vendor",
+            ),
+        )
+
+    def is_only_oidc_sign_in(self, user: Any) -> bool:
+        """Return whether ``user`` has no password and only one OIDC sign-in account."""
+
+        if user.has_usable_password():
+            return False
+        with system_context(reason="iam.graphql.unlink_account.guard"):
+            oidc_account_count = (
+                self.filter(
+                    user=user,
+                    kind=CredentialKind.OAUTH,
+                    oauth_client__is_oidc=True,
+                    external_account__isnull=False,
+                )
+                .values("external_account_id")
+                .distinct()
+                .count()
+            )
+        return oidc_account_count <= 1
+
+
+class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type: ignore[misc]
     """Manager for idempotent per-user credential writes.
 
     Actor-less framework writes run under ``system_context``; update paths do not maintain ``updated_by``.
@@ -644,20 +780,6 @@ class CredentialManager(RebacManager):
         }
     )
     operation_fields = frozenset({"kind", "material"})
-
-    def connected_for(self, user: Any) -> models.QuerySet[Any]:
-        """Return ``user``'s external-account-backed credentials.
-
-        Each row is a credential whose ``external_account`` (and that account's
-        ``credential``) is preloaded under the ambient actor's scope. Owns the
-        "what counts as a connected account" predicate for the self-service
-        connected-accounts surface.
-        """
-
-        return self.filter(
-            user=user,
-            external_account__isnull=False,
-        ).rebac_select_related("external_account", "external_account__credential")
 
     def upsert_for_user(
         self,
@@ -738,7 +860,7 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
         blank=True,
         related_name="credentials",
     )
-    kind = models.CharField(max_length=32, choices=CredentialKind.choices)
+    kind = StateField(choices_enum=CredentialKind)
     material = EncryptedField()
     status = StateField(choices_enum=CredentialStatus, default=CredentialStatus.ACTIVE)
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)

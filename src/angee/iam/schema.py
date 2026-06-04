@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 from typing import Any, cast
 
 import strawberry
 import strawberry_django
 from django.apps import apps
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.db.models import F, QuerySet
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.http import url_has_allowed_host_and_scheme
 from rebac import PermissionDenied, system_context
@@ -31,14 +33,37 @@ from angee.iam.oidc import client as client_module
 from angee.iam.oidc import state
 from angee.iam.oidc.errors import INVALID_STATE, OidcFlowError
 
-try:
-    User = apps.get_model("iam", "User")
-except LookupError:  # pragma: no cover - source-addon unit tests may not build runtime models.
-    User = get_user_model()
-Vendor = apps.get_model("iam", "Vendor")
-OAuthClient = apps.get_model("iam", "OAuthClient")
-ExternalAccount = apps.get_model("iam", "ExternalAccount")
-Credential = apps.get_model("iam", "Credential")
+
+def _has_module_spec(dotted_path: str) -> bool:
+    """Return whether ``dotted_path`` and each parent module can be found."""
+
+    parts = dotted_path.split(".")
+    for index in range(1, len(parts) + 1):
+        if importlib.util.find_spec(".".join(parts[:index])) is None:
+            return False
+    return True
+
+
+def _runtime_iam_models_built() -> bool:
+    """Return whether the generated IAM runtime model module is importable."""
+
+    runtime_module = str(getattr(settings, "ANGEE_RUNTIME_MODULE", "runtime"))
+    return _has_module_spec(f"{runtime_module}.iam.models")
+
+
+def _iam_model(name: str) -> type[Any]:
+    """Return an IAM model, using the auth user while source tests are not built."""
+
+    if name == "User" and not _runtime_iam_models_built():
+        return cast(type[Any], get_user_model())
+    return cast(type[Any], apps.get_model("iam", name))
+
+
+User = _iam_model("User")
+Vendor = _iam_model("Vendor")
+OAuthClient = _iam_model("OAuthClient")
+ExternalAccount = _iam_model("ExternalAccount")
+Credential = _iam_model("Credential")
 
 _OIDC_SESSION_OAUTH_CLIENT_PREFIX = "angee.iam.oidc.oauth_client:"
 
@@ -98,19 +123,19 @@ class OAuthClientType(AngeeNode):
     def default_scopes(self) -> list[str]:
         """Return the configured default OAuth scopes."""
 
-        return _string_list(cast(Any, self).default_scopes)
+        return cast(list[str], cast(Any, self).default_scope_values)
 
     @strawberry_django.field(only=["scopes_catalogue"])
     def scopes_catalogue(self) -> list[str]:
         """Return the advertised OAuth scopes."""
 
-        return _string_list(cast(Any, self).scopes_catalogue)
+        return cast(list[str], cast(Any, self).scopes_catalogue_values)
 
     @strawberry_django.field(only=["allowed_email_domains"])
     def allowed_email_domains(self) -> list[str]:
         """Return the login domain allow-list."""
 
-        return _string_list(cast(Any, self).allowed_email_domains)
+        return cast(list[str], cast(Any, self).allowed_email_domain_values)
 
     @strawberry_django.field
     def configuration_state(self) -> str:
@@ -202,12 +227,13 @@ class AvailableConnection:
     def vendor(self) -> AvailableConnectionVendor:
         """Return the picker-safe vendor projection from the joined columns.
 
-        ``_available_connections`` annotates the vendor columns onto each row, so
-        this reads them off the same row — one query for the whole page, no
-        per-row vendor fetch. A ``select_related`` join can't be used here: the
-        picker is public/system-scoped, so there is no actor to check a
-        materialised REBAC-bound ``Vendor`` instance against (the related-row
-        guard fails closed). Annotated columns carry no such instance.
+        ``OAuthClientQuerySet.available_connections`` annotates the vendor
+        columns onto each row, so this reads them off the same row — one query
+        for the whole page, no per-row vendor fetch. A ``select_related`` join
+        can't be used here: the picker is public/system-scoped, so there is no
+        actor to check a materialised REBAC-bound ``Vendor`` instance against
+        (the related-row guard fails closed). Annotated columns carry no such
+        instance.
         """
 
         row = cast(Any, self)
@@ -384,18 +410,7 @@ def _available_connections(
     """Return enabled and configured OIDC clients for the public connection picker."""
 
     del info
-    return cast(
-        QuerySet[Any],
-        OAuthClient.objects.system_context(reason="iam.graphql.available_connections")
-        .filter(is_enabled=True, is_oidc=True)
-        .exclude(client_id="")
-        .exclude(discovery_url="", authorize_endpoint="")
-        .annotate(
-            picker_vendor_slug=F("vendor__slug"),
-            picker_vendor_display_name=F("vendor__display_name"),
-            picker_vendor_icon=F("vendor__icon"),
-        ),
-    )
+    return cast(QuerySet[Any], cast(Any, OAuthClient.objects).available_connections())
 
 
 def _my_connected_accounts(
@@ -403,7 +418,7 @@ def _my_connected_accounts(
 ) -> QuerySet[Any]:
     """Return this session user's credential-backed connected accounts."""
 
-    return Credential.objects.connected_for(_session_user(info))
+    return cast(QuerySet[Any], cast(Any, Credential.objects).connected_for(_session_user(info)))
 
 
 def _console_oauth_clients(
@@ -412,7 +427,7 @@ def _console_oauth_clients(
     """Return admin-visible OAuth clients with guarded vendor joins."""
 
     del info
-    return cast(QuerySet[Any], OAuthClient.objects.rebac_select_related("vendor"))
+    return cast(QuerySet[Any], cast(Any, OAuthClient.objects).console_oauth_clients())
 
 
 def _console_external_accounts(
@@ -421,7 +436,7 @@ def _console_external_accounts(
     """Return admin-visible external accounts with guarded vendor joins."""
 
     del info
-    return cast(QuerySet[Any], ExternalAccount.objects.rebac_select_related("vendor", "credential"))
+    return cast(QuerySet[Any], cast(Any, ExternalAccount.objects).console_external_accounts())
 
 
 def _console_credentials(
@@ -430,15 +445,7 @@ def _console_credentials(
     """Return admin-visible credential health with guarded FK joins."""
 
     del info
-    return cast(
-        QuerySet[Any],
-        Credential.objects.rebac_select_related(
-            "oauth_client",
-            "oauth_client__vendor",
-            "external_account",
-            "external_account__vendor",
-        ),
-    )
+    return cast(QuerySet[Any], cast(Any, Credential.objects).console_credentials())
 
 
 @strawberry.type
@@ -661,7 +668,7 @@ class IAMMutation:
                 )
             if credential is None:
                 return UnlinkAccountResult(ok=False)
-            if _would_remove_only_oidc_sign_in_method(user, credential):
+            if credential.kind == CredentialKind.OAUTH and cast(Any, Credential.objects).is_only_oidc_sign_in(user):
                 raise OidcFlowError("only_sign_in_method", 409)
             _revoke_remote_oauth_token(credential)
             external_account = credential.external_account
@@ -675,26 +682,6 @@ class IAMMutation:
             return UnlinkAccountResult(ok=deleted > 0)
         except OidcFlowError as error:
             return UnlinkAccountResult(ok=False, error=str(error), error_code=error.code)
-
-
-def _would_remove_only_oidc_sign_in_method(user: Any, credential: Any) -> bool:
-    """Return whether unlinking ``credential`` would leave a passwordless user unable to sign in."""
-
-    if user.has_usable_password() or credential.kind != CredentialKind.OAUTH:
-        return False
-    with system_context(reason="iam.graphql.unlink_account.guard"):
-        oidc_account_count = (
-            Credential.objects.filter(
-                user=user,
-                kind=CredentialKind.OAUTH,
-                oauth_client__is_oidc=True,
-                external_account__isnull=False,
-            )
-            .values("external_account_id")
-            .distinct()
-            .count()
-        )
-    return oidc_account_count <= 1
 
 
 def _revoke_remote_oauth_token(credential: Any) -> None:
@@ -795,7 +782,7 @@ def _start_oidc_flow(
         state=state_token,
         nonce=record.nonce,
         redirect_uri=redirect_uri,
-        scopes=_string_list(oauth_client.default_scopes),
+        scopes=oauth_client.default_scope_values,
         code_challenge=_pkce_challenge(record.code_verifier),
     )
     return OidcStartPayload(authorize_url=authorize_url, state=state_token)
@@ -855,14 +842,6 @@ def _pkce_challenge(code_verifier: str | None) -> str | None:
         return None
     digest = hashlib.sha256(code_verifier.encode()).digest()
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-
-
-def _string_list(value: object) -> list[str]:
-    """Return ``value`` as a string list for JSON-backed scope fields."""
-
-    if not isinstance(value, (list, tuple)):
-        return []
-    return [str(item) for item in value]
 
 
 schemas = {

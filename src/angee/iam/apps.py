@@ -29,6 +29,7 @@ class IAMConfig(BaseAddonConfig):
         """Wire IAM-owned REBAC relationships after app population."""
 
         super().ready()
+        # App population phase 1 imports AppConfig before IAM signal models are ready.
         from angee.iam import signals
 
         signals.connect()
