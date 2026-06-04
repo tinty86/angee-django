@@ -3,9 +3,7 @@
 //
 // Aggregate results carry a `count` plus optional measure maps such as
 // `sum { amount }`. Grouped results are offset-paginated envelopes with
-// `results`; older schemas exposed grouped rows as `groups` beneath the
-// aggregate field, so the extractor accepts both shapes while the document
-// builder emits the newer one.
+// `results`, matching the document builder's selected response shape.
 
 export const AGGREGATE_MEASURE_OPERATORS = [
   "sum",
@@ -70,12 +68,6 @@ function extractMeasures(
   return measures;
 }
 
-/** A legacy group object becomes a bucket: its `count`, with the rest as key. */
-function toBucket(group: Record<string, unknown>): AggregateBucket {
-  const { count, ...key } = group;
-  return { key, count: countOf(count) };
-}
-
 /** A grouped-result row carries its key under `key` and its row count. */
 function toGroupedResultBucket(group: Record<string, unknown>): AggregateBucket {
   const key = isRecord(group.key) ? group.key : {};
@@ -103,19 +95,13 @@ export function autoExtractAggregate(
 export function autoExtractGroupBy(data: unknown, field: string): GroupByResult {
   const node = isRecord(data) ? data[field] : undefined;
   if (!isRecord(node)) return { count: 0, totalCount: 0, buckets: [] };
-  if (Array.isArray(node.results)) {
-    const buckets = node.results.filter(isRecord).map(toGroupedResultBucket);
-    return {
-      count: buckets.reduce((total, bucket) => total + bucket.count, 0),
-      totalCount: countOf(node.totalCount),
-      buckets,
-    };
+  if (!Array.isArray(node.results)) {
+    return { count: 0, totalCount: 0, buckets: [] };
   }
-  const groups = Array.isArray(node.groups) ? node.groups : [];
-  const buckets = groups.filter(isRecord).map(toBucket);
+  const buckets = node.results.filter(isRecord).map(toGroupedResultBucket);
   return {
-    count: countOf(node.count),
-    totalCount: buckets.length,
+    count: buckets.reduce((total, bucket) => total + bucket.count, 0),
+    totalCount: countOf(node.totalCount),
     buckets,
   };
 }

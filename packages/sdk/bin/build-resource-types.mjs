@@ -6,11 +6,9 @@
 // (the SDL) so it cannot drift from the types codegen emits.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { buildSchema } from "graphql";
 
-const here = fileURLToPath(new URL(".", import.meta.url));
 const schemaPath = new URL("../schema/contract.graphql", import.meta.url);
 const outPath = new URL("../src/__generated__/resource-types.ts", import.meta.url);
 
@@ -45,4 +43,3 @@ const lines = [
 
 writeFileSync(outPath, lines.join("\n"));
 process.stdout.write(`resource-types: ${models.length} model(s) [${models.join(", ")}]\n`);
-void here;

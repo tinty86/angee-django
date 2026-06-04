@@ -7,7 +7,7 @@ import {
   useInvalidateModels,
   useRegisterModelRefetch,
 } from "./relay-invalidation";
-import { useStableArray } from "./stable-deps";
+import { useStableArray, useStableVariables } from "./stable-deps";
 import {
   extractDeletePreview,
   extractNode,
@@ -98,14 +98,17 @@ export function useResourceList<TName extends ResourceTypeName = ResourceTypeNam
     [modelLabel, stableFields, withFilter, withOrder],
   );
 
-  const filterKey = JSON.stringify(filter ?? null);
-  const orderKey = JSON.stringify(order ?? null);
+  const resetKey = useStableVariables({
+    modelLabel,
+    size,
+    filter: filter ?? null,
+    order: order ?? null,
+  });
 
   const controlledPage = options.page === undefined
     ? undefined
     : normalisePage(options.page);
   const initial = normalisePage(initialPage);
-  const resetKey = `${modelLabel}|${size}|${filterKey}|${orderKey}`;
   const [pageState, setPageState] = useState(() => ({
     resetKey,
     initial,
@@ -131,17 +134,11 @@ export function useResourceList<TName extends ResourceTypeName = ResourceTypeNam
     });
   }, [controlledPage, initial, resetKey]);
 
-  const variables = useMemo(() => {
-    const vars: Record<string, unknown> = {
-      pagination: { offset: (currentPage - 1) * size, limit: size },
-    };
-    if (withFilter) vars.filters = filter;
-    if (withOrder) vars.order = order;
-    return vars;
-    // `filter`/`order` are keyed by their serialized form so the memo is stable
-    // when a caller passes a fresh-but-equal object each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, size, withFilter, withOrder, filterKey, orderKey]);
+  const variables = useStableVariables({
+    pagination: { offset: (currentPage - 1) * size, limit: size },
+    ...(withFilter ? { filters: filter } : {}),
+    ...(withOrder ? { order } : {}),
+  });
 
   const run = useDocumentQuery(document, variables, active);
   // Register so a change event (and post-write invalidation) refresh this list —

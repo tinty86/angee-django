@@ -106,6 +106,9 @@ export function pluralFieldName(modelLabel: string): string {
   return pluralize(singularFieldName(modelLabel));
 }
 
+// The runtime document builder receives a model label, not a loaded SDL
+// contract. Until codegen emits root field names, these helpers mirror the
+// backend defaults the schema declares.
 // Regular English pluralization, matching the schema's default field naming.
 // Irregular plurals (person -> people) are not derivable from a heuristic and
 // belong to the backend; a model whose plural is irregular needs its field name

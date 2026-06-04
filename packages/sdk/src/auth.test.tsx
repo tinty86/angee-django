@@ -18,14 +18,16 @@ describe("useAuth", () => {
     expect(result.current.hasRole("admin")).toBe(false);
   });
 
-  test("exposes the authenticated user and roles", () => {
+  test("exposes the authenticated user; hasRole stays inert until REBAC ships roles", () => {
     const wrapper = wrapperFor({
       status: "authenticated",
       user: { id: "1", name: "Ada", roles: ["admin", "editor"] },
     });
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.user?.name).toBe("Ada");
-    expect(result.current.hasRole("editor")).toBe(true);
+    // Roles are not on the user node yet — the server is the authorization
+    // boundary, so hasRole is inert regardless of any roles on the user.
+    expect(result.current.hasRole("editor")).toBe(false);
     expect(result.current.hasRole("viewer")).toBe(false);
   });
 });

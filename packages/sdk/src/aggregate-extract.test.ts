@@ -102,26 +102,6 @@ describe("autoExtractGroupBy", () => {
     );
   });
 
-  test("keeps reading legacy aggregate groups", () => {
-    const data = {
-      saleAggregate: {
-        count: 5,
-        groups: [
-          { count: 3, state: "OPEN" },
-          { count: 2, state: "CLOSED" },
-        ],
-      },
-    };
-    expect(autoExtractGroupBy(data, "saleAggregate")).toEqual({
-      count: 5,
-      totalCount: 2,
-      buckets: [
-        { key: { state: "OPEN" }, count: 3 },
-        { key: { state: "CLOSED" }, count: 2 },
-      ],
-    });
-  });
-
   test("returns an empty result when the field is absent", () => {
     expect(autoExtractGroupBy({}, "saleAggregate")).toEqual({
       count: 0,

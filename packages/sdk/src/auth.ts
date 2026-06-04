@@ -91,8 +91,8 @@ export function currentUserToAuthState(
 const AuthContext = makeContext<AuthState>("AuthProvider");
 
 /**
- * Provide auth state. Pass the `user`/`status` an auth query resolved; `hasRole`
- * is derived from the user's roles so call sites never re-implement the check.
+ * Provide auth state. Roles are not on the User node yet, so `hasRole` remains
+ * false here; the server is the authorization boundary.
  */
 export function AuthProvider(props: {
   auth: Partial<Pick<AuthState, "user" | "status">>;
@@ -101,11 +101,10 @@ export function AuthProvider(props: {
   const { auth } = props;
   const value = useMemo<AuthState>(() => {
     const user = auth.user ?? null;
-    const roles = user?.roles ?? [];
     return {
       user,
       status: auth.status ?? (user ? "authenticated" : "anonymous"),
-      hasRole: (role: string) => roles.includes(role),
+      hasRole: () => false,
     };
   }, [auth]);
   return AuthContext.Provider({ value, children: props.children });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import {
   useMutation as useUrqlMutation,
   useSubscription as useUrqlSubscription,
@@ -6,17 +6,9 @@ import {
 
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
 import { useDocumentQuery } from "./document-query";
+import { useStableVariables } from "./stable-deps";
 
 type Variables = Record<string, unknown>;
-
-/** Memoize a variables object by value so urql re-runs only on real changes. */
-function useStableVariables<TVariables extends Variables>(
-  variables: TVariables | undefined,
-): TVariables {
-  const key = JSON.stringify(variables ?? {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => (variables ?? ({} as TVariables)), [key]);
-}
 
 export interface AuthoredQueryOptions {
   enabled?: boolean;

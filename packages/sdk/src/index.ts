@@ -5,22 +5,15 @@
 
 // Runtime document assembly.
 export {
-  buildSelection,
-  printSelection,
   assembleDetailDocument,
   assembleListDocument,
   assembleMutationDocument,
   assembleAggregateDocument,
   assembleGroupByDocument,
-  aggregateFieldName,
-  groupByFieldName,
   typeNameForModel,
-  singularFieldName,
-  pluralFieldName,
   clampPageSize,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  PAGE_SIZE_OPTIONS,
   type SelectionField,
   type MutationAction,
   type AssembleListDocumentOptions,
@@ -75,16 +68,19 @@ export type {
 export {
   useResourceAggregate,
   useResourceGroupBy,
-  type AggregateBucket,
-  type AggregateMeasure,
-  type AggregateMeasureOperator,
-  type GroupByResult,
   type GroupByDimension,
   type GroupByOrder,
   type UseAggregateOptions,
   type UseGroupByOptions,
 } from "./aggregates";
-export { autoExtractAggregate, autoExtractGroupBy } from "./aggregate-extract";
+export {
+  autoExtractAggregate,
+  autoExtractGroupBy,
+  type AggregateBucket,
+  type AggregateMeasure,
+  type AggregateMeasureOperator,
+  type GroupByResult,
+} from "./aggregate-extract";
 
 // Authored (bespoke) operations.
 export {

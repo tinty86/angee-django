@@ -23,12 +23,6 @@ import type {
   ResourceTypeName,
 } from "./__generated__/resource-types";
 
-export type { AggregateBucket, GroupByResult } from "./aggregate-extract";
-export type {
-  AggregateMeasure,
-  AggregateMeasureOperator,
-} from "./aggregate-extract";
-
 // Stable empty variables for the ungrouped query, so the hook does not re-run on
 // every render.
 const NO_VARIABLES: Record<string, unknown> = {};
