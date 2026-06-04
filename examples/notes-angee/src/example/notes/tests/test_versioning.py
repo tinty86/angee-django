@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TransactionTestCase
 from rebac import actor_context, system_context, to_subject_ref
+from strawberry import relay
 
 from angee.base.graphql import GraphQLSchemas
 
@@ -51,7 +52,10 @@ class NotesVersioningTests(TransactionTestCase):
         query = "mutation($id: ID!){ deleteNote(id: $id){ totalDeletedCount hasBlockers deleted { label count } } }"
         with actor_context(to_subject_ref(self.user)):
             schema = GraphQLSchemas.from_discovery().build("console")
-            result = schema.execute_sync(query, variable_values={"id": self.note.sqid})
+            result = schema.execute_sync(
+                query,
+                variable_values={"id": relay.to_base64("NoteType", self.note.sqid)},
+            )
 
         self.assertIsNone(result.errors)
         self.assertEqual(result.data["deleteNote"]["totalDeletedCount"], 1)

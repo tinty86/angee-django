@@ -67,7 +67,7 @@ class NoteWordCountGraphQLTests(TransactionTestCase):
 
     def setUp(self) -> None:
         call_command("rebac", "sync", verbosity=0)
-        call_command("resources", "load", "demo", allow_non_dev=True, verbosity=0)
+        call_command("resources", "load", include_demo=True, allow_non_dev=True, verbosity=0)
         with system_context(reason="test-setup"):
             self.alice = User.objects.get(username="alice")
         self.client = Client()
