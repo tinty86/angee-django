@@ -11,11 +11,14 @@ between sessions lives here and is committed; only genuinely throwaway scratch
 
 - `commands/` — project slash commands for non-Codex harnesses
   (`/name` resolves to `commands/name.md`). Surfaced via the
-  `.claude/commands` symlink; Codex app slash entries come from skills instead.
-- `skills/` — repo-scoped Codex skills. Codex scans `.agents/skills` from the
-  current working directory up to the repo root. Keep shared workflow logic in
-  one owner skill; small alias skills may exist only to make slash-list entries
-  discoverable.
+  `.claude/commands` symlink. A command may be self-contained or a thin shim
+  that delegates to an owner skill in `skills/`; Codex's own slash entries come
+  from skills instead.
+- `skills/` — repo-scoped skills, scanned by Codex from the working directory up
+  to the repo root. Keep shared workflow logic in one harness-neutral owner
+  skill; both Codex alias skills and non-Codex command shims delegate to it.
+  Small alias skills (with `agents/openai.yaml`) exist only to make Codex
+  slash-list entries discoverable.
 - `agents/` — subagent definitions. Surfaced via the `.claude/agents` symlink.
 - `plans/` — implementation plans, one file per effort.
 - `notes/` — durable memory and working notes meant to outlive a single session.
