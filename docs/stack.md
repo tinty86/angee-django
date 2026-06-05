@@ -34,7 +34,7 @@ Dependency changes must update this file in the same change.
 | django-zed-rebac | REBAC engine, actor scoping, relationship storage, local and SpiceDB-compatible backends | Per-addon schema merge, reserved roles, actor resolver |
 | django-sqids | Opaque external IDs | `SqidMixin` and GraphQL boundary scalar |
 | django-simple-history | Shadow history tables and revert | `HistoryMixin` marker |
-| django-reversion | Versioned field snapshots and revert | `RevisionMixin` marker, `revisioned_fields` |
+| django-reversion | Versioned field snapshots and revert | `RevisionMixin` convenience API, composer-emitted model registration |
 | cryptography | Encryption primitives | `EncryptedField` (Fernet at rest, secret-by-type) |
 | django-import-export + tablib | Resource import/export resources, tabular formats, row cleaning, and row results | Tiered manifests, xref ledger, and frozen-tier policy |
 | pyyaml | YAML parsing substrate | Resource loader reads `.yaml`/`.yml` resource files; django-yamlconf consumes project settings YAML |

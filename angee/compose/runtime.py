@@ -22,7 +22,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.utils.module_loading import module_has_submodule
 
-from angee.base.mixins import HistoryMixin
+from angee.base.mixins import HistoryMixin, ModelDecorator
 from angee.base.models import AngeeModel
 
 GENERATED_SENTINEL = "# ANGEE GENERATED RUNTIME - DO NOT EDIT"
@@ -228,6 +228,7 @@ class Runtime:
                 type[AngeeModel],
                 str,
                 tuple[tuple[type[models.Model], str], ...],
+                tuple[ModelDecorator, ...],
             ]
         ] = []
         for model_class in source_models:
@@ -248,11 +249,20 @@ class Runtime:
                 alias = f"{model_class.__name__}Extension{index}"
                 aliased_extensions.append((extension_base, alias))
                 imports.extend(self._class_import(extension_base, alias))
-            render_plans.append((model_class, source_alias, tuple(aliased_extensions)))
+            decorators = self._model_decorators(model_class, extension_bases)
+            imports.extend(self._model_decorator_imports(decorators))
+            render_plans.append(
+                (
+                    model_class,
+                    source_alias,
+                    tuple(aliased_extensions),
+                    decorators,
+                )
+            )
 
         lines.extend(sorted(set(imports)))
         lines.append("")
-        for model_class, source_alias, extension_aliases in render_plans:
+        for model_class, source_alias, extension_aliases, decorators in render_plans:
             meta_name = f"_{model_class.__name__}Meta"
             base_names = [alias for _extension, alias in extension_aliases] + [source_alias]
             meta_lines = [
@@ -267,10 +277,19 @@ class Runtime:
                 meta_lines.append(f"        swappable = {swappable}")
             meta_lines.extend(self._rebac_meta_source(model_class))
             body_lines = self._history_source(label, model_class)
+            decorator_lines = [
+                self._model_decorator_source(
+                    model_class,
+                    extension_bases,
+                    decorator,
+                )
+                for decorator in decorators
+            ]
             lines.extend(
                 [
                     f"{meta_name} = getattr({source_alias}, 'Meta', object)",
                     "",
+                    *decorator_lines,
                     f"class {model_class.__name__}({', '.join(base_names)}):",
                     f'    """Concrete {model_class.__name__} model."""',
                     "",
@@ -281,6 +300,108 @@ class Runtime:
                 ]
             )
         return "\n".join(lines).rstrip() + "\n"
+
+    def _model_decorators(
+        self,
+        model_class: type[models.Model],
+        extension_bases: tuple[type[models.Model], ...],
+    ) -> tuple[ModelDecorator, ...]:
+        """Return model decorators contributed by composed abstract bases."""
+
+        decorators: list[ModelDecorator] = []
+        decorators_by_path: dict[str, ModelDecorator] = {}
+        seen_owners: set[type] = set()
+        for base in (*extension_bases, model_class):
+            for owner in base.__mro__:
+                if owner in seen_owners:
+                    continue
+                seen_owners.add(owner)
+                declared = owner.__dict__.get("angee_model_decorators", ())
+                for decorator in declared:
+                    if not isinstance(decorator, ModelDecorator):
+                        raise ImproperlyConfigured(
+                            f"{owner.__module__}.{owner.__name__}.angee_model_decorators "
+                            "must contain ModelDecorator instances"
+                        )
+                    if decorator.enabled_by_model_attr:
+                        _found, enabled = self._composed_model_attr(
+                            model_class,
+                            extension_bases,
+                            decorator.enabled_by_model_attr,
+                        )
+                        if not enabled:
+                            continue
+                    previous = decorators_by_path.get(decorator.import_path)
+                    if previous is None:
+                        decorators_by_path[decorator.import_path] = decorator
+                        decorators.append(decorator)
+                    elif previous != decorator:
+                        raise ImproperlyConfigured(
+                            f"{model_class._meta.label} composes conflicting "
+                            f"decorators for {decorator.import_path!r}"
+                        )
+        return tuple(decorators)
+
+    def _model_decorator_imports(
+        self,
+        decorators: tuple[ModelDecorator, ...],
+    ) -> list[str]:
+        """Return import lines for model decorators."""
+
+        return [
+            f"import {self._model_decorator_module(decorator)}"
+            for decorator in decorators
+        ]
+
+    def _model_decorator_source(
+        self,
+        model_class: type[models.Model],
+        extension_bases: tuple[type[models.Model], ...],
+        decorator: ModelDecorator,
+    ) -> str:
+        """Return one emitted class decorator line."""
+
+        parts = [repr(arg) for arg in decorator.args]
+        parts.extend(
+            f"{name}={value!r}"
+            for name, value in decorator.kwargs
+        )
+        for name, attr in decorator.kwargs_from_model:
+            found, value = self._composed_model_attr(
+                model_class,
+                extension_bases,
+                attr,
+            )
+            if not found:
+                raise ImproperlyConfigured(
+                    f"{model_class._meta.label} decorator {decorator.import_path!r} "
+                    f"requires model attribute {attr!r}"
+                )
+            parts.append(f"{name}={value!r}")
+        return f"@{decorator.import_path}({', '.join(parts)})"
+
+    def _composed_model_attr(
+        self,
+        model_class: type[models.Model],
+        extension_bases: tuple[type[models.Model], ...],
+        attr: str,
+    ) -> tuple[bool, object]:
+        """Return an attribute using the generated concrete model base order."""
+
+        for base in (*extension_bases, model_class):
+            if hasattr(base, attr):
+                return True, getattr(base, attr)
+        return False, None
+
+    def _model_decorator_module(self, decorator: ModelDecorator) -> str:
+        """Return the module imported for one decorator path."""
+
+        module, _separator, name = decorator.import_path.rpartition(".")
+        if not module or not name:
+            raise ImproperlyConfigured(
+                f"Model decorator import path must be dotted: {decorator.import_path!r}"
+            )
+        return module
 
     def _history_source(
         self,

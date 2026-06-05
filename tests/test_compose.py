@@ -2,18 +2,35 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from django.apps import apps
+from django.db import models
 
 import angee.compose as compose_package
 import angee.compose.runtime as runtime_module
+from angee.base.mixins import RevisionMixin
+from angee.base.models import AngeeModel
 from angee.compose.apps import ComposeConfig
 from angee.compose.runtime import Runtime
+
+
+class DecoratedRevisionThing(RevisionMixin, AngeeModel):
+    """Abstract model used to test composer-emitted model decorators."""
+
+    revisioned_fields = ("body",)
+
+    body = models.TextField()
+
+    class Meta:
+        """Django model options for the test source model."""
+
+        abstract = True
+        app_label = "tests"
 
 
 def runtime_for(tmp_path: Path) -> Runtime:
@@ -57,6 +74,24 @@ def test_runtime_renders_iam_user_sources(tmp_path: Path) -> None:
     assert 'app_label = "iam"' in user_source
     assert "rebac_resource_type = 'auth/user'" in user_source
     assert "swappable = 'AUTH_USER_MODEL'" in user_source
+
+
+def test_runtime_renders_model_decorators_from_mixins(tmp_path: Path) -> None:
+    """Mixin-declared decorators are emitted on concrete runtime models."""
+
+    app_config = SimpleNamespace(
+        label="decorated",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=sys.modules[__name__],
+    )
+    runtime = Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+
+    source = runtime.render_sources()[Path("decorated/models.py")]
+
+    assert "import reversion" in source
+    assert "@reversion.register(fields=('body',))" in source
+    assert source.index("@reversion.register") < source.index("class DecoratedRevisionThing")
 
 
 def test_runtime_emit_and_check_detect_drift(tmp_path: Path) -> None:
@@ -115,7 +150,9 @@ def test_clean_then_emit_is_idempotent(tmp_path: Path, settings: Any) -> None:
     runtime.emit()
 
     assert "ANGEE GENERATED RUNTIME" in (runtime.runtime_dir / "__init__.py").read_text(encoding="utf-8")
+    assert migration_path.read_text(encoding="utf-8") == "# migration\n"
     runtime.clean()
+    assert migration_path.read_text(encoding="utf-8") == "# migration\n"
     runtime.clean()
 
 
@@ -127,14 +164,30 @@ def _compose_config() -> ComposeConfig:
     return config
 
 
-def test_compose_config_build_check_action_does_not_emit(
+@pytest.mark.parametrize(
+    ("argv", "current", "expected"),
+    (
+        (["manage.py", "angee", "build"], False, ["current", "emit", "import"]),
+        (["manage.py", "angee", "clean"], False, ["current", "emit", "import"]),
+        (["manage.py", "angee", "build", "--check"], False, ["check", "import"]),
+        (["manage.py", "angee", "build", "--bad-option"], False, ["check", "import"]),
+    ),
+)
+def test_compose_config_runtime_commands_bootstrap_generated_models(
     monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    current: bool,
+    expected: list[str],
 ) -> None:
-    """The pre-setup build check path checks and imports without writing."""
+    """Runtime commands import generated models without env-driven writes."""
 
     calls: list[str] = []
 
     class FakeRuntime:
+        def is_current(self) -> bool:
+            calls.append("current")
+            return current
+
         def emit(self) -> None:
             calls.append("emit")
 
@@ -144,41 +197,12 @@ def test_compose_config_build_check_action_does_not_emit(
         def import_generated_models(self) -> None:
             calls.append("import")
 
-    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
-    monkeypatch.setattr(sys, "argv", ["manage.py", "angee", "build", "--check"])
+    monkeypatch.setattr(sys, "argv", argv)
     monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
 
     _compose_config().import_models()
 
-    assert calls == ["check", "import"]
-    assert os.environ["ANGEE_RUNTIME_ACTION"] == "check"
-
-
-def test_compose_config_build_action_emits_before_import(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The explicit build path emits while source models are safe to inspect."""
-
-    calls: list[str] = []
-
-    class FakeRuntime:
-        def emit(self) -> None:
-            calls.append("emit")
-
-        def check(self) -> None:
-            calls.append("check")
-
-        def import_generated_models(self) -> None:
-            calls.append("import")
-
-    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
-    monkeypatch.setattr(sys, "argv", ["manage.py", "angee", "build"])
-    monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
-
-    _compose_config().import_models()
-
-    assert calls == ["emit", "import"]
-    assert os.environ["ANGEE_RUNTIME_ACTION"] == "emit"
+    assert calls == expected
 
 
 def test_compose_config_default_action_checks_before_import(
@@ -198,7 +222,7 @@ def test_compose_config_default_action_checks_before_import(
         def import_generated_models(self) -> None:
             calls.append("import")
 
-    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
+    monkeypatch.setenv("ANGEE_RUNTIME_ACTION", "emit")
     monkeypatch.setattr(sys, "argv", ["manage.py", "runserver"])
     monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
 

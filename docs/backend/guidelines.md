@@ -44,7 +44,7 @@ The framework core is four packages with a one-way dependency rule that a test
 enforces:
 
 - `angee.base` is the model foundation (models, fields, mixins, managers,
-  querysets, relations, and model signals). It must not import `angee.compose`,
+  querysets, and model emission declarations). It must not import `angee.compose`,
   `angee.graphql`, or addon packages.
 - `angee.graphql` is the GraphQL runtime (schema assembly, Strawberry helpers,
   serving, subscriptions, and SDL commands). It may import `angee.base`, never
@@ -80,9 +80,10 @@ Rules that follow from the layering:
   (`angee.compose`, `angee.base`, `angee.graphql`) arrive through that same graph
   rather than a parallel hardcoded list. In app-populate phase 2,
   `ComposeConfig.import_models()` checks the generated runtime and imports
-  concrete model modules before normal app model imports continue. Only the
-  explicit `angee build` command selects the emit action before app loading; no
-  build/run app-set split exists.
+  concrete model modules before normal app model imports continue. `angee build`
+  and `angee clean` may emit stale runtime sources during that hook only so
+  Django can finish loading the generated model registry; no build/run app-set
+  split exists.
 - **The resource ledger is owned by the resource addon.** The composer discovers
   `angee.resources.models.Resource` as a normal addon source model and emits it
   under the `resources` label. `angee.base` must not import `angee.resources`.

@@ -1,4 +1,4 @@
-"""Tests for change publishers, revision registration, and read gates."""
+"""Tests for change publishers, audit stamping, and read gates."""
 
 from __future__ import annotations
 
@@ -7,30 +7,15 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-import reversion
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import connection, models
 from rebac import actor_context, anonymous_actor
 
-from angee.base import signals
-from angee.base.mixins import AuditMixin, RevisionMixin
+from angee.base.mixins import AuditMixin
 from angee.graphql import access, publishing
 from angee.graphql.access import ChangeReadGate
 from angee.resources.serialization import json_safe
-
-
-class RevisionRegistered(RevisionMixin, models.Model):
-    """Concrete model used to test reversion registration."""
-
-    revisioned_fields = ("body",)
-
-    body = models.TextField()
-
-    class Meta:
-        """Django model options for the test model."""
-
-        app_label = "auth"
 
 
 class AuditStamped(AuditMixin, models.Model):
@@ -57,20 +42,6 @@ def payload(**overrides: object) -> dict[str, object]:
     }
     data.update(overrides)
     return data
-
-
-def test_register_revision_models_registers_declared_fields() -> None:
-    """Models declaring revisioned fields are registered with reversion."""
-
-    if reversion.is_registered(RevisionRegistered):
-        reversion.unregister(RevisionRegistered)
-    try:
-        signals.register_revision_models()
-
-        assert reversion.is_registered(RevisionRegistered)
-    finally:
-        if reversion.is_registered(RevisionRegistered):
-            reversion.unregister(RevisionRegistered)
 
 
 @pytest.mark.django_db(transaction=True)

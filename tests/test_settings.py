@@ -325,6 +325,35 @@ def test_compose_settings_module_reads_named_project_settings_module(
     assert "angee.resources.apps.ResourcesConfig" in installed
 
 
+def test_compose_settings_module_does_not_import_external_settings_module(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """ANGEE_PROJECT_SETTINGS must resolve inside the configured project."""
+
+    project = tmp_path / "project"
+    outside = tmp_path / "outside"
+    marker = tmp_path / "imported"
+    project.mkdir()
+    outside.mkdir()
+    (outside / "outside_settings.py").write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('imported', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(outside))
+    monkeypatch.delitem(sys.modules, "settings", raising=False)
+    monkeypatch.delitem(sys.modules, "outside_settings", raising=False)
+    monkeypatch.setenv("ANGEE_PROJECT_DIR", str(project))
+    monkeypatch.setenv("ANGEE_PROJECT_SETTINGS", "outside_settings")
+
+    with pytest.raises(ImproperlyConfigured, match="settings.py or settings.yaml"):
+        import angee.compose.settings as compose_settings
+
+        importlib.reload(compose_settings)
+
+    assert not marker.exists()
+
+
 def test_compose_settings_module_layers_yaml_over_python_settings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -862,6 +891,23 @@ def test_depends_on_treats_bare_string_as_one_app(
     assert "alpha.apps.TestConfig" in _installed_paths(settings["INSTALLED_APPS"])
 
 
+def test_depends_on_rejects_non_string_items(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Dependency declarations fail at the AppConfig contract boundary."""
+
+    _write_addon(tmp_path, "alpha", depends_on=(1,))
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    settings: dict[str, Any] = {
+        "INSTALLED_APPS": ("alpha",),
+        "ANGEE_RUNTIME_DIR": tmp_path / "runtime",
+    }
+    with pytest.raises(ImproperlyConfigured, match="depends_on"):
+        Composer(settings).compose_settings()
+
+
 def test_root_installed_apps_keep_project_order(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -918,6 +964,19 @@ def test_composer_rejects_dependency_cycles(
     }
     with pytest.raises(ImproperlyConfigured, match="Cycle"):
         Composer(settings).compose_settings()
+
+
+def test_root_urlconf_ignores_plain_django_dependency_urls() -> None:
+    """Plain Django dependencies must not leak conventional URLs into Angee."""
+
+    import django.contrib.auth as auth_module
+    from django.contrib.auth.apps import AuthConfig
+
+    from angee import urls as angee_urls
+
+    auth_config = AuthConfig("django.contrib.auth", auth_module)
+
+    assert angee_urls._addon_urlpatterns(auth_config) == []
 
 
 def test_plain_addon_autoconfig_keys_are_defaults(

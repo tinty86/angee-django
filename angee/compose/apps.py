@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 from django.apps import AppConfig
@@ -18,7 +17,7 @@ class ComposeConfig(AppConfig):
     emits_runtime_models = False
 
     def import_models(self) -> None:
-        """Check or explicitly emit runtime files, then import generated models."""
+        """Check runtime files, then import generated models."""
 
         super().import_models()
         # Deferred (phase-1 AppConfig rule): importing Runtime at module top
@@ -29,24 +28,15 @@ class ComposeConfig(AppConfig):
         # ANGEE_RUNTIME_DIR contract and raises if it is missing.
         from angee.compose.runtime import Runtime
 
-        action = os.environ.get("ANGEE_RUNTIME_ACTION")
-        if action is None and sys.argv[1:3] == ["angee", "build"]:
-            action = "check" if "--check" in sys.argv[3:] else "emit"
-            os.environ["ANGEE_RUNTIME_ACTION"] = action
-        action = action or "import"
-
         runtime = Runtime.from_django()
         try:
-            if action == "emit":
-                runtime.emit()
-            elif action in {"check", "import"}:
-                runtime.check()
+            if sys.argv[1:3] in (["angee", "build"], ["angee", "clean"]) and not sys.argv[3:]:
+                if not runtime.is_current():
+                    runtime.emit()
             else:
-                raise ImproperlyConfigured(f"Unknown ANGEE_RUNTIME_ACTION {action!r}")
+                runtime.check()
         except RuntimeError as error:
-            if action in {"check", "import"}:
-                raise ImproperlyConfigured(
-                    f"{error}; run `angee build` to refresh generated runtime sources"
-                ) from error
-            raise
+            raise ImproperlyConfigured(
+                f"{error}; run `angee build` to refresh generated runtime sources"
+            ) from error
         runtime.import_generated_models()

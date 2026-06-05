@@ -204,8 +204,8 @@ model classes must live in importable modules with migration packages.
 - `ANGEE_RUNTIME_MODULE`, defaulting to `runtime`
 
 `Runtime` groups abstract source models by app label, applies `extends`
-extension bases, rejects field collisions, renders concrete model source, and
-imports generated model modules.
+extension bases, rejects field collisions, renders concrete model source, emits
+model decorators declared by composed bases, and imports generated model modules.
 
 Generated files live under `runtime/`:
 
@@ -220,19 +220,18 @@ migrations.
 
 `ComposeConfig.import_models()` is the Django app-loading hook:
 
-- For `manage.py angee build`, it selects `ANGEE_RUNTIME_ACTION=emit`, emits the
-  runtime, and imports generated models.
-- For `manage.py angee build --check`, it selects `ANGEE_RUNTIME_ACTION=check`,
-  checks drift, and imports generated models.
-- For normal startup, it checks drift and imports generated models.
-- If the runtime is missing or stale outside the emit action, startup fails with
-  a clear message telling the user to run `angee build`.
+- For `manage.py angee build` and `manage.py angee clean`, it emits only when the
+  runtime is stale, then imports generated models so Django can finish app
+  loading before the command handler runs.
+- For normal startup and `angee build --check`, it checks drift and imports
+  generated models.
+- If the runtime is missing or stale, startup fails with a clear message telling
+  the user to run `angee build`.
 
-The `angee build` command runs after Django setup. If app loading already
-performed the emit action, the command verifies with `runtime.check()` and
-prints success. `angee build --check` verifies without writes. `angee clean`
-deletes generated runtime sources behind the generated sentinel guard and
-preserves migrations.
+The `angee build` command runs after Django setup, emits only if stale, verifies
+with `runtime.check()`, and prints success. `angee build --check` verifies
+without source writes. `angee clean` deletes generated runtime sources behind
+the generated sentinel guard and preserves migrations.
 
 ## Addon AppConfig Contract
 
@@ -243,7 +242,8 @@ explicit `AppConfig` declarations.
 
 Common attributes:
 
-- `depends_on`: app names or labels that must load before this app
+- `depends_on`: app names, or labels already present in the resolved app graph,
+  that must load before this app
 - `emits_runtime_models`: whether Angee should materialize abstract source
   models for this app
 - `schemas`: GraphQL schema contribution declaration, owned by
@@ -261,6 +261,10 @@ Conventions:
 - resource data usually lives under `resources/`
 - permission declarations usually live in `permissions.zed`
 - settings contributions live in optional `autoconfig.py`
+
+Route modules are read only from apps that declare a composition contract, such
+as `depends_on = ()` or `emits_runtime_models = True`, so plain Django
+dependencies do not leak URLs into the Angee root router.
 
 The GraphQL addon is the routing example:
 

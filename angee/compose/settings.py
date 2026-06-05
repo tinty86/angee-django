@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import os
 import runpy
 import sys
@@ -84,13 +83,14 @@ if existing_project_settings := sys.modules.get(project_settings_module):
     else:
         sys.modules.pop(project_settings_module, None)
 
-if project_settings is None and project_settings_module == "settings" and (project_dir / "settings.py").exists():
-    project_settings = importlib.import_module(project_settings_module)
-elif project_settings is None and project_settings_module == "settings" and (project_dir / "settings.yaml").exists():
-    project_settings = ModuleType(project_settings_module)
-    project_settings.__file__ = str(project_dir / f"{project_yaml_name}.py")
-    sys.modules[project_settings_module] = project_settings
-elif project_settings is None and importlib.util.find_spec(project_settings_module) is not None:
+project_settings_path = project_dir.joinpath(*project_settings_module.split(".")).with_suffix(".py")
+
+if project_settings is None and project_settings_path.exists():
+    if project_dir not in project_settings_path.resolve().parents:
+        resolved_settings_path = project_settings_path.resolve()
+        raise ImproperlyConfigured(
+            f"Loaded settings module {resolved_settings_path} is outside configured project root {project_dir}"
+        )
     project_settings = importlib.import_module(project_settings_module)
 elif project_settings is None and (project_dir / "settings.yaml").exists():
     project_settings = ModuleType(project_settings_module)

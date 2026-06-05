@@ -49,6 +49,8 @@ def _websocket_urlpatterns() -> list[object]:
 def _addon_websocket_urlpatterns(app_config: AppConfig) -> list[object]:
     """Return WebSocket URL patterns from one addon's conventional ``asgi.py``."""
 
+    if not hasattr(app_config, "depends_on") and not getattr(app_config, "emits_runtime_models", False):
+        return []
     if not module_has_submodule(app_config.module, "asgi"):
         return []
     module_path = f"{app_config.name}.asgi"

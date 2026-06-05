@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import reversion
@@ -9,6 +10,17 @@ from django.conf import settings
 from django.db import models
 from django_sqids import SqidsField
 from rebac import app_settings, current_actor
+
+
+@dataclass(frozen=True, slots=True)
+class ModelDecorator:
+    """Decorator the composer applies to emitted concrete models."""
+
+    import_path: str
+    args: tuple[Any, ...] = ()
+    kwargs: tuple[tuple[str, Any], ...] = ()
+    kwargs_from_model: tuple[tuple[str, str], ...] = ()
+    enabled_by_model_attr: str = ""
 
 
 class TimestampMixin(models.Model):
@@ -104,6 +116,15 @@ class HistoryMixin(models.Model):
 
 class RevisionMixin(models.Model):
     """Mark a model as tracked by django-reversion snapshots."""
+
+    angee_model_decorators: ClassVar[tuple[ModelDecorator, ...]] = (
+        ModelDecorator(
+            import_path="reversion.register",
+            kwargs_from_model=(("fields", "revisioned_fields"),),
+            enabled_by_model_attr="revisioned_fields",
+        ),
+    )
+    """Composer decorators applied to emitted concrete revision models."""
 
     revisioned_fields: ClassVar[tuple[str, ...]] = ()
     """Model field names registered with django-reversion."""

@@ -92,4 +92,7 @@ class AppGraph:
             return (value,)
         if not isinstance(value, Iterable):
             raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
-        return tuple(str(item) for item in value)
+        dependencies = tuple(value)
+        if not all(isinstance(item, str) for item in dependencies):
+            raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
+        return dependencies
