@@ -100,7 +100,9 @@ describe("bulk delete flow", () => {
     fireEvent.click((await screen.findAllByRole("checkbox", { name: "Select row" }))[0]!);
 
     expect(screen.getByText("1 selected")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
+    expect(deleteButton).toBeTruthy();
+    expect(deleteButton.querySelector("svg")).toBeTruthy();
   });
 
   test("clicking Delete runs dry-run preview and opens the tree dialog", async () => {
@@ -120,6 +122,9 @@ describe("bulk delete flow", () => {
     );
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Delete 1 records?")).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: "Delete" }).querySelector("svg"),
+    ).toBeTruthy();
     expect(within(dialog).getByText("First sale")).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "2 line items" })).toBeTruthy();
     expect(within(dialog).getByText("Line 1")).toBeTruthy();

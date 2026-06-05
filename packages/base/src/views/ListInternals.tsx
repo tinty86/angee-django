@@ -32,9 +32,10 @@ import { Glyph } from "../chrome/Glyph";
 import { titleCase } from "../lib/titleCase";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
+import { Checkbox, CheckboxVisual } from "../ui/checkbox";
 import { Chip } from "../ui/chip";
 import { DropdownMenu } from "../ui/dropdown-menu";
+import { SelectionBar as SelectionBarPrimitive } from "../ui/selection-bar";
 import {
   Table,
   TableBody,
@@ -104,26 +105,30 @@ export function SelectionBar({
   onDelete?: () => void;
   deletePending?: boolean;
 }): React.ReactElement {
+  const actions = (
+    <>
+      {onDelete ? (
+        <SelectionBarPrimitive.Action
+          surface="brand"
+          pending={deletePending}
+          onClick={onDelete}
+        >
+          <Glyph name="trash" />
+          Delete
+        </SelectionBarPrimitive.Action>
+      ) : null}
+      <SelectionBarPrimitive.Action surface="brand" onClick={onClear}>
+        Clear
+      </SelectionBarPrimitive.Action>
+    </>
+  );
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-brand px-3 py-2 text-13 text-on-brand">
-      <span>{count} selected</span>
-      <div className="flex items-center gap-2">
-        {onDelete ? (
-          <Button
-            type="button"
-            variant="danger"
-            size="sm"
-            pending={deletePending}
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        ) : null}
-        <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-          Clear
-        </Button>
-      </div>
-    </div>
+    <SelectionBarPrimitive
+      className="h-11 w-full rounded-none border-b border-border-subtle shadow-none"
+      count={count}
+      countLabel={`${count} selected`}
+      actions={actions}
+    />
   );
 }
 
@@ -337,6 +342,7 @@ export function VisibleFieldsMenu({
               {fields.map((field) => (
                 <DropdownMenu.CheckboxItem
                   key={field.id}
+                  inset={false}
                   checked={field.visible}
                   disabled={field.disabled}
                   onCheckedChange={(checked) => {
@@ -344,7 +350,7 @@ export function VisibleFieldsMenu({
                     onToggle?.(field.id, checked);
                   }}
                 >
-                  <DropdownMenu.CheckboxItemIndicator />
+                  <CheckboxVisual checked={field.visible} />
                   <span className="min-w-0 truncate">{field.label}</span>
                 </DropdownMenu.CheckboxItem>
               ))}

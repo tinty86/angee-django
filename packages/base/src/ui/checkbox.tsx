@@ -38,6 +38,37 @@ type CheckedChangeDetails = Parameters<CheckedChangeHandler>[1];
 
 export type CheckboxSize = NonNullable<CheckboxRecipeProps["size"]>;
 
+export interface CheckboxVisualProps
+  extends Pick<CheckboxRecipeProps, "invalid" | "size"> {
+  checked?: boolean;
+  className?: string;
+  indeterminate?: boolean;
+}
+
+export function CheckboxVisual({
+  checked = false,
+  className,
+  indeterminate = false,
+  invalid = false,
+  size = "md",
+}: CheckboxVisualProps): React.ReactElement {
+  const styles = checkboxVariants({ size, invalid });
+  return (
+    <span
+      aria-hidden="true"
+      className={styles.root({ className })}
+      data-checked={checked ? "" : undefined}
+      data-indeterminate={indeterminate ? "" : undefined}
+    >
+      {checked || indeterminate ? (
+        <span className={styles.indicator()}>
+          <CheckboxIndicatorIcon indeterminate={indeterminate} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export type CheckboxProps = Omit<
   BaseCheckboxRootProps,
   "className" | "children" | "onCheckedChange"
@@ -86,11 +117,7 @@ export const Checkbox = React.forwardRef<HTMLElement, CheckboxProps>(
           className={styles.indicator()}
           render={(indicatorProps, state) => (
             <span {...indicatorProps}>
-              {state.indeterminate ? (
-                <Minus aria-hidden="true" strokeWidth={3} />
-              ) : (
-                <Check aria-hidden="true" strokeWidth={3} />
-              )}
+              <CheckboxIndicatorIcon indeterminate={state.indeterminate} />
             </span>
           )}
         />
@@ -101,6 +128,18 @@ export const Checkbox = React.forwardRef<HTMLElement, CheckboxProps>(
 );
 
 Checkbox.displayName = "Checkbox";
+
+function CheckboxIndicatorIcon({
+  indeterminate,
+}: {
+  indeterminate: boolean;
+}): React.ReactElement {
+  return indeterminate ? (
+    <Minus aria-hidden="true" strokeWidth={3} />
+  ) : (
+    <Check aria-hidden="true" strokeWidth={3} />
+  );
+}
 
 function checkboxChangeEvent(checked: boolean): React.ChangeEvent<HTMLInputElement> {
   return {

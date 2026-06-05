@@ -5,6 +5,7 @@ import type {
   DeletePreviewNode,
 } from "@angee/sdk";
 
+import { Glyph } from "../chrome/Glyph";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { DeletePreviewTree } from "./DeletePreviewTree";
@@ -73,6 +74,7 @@ export function DeletePreviewDialog({
               disabled={fullyBlocked || isPending}
               onClick={onConfirm}
             >
+              <Glyph name="trash" />
               Delete
             </Button>
           </Dialog.Footer>
