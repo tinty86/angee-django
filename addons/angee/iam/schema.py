@@ -48,7 +48,6 @@ from strawberry.permission import BasePermission
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.base.relations import revoke_owner
 from angee.graphql.crud import crud
 from angee.graphql.node import AngeeNode
 from angee.iam import identity
@@ -1137,7 +1136,7 @@ class IAMMutation:
             _revoke_remote_oauth_token(credential)
             external_account = credential.external_account
             with system_context(reason="iam.graphql.unlink_account"), transaction.atomic():
-                revoke_owner(external_account, user)
+                ExternalAccount.objects.revoke_owner(external_account, user)
                 deleted, _details = (
                     Credential.objects.filter(pk=credential.pk)
                     .with_action("delete")

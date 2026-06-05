@@ -22,7 +22,6 @@ from rebac.managers import RebacManager
 from angee.base.fields import EncryptedField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
-from angee.base.relations import grant_owner
 from angee.integrate.events import EventKind
 from angee.integrate.net import validate_public_url
 from angee.integrate.webhooks import PinnedWebhookClient, WebhookDeliveryError
@@ -199,21 +198,7 @@ class Bridge(Capability):
 
 
 class WebhookSubscriptionManager(RebacManager):
-    """Manager for webhook subscriptions and their owner relationship grants."""
-
-    def create(self, **kwargs: Any) -> Any:
-        """Create a subscription, then grant its owner under a narrow bypass.
-
-        The create itself stays REBAC-authorized (the integrate/webhook_subscription
-        ``create`` permission gates it); only the owner-relation write — which no
-        actor holds permission for — runs under ``system_context``.
-        """
-
-        with transaction.atomic():
-            instance = super().create(**kwargs)
-            with system_context(reason="integrate.webhook_subscription.owner_grant"):
-                grant_owner(instance, instance.owner)
-        return instance
+    """Manager for webhook subscriptions."""
 
     def deliver_event(
         self,

@@ -91,12 +91,16 @@ def webhook_tables(transactional_db: Any) -> Iterator[None]:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_webhook_subscription_create_writes_owner_tuple(webhook_tables: None) -> None:
-    """WebhookSubscription manager grants owner on create."""
+def test_webhook_subscription_owner_is_field_backed(webhook_tables: None) -> None:
+    """WebhookSubscription owner access comes from the owner field."""
 
     del webhook_tables
     call_command("rebac", "sync", verbosity=0)
     user = get_user_model().objects.create_user(username="webhook-owner", email="owner@example.com")
+    other_user = get_user_model().objects.create_user(
+        username="webhook-other",
+        email="other@example.com",
+    )
 
     with system_context(reason="test webhook owner grant"):
         subscription = WebhookSubscription.objects.create(
@@ -106,7 +110,9 @@ def test_webhook_subscription_create_writes_owner_tuple(webhook_tables: None) ->
             event_kinds=[EventKind.BRIDGE_SYNCED.value],
         )
 
-    assert _owner_tuple_exists(user, subscription)
+    assert not _owner_tuple_exists(user, subscription)
+    assert WebhookSubscription.objects.with_actor(user).filter(pk=subscription.pk).exists()
+    assert not WebhookSubscription.objects.with_actor(other_user).filter(pk=subscription.pk).exists()
 
 
 @pytest.mark.django_db(transaction=True)

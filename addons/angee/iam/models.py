@@ -13,7 +13,15 @@ from django.contrib.auth.models import UnicodeUsernameValidator
 from django.db import models, transaction
 from django.utils import timezone
 from django_sqids import SqidsField
-from rebac import app_settings, system_context, to_object_ref
+from rebac import (
+    RelationshipTuple,
+    app_settings,
+    delete_relationship,
+    system_context,
+    to_object_ref,
+    to_subject_ref,
+    write_relationships,
+)
 from rebac.managers import RebacManager, RebacQuerySet
 from rebac.models import active_relationship_model
 from rebac.permissions_mixin import RebacPermissionsMixin
@@ -22,7 +30,6 @@ from rebac.roles import grant, revoke
 from angee.base.fields import EncryptedField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
-from angee.base.relations import grant_owner
 from angee.iam.credentials import CredentialKind, handler_for
 
 
@@ -332,8 +339,32 @@ class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: igno
                 create_defaults=create_values,
             )
             if owner is not None and (created or self.owner_for(instance) is None):
-                grant_owner(instance, owner)
+                self.grant_owner(instance, owner)
         return instance
+
+    def grant_owner(self, account: Any, owner: Any) -> None:
+        """Grant ``owner`` direct ownership of an external account."""
+
+        write_relationships(
+            [
+                RelationshipTuple(
+                    resource=to_object_ref(account),
+                    relation="owner",
+                    subject=to_subject_ref(owner),
+                )
+            ]
+        )
+
+    def revoke_owner(self, account: Any, owner: Any) -> None:
+        """Revoke ``owner`` direct ownership of an external account."""
+
+        delete_relationship(
+            RelationshipTuple(
+                resource=to_object_ref(account),
+                relation="owner",
+                subject=to_subject_ref(owner),
+            )
+        )
 
     def owner_for(self, account: Any) -> AbstractBaseUser | None:
         """Return the user granted owner on ``account``, if one exists."""
@@ -845,14 +876,12 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
             **update_values,
         }
         with system_context(reason=reason), transaction.atomic():
-            instance, created = self.update_or_create(
+            instance, _created = self.update_or_create(
                 user=user,
                 oauth_client=oauth_client,
                 defaults={**operation_values, **update_values},
                 create_defaults=create_values,
             )
-            if created:
-                grant_owner(instance, user)
         return instance
 
 

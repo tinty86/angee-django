@@ -89,7 +89,7 @@ def test_connection_managers_are_idempotent_and_delegate_static_token_material()
 
             assert second_credential.pk == first_credential.pk
             assert Credential.objects.count() == 1
-            assert _owner_tuple_exists(user, second_credential)
+            assert not _owner_tuple_exists(user, second_credential)
             assert Credential.objects.with_actor(user).filter(pk=second_credential.pk).exists()
             assert not Credential.objects.with_actor(other_user).filter(pk=second_credential.pk).exists()
 
@@ -133,6 +133,7 @@ def test_connection_managers_authorize_their_own_writes() -> None:
             username="connection-bob",
             email="bob@example.com",
         )
+        call_command("rebac", "sync", verbosity=0)
         with system_context(reason="test setup"):
             vendor = Vendor.objects.create(slug="selfsuff", display_name="SelfSuff")
             oauth_client = OAuthClient.objects.create(
@@ -157,7 +158,8 @@ def test_connection_managers_authorize_their_own_writes() -> None:
         assert account.pk is not None
         assert credential.pk is not None
         assert _owner_tuple_exists(user, account)
-        assert _owner_tuple_exists(user, credential)
+        assert not _owner_tuple_exists(user, credential)
+        assert Credential.objects.with_actor(user).filter(pk=credential.pk).exists()
     finally:
         if created_models:
             with connection.schema_editor() as schema_editor:

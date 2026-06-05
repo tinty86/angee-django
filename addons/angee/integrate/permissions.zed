@@ -1,10 +1,10 @@
 // Authorization schema for the integrate addon.
 // @rebac_package: integrate
 // @rebac_package_version: 0.1.0
-// @rebac_schema_revision: 1
+// @rebac_schema_revision: 2
 
 definition integrate/webhook_subscription {
-    relation owner: auth/user
+    relation owner: auth/user // rebac:field=owner
     relation admin: angee/role // rebac:const=admin
 
     permission create = admin->member
