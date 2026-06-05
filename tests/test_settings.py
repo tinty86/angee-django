@@ -166,6 +166,27 @@ def test_rebac_strict_mode_is_explicitly_pinned(tmp_path: Path) -> None:
     assert settings["REBAC_STRICT_MODE"] is True
 
 
+def test_rebac_bare_prefetch_lint_is_quiet_by_default(tmp_path: Path) -> None:
+    """Composed hosts disable the structural REBAC relation audit by default."""
+
+    settings = _compose(tmp_path)
+
+    assert settings["REBAC_LINT_BARE_PREFETCH"] is False
+
+
+def test_rebac_bare_prefetch_lint_can_be_enabled_by_project(tmp_path: Path) -> None:
+    """Project settings can still opt in to the structural REBAC relation audit."""
+
+    settings: dict[str, Any] = {
+        "INSTALLED_APPS": ("example.notes",),
+        "ANGEE_RUNTIME_DIR": tmp_path / "runtime",
+        "REBAC_LINT_BARE_PREFETCH": True,
+    }
+    Composer(settings).compose_settings()
+
+    assert settings["REBAC_LINT_BARE_PREFETCH"] is True
+
+
 def test_auth_user_model_comes_from_iam_autoconfig(
     tmp_path: Path,
 ) -> None:

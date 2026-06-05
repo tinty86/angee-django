@@ -6,6 +6,7 @@ SETTINGS = {
     "REBAC_BACKEND": "local",
     "REBAC_LOCAL_BACKEND_STORAGE": "registry",
     "REBAC_STRICT_MODE": True,
+    "REBAC_LINT_BARE_PREFETCH": False,
     "REBAC_FIELD_READ_MODE": "redact",
     "REBAC_ALLOW_SUDO": True,
     # Admin reach is expressed in the schema (const-backed `admin` relations
