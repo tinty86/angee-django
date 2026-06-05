@@ -27,11 +27,17 @@ function Statusbar({
     );
   }
   return (
-    <div className="inline-flex items-stretch gap-px" role="list">
+    <div className="inline-flex items-stretch" role="list">
       {steps.map((step, index) => {
         const currentStep = index === current;
         const completed = current >= 0 && index < current;
         const disabled = !interactive || step.disabled;
+        const tone = statusStepTone(currentStep, completed);
+        const clip = index === 0
+          ? FIRST_CLIP
+          : index === steps.length - 1
+            ? LAST_CLIP
+            : STEP_CLIP;
         return (
           <button
             key={step.value}
@@ -40,21 +46,26 @@ function Statusbar({
             aria-current={currentStep ? "step" : undefined}
             disabled={disabled}
             className={cn(
-              "inline-flex h-6 items-center text-xs font-medium outline-none transition-colors focus-visible:focus-ring disabled:opacity-100",
-              index === 0 ? "pl-3.5 pr-4" : "pl-5 pr-4",
-              index === 0
-                ? FIRST_CLIP
-                : index === steps.length - 1
-                  ? LAST_CLIP
-                  : STEP_CLIP,
-              currentStep && "bg-brand-soft text-brand-soft-text",
-              completed && "bg-success-soft text-success-text",
-              !currentStep && !completed && "bg-inset text-fg-muted",
-              !disabled ? "cursor-pointer hover:bg-sheet-2" : "cursor-default",
+              "group relative inline-flex h-6 items-stretch p-px text-xs font-medium outline-none transition-colors focus-visible:focus-ring disabled:opacity-100",
+              index > 0 && "-ml-3",
+              currentStep ? "z-20" : completed ? "z-10" : "z-0",
+              clip,
+              tone.border,
+              !disabled ? "cursor-pointer" : "cursor-default",
             )}
             onClick={() => onChange?.(step.value)}
           >
-            {step.label}
+            <span
+              className={cn(
+                "inline-flex h-full items-center transition-colors",
+                index === 0 ? "pl-3.5 pr-4" : "pl-5 pr-4",
+                clip,
+                tone.fill,
+                !disabled && tone.hover,
+              )}
+            >
+              {step.label}
+            </span>
           </button>
         );
       })}
@@ -81,4 +92,29 @@ function normaliseStatus(value: string | null | undefined): string {
     .trim()
     .replace(/[\s-]+/g, "_")
     .toUpperCase();
+}
+
+function statusStepTone(
+  current: boolean,
+  completed: boolean,
+): { border: string; fill: string; hover: string } {
+  if (current) {
+    return {
+      border: "bg-brand",
+      fill: "bg-brand-soft text-brand-soft-text",
+      hover: "group-hover:bg-brand-soft",
+    };
+  }
+  if (completed) {
+    return {
+      border: "bg-success-text",
+      fill: "bg-success-soft text-success-text",
+      hover: "group-hover:bg-success-soft",
+    };
+  }
+  return {
+    border: "bg-border-strong",
+    fill: "bg-inset text-fg-muted",
+    hover: "group-hover:bg-sheet-2",
+  };
 }
