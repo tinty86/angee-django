@@ -4,6 +4,9 @@ import {
   Glyph,
   GroupListView,
   Spinner,
+  type DataToolbarFilterField,
+  type DataToolbarFilterOption,
+  type DataToolbarGroupOption,
   type FormField,
   type ListColumn,
   type PageGroupDescriptor,
@@ -58,6 +61,53 @@ const columns: readonly ListColumn[] = [
   { field: "status", header: "Status", tone: NOTE_STATUS_TONES },
   { field: "wordCount", header: "Word Count", align: "right", aggregate: "sum" },
   { field: "updatedAt", header: "Updated At" },
+];
+
+const NOTE_FILTERS: readonly DataToolbarFilterOption[] = NOTE_STATUS_OPTIONS.map(
+  (option) => ({
+    id: `status:${option.value}`,
+    label: option.label,
+    chipLabel: option.label,
+    filter: { status: { exact: option.value } },
+  }),
+);
+
+const NOTE_FILTER_FIELDS: readonly DataToolbarFilterField[] = [
+  {
+    id: "title",
+    field: "title",
+    label: "Title",
+    type: "text",
+  },
+  {
+    id: "status",
+    field: "status",
+    label: "Status",
+    type: "selection",
+    options: NOTE_STATUS_OPTIONS,
+  },
+  {
+    id: "updatedAt",
+    field: "updatedAt",
+    label: "Updated At",
+    type: "datetime",
+  },
+];
+
+const NOTE_GROUPS: readonly DataToolbarGroupOption[] = [
+  {
+    id: "updatedAt",
+    label: "Updated",
+    group: { field: "updatedAt", granularity: "year" },
+    type: "date",
+    granularities: ["year", "quarter", "month", "week", "day"],
+  },
+  {
+    id: "status",
+    label: "Status",
+    group: { field: "status" },
+    type: "value",
+  },
 ];
 
 const titleField = {
@@ -174,6 +224,9 @@ export function NotePage({
       <DataPage
         model={MODEL}
         columns={columns}
+        filters={NOTE_FILTERS}
+        filterFields={NOTE_FILTER_FIELDS}
+        groupOptions={NOTE_GROUPS}
         formFields={formFields}
         formGroups={formGroups}
         returning={RECORD_SUBTITLE_FIELDS}

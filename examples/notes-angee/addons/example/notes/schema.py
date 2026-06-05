@@ -192,7 +192,7 @@ def _scoped_note_by_id(id: relay.GlobalID) -> Any | None:
     """Return the actor-visible note addressed by relay id, if any."""
 
     try:
-        return Note.objects.filter(**Note.public_id_lookup(id.node_id)).first()
+        return Note.objects.from_public_id(id.node_id)
     except MissingActorError:
         return None
 

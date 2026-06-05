@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -14,6 +15,7 @@ import {
   dataViewStateToSearch,
   mergeDataViewSearch,
   type DataViewAction,
+  type DataViewFavorite,
   type DataViewFilter,
   type DataViewGroup,
   type DataViewInitialState,
@@ -33,15 +35,22 @@ export interface DataViewContextValue {
   toggleSelectedId: (id: string, selected?: boolean) => void;
   clearSelectedIds: () => void;
   setView: (view: DataViewKind) => void;
+  savedFavorites: readonly DataViewFavorite[];
+  saveFavorite: (label: string) => void;
+  applyFavorite: (favorite: DataViewFavorite) => void;
 }
 
 export interface DataViewProviderProps {
   children: ReactNode;
   initialState?: DataViewInitialState;
+  resource?: string;
 }
 
 const DataViewContext = createContext<DataViewContextValue | null>(null);
-type DataViewActions = Omit<DataViewContextValue, "state">;
+type DataViewActions = Omit<
+  DataViewContextValue,
+  "state" | "savedFavorites" | "saveFavorite"
+>;
 type DataViewNavigate = (options: {
   search: (current: Record<string, unknown>) => Record<string, unknown>;
   replace?: boolean;
@@ -50,14 +59,21 @@ type DataViewNavigate = (options: {
 export function DataViewProvider({
   children,
   initialState,
+  resource,
 }: DataViewProviderProps): ReactNode {
   const search = useSearch({ strict: false });
+  const favoriteStorageKey = resource
+    ? `angee:data-view:${resource}:favorites`
+    : null;
   // Narrow Router navigation to functional search updates; no from is supplied
   // because the updater is route-agnostic.
   const navigate = useNavigate() as DataViewNavigate;
   const [selectedIds, setSelectedIdsState] = useState<ReadonlySet<string>>(
     () => new Set(initialState?.selectedIds ?? []),
   );
+  const [savedFavorites, setSavedFavorites] = useState<
+    readonly DataViewFavorite[]
+  >(() => readFavorites(favoriteStorageKey));
   const queryState = useMemo(
     () => dataViewSearchToState(search, initialState),
     [search, initialState],
@@ -90,12 +106,30 @@ export function DataViewProvider({
 
   const actions = useMemo(() => createDataViewActions(dispatch), [dispatch]);
 
+  useEffect(() => {
+    writeFavorites(favoriteStorageKey, savedFavorites);
+  }, [favoriteStorageKey, savedFavorites]);
+
+  const saveFavorite = useCallback(
+    (label: string) => {
+      const trimmed = label.trim();
+      if (!trimmed) return;
+      setSavedFavorites((current) => [
+        ...current,
+        state.toFavorite(trimmed, nextFavoriteId(trimmed, current)),
+      ]);
+    },
+    [state],
+  );
+
   const value = useMemo<DataViewContextValue>(
     () => ({
       state,
+      savedFavorites,
+      saveFavorite,
       ...actions,
     }),
-    [actions, state],
+    [actions, saveFavorite, savedFavorites, state],
   );
 
   return (
@@ -156,5 +190,67 @@ function createDataViewActions(
       dispatch({ type: "toggleSelectedId", id, selected }),
     clearSelectedIds: () => dispatch({ type: "clearSelectedIds" }),
     setView: (view) => dispatch({ type: "setView", view }),
+    applyFavorite: (favorite) => dispatch({ type: "applyFavorite", favorite }),
   };
+}
+
+function readFavorites(
+  storageKey: string | null,
+): readonly DataViewFavorite[] {
+  const storage = favoriteStorage();
+  if (!storageKey || !storage) return [];
+  try {
+    const raw = storage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(isDataViewFavorite)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFavorites(
+  storageKey: string | null,
+  favorites: readonly DataViewFavorite[],
+): void {
+  const storage = favoriteStorage();
+  if (!storageKey || !storage) return;
+  storage.setItem(storageKey, JSON.stringify(favorites));
+}
+
+function favoriteStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isDataViewFavorite(value: unknown): value is DataViewFavorite {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<DataViewFavorite>;
+  return typeof record.id === "string" && typeof record.label === "string";
+}
+
+function nextFavoriteId(
+  label: string,
+  favorites: readonly DataViewFavorite[],
+): string {
+  const base = `favorite:${slugifyFavoriteLabel(label) || "search"}`;
+  const existing = new Set(favorites.map((favorite) => favorite.id));
+  if (!existing.has(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const id = `${base}-${suffix}`;
+    if (!existing.has(id)) return id;
+  }
+}
+
+function slugifyFavoriteLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }

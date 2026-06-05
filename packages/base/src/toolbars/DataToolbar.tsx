@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { ReactElement, ReactNode } from "react";
 import {
   Calendar,
@@ -16,6 +17,7 @@ import { cn } from "../lib/cn";
 import { titleCase } from "../lib/titleCase";
 import { Button } from "../ui/button";
 import { Chip } from "../ui/chip";
+import { Input } from "../ui/input";
 import {
   PopoverContent,
   PopoverPortal,
@@ -23,13 +25,17 @@ import {
   PopoverRoot,
   PopoverTrigger,
 } from "../ui/popover";
+import { Select } from "../ui/select";
 import { Pager, type PagerState } from "../ui/pager";
 import type {
+  DataViewFavorite,
   DataViewFilter,
   DataViewGroup,
   DataViewGroupGranularity,
   DataViewKind,
+  DataViewLookupOperator,
 } from "../views/data-view-model";
+import { dataViewGroupsEqual } from "../views/data-view-model";
 
 export interface DataToolbarProps {
   pager: PagerState;
@@ -38,6 +44,9 @@ export interface DataToolbarProps {
   groupStack?: readonly DataViewGroup[];
   groupOptions?: readonly DataToolbarGroupOption[];
   filterOptions?: readonly DataToolbarFilterOption[];
+  filterFields?: readonly DataToolbarFilterField[];
+  customFilterChips?: readonly DataToolbarCustomFilterChip[];
+  favorites?: readonly DataViewFavorite[];
   activeFilterIds?: readonly string[];
   filterText?: string;
   createLabel?: ReactNode;
@@ -47,7 +56,12 @@ export interface DataToolbarProps {
   onClearGroup?: () => void;
   onGroupStackChange?: (groups: readonly DataViewGroup[]) => void;
   onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
   onViewChange?: (view: DataViewKind) => void;
+  onCustomFilterAdd?: (filter: DataToolbarCustomFilter) => void;
+  onCustomFilterRemove?: (id: string) => void;
+  onFavoriteSave?: (label: string) => void;
+  onFavoriteSelect?: (favorite: DataViewFavorite) => void;
   pagerSubject?: string;
   pagerTotalUnit?: string;
   className?: string;
@@ -68,6 +82,44 @@ export interface DataToolbarGroupOption {
   granularities?: readonly DataViewGroupGranularity[];
 }
 
+export type DataToolbarFilterFieldType =
+  | "text"
+  | "number"
+  | "date"
+  | "datetime"
+  | "selection"
+  | "boolean";
+
+export type DataToolbarCustomFilterOperator =
+  | DataViewLookupOperator
+  | "isNotNull";
+
+export interface DataToolbarFilterChoice {
+  value: string;
+  label: ReactNode;
+}
+
+export interface DataToolbarFilterField {
+  id: string;
+  field?: string;
+  label: ReactNode;
+  type?: DataToolbarFilterFieldType;
+  options?: readonly DataToolbarFilterChoice[];
+  operators?: readonly DataToolbarCustomFilterOperator[];
+}
+
+export interface DataToolbarCustomFilter {
+  field: string;
+  operator: DataToolbarCustomFilterOperator;
+  value?: string | number | boolean;
+  type?: DataToolbarFilterFieldType;
+}
+
+export interface DataToolbarCustomFilterChip {
+  id: string;
+  label: ReactNode;
+}
+
 export interface DataViewSwitcherProps {
   view: DataViewKind;
   onViewChange?: (view: DataViewKind) => void;
@@ -82,6 +134,9 @@ export function DataToolbar({
   groupStack,
   groupOptions,
   filterOptions = [],
+  filterFields = [],
+  customFilterChips = [],
+  favorites = [],
   activeFilterIds = [],
   filterText = "",
   createLabel = "New",
@@ -91,7 +146,12 @@ export function DataToolbar({
   onClearGroup,
   onGroupStackChange,
   onPageChange,
+  onPageSizeChange,
   onViewChange,
+  onCustomFilterAdd,
+  onCustomFilterRemove,
+  onFavoriteSave,
+  onFavoriteSelect,
   pagerSubject = "Records",
   pagerTotalUnit,
   className,
@@ -128,11 +188,18 @@ export function DataToolbar({
         activeFilters={activeFilters}
         activeFilterIds={activeFilterIds}
         filterOptions={filterOptions}
+        filterFields={filterFields}
+        customFilterChips={customFilterChips}
+        favorites={favorites}
         filterText={filterText}
         onClearGroup={onClearGroup}
         onFilterTextChange={onFilterTextChange}
         onFilterToggle={onFilterToggle}
         onGroupStackChange={onGroupStackChange}
+        onCustomFilterAdd={onCustomFilterAdd}
+        onCustomFilterRemove={onCustomFilterRemove}
+        onFavoriteSave={onFavoriteSave}
+        onFavoriteSelect={onFavoriteSelect}
       />
       <div className="min-w-2 flex-1" />
       <Pager
@@ -140,6 +207,7 @@ export function DataToolbar({
         subject={pagerSubject}
         unit={pagerTotalUnit}
         onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
       />
       {view && onViewChange ? (
         <DataViewSwitcher view={view} onViewChange={onViewChange} />
@@ -153,6 +221,9 @@ function FilterPicker({
   groupControls,
   groupOptions,
   filterOptions,
+  filterFields,
+  customFilterChips,
+  favorites,
   activeFilters,
   activeFilterIds,
   filterText,
@@ -160,11 +231,18 @@ function FilterPicker({
   onFilterToggle,
   onClearGroup,
   onGroupStackChange,
+  onCustomFilterAdd,
+  onCustomFilterRemove,
+  onFavoriteSave,
+  onFavoriteSelect,
 }: {
   groups: readonly DataViewGroup[];
   groupControls: boolean;
   groupOptions: readonly DataToolbarGroupOption[];
   filterOptions: readonly DataToolbarFilterOption[];
+  filterFields: readonly DataToolbarFilterField[];
+  customFilterChips: readonly DataToolbarCustomFilterChip[];
+  favorites: readonly DataViewFavorite[];
   activeFilters: readonly DataToolbarFilterOption[];
   activeFilterIds: readonly string[];
   filterText: string;
@@ -172,7 +250,66 @@ function FilterPicker({
   onFilterToggle?: (id: string) => void;
   onClearGroup?: () => void;
   onGroupStackChange?: (groups: readonly DataViewGroup[]) => void;
+  onCustomFilterAdd?: (filter: DataToolbarCustomFilter) => void;
+  onCustomFilterRemove?: (id: string) => void;
+  onFavoriteSave?: (label: string) => void;
+  onFavoriteSelect?: (favorite: DataViewFavorite) => void;
 }): ReactElement {
+  const [customFilterOpen, setCustomFilterOpen] = React.useState(false);
+  const [customFieldId, setCustomFieldId] = React.useState("");
+  const [customOperator, setCustomOperator] =
+    React.useState<DataToolbarCustomFilterOperator>("contains");
+  const [customValue, setCustomValue] = React.useState("");
+  const selectedCustomField =
+    filterFields.find((field) => field.id === customFieldId) ?? filterFields[0];
+  const effectiveCustomOperator = operatorForField(
+    selectedCustomField,
+    customOperator,
+  );
+  const [customGroupOpen, setCustomGroupOpen] = React.useState(false);
+  const [customGroupId, setCustomGroupId] = React.useState("");
+  const [customGroupGranularity, setCustomGroupGranularity] =
+    React.useState<DataViewGroupGranularity>("day");
+  const selectedCustomGroup =
+    groupOptions.find((option) => option.id === customGroupId) ?? groupOptions[0];
+  const [favoriteOpen, setFavoriteOpen] = React.useState(false);
+  const [favoriteLabel, setFavoriteLabel] = React.useState("Saved search");
+
+  function addCustomFilter() {
+    if (!selectedCustomField || !onCustomFilterAdd) return;
+    const needsValue = customFilterNeedsValue(effectiveCustomOperator);
+    const value = needsValue
+      ? coerceFilterValue(selectedCustomField, customValue)
+      : undefined;
+    if (needsValue && value === undefined) return;
+    onCustomFilterAdd({
+      field: selectedCustomField.field ?? selectedCustomField.id,
+      operator: effectiveCustomOperator,
+      ...(value !== undefined ? { value } : {}),
+      ...(selectedCustomField.type ? { type: selectedCustomField.type } : {}),
+    });
+    setCustomValue("");
+    setCustomFilterOpen(false);
+  }
+
+  function addCustomGroup() {
+    if (!selectedCustomGroup || !onGroupStackChange) return;
+    const group =
+      selectedCustomGroup.type === "date"
+        ? { ...selectedCustomGroup.group, granularity: customGroupGranularity }
+        : selectedCustomGroup.group;
+    onGroupStackChange([...groups, group]);
+    setCustomGroupOpen(false);
+  }
+
+  function saveFavorite() {
+    const label = favoriteLabel.trim();
+    if (!label || !onFavoriteSave) return;
+    onFavoriteSave(label);
+    setFavoriteLabel("Saved search");
+    setFavoriteOpen(false);
+  }
+
   return (
     <PopoverRoot>
       <div className="inline-flex h-8 min-w-0 max-w-xl flex-1 items-center gap-1 overflow-hidden rounded-md border border-transparent bg-inset pl-2 pr-1 text-13 text-fg focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring">
@@ -197,6 +334,15 @@ function FilterPicker({
             value={option.chipLabel ?? option.label}
             removeLabel={`Remove ${String(option.chipLabel ?? option.label)}`}
             onRemove={() => onFilterToggle?.(option.id)}
+          />
+        ))}
+        {customFilterChips.map((chip) => (
+          <FacetChip
+            key={chip.id}
+            label="Filter"
+            value={chip.label}
+            removeLabel={`Remove ${labelText(chip.label) ?? "filter"}`}
+            onRemove={() => onCustomFilterRemove?.(chip.id)}
           />
         ))}
         <input
@@ -239,10 +385,33 @@ function FilterPicker({
                 ))
               )}
               <PickerDivider />
-              <PickerButton muted>
+              <PickerButton
+                active={customFilterOpen}
+                muted={!customFilterOpen}
+                onClick={() => setCustomFilterOpen((value) => !value)}
+              >
                 <Plus className="size-3" aria-hidden />
                 Add custom filter
               </PickerButton>
+              {customFilterOpen ? (
+                <CustomFilterEditor
+                  fields={filterFields}
+                  field={selectedCustomField}
+                  fieldId={selectedCustomField?.id ?? ""}
+                  operator={effectiveCustomOperator}
+                  value={customValue}
+                  onField={(id) => {
+                    const nextField = filterFields.find((field) =>
+                      field.id === id);
+                    setCustomFieldId(id);
+                    setCustomOperator(defaultOperator(nextField));
+                    setCustomValue("");
+                  }}
+                  onOperator={setCustomOperator}
+                  onValue={setCustomValue}
+                  onAdd={addCustomFilter}
+                />
+              ) : null}
             </PickerColumn>
             {groupControls ? (
               <PickerColumn
@@ -258,17 +427,79 @@ function FilterPicker({
                   />
                 ))}
                 <PickerDivider />
-                <PickerButton muted>
+                <PickerButton
+                  active={customGroupOpen}
+                  muted={!customGroupOpen}
+                  onClick={() => setCustomGroupOpen((value) => !value)}
+                >
                   <Plus className="size-3" aria-hidden />
                   Add custom group
                 </PickerButton>
+                {customGroupOpen ? (
+                  <CustomGroupEditor
+                    options={groupOptions}
+                    option={selectedCustomGroup}
+                    optionId={selectedCustomGroup?.id ?? ""}
+                    granularity={customGroupGranularity}
+                    onOption={(id) => {
+                      const option = groupOptions.find((item) => item.id === id);
+                      setCustomGroupId(id);
+                      setCustomGroupGranularity(
+                        option?.group.granularity ?? "day",
+                      );
+                    }}
+                    onGranularity={setCustomGroupGranularity}
+                    onAdd={addCustomGroup}
+                  />
+                ) : null}
               </PickerColumn>
             ) : null}
             <PickerColumn icon={<Star className="size-3.5" />} title="Favorites">
-              <PickerButton muted>
+              <PickerButton
+                active={favoriteOpen}
+                muted={!favoriteOpen}
+                onClick={() => setFavoriteOpen((value) => !value)}
+              >
                 <Plus className="size-3" aria-hidden />
                 Save current search
               </PickerButton>
+              {favoriteOpen ? (
+                <form
+                  className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveFavorite();
+                  }}
+                >
+                  <Input
+                    size="sm"
+                    value={favoriteLabel}
+                    aria-label="Favorite name"
+                    onChange={(event) =>
+                      setFavoriteLabel(event.currentTarget.value)}
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="secondary"
+                    className="justify-center"
+                  >
+                    Save
+                  </Button>
+                </form>
+              ) : null}
+              {favorites.length === 0 ? (
+                <PickerMuted>No saved searches</PickerMuted>
+              ) : (
+                favorites.map((favorite) => (
+                  <PickerButton
+                    key={favorite.id}
+                    onClick={() => onFavoriteSelect?.(favorite)}
+                  >
+                    {favorite.label}
+                  </PickerButton>
+                ))
+              )}
             </PickerColumn>
           </PopoverContent>
         </PopoverPositioner>
@@ -353,6 +584,163 @@ function PickerButton({
   );
 }
 
+function CustomFilterEditor({
+  fields,
+  field,
+  fieldId,
+  operator,
+  value,
+  onField,
+  onOperator,
+  onValue,
+  onAdd,
+}: {
+  fields: readonly DataToolbarFilterField[];
+  field: DataToolbarFilterField | undefined;
+  fieldId: string;
+  operator: DataToolbarCustomFilterOperator;
+  value: string;
+  onField: (id: string) => void;
+  onOperator: (operator: DataToolbarCustomFilterOperator) => void;
+  onValue: (value: string) => void;
+  onAdd: () => void;
+}): ReactElement {
+  const operators = operatorsForField(field);
+  const needsValue = customFilterNeedsValue(operator);
+  return (
+    <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
+      {fields.length === 0 ? (
+        <PickerMuted>No filter fields</PickerMuted>
+      ) : (
+        <>
+          <Select
+            size="sm"
+            value={fieldId}
+            aria-label="Filter field"
+            options={fields.map((item) => ({
+              value: item.id,
+              label: item.label,
+            }))}
+            onValueChange={onField}
+          />
+          <div className="flex min-w-0 gap-2">
+            <Select
+              size="sm"
+              value={operator}
+              className="min-w-0 flex-1"
+              aria-label="Filter operator"
+              options={operators.map((item) => ({
+                value: item,
+                label: FILTER_OPERATOR_LABEL[item],
+              }))}
+              onValueChange={(next) =>
+                onOperator(next as DataToolbarCustomFilterOperator)}
+            />
+            {needsValue ? (
+              field?.options ? (
+                <Select
+                  size="sm"
+                  value={value}
+                  className="min-w-0 flex-1"
+                  aria-label="Filter value"
+                  placeholder="Value"
+                  options={field.options.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  onValueChange={onValue}
+                />
+              ) : (
+                <Input
+                  size="sm"
+                  type={filterInputType(field)}
+                  value={value}
+                  placeholder="Value"
+                  aria-label="Filter value"
+                  className="min-w-0 flex-1"
+                  onChange={(event) => onValue(event.currentTarget.value)}
+                />
+              )
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="justify-center"
+            disabled={!field || (needsValue && value.trim() === "")}
+            onClick={onAdd}
+          >
+            Add
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CustomGroupEditor({
+  options,
+  option,
+  optionId,
+  granularity,
+  onOption,
+  onGranularity,
+  onAdd,
+}: {
+  options: readonly DataToolbarGroupOption[];
+  option: DataToolbarGroupOption | undefined;
+  optionId: string;
+  granularity: DataViewGroupGranularity;
+  onOption: (id: string) => void;
+  onGranularity: (granularity: DataViewGroupGranularity) => void;
+  onAdd: () => void;
+}): ReactElement {
+  const granularities = option?.granularities ?? DEFAULT_GRANULARITIES;
+  return (
+    <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
+      {options.length === 0 ? (
+        <PickerMuted>No group fields</PickerMuted>
+      ) : (
+        <>
+          <Select
+            size="sm"
+            value={optionId}
+            aria-label="Group field"
+            options={options.map((item) => ({
+              value: item.id,
+              label: item.label,
+            }))}
+            onValueChange={onOption}
+          />
+          {option?.type === "date" ? (
+            <Select
+              size="sm"
+              value={granularity}
+              aria-label="Group granularity"
+              options={granularities.map((item) => ({
+                value: item,
+                label: titleCase(item),
+              }))}
+              onValueChange={(next) =>
+                onGranularity(next as DataViewGroupGranularity)}
+            />
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="justify-center"
+            onClick={onAdd}
+          >
+            Add
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function GroupOptionButton({
   option,
   groups,
@@ -362,13 +750,13 @@ function GroupOptionButton({
   groups: readonly DataViewGroup[];
   onGroupStackChange?: (groups: readonly DataViewGroup[]) => void;
 }): ReactElement {
-  const activeIndex = groups.findIndex((group) => group.field === option.group.field);
-  const active = activeIndex >= 0;
+  const active = groups.some((group) => group.field === option.group.field);
   const granularities = option.granularities ?? DEFAULT_GRANULARITIES;
-  const selectedGranularity =
-    activeIndex >= 0
-      ? groups[activeIndex]?.granularity
-      : option.group.granularity;
+  const selectedGranularities = new Set(
+    groups
+      .filter((group) => group.field === option.group.field && group.granularity)
+      .map((group) => group.granularity!),
+  );
 
   return (
     <div className={cn("rounded-md", active && "bg-brand-soft")}>
@@ -378,7 +766,7 @@ function GroupOptionButton({
           if (!onGroupStackChange) return;
           if (active) {
             onGroupStackChange(
-              groups.filter((_, index) => index !== activeIndex),
+              groups.filter((group) => group.field !== option.group.field),
             );
           } else {
             onGroupStackChange([...groups, option.group]);
@@ -390,7 +778,7 @@ function GroupOptionButton({
         ) : null}
         <span className="min-w-0 flex-1 truncate">{option.label}</span>
       </PickerButton>
-      {option.type === "date" && active ? (
+      {option.type === "date" ? (
         <div className="flex px-2 pb-1">
           {granularities.map((granularity) => (
             <button
@@ -398,15 +786,20 @@ function GroupOptionButton({
               type="button"
               className={cn(
                 "h-5 rounded px-1.5 text-2xs font-medium outline-none focus-visible:focus-ring",
-                selectedGranularity === granularity
+                selectedGranularities.has(granularity)
                   ? "bg-brand text-on-brand"
                   : "text-fg-muted hover:bg-sheet",
               )}
               onClick={() => {
-                const next = groups.map((group, index) =>
-                  index === activeIndex ? { ...group, granularity } : group,
+                const nextGroup = { ...option.group, granularity };
+                const selected = groups.some((group) =>
+                  dataViewGroupsEqual(group, nextGroup));
+                onGroupStackChange?.(
+                  selected
+                    ? groups.filter((group) =>
+                      !dataViewGroupsEqual(group, nextGroup))
+                    : [...groups, nextGroup],
                 );
-                onGroupStackChange?.(next);
               }}
             >
               {titleCase(granularity)}
@@ -477,7 +870,120 @@ const DEFAULT_GRANULARITIES: readonly DataViewGroupGranularity[] = [
   "day",
 ];
 
+const FILTER_OPERATOR_LABEL = {
+  exact: "is",
+  inList: "is one of",
+  isNull: "is empty",
+  isNotNull: "is not empty",
+  iExact: "is",
+  contains: "contains",
+  iContains: "contains",
+  startsWith: "starts with",
+  iStartsWith: "starts with",
+  endsWith: "ends with",
+  iEndsWith: "ends with",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+} satisfies Record<DataToolbarCustomFilterOperator, string>;
+
+const TEXT_FILTER_OPERATORS: readonly DataToolbarCustomFilterOperator[] = [
+  "contains",
+  "iContains",
+  "iExact",
+  "startsWith",
+  "iStartsWith",
+  "endsWith",
+  "iEndsWith",
+  "isNull",
+  "isNotNull",
+];
+
+const COMPARISON_FILTER_OPERATORS: readonly DataToolbarCustomFilterOperator[] = [
+  "exact",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "isNull",
+  "isNotNull",
+];
+
+const EXACT_FILTER_OPERATORS: readonly DataToolbarCustomFilterOperator[] = [
+  "exact",
+  "isNull",
+  "isNotNull",
+];
+
 function groupFieldLabel(field: string): string {
   const label = titleCase(field);
   return label.endsWith(" At") ? label.slice(0, -3) : label;
+}
+
+function operatorsForField(
+  field: DataToolbarFilterField | undefined,
+): readonly DataToolbarCustomFilterOperator[] {
+  if (field?.operators) return field.operators;
+  if (
+    field?.type === "number" ||
+    field?.type === "date" ||
+    field?.type === "datetime"
+  ) {
+    return COMPARISON_FILTER_OPERATORS;
+  }
+  if (field?.type === "selection" || field?.type === "boolean") {
+    return EXACT_FILTER_OPERATORS;
+  }
+  return TEXT_FILTER_OPERATORS;
+}
+
+function defaultOperator(
+  field: DataToolbarFilterField | undefined,
+): DataToolbarCustomFilterOperator {
+  return operatorsForField(field)[0] ?? "contains";
+}
+
+function operatorForField(
+  field: DataToolbarFilterField | undefined,
+  operator: DataToolbarCustomFilterOperator,
+): DataToolbarCustomFilterOperator {
+  return operatorsForField(field).includes(operator)
+    ? operator
+    : defaultOperator(field);
+}
+
+function customFilterNeedsValue(
+  operator: DataToolbarCustomFilterOperator,
+): boolean {
+  return operator !== "isNull" && operator !== "isNotNull";
+}
+
+function filterInputType(field: DataToolbarFilterField | undefined): string {
+  if (field?.type === "number") return "number";
+  if (field?.type === "date") return "date";
+  if (field?.type === "datetime") return "datetime-local";
+  return "text";
+}
+
+function coerceFilterValue(
+  field: DataToolbarFilterField,
+  value: string,
+): string | number | boolean | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (field.type === "number") {
+    const number = Number(trimmed);
+    return Number.isFinite(number) ? number : undefined;
+  }
+  if (field.type === "boolean") {
+    return ["1", "true", "yes", "on"].includes(trimmed.toLowerCase());
+  }
+  return trimmed;
+}
+
+function labelText(value: ReactNode): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return null;
 }

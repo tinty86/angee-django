@@ -133,8 +133,15 @@ export function useDataViewSurface<TRow extends Row = Row>({
   enabled = true,
   onListStateChange,
 }: UseDataViewSurfaceProps<TRow>): DataViewSurface<TRow> {
+  const handledPageSizeRef = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
-    if (pageSize && dataView.state.pageSize !== pageSize) {
+    if (pageSize === undefined) {
+      handledPageSizeRef.current = undefined;
+      return;
+    }
+    if (handledPageSizeRef.current === pageSize) return;
+    handledPageSizeRef.current = pageSize;
+    if (dataView.state.pageSize !== pageSize) {
       dataView.setPageSize(pageSize);
     }
   }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
@@ -220,8 +227,15 @@ export function useRowsDataViewSurface<
   error = null,
   onListStateChange,
 }: UseRowsDataViewSurfaceProps<TRow>): RowsDataViewSurface<TRow> {
+  const handledPageSizeRef = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
-    if (pageSize && dataView.state.pageSize !== pageSize) {
+    if (pageSize === undefined) {
+      handledPageSizeRef.current = undefined;
+      return;
+    }
+    if (handledPageSizeRef.current === pageSize) return;
+    handledPageSizeRef.current = pageSize;
+    if (dataView.state.pageSize !== pageSize) {
       dataView.setPageSize(pageSize);
     }
   }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
@@ -481,11 +495,38 @@ function matchesClientLookup(value: unknown, lookup: unknown): boolean {
   const record = lookup as Record<string, unknown>;
   if ("exact" in record) return value === record.exact;
   if (Array.isArray(record.inList)) return record.inList.includes(value);
+  if (typeof record.isNull === "boolean") return (value == null) === record.isNull;
+  if ("iExact" in record) {
+    return String(value ?? "").toLowerCase() === String(record.iExact ?? "").toLowerCase();
+  }
+  if ("contains" in record) {
+    return String(value ?? "").includes(String(record.contains ?? ""));
+  }
   if (typeof record.iContains === "string") {
     return String(value ?? "")
       .toLowerCase()
       .includes(record.iContains.toLowerCase());
   }
+  if ("startsWith" in record) {
+    return String(value ?? "").startsWith(String(record.startsWith ?? ""));
+  }
+  if ("iStartsWith" in record) {
+    return String(value ?? "")
+      .toLowerCase()
+      .startsWith(String(record.iStartsWith ?? "").toLowerCase());
+  }
+  if ("endsWith" in record) {
+    return String(value ?? "").endsWith(String(record.endsWith ?? ""));
+  }
+  if ("iEndsWith" in record) {
+    return String(value ?? "")
+      .toLowerCase()
+      .endsWith(String(record.iEndsWith ?? "").toLowerCase());
+  }
+  if ("gt" in record && compareClientValues(value, record.gt) <= 0) return false;
+  if ("gte" in record && compareClientValues(value, record.gte) < 0) return false;
+  if ("lt" in record && compareClientValues(value, record.lt) >= 0) return false;
+  if ("lte" in record && compareClientValues(value, record.lte) > 0) return false;
   return true;
 }
 

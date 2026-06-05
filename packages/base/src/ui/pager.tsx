@@ -1,8 +1,16 @@
-import type { ReactElement } from "react";
+import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "../lib/cn";
 import { Button } from "./button";
+import { NumberField } from "./number-field";
+import {
+  PopoverContent,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverRoot,
+  PopoverTrigger,
+} from "./popover";
 
 export interface PagerState {
   page: number;
@@ -14,6 +22,8 @@ export interface PagerState {
 
 export interface PagerProps extends PagerState {
   onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  pageSizeOptions?: readonly number[];
   subject?: string;
   unit?: string;
   labelElement?: "button" | "span";
@@ -22,6 +32,8 @@ export interface PagerProps extends PagerState {
   nextLabel?: string;
   formatNumber?: (value: number) => string;
 }
+
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 80, 100, 200] as const;
 
 const BUTTON_LABEL_CLASS =
   "h-6 rounded px-1.5 text-13 tabular-nums text-fg outline-none hover:bg-inset focus-visible:focus-ring";
@@ -64,6 +76,8 @@ export function Pager({
   hasPrev,
   hasNext,
   onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   subject = "Records",
   unit,
   labelElement = "button",
@@ -71,7 +85,10 @@ export function Pager({
   previousLabel = "Previous page",
   nextLabel = "Next page",
   formatNumber = defaultFormatNumber,
-}: PagerProps): ReactElement {
+}: PagerProps): React.ReactElement {
+  const [customPageSize, setCustomPageSize] = React.useState<number | null>(
+    null,
+  );
   const pageLabel = pagerRangeLabel({
     page,
     pageSize,
@@ -81,21 +98,34 @@ export function Pager({
   });
   const canPrev = hasPrev ?? page > 1;
   const canNext = hasNext ?? (total !== undefined && page * pageSize < total);
-  const label = labelElement === "button"
+  const label = labelElement === "button" && onPageSizeChange
     ? (
-      <button
-        type="button"
-        className={cn(BUTTON_LABEL_CLASS, labelClassName)}
-        aria-label={`${subject} ${pageLabel}`}
-      >
-        {pageLabel}
-      </button>
+      <PageSizePicker
+        pageLabel={pageLabel}
+        pageSize={pageSize}
+        pageSizeOptions={pageSizeOptions}
+        subject={subject}
+        labelClassName={labelClassName}
+        customPageSize={customPageSize}
+        onCustomPageSizeChange={setCustomPageSize}
+        onPageSizeChange={onPageSizeChange}
+      />
     )
-    : (
-      <span className={cn(TEXT_LABEL_CLASS, labelClassName)}>
-        {pageLabel}
-      </span>
-    );
+    : labelElement === "button"
+      ? (
+        <button
+          type="button"
+          className={cn(BUTTON_LABEL_CLASS, labelClassName)}
+          aria-label={`${subject} ${pageLabel}`}
+        >
+          {pageLabel}
+        </button>
+      )
+      : (
+        <span className={cn(TEXT_LABEL_CLASS, labelClassName)}>
+          {pageLabel}
+        </span>
+      );
 
   return (
     <>
@@ -121,5 +151,97 @@ export function Pager({
         <ChevronRight className="glyph" aria-hidden />
       </Button>
     </>
+  );
+}
+
+function PageSizePicker({
+  pageLabel,
+  pageSize,
+  pageSizeOptions,
+  subject,
+  labelClassName,
+  customPageSize,
+  onCustomPageSizeChange,
+  onPageSizeChange,
+}: {
+  pageLabel: string;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  subject: string;
+  labelClassName?: string;
+  customPageSize: number | null;
+  onCustomPageSizeChange: (value: number | null) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}): React.ReactElement {
+  const applyPageSize = React.useCallback(
+    (value: number | null) => {
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+        return;
+      }
+      onPageSizeChange(Math.floor(value));
+      onCustomPageSizeChange(null);
+    },
+    [onCustomPageSizeChange, onPageSizeChange],
+  );
+
+  return (
+    <PopoverRoot>
+      <PopoverTrigger
+        className={cn(BUTTON_LABEL_CLASS, labelClassName)}
+        aria-label={`${subject} ${pageLabel}`}
+      >
+        {pageLabel}
+      </PopoverTrigger>
+      <PopoverPortal>
+        <PopoverPositioner sideOffset={6} align="end">
+          <PopoverContent className="w-56 p-3">
+            <p className="mb-2 px-1 text-13 font-semibold text-fg">
+              Rows per page
+            </p>
+            <div className="grid grid-cols-3 gap-1">
+              {pageSizeOptions.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={cn(
+                    "h-7 rounded-md px-2 text-13 tabular-nums outline-none transition-colors focus-visible:focus-ring",
+                    value === pageSize
+                      ? "bg-brand-soft font-medium text-brand-soft-text"
+                      : "text-fg hover:bg-inset",
+                  )}
+                  onClick={() => applyPageSize(value)}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+            <form
+              className="mt-3 flex min-w-0 items-center gap-2 border-t border-border-subtle pt-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                applyPageSize(customPageSize);
+              }}
+            >
+              <NumberField
+                min={1}
+                value={customPageSize}
+                size="sm"
+                align="start"
+                showStepper={false}
+                className="min-w-0 flex-1"
+                inputProps={{
+                  "aria-label": "Custom rows per page",
+                  placeholder: "42",
+                }}
+                onValueChange={onCustomPageSizeChange}
+              />
+              <Button type="submit" size="sm" variant="secondary">
+                Apply
+              </Button>
+            </form>
+          </PopoverContent>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </PopoverRoot>
   );
 }

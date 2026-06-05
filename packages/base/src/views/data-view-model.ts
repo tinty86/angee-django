@@ -21,7 +21,18 @@ export type DataViewOrderDirection = "ASC" | "DESC";
 export const DATA_VIEW_LOOKUP_OPERATORS = [
   "exact",
   "inList",
+  "isNull",
+  "iExact",
+  "contains",
   "iContains",
+  "startsWith",
+  "iStartsWith",
+  "endsWith",
+  "iEndsWith",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
 ] as const;
 export type DataViewLookupOperator =
   (typeof DATA_VIEW_LOOKUP_OPERATORS)[number];
@@ -63,6 +74,16 @@ export interface DataViewInitialState {
   view?: DataViewKind;
 }
 
+export interface DataViewFavorite {
+  id: string;
+  label: string;
+  pageSize?: number;
+  sort?: DataViewSort | null;
+  filter?: DataViewFilter;
+  groupStack?: readonly DataViewGroup[];
+  view?: DataViewKind;
+}
+
 export type DataViewAction =
   | { type: "setPage"; page: number }
   | { type: "setPageSize"; pageSize: number }
@@ -73,7 +94,8 @@ export type DataViewAction =
   | { type: "setSelectedIds"; selectedIds: Iterable<string> }
   | { type: "toggleSelectedId"; id: string; selected?: boolean }
   | { type: "clearSelectedIds" }
-  | { type: "setView"; view: DataViewKind };
+  | { type: "setView"; view: DataViewKind }
+  | { type: "applyFavorite"; favorite: DataViewFavorite };
 
 export interface FilterFacet {
   field: string;
@@ -252,6 +274,14 @@ export class DataViewState {
         return this.with({ selectedIds: new Set() });
       case "setView":
         return this.with({ view: action.view });
+      case "applyFavorite":
+        return this.resetQueryScope({
+          pageSize: action.favorite.pageSize,
+          sort: action.favorite.sort ?? null,
+          filter: action.favorite.filter ?? {},
+          groupStack: action.favorite.groupStack ?? [],
+          view: action.favorite.view ?? "list",
+        });
     }
   }
 
@@ -282,6 +312,18 @@ export class DataViewState {
 
   withSelectedIds(selectedIds: Iterable<string>): DataViewState {
     return this.with({ selectedIds: new Set(selectedIds) });
+  }
+
+  toFavorite(label: string, id: string): DataViewFavorite {
+    return {
+      id,
+      label,
+      pageSize: this.pageSize,
+      ...(this.sort ? { sort: this.sort } : {}),
+      ...(this.hasFilter() ? { filter: this.filter } : {}),
+      ...(this.groupStack.length > 0 ? { groupStack: this.groupStack } : {}),
+      ...(this.view !== "list" ? { view: this.view } : {}),
+    };
   }
 
   static normaliseGroupStack(

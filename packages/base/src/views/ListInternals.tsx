@@ -40,6 +40,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -152,6 +153,7 @@ export interface FlatListBodyProps<TRow extends Row> {
   onRowClick?: (row: TRow) => void;
   emptyMessage: React.ReactNode;
   fetching: boolean;
+  footerAggregate?: AggregateBucket | null;
 }
 
 export function FlatListBody<TRow extends Row>({
@@ -174,6 +176,7 @@ export function FlatListBody<TRow extends Row>({
   onRowClick,
   emptyMessage,
   fetching,
+  footerAggregate,
 }: FlatListBodyProps<TRow>): React.ReactElement {
   const colSpan = Math.max(1, visibleColumnCount + (selectable ? 1 : 0));
   const measures = React.useMemo(
@@ -269,8 +272,61 @@ export function FlatListBody<TRow extends Row>({
             </>
           )}
         </TableBody>
+        {measures.length > 0 && footerAggregate ? (
+          <FlatMeasureFooter
+            table={table}
+            measures={measures}
+            aggregate={footerAggregate}
+            selectable={selectable}
+          />
+        ) : null}
       </Table>
     </div>
+  );
+}
+
+function FlatMeasureFooter<TRow extends Row>({
+  table,
+  measures,
+  aggregate,
+  selectable,
+}: {
+  table: TableModel<TRow>;
+  measures: readonly GroupMeasure[];
+  aggregate: AggregateBucket;
+  selectable: boolean;
+}): React.ReactElement {
+  const byColumn = new Map(measures.map((measure) => [measure.columnId, measure]));
+  return (
+    <TableFooter>
+      <TableRow>
+        {selectable ? <TableCell className="w-8" /> : null}
+        {table.getVisibleLeafColumns().map((column, index) => {
+          const measure = byColumn.get(column.id);
+          const value = measure ? measureValue(aggregate, measure) : undefined;
+          const formatted = measure && value != null
+            ? formatMeasure(value, measure)
+            : "";
+          return (
+            <TableCell
+              key={column.id}
+              className={ALIGN_CLASS[alignOf(column.columnDef)]}
+              aria-label={
+                measure
+                  ? `Total ${measure.label}${formatted ? `: ${formatted}` : ""}`
+                  : undefined
+              }
+            >
+              {measure ? (
+                formatted
+              ) : index === 0 ? (
+                <span className="text-fg-muted">Total</span>
+              ) : null}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    </TableFooter>
   );
 }
 

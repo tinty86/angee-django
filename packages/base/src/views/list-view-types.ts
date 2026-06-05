@@ -5,6 +5,11 @@ import type {
   UseResourceListOptions,
 } from "@angee/sdk";
 
+import type {
+  DataToolbarFilterField,
+  DataToolbarFilterOption,
+  DataToolbarGroupOption,
+} from "../toolbars";
 import type { ListViewState } from "./data-view-surface";
 import type { ColumnDescriptor } from "./page";
 
@@ -15,6 +20,9 @@ export interface ListViewProps<TRow extends Row = Row> {
   columns: readonly ColumnDescriptor<TRow>[];
   fields?: readonly string[];
   filter?: UseResourceListOptions<ResourceTypeName>["filter"];
+  filters?: readonly DataToolbarFilterOption[];
+  filterFields?: readonly DataToolbarFilterField[];
+  groupOptions?: readonly DataToolbarGroupOption[];
   order?: UseResourceListOptions<ResourceTypeName>["order"];
   pageSize?: number;
   onCreate?: () => void;

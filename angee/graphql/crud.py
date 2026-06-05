@@ -135,7 +135,11 @@ def _resolve_for_delete(
 ) -> models.Model:
     """Return the instance addressed by ``public_id`` or raise."""
 
-    instance = instance_from_public_id(model, public_id)
+    queryset = model._default_manager.all()
+    on_field_deny = getattr(queryset, "on_field_deny", None)
+    if callable(on_field_deny):
+        queryset = on_field_deny("allow")
+    instance = instance_from_public_id(model, public_id, queryset=queryset)
     if instance is None:
         raise ValueError(f"{model._meta.object_name} {public_id!r} was not found")
     return instance

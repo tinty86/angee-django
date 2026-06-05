@@ -707,6 +707,111 @@ describe("DataPage", () => {
     });
   });
 
+  test("selects page size from the pager range popover", async () => {
+    const onUrlUpdate = vi.fn();
+    render(
+      <TestUrlState onUrlUpdate={onUrlUpdate}>
+        <DataPage
+          model="notes.Note"
+          columns={columns}
+          formFields={formFields}
+          pageSize={2}
+        />
+      </TestUrlState>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Records 1-2 / 4" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "10" }));
+
+    await waitFor(() => {
+      const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
+      expect(latest?.searchParams.get("pageSize")).toBe("10");
+    });
+  });
+
+  test("adds a custom filter from the toolbar editor", async () => {
+    const onUrlUpdate = vi.fn();
+    render(
+      <TestUrlState onUrlUpdate={onUrlUpdate}>
+        <DataPage
+          model="notes.Note"
+          columns={columns}
+          formFields={formFields}
+        />
+      </TestUrlState>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Filter and favorites" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add custom filter" }),
+    );
+    fireEvent.change(await screen.findByRole("textbox", { name: "Filter value" }), {
+      target: { value: "Fir" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
+      expect(JSON.parse(latest?.searchParams.get("filter") ?? "{}")).toEqual({
+        title: { contains: "Fir" },
+      });
+    });
+    expect(await screen.findByText("Title contains Fir")).toBeTruthy();
+  });
+
+  test("saves and reapplies the current data-view search", async () => {
+    const onUrlUpdate = vi.fn();
+    render(
+      <TestUrlState onUrlUpdate={onUrlUpdate}>
+        <DataPage
+          model="notes.Note"
+          columns={columns}
+          formFields={formFields}
+          pageSize={2}
+        />
+      </TestUrlState>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Filter and favorites" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save current search" }),
+    );
+    fireEvent.change(await screen.findByRole("textbox", { name: "Favorite name" }), {
+      target: { value: "Two per page" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Filter and favorites" }),
+    );
+    expect(await screen.findByRole("button", { name: "Two per page" }))
+      .toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Records 1-2 / 4" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "10" }));
+    await waitFor(() => {
+      const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
+      expect(latest?.searchParams.get("pageSize")).toBe("10");
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Filter and favorites" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Two per page" }));
+    await waitFor(() => {
+      const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
+      expect(latest?.searchParams.get("pageSize")).toBe("2");
+    });
+  });
+
   test("keeps page size and default group updates from the same commit", async () => {
     const onUrlUpdate = vi.fn();
     render(
@@ -731,7 +836,7 @@ describe("DataPage", () => {
     });
   });
 
-  test("changing the group resets a deep page through the data view state", async () => {
+  test("adding a date group level resets a deep page through the data view state", async () => {
     const onUrlUpdate = vi.fn();
     render(
       <TestUrlState
@@ -767,7 +872,8 @@ describe("DataPage", () => {
     );
     await waitFor(() => {
       const latest = onUrlUpdate.mock.calls.at(-1)?.[0];
-      expect(latest?.searchParams.get("group")).toBe("updatedAt:month");
+      expect(latest?.searchParams.get("group")).toBe("updatedAt:day");
+      expect(latest?.searchParams.get("then")).toBe("updatedAt:month");
       expect(latest?.searchParams.get("page")).not.toBe("2");
     });
   });

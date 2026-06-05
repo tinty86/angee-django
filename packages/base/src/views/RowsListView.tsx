@@ -6,6 +6,8 @@ import {
 } from "../shell/ControlBand";
 import {
   DataToolbar,
+  type DataToolbarFilterField,
+  type DataToolbarFilterOption,
   type DataToolbarGroupOption,
 } from "../toolbars";
 import type { PagerState } from "../ui/pager";
@@ -35,13 +37,21 @@ import {
 } from "./ListInternals";
 import {
   activeFilterIdsFor,
+  addCustomFilter as addCustomFilterToFilter,
+  buildFilterFields,
   buildFilterOptions,
+  customFilterChipsFor,
+  mergeFilterFields,
+  mergeFilterOptions,
   nextFacetFilter,
+  removeCustomFilter,
 } from "./list-view-utils";
 
 export interface RowsListViewProps<TRow extends StringIdRow = StringIdRow> {
   rows: readonly TRow[];
   columns: readonly ListColumn<TRow>[];
+  filters?: readonly DataToolbarFilterOption[];
+  filterFields?: readonly DataToolbarFilterField[];
   groupOptions?: readonly DataToolbarGroupOption[];
   defaultGroup?: DataViewGroup | null;
   pageSize?: number;
@@ -82,6 +92,8 @@ function RowsListViewBound<TRow extends StringIdRow = StringIdRow>(
 function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
   rows,
   columns,
+  filters: explicitFilters,
+  filterFields: explicitFilterFields,
   groupOptions,
   defaultGroup,
   pageSize,
@@ -144,13 +156,30 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
   );
   const groupingEnabled =
     toolbarGroupOptions.length > 0 || dataView.state.groupStack.length > 0;
-  const filterOptions = React.useMemo(
+  const inferredFilterOptions = React.useMemo(
     () => buildFilterOptions(columns, surface.sourceRows),
     [columns, surface.sourceRows],
+  );
+  const filterOptions = React.useMemo(
+    () => mergeFilterOptions(explicitFilters, inferredFilterOptions),
+    [explicitFilters, inferredFilterOptions],
+  );
+  const inferredFilterFields = React.useMemo(
+    () => buildFilterFields(columns, surface.sourceRows),
+    [columns, surface.sourceRows],
+  );
+  const filterFields = React.useMemo(
+    () => mergeFilterFields(explicitFilterFields, inferredFilterFields),
+    [explicitFilterFields, inferredFilterFields],
   );
   const activeFilterIds = activeFilterIdsFor(
     dataView.state.filter,
     filterOptions,
+  );
+  const customFilterChips = customFilterChipsFor(
+    dataView.state.filter,
+    filterOptions,
+    filterFields,
   );
   const filterText = rowTextFilterValue(dataView.state.filter);
   const interactive = Boolean(onRowClick || rowHref);
@@ -165,11 +194,25 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
           groupStack={groupingEnabled ? dataView.state.groupStack : undefined}
           groupOptions={groupingEnabled ? toolbarGroupOptions : undefined}
           filterOptions={filterOptions}
+          filterFields={filterFields}
+          customFilterChips={customFilterChips}
+          favorites={dataView.savedFavorites}
           activeFilterIds={activeFilterIds}
           filterText={filterText}
           onClearGroup={groupingEnabled ? () => dataView.setGroupStack([]) : undefined}
           onGroupStackChange={groupingEnabled ? dataView.setGroupStack : undefined}
           onPageChange={dataView.setPage}
+          onPageSizeChange={dataView.setPageSize}
+          onCustomFilterAdd={(customFilter) =>
+            dataView.setFilter(
+              addCustomFilterToFilter(dataView.state.filter, customFilter),
+            )
+          }
+          onCustomFilterRemove={(id) =>
+            dataView.setFilter(removeCustomFilter(dataView.state.filter, id))
+          }
+          onFavoriteSave={dataView.saveFavorite}
+          onFavoriteSelect={dataView.applyFavorite}
           onFilterToggle={(id) =>
             dataView.setFilter(
               nextFacetFilter(dataView.state.filter, filterOptions, id),

@@ -21,6 +21,11 @@ _ModelT = TypeVar("_ModelT", bound=models.Model)
 class AngeeQuerySet(RebacQuerySet[_ModelT]):
     """QuerySet API shared by Angee source and runtime models."""
 
+    def from_public_id(self, value: str) -> _ModelT | None:
+        """Return the row addressed by ``value`` within this queryset policy."""
+
+        return _instance_from_public_id_queryset(self, value)
+
     def apply_ambient_scope(self) -> Self:
         """Eagerly apply REBAC row scope using the queryset or ambient actor."""
 
@@ -135,15 +140,8 @@ class AngeeModel(TimestampMixin, RebacMixin):
     def from_public_id(cls, value: str) -> Self | None:
         """Return the instance addressed by ``value``, if one exists."""
 
-        if value == "":
-            return None
-
-        lookup = cls.public_id_lookup(value)
-        try:
-            instance = cls._default_manager.filter(**lookup).first()
-        except TypeError, ValueError:
-            return None
-        return cast(Self | None, instance)
+        queryset = cast(AngeeQuerySet[Self], cls._default_manager.all())
+        return queryset.from_public_id(value)
 
     @classmethod
     def public_id_lookup(cls, value: str) -> dict[str, Any]:
@@ -157,17 +155,20 @@ class AngeeModel(TimestampMixin, RebacMixin):
         return self.pk
 
 
-def instance_from_public_id(model: type[_ModelT], value: str) -> _ModelT | None:
+def instance_from_public_id(
+    model: type[_ModelT],
+    value: str,
+    *,
+    queryset: models.QuerySet[_ModelT] | None = None,
+) -> _ModelT | None:
     """Return ``model`` instance addressed by Angee or Django public ID."""
 
-    if issubclass(model, AngeeModel):
-        return cast(_ModelT | None, model.from_public_id(value))
+    active_queryset = queryset if queryset is not None else model._default_manager.all()
+    resolver = getattr(active_queryset, "from_public_id", None)
+    if callable(resolver):
+        return cast(_ModelT | None, resolver(value))
 
-    try:
-        instance = model._default_manager.filter(pk=value).first()
-    except TypeError, ValueError:
-        return None
-    return cast(_ModelT | None, instance)
+    return _instance_from_public_id_queryset(active_queryset, value)
 
 
 def public_id_of(instance: models.Model) -> str:
@@ -178,6 +179,35 @@ def public_id_of(instance: models.Model) -> str:
     if instance.pk is None:
         return ""
     return str(instance.pk)
+
+
+def _instance_from_public_id_queryset(
+    queryset: models.QuerySet[_ModelT],
+    value: str,
+) -> _ModelT | None:
+    """Return the row addressed by ``value`` using ``queryset`` as the owner."""
+
+    if value == "":
+        return None
+
+    try:
+        instance = queryset.filter(**_public_id_lookup(queryset.model, value)).first()
+    except (TypeError, ValueError):
+        return None
+    return cast(_ModelT | None, instance)
+
+
+def _public_id_lookup(
+    model: type[models.Model],
+    value: str,
+) -> dict[str, Any]:
+    """Return the model-owned lookup for one public id value."""
+
+    lookup = getattr(model, "public_id_lookup", None)
+    if callable(lookup):
+        return dict(lookup(value))
+    pk = model._meta.pk
+    return {pk.name: value} if pk is not None else {}
 
 
 def _is_contributed_extension_base(value: type) -> bool:

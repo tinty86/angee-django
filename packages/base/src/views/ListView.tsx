@@ -1,5 +1,10 @@
 import * as React from "react";
-import type { Row } from "@angee/sdk";
+import {
+  useResourceAggregate,
+  type ResourceTypeName,
+  type Row,
+  type UseAggregateOptions,
+} from "@angee/sdk";
 
 import {
   ControlBand,
@@ -34,15 +39,23 @@ import {
   SelectionBar,
   dataViewGroupToAggregateDimension,
   groupFieldLabel,
+  groupMeasuresFromColumns,
   looksLikeDateField,
+  type FlatListBodyProps,
 } from "./ListInternals";
 import type { ListViewProps } from "./list-view-types";
 import {
   activeFilterIdsFor,
+  addCustomFilter as addCustomFilterToFilter,
+  buildFilterFields,
   buildFilterOptions,
   createLabelForModel,
+  customFilterChipsFor,
+  mergeFilterFields,
+  mergeFilterOptions,
   nextFacetFilter,
   nextTextFilter,
+  removeCustomFilter,
   supportsChoiceFacet,
   textFilterValue,
 } from "./list-view-utils";
@@ -93,7 +106,7 @@ function ListViewShell<TRow extends Row = Row>(
   );
   if (dataView) return <ListViewBody {...props} dataView={dataView} />;
   return (
-    <DataViewProvider initialState={initialState}>
+    <DataViewProvider initialState={initialState} resource={props.model}>
       <ListViewBound {...props} />
     </DataViewProvider>
   );
@@ -110,6 +123,9 @@ function ListViewBody<TRow extends Row = Row>({
   columns,
   fields,
   filter,
+  filters: explicitFilters,
+  filterFields: explicitFilterFields,
+  groupOptions: explicitGroupOptions,
   order,
   pageSize,
   defaultGroup,
@@ -167,6 +183,10 @@ function ListViewBody<TRow extends Row = Row>({
     enabled: !groupedListMode,
     onListStateChange,
   });
+  const flatMeasures = React.useMemo(
+    () => groupMeasuresFromColumns(columns),
+    [columns],
+  );
   const [groupPagerState, setGroupPagerState] =
     React.useState<GroupPagerState | null>(null);
   const handleGroupPagerStateChange = React.useCallback(
@@ -204,17 +224,40 @@ function ListViewBody<TRow extends Row = Row>({
     surface.list.pageSize,
     surface.list.total,
   ]);
-  const groupOptions = React.useMemo(
-    () => (grouping ? buildGroupOptions(columns, defaultGroup) : undefined),
-    [columns, defaultGroup, grouping],
+  const toolbarGroupOptions = React.useMemo(
+    () =>
+      grouping
+        ? mergeGroupOptions(
+            explicitGroupOptions,
+            buildGroupOptions(columns, defaultGroup),
+          )
+        : undefined,
+    [columns, defaultGroup, explicitGroupOptions, grouping],
   );
-  const filterOptions = React.useMemo(
+  const inferredFilterOptions = React.useMemo(
     () => buildFilterOptions(columns, surface.rows),
     [columns, surface.rows],
+  );
+  const filterOptions = React.useMemo(
+    () => mergeFilterOptions(explicitFilters, inferredFilterOptions),
+    [explicitFilters, inferredFilterOptions],
+  );
+  const inferredFilterFields = React.useMemo(
+    () => buildFilterFields(columns, surface.rows),
+    [columns, surface.rows],
+  );
+  const filterFields = React.useMemo(
+    () => mergeFilterFields(explicitFilterFields, inferredFilterFields),
+    [explicitFilterFields, inferredFilterFields],
   );
   const activeFilterIds = activeFilterIdsFor(
     dataView.state.filter,
     filterOptions,
+  );
+  const customFilterChips = customFilterChipsFor(
+    dataView.state.filter,
+    filterOptions,
+    filterFields,
   );
 
   const setPage = React.useCallback(
@@ -241,8 +284,11 @@ function ListViewBody<TRow extends Row = Row>({
           view={grouping ? dataView.state.view : undefined}
           group={grouping ? dataView.state.group : undefined}
           groupStack={grouping ? dataView.state.groupStack : undefined}
-          groupOptions={groupOptions}
+          groupOptions={toolbarGroupOptions}
           filterOptions={filterOptions}
+          filterFields={filterFields}
+          customFilterChips={customFilterChips}
+          favorites={dataView.savedFavorites}
           activeFilterIds={activeFilterIds}
           filterText={filterText}
           createLabel={createLabel ?? createLabelForModel(model)}
@@ -251,6 +297,17 @@ function ListViewBody<TRow extends Row = Row>({
           onGroupStackChange={grouping ? dataView.setGroupStack : undefined}
           onViewChange={grouping ? dataView.setView : undefined}
           onPageChange={setPage}
+          onPageSizeChange={dataView.setPageSize}
+          onCustomFilterAdd={(customFilter) =>
+            dataView.setFilter(
+              addCustomFilterToFilter(dataView.state.filter, customFilter),
+            )
+          }
+          onCustomFilterRemove={(id) =>
+            dataView.setFilter(removeCustomFilter(dataView.state.filter, id))
+          }
+          onFavoriteSave={dataView.saveFavorite}
+          onFavoriteSelect={dataView.applyFavorite}
           pagerSubject={groupedListMode ? "Groups" : undefined}
           pagerTotalUnit={groupedListMode ? "groups" : undefined}
           onFilterToggle={(id) =>
@@ -316,6 +373,30 @@ function ListViewBody<TRow extends Row = Row>({
             rowHref={rowHref}
             onRowClick={onRowClick}
           />
+        ) : flatMeasures.length > 0 ? (
+          <FlatListBodyWithAggregate
+            model={model}
+            filter={surface.mergedFilter}
+            measures={flatMeasures}
+            columns={columns}
+            table={surface.table}
+            rowModels={surface.rowModels}
+            listItems={surface.listItems}
+            tableScrollRef={surface.tableScrollRef}
+            rowVirtualizer={surface.rowVirtualizer}
+            visibleColumnCount={surface.visibleColumnCount}
+            allPageSelected={surface.allPageSelected}
+            somePageSelected={surface.somePageSelected}
+            onPageSelectionChange={surface.setPageSelection}
+            visibleFields={surface.visibleFields}
+            onVisibleFieldToggle={surface.toggleVisibleField}
+            dataView={dataView}
+            interactive={interactive}
+            rowHref={rowHref}
+            onRowClick={onRowClick}
+            emptyMessage={emptyMessage}
+            fetching={surface.list.fetching}
+          />
         ) : (
           <FlatListBody
             columns={columns}
@@ -360,6 +441,24 @@ function ListViewBody<TRow extends Row = Row>({
   );
 }
 
+function FlatListBodyWithAggregate<TRow extends Row>({
+  model,
+  filter,
+  measures,
+  ...props
+}: FlatListBodyProps<TRow> & {
+  model: string;
+  filter: UseAggregateOptions<ResourceTypeName>["filter"];
+  measures: UseAggregateOptions<ResourceTypeName>["measures"];
+}): React.ReactElement {
+  const aggregate = useResourceAggregate(model, {
+    filter,
+    measures,
+    enabled: Boolean(measures?.length),
+  });
+  return <FlatListBody {...props} footerAggregate={aggregate.aggregate} />;
+}
+
 export function buildGroupOptions<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   defaultGroup: DataViewGroup | null | undefined,
@@ -402,4 +501,18 @@ export function buildGroupOptions<TRow extends Row>(
   }
 
   return options;
+}
+
+function mergeGroupOptions(
+  explicit: readonly DataToolbarGroupOption[] | undefined,
+  inferred: readonly DataToolbarGroupOption[],
+): readonly DataToolbarGroupOption[] {
+  const merged: DataToolbarGroupOption[] = [];
+  const seen = new Set<string>();
+  for (const option of [...(explicit ?? []), ...inferred]) {
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    merged.push(option);
+  }
+  return merged;
 }

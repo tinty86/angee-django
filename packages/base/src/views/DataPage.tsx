@@ -75,6 +75,9 @@ export interface DataPageProps<TRow extends Row = Row> {
   placement?: RecordPlacement;
   /** List options forwarded to `ListView`. */
   filter?: ListViewProps<TRow>["filter"];
+  filters?: ListViewProps<TRow>["filters"];
+  filterFields?: ListViewProps<TRow>["filterFields"];
+  groupOptions?: ListViewProps<TRow>["groupOptions"];
   order?: ListViewProps<TRow>["order"];
   pageSize?: number;
   defaultGroup?: DataViewGroup | null;
@@ -118,7 +121,7 @@ export function DataPage<TRow extends Row = Row>({
   }
 
   return (
-    <DataViewProvider initialState={initialState}>
+    <DataViewProvider initialState={initialState} resource={props.model}>
       <DataPageBody
         {...props}
         pageSize={pageSize}
@@ -139,6 +142,9 @@ function DataPageBody<TRow extends Row = Row>({
   onClose,
   placement = "inline",
   filter,
+  filters,
+  filterFields,
+  groupOptions,
   order,
   pageSize,
   defaultGroup,
@@ -296,6 +302,9 @@ function DataPageBody<TRow extends Row = Row>({
       columns={columns}
       fields={fields}
       filter={filter}
+      filters={filters}
+      filterFields={filterFields}
+      groupOptions={groupOptions}
       order={order}
       pageSize={pageSize}
       defaultGroup={defaultGroup}

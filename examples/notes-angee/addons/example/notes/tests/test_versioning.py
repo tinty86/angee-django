@@ -65,3 +65,44 @@ class NotesVersioningTests(TransactionTestCase):
         self.assertFalse(result.data["deleteNote"]["hasBlockers"])
         with system_context(reason="test"):
             self.assertFalse(Note.objects.filter(sqid=self.note.sqid).exists())
+
+    def test_admin_delete_preserves_redacted_fields_for_history(self) -> None:
+        query = (
+            "mutation($id: ID!){ deleteNote(id: $id, confirm: true)"
+            "{ totalDeletedCount hasBlockers } }"
+        )
+        with system_context(reason="test-setup"):
+            owner = User.objects.create(
+                username="owner",
+                email="owner@example.com",
+                password="!",
+            )
+            admin = User.objects.create_superuser(
+                username="admin-delete",
+                email="admin-delete@example.com",
+                password="!",
+            )
+            note = Note.objects.create(
+                title="Admin delete target",
+                body="private flag",
+                created_by=owner,
+                is_starred=True,
+            )
+            sqid = note.sqid
+            note_id = note.pk
+
+        with actor_context(to_subject_ref(admin)):
+            self.assertIsNone(Note.objects.get(sqid=sqid).is_starred)
+            schema = GraphQLSchemas.from_discovery().build("console")
+            result = schema.execute_sync(
+                query,
+                variable_values={"id": relay.to_base64("NoteType", sqid)},
+            )
+
+        self.assertIsNone(result.errors)
+        self.assertEqual(result.data["deleteNote"]["totalDeletedCount"], 1)
+        self.assertFalse(result.data["deleteNote"]["hasBlockers"])
+        with system_context(reason="test"):
+            self.assertFalse(Note.objects.filter(sqid=sqid).exists())
+            history = Note.history.model.objects.get(id=note_id, history_type="-")
+            self.assertTrue(history.is_starred)
