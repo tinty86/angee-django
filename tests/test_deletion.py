@@ -1,4 +1,4 @@
-"""Tests for deletion preview domain objects."""
+"""Tests for GraphQL deletion preview objects."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from django.db.models.signals import post_delete, pre_delete
 from rebac import RebacMixin, SubjectRef, actor_context, system_context
 from rebac.signals import _rebac_cascade_resource, _rebac_pre_delete
 
-from angee.base.deletion import DeletionPreview, DeletionPreviewNode
+from angee.graphql.deletion import DeletePreview, DeletePreviewNode
 
 
 @pytest.mark.django_db(transaction=True)
@@ -31,7 +31,7 @@ def test_deletion_preview_counts_deleted_rows() -> None:
     try:
         item = PreviewItem.objects.create(name="draft")
 
-        preview = DeletionPreview.from_instance(item)
+        preview = DeletePreview.from_instance(item)
 
         assert preview.total_deleted_count == 1
         assert preview.deleted[0].count == 1
@@ -72,7 +72,7 @@ def test_deletion_preview_reports_protected_blockers() -> None:
         parent = PreviewParent.objects.create(name="parent")
         PreviewChild.objects.create(parent=parent)
 
-        preview = DeletionPreview.from_instance(parent)
+        preview = DeletePreview.from_instance(parent)
 
         assert preview.has_blockers
         assert preview.blocked[0].count == 1
@@ -118,7 +118,7 @@ def test_deletion_preview_counts_set_null_updates() -> None:
         PreviewNullableChild.objects.create(parent=parent)
         PreviewNullableChild.objects.create(parent=parent)
 
-        preview = DeletionPreview.from_instance(parent)
+        preview = DeletePreview.from_instance(parent)
 
         assert preview.updated[0].count == 2
         assert not preview.has_blockers
@@ -162,7 +162,7 @@ def test_deletion_preview_reports_restricted_blockers() -> None:
         parent = PreviewRestrictedParent.objects.create(name="parent")
         PreviewRestrictedChild.objects.create(parent=parent)
 
-        preview = DeletionPreview.from_instance(parent)
+        preview = DeletePreview.from_instance(parent)
 
         assert preview.has_blockers
         assert preview.blocked[0].count == 1
@@ -212,7 +212,7 @@ def test_deletion_preview_counts_fast_deletes() -> None:
 
         assert any(queryset.model is PreviewCascadeChild for queryset in collector.fast_deletes)
 
-        preview = DeletionPreview.from_instance(parent)
+        preview = DeletePreview.from_instance(parent)
 
         deleted = {group.label: group.count for group in preview.deleted}
         parent_label = str(PreviewCascadeParent._meta.verbose_name_plural)
@@ -270,7 +270,7 @@ def test_deletion_preview_hides_rebac_child_leaves_without_read_access() -> None
             child = PreviewScopedChild.objects.create(parent=parent, name="Hidden child")
 
         with actor_context(SubjectRef.of("auth/user", "reader")):
-            preview = DeletionPreview.from_instance(parent)
+            preview = DeletePreview.from_instance(parent)
 
         child_group = next(group for group in preview.root.children if group.label == "preview scoped childs")
         assert child_group.object_label == "1 preview scoped childs"
@@ -285,13 +285,13 @@ def test_deletion_preview_hides_rebac_child_leaves_without_read_access() -> None
             schema_editor.delete_model(PreviewScopedParent)
 
 
-def _tree_object_labels(node: DeletionPreviewNode) -> tuple[str, ...]:
+def _tree_object_labels(node: DeletePreviewNode) -> tuple[str, ...]:
     """Return every object label in a preview tree."""
 
     return (node.object_label, *(label for child in node.children for label in _tree_object_labels(child)))
 
 
-def _tree_object_ids(node: DeletionPreviewNode) -> tuple[str, ...]:
+def _tree_object_ids(node: DeletePreviewNode) -> tuple[str, ...]:
     """Return every concrete object id in a preview tree."""
 
     own = () if node.object_id is None else (node.object_id,)

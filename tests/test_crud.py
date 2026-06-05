@@ -12,8 +12,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from strawberry import auto, relay
 
-from angee.base.deletion import DeletionPreview, DeletionPreviewGroup
 from angee.graphql.crud import _delete_resolver, crud
+from angee.graphql.deletion import DeletePreview, DeletePreviewGroup
 
 
 @strawberry_django.type(Group)
@@ -110,12 +110,10 @@ def test_crud_fields_merge_into_a_schema() -> None:
 
 @pytest.mark.django_db
 def test_delete_preview_output_adapts_deletion_domain() -> None:
-    """CRUD delete output serializes the deletion preview domain object."""
-
-    from angee.graphql.crud import DeletePreview
+    """CRUD delete output uses the GraphQL deletion preview object."""
 
     group = Group.objects.create(name="reviewers")
-    preview = DeletePreview.from_domain(DeletionPreview.from_instance(group))
+    preview = DeletePreview.from_instance(group)
 
     assert preview.total_deleted_count == 1
     assert not preview.has_blockers
@@ -132,30 +130,30 @@ def test_delete_resolver_preserves_blocked_and_removes_unblocked(
     removable = Group.objects.create(name="removable")
     previews = iter(
         (
-            DeletionPreview(
+            DeletePreview(
                 total_deleted_count=1,
-                deleted=(),
-                updated=(),
-                blocked=(DeletionPreviewGroup(label="groups", count=1),),
+                deleted=[],
+                updated=[],
+                blocked=[DeletePreviewGroup(label="groups", count=1)],
             ),
-            DeletionPreview(
+            DeletePreview(
                 total_deleted_count=1,
-                deleted=(DeletionPreviewGroup(label="groups", count=1),),
-                updated=(),
-                blocked=(),
+                deleted=[DeletePreviewGroup(label="groups", count=1)],
+                updated=[],
+                blocked=[],
             ),
         )
     )
 
     def preview_for(
-        cls: type[DeletionPreview],
+        cls: type[DeletePreview],
         instance: Group,
-    ) -> DeletionPreview:
+    ) -> DeletePreview:
         del cls, instance
         return next(previews)
 
     monkeypatch.setattr(
-        DeletionPreview,
+        DeletePreview,
         "from_instance",
         classmethod(preview_for),
     )
@@ -199,21 +197,21 @@ def test_delete_resolver_previews_and_deletes_inside_transaction(
         return Atomic()
 
     def preview_for(
-        cls: type[DeletionPreview],
+        cls: type[DeletePreview],
         instance: Group,
-    ) -> DeletionPreview:
+    ) -> DeletePreview:
         del cls, instance
         assert active
-        return DeletionPreview(
+        return DeletePreview(
             total_deleted_count=1,
-            deleted=(DeletionPreviewGroup(label="groups", count=1),),
-            updated=(),
-            blocked=(),
+            deleted=[DeletePreviewGroup(label="groups", count=1)],
+            updated=[],
+            blocked=[],
         )
 
     monkeypatch.setattr(transaction, "atomic", atomic)
     monkeypatch.setattr(
-        DeletionPreview,
+        DeletePreview,
         "from_instance",
         classmethod(preview_for),
     )

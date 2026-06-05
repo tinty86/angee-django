@@ -1,4 +1,4 @@
-"""Cascade deletion preview domain objects for Django model instances."""
+"""GraphQL delete-confirmation preview built on Django's deletion collector."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+import strawberry
 from django.db import models
 from django.db.models.deletion import (
     Collector,
@@ -22,8 +23,8 @@ _PREVIEW_LEAF_LIMIT = 50
 type _FastDelete = tuple[models.QuerySet[models.Model], int]
 
 
-@dataclass(frozen=True, slots=True)
-class DeletionPreviewGroup:
+@strawberry.type
+class DeletePreviewGroup:
     """A count of affected rows for one Django model."""
 
     label: str
@@ -33,8 +34,8 @@ class DeletionPreviewGroup:
     """Number of affected rows for this model."""
 
 
-@dataclass(frozen=True, slots=True)
-class DeletionPreviewNode:
+@strawberry.type
+class DeletePreviewNode:
     """One node in a cascade deletion preview tree."""
 
     label: str
@@ -46,27 +47,27 @@ class DeletionPreviewNode:
     object_id: str | None
     """Public object id when the node represents a concrete row."""
 
-    children: tuple[DeletionPreviewNode, ...]
+    children: list[DeletePreviewNode]
     """Child nodes below this preview node."""
 
     @classmethod
-    def from_row(cls, instance: models.Model) -> DeletionPreviewNode:
+    def from_row(cls, instance: models.Model) -> DeletePreviewNode:
         """Return a childless leaf node for one deleted row."""
 
         return cls(
             label=str(instance._meta.verbose_name),
             object_label=str(instance),
             object_id=_object_id(instance),
-            children=(),
+            children=[],
         )
 
     @classmethod
-    def from_group(cls, model: type[models.Model], rows: _PreviewRows) -> DeletionPreviewNode:
+    def from_group(cls, model: type[models.Model], rows: _PreviewRows) -> DeletePreviewNode:
         """Return a grouped child node summarizing deleted rows of one model."""
 
         ordered_rows = sorted(rows.visible_rows, key=lambda row: row.pk)
         plural = str(model._meta.verbose_name_plural)
-        leaves = tuple(cls.from_row(row) for row in ordered_rows[:_PREVIEW_LEAF_LIMIT])
+        leaves = [cls.from_row(row) for row in ordered_rows[:_PREVIEW_LEAF_LIMIT]]
         hidden_count = max(0, rows.total_count - rows.visible_count)
         capped_count = max(0, rows.visible_count - len(leaves))
         if hidden_count:
@@ -76,7 +77,7 @@ class DeletionPreviewNode:
         else:
             overflow_label = ""
         if overflow_label:
-            leaves = (*leaves, cls(label="", object_label=overflow_label, object_id=None, children=()))
+            leaves.append(cls(label="", object_label=overflow_label, object_id=None, children=[]))
         return cls(
             label=plural,
             object_label=f"{rows.total_count} {plural}",
@@ -91,7 +92,7 @@ class DeletionPreviewNode:
         collector: Collector,
         fast_deletes: tuple[_FastDelete, ...],
         actor: Any | None,
-    ) -> DeletionPreviewNode:
+    ) -> DeletePreviewNode:
         """Return the root node (the deletion target) with its grouped children."""
 
         model = type(instance)
@@ -100,33 +101,36 @@ class DeletionPreviewNode:
             label=str(model._meta.verbose_name),
             object_label=str(instance),
             object_id=_object_id(instance),
-            children=tuple(
+            children=[
                 cls.from_group(group_model, preview_rows)
                 for group_model, preview_rows in sorted(
                     groups.items(),
                     key=lambda item: (str(item[0]._meta.verbose_name_plural), item[0]._meta.label_lower),
                 )
-            ),
+            ],
         )
 
 
-@dataclass(frozen=True, slots=True)
-class DeletionPreview:
+@strawberry.type
+class DeletePreview:
     """Cascade forecast for deleting one Django model instance."""
 
     total_deleted_count: int
     """Total number of rows Django would delete."""
 
-    deleted: tuple[DeletionPreviewGroup, ...]
+    deleted: list[DeletePreviewGroup]
     """Rows Django would delete."""
 
-    updated: tuple[DeletionPreviewGroup, ...]
+    updated: list[DeletePreviewGroup]
     """Rows Django would update because of ``on_delete`` behavior."""
 
-    blocked: tuple[DeletionPreviewGroup, ...]
+    blocked: list[DeletePreviewGroup]
     """Rows whose ``on_delete`` behavior blocks deletion."""
 
-    root: DeletionPreviewNode = DeletionPreviewNode(label="", object_label="", object_id=None, children=())
+    root: DeletePreviewNode = strawberry.field(
+        default_factory=lambda: DeletePreviewNode(label="", object_label="", object_id=None, children=[]),
+        description="Tree apex for the target row; deleted counts already include that row.",
+    )
     """Rooted tree of rows Django would delete; deleted counts include this root row."""
 
     @property
@@ -136,11 +140,11 @@ class DeletionPreview:
         return bool(self.blocked)
 
     @classmethod
-    def from_instance(cls, instance: models.Model, actor: Any | None = None) -> DeletionPreview:
+    def from_instance(cls, instance: models.Model, actor: Any | None = None) -> DeletePreview:
         """Return Django's cascade forecast for ``instance``."""
 
         collector = Collector(using=instance._state.db or "default")
-        blocked: tuple[DeletionPreviewGroup, ...] = ()
+        blocked: list[DeletePreviewGroup] = []
         try:
             collector.collect([instance])
         except ProtectedError as error:
@@ -151,7 +155,7 @@ class DeletionPreview:
         fast_deletes: tuple[_FastDelete, ...] = tuple(
             (queryset, queryset.count()) for queryset in collector.fast_deletes
         )
-        root = DeletionPreviewNode.from_target(
+        root = DeletePreviewNode.from_target(
             instance,
             collector,
             fast_deletes,
@@ -275,13 +279,11 @@ class _PreviewRows:
         )
 
 
-def _groups(
-    counts: dict[type[models.Model], int],
-) -> tuple[DeletionPreviewGroup, ...]:
+def _groups(counts: dict[type[models.Model], int]) -> list[DeletePreviewGroup]:
     """Return sorted non-empty deletion preview groups."""
 
-    return tuple(
-        DeletionPreviewGroup(
+    return [
+        DeletePreviewGroup(
             label=str(model._meta.verbose_name_plural),
             count=count,
         )
@@ -290,7 +292,7 @@ def _groups(
             key=lambda item: item[0]._meta.label,
         )
         if count
-    )
+    ]
 
 
 def _count_by_model(

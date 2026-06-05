@@ -13,12 +13,8 @@ from strawberry import relay
 from strawberry.extensions.field_extension import FieldExtension, SyncExtensionResolver
 from strawberry.types import Info
 
-from angee.base.deletion import (
-    DeletionPreview,
-    DeletionPreviewGroup,
-    DeletionPreviewNode,
-)
 from angee.base.models import instance_from_public_id
+from angee.graphql.deletion import DeletePreview
 from angee.graphql.introspection import django_model, surface_name
 
 
@@ -43,68 +39,6 @@ class _SystemContextWrite(FieldExtension):
 
         with system_context(reason=self._reason):
             return next_(source, info, **kwargs)
-
-
-@strawberry.type
-class DeletePreviewGroup:
-    """GraphQL output for one deletion preview group."""
-
-    label: str
-    count: int
-
-    @classmethod
-    def from_domain(cls, group: DeletionPreviewGroup) -> DeletePreviewGroup:
-        """Return GraphQL output for a domain preview group."""
-
-        return cls(label=group.label, count=group.count)
-
-
-@strawberry.type
-class DeletePreviewNode:
-    """GraphQL output for one deletion preview tree node."""
-
-    label: str
-    object_label: str
-    object_id: str | None
-    children: list["DeletePreviewNode"]
-
-    @classmethod
-    def from_domain(cls, node: DeletionPreviewNode) -> DeletePreviewNode:
-        """Return GraphQL output for a domain preview tree node."""
-
-        return cls(
-            label=node.label,
-            object_label=node.object_label,
-            object_id=node.object_id,
-            children=[DeletePreviewNode.from_domain(child) for child in node.children],
-        )
-
-
-@strawberry.type
-class DeletePreview:
-    """GraphQL output for a cascade deletion preview."""
-
-    total_deleted_count: int
-    deleted: list[DeletePreviewGroup]
-    updated: list[DeletePreviewGroup]
-    blocked: list[DeletePreviewGroup]
-    has_blockers: bool
-    root: DeletePreviewNode = strawberry.field(
-        description="Tree apex for the target row; deleted counts already include that row."
-    )
-
-    @classmethod
-    def from_domain(cls, preview: DeletionPreview) -> DeletePreview:
-        """Return GraphQL output for a domain deletion preview."""
-
-        return cls(
-            total_deleted_count=preview.total_deleted_count,
-            deleted=[DeletePreviewGroup.from_domain(group) for group in preview.deleted],
-            updated=[DeletePreviewGroup.from_domain(group) for group in preview.updated],
-            blocked=[DeletePreviewGroup.from_domain(group) for group in preview.blocked],
-            has_blockers=preview.has_blockers,
-            root=DeletePreviewNode.from_domain(preview.root),
-        )
 
 
 def crud(
@@ -187,10 +121,10 @@ def _delete_resolver(model: type[models.Model]) -> Any:
 
         with transaction.atomic():
             instance = _resolve_for_delete(model, id.node_id)
-            preview = DeletionPreview.from_instance(instance)
+            preview = DeletePreview.from_instance(instance)
             if confirm and not preview.has_blockers:
                 instance.delete()
-        return DeletePreview.from_domain(preview)
+        return preview
 
     return delete
 
