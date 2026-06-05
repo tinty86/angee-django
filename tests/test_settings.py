@@ -53,6 +53,19 @@ def test_resource_migrations_are_redirected_into_runtime(tmp_path: Path) -> None
     assert migration_modules["notes"] == "runtime.notes.migrations"
 
 
+def test_runtime_migration_module_conflicts_fail_fast(tmp_path: Path) -> None:
+    """Projects cannot silently move migrations for emitted runtime apps."""
+
+    settings: dict[str, Any] = {
+        "INSTALLED_APPS": ("angee.resources",),
+        "ANGEE_RUNTIME_DIR": tmp_path / "runtime",
+        "MIGRATION_MODULES": {"resources": "custom.resources.migrations"},
+    }
+
+    with pytest.raises(ImproperlyConfigured, match=r"MIGRATION_MODULES\['resources'\]"):
+        Composer(settings).compose_settings()
+
+
 def test_base_is_installed_exactly_once(tmp_path: Path) -> None:
     """The model foundation is a normal installed Django app."""
 
@@ -724,6 +737,7 @@ def _write_addon(
     *,
     depends_on: object = ("angee.compose",),
     autoconfig: str = "SETTINGS = {}\n",
+    label: str | None = None,
 ) -> None:
     """Write a small importable addon package for settings tests."""
 
@@ -741,6 +755,7 @@ def _write_addon(
                 "class TestConfig(AppConfig):",
                 "    default = True",
                 f"    name = {name!r}",
+                *([f"    label = {label!r}"] if label is not None else []),
                 f"    depends_on = {depends_on!r}",
                 "",
             ]
@@ -867,6 +882,26 @@ def test_root_installed_apps_keep_project_order(
     assert installed.index("beta.apps.TestConfig") < installed.index("alpha.apps.TestConfig")
 
 
+def test_later_root_app_labels_are_available_to_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A root may depend on another later root by Django app label."""
+
+    _write_addon(tmp_path, "alpha", depends_on=("beta",))
+    _write_addon(tmp_path, "project_beta", label="beta")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    settings: dict[str, Any] = {
+        "INSTALLED_APPS": ("alpha", "project_beta"),
+        "ANGEE_RUNTIME_DIR": tmp_path / "runtime",
+    }
+    Composer(settings).compose_settings()
+    installed = _installed_paths(settings["INSTALLED_APPS"])
+
+    assert installed.index("project_beta.apps.TestConfig") < installed.index("alpha.apps.TestConfig")
+
+
 def test_composer_rejects_dependency_cycles(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -943,6 +978,43 @@ def test_yamlconf_project_values_beat_plain_addon_defaults(
     compose_settings = importlib.reload(compose_settings)
 
     assert compose_settings.ALPHA_SETTING == "env"
+
+
+def test_angee_env_values_overlay_declared_addon_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Stack env can feed declared addon settings without app code reading env."""
+
+    manage_py = tmp_path / "manage.py"
+    manage_py.write_text("# test entrypoint\n", encoding="utf-8")
+    _write_addon(
+        tmp_path / "addons",
+        "alpha",
+        autoconfig="SETTINGS = {'ANGEE_ALPHA_SECRET': 'addon-default'}\n",
+    )
+    (tmp_path / "settings.yaml").write_text(
+        "\n".join(
+            [
+                "SECRET_KEY: yaml-secret",
+                "ANGEE_ALPHA_SECRET: yaml-secret",
+                "INSTALLED_APPS:",
+                "  - alpha",
+                'ANGEE_RUNTIME_DIR: "{BASE_DIR}/runtime"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delitem(sys.modules, "settings", raising=False)
+    monkeypatch.setattr(sys, "argv", [str(manage_py)])
+    monkeypatch.setenv("ANGEE_ALPHA_SECRET", "env-secret")
+
+    import angee.compose.settings as compose_settings
+
+    compose_settings = importlib.reload(compose_settings)
+
+    assert compose_settings.ANGEE_ALPHA_SECRET == "env-secret"
 
 
 def test_addon_autoconfig_rejects_composer_owned_settings(

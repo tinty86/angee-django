@@ -64,11 +64,11 @@ Rules that follow from the layering:
   never imports `angee.compose` just to list addons.
 - **An Angee addon is a plain Django app config with explicit attributes.**
   Addons do not subclass an Angee base config. `depends_on` is only an ordering
-  contract; each lifecycle step reads only the attributes it owns:
+  contract; each lifecycle step reads only the contract it owns:
   `graphql` reads `schemas`, `resources` reads `resources`, REBAC sync reads
-  `permissions`, stable serving reads `url_patterns` /
-  `asgi_websocket_urlpatterns`, runtime emission reads `emits_runtime_models`,
-  and settings composition reads the addon's optional `autoconfig.py`.
+  `permissions`, stable serving imports conventional `urls.py` / `asgi.py`,
+  runtime emission reads `emits_runtime_models`, and settings composition reads
+  the addon's optional `autoconfig.py`.
 - **There is a single app set and a single boot.** `DJANGO_SETTINGS_MODULE`
   points at `angee.compose.settings`, which imports the project's settings
   contract (`settings.yaml` or `settings.py` beside `manage.py`). YAML projects
@@ -79,9 +79,10 @@ Rules that follow from the layering:
   resolved `AppConfig` instances in `INSTALLED_APPS`. Framework boot apps
   (`angee.compose`, `angee.base`, `angee.graphql`) arrive through that same graph
   rather than a parallel hardcoded list. In app-populate phase 2,
-  `ComposeConfig.import_models()` calls
-  `Runtime.from_django().materialize_models()` before normal app model imports
-  continue. No `ANGEE_BUILD` flag or build/run app-set split exists.
+  `ComposeConfig.import_models()` checks the generated runtime and imports
+  concrete model modules before normal app model imports continue. Only the
+  explicit `angee build` command selects the emit action before app loading; no
+  build/run app-set split exists.
 - **The resource ledger is owned by the resource addon.** The composer discovers
   `angee.resources.models.Resource` as a normal addon source model and emits it
   under the `resources` label. `angee.base` must not import `angee.resources`.
@@ -196,12 +197,13 @@ evaluates `angee.compose.defaults` as the base Django settings module, and asks
 `MIGRATION_MODULES`, import paths, and addon autoconfig.
 Addon autoconfig uses yamlconf-style `SETTINGS` keys: plain keys are defaults,
 `:append` / `:prepend` keys always merge, dotted keys update nested dictionaries,
-`:raw` protects literal braces, and `:jsonenv` is required for typed
-`YAMLCONF_*` environment overrides. Use `settings.py` only when the project
-truly needs Python-computed settings. Angee treats yamlconf errors as Django
-configuration failures and rejects implicit ancestor `settings.yaml` files; only
-the project file and an explicit `YAMLCONF_CONFFILE` may contribute file-backed
-settings.
+`:raw` protects literal braces, and declared `ANGEE_*` addon settings may be
+overlaid by same-named process environment values from the stack. Use
+`settings.py` only when the project truly needs Python-computed settings. Angee
+treats yamlconf errors as Django configuration failures and rejects implicit
+ancestor `settings.yaml` files; only the project file and an explicit
+`YAMLCONF_CONFFILE` may contribute file-backed settings. Generic typed yamlconf
+environment overrides still require `:jsonenv`.
 Anchor project defaults to `BASE_DIR`, never to the current working directory.
 
 Keep `angee` as a namespace package. Do not add an `__init__.py` at either

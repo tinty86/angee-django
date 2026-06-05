@@ -37,10 +37,8 @@ class Runtime:
 
     - ``render_sources`` — the seam: returns ``{relative path: text}`` for the
       whole runtime. Every other entry point renders through it.
-    - ``emit`` / ``emit_if_stale`` — write that map to ``runtime_dir``.
-      ``emit`` is the destructive ``angee build`` pass (resets, prunes
-      orphans); ``emit_if_stale`` is the write-only boot heal called from the
-      composer's ``import_models``.
+    - ``emit`` — write that map to ``runtime_dir`` during the explicit
+      ``angee build`` pass (resets, prunes orphans).
     - ``is_current`` / ``check`` / ``_drift`` — disk vs the rendered map.
     - ``reset`` / ``clean`` — delete generated files behind the
       ``GENERATED_SENTINEL`` gate while preserving ``*/migrations/``.
@@ -86,23 +84,11 @@ class Runtime:
                 "sets it. A host installing the composer must configure the "
                 "runtime directory."
             )
-        return cls.from_addons(
+        return cls(
             (app_config for app_config in apps.get_app_configs() if getattr(app_config, "emits_runtime_models", False)),
             runtime_dir=Path(runtime_dir),
             runtime_module=str(runtime_module),
         )
-
-    @classmethod
-    def from_addons(
-        cls,
-        addons: Iterable[AppConfig],
-        *,
-        runtime_dir: Path,
-        runtime_module: str = "runtime",
-    ) -> Runtime:
-        """Return a runtime for explicit addon configs."""
-
-        return cls(addons, runtime_dir=runtime_dir, runtime_module=runtime_module)
 
     def render_sources(self) -> dict[Path, str]:
         """Return generated runtime source files keyed by relative path.
@@ -140,36 +126,11 @@ class Runtime:
 
         Used by the ``angee build`` command: it runs the ``_ensure_cleanable``
         gate and prunes stale files (e.g. a removed addon's leftover label),
-        then rewrites. Not used at boot — see ``emit_if_stale``.
+        then rewrites.
         """
 
         self.reset()
         self._write_sources()
-
-    def emit_if_stale(self) -> bool:
-        """Write the runtime when it drifts from the sources, on every boot.
-
-        Called from the composer's ``import_models`` in app-populate phase 2.
-        Write-only and idempotent: it never resets or cleans, so a present-but-
-        stale runtime is healed file by file and a corrupted or non-Angee
-        directory can never abort app population through the destructive
-        ``_ensure_cleanable`` gate. Orphaned files from a removed addon are
-        pruned by the explicit ``angee build`` (which calls ``emit``).
-        Returning early when current keeps boots fast and avoids churning files
-        the running process (and Django's autoreloader) already imported.
-        """
-
-        if not self._drift():
-            return False
-        self._write_sources()
-        return True
-
-    def materialize_models(self) -> bool:
-        """Write stale runtime sources, then import every emitted model module."""
-
-        wrote = self.emit_if_stale()
-        self.import_generated_models()
-        return wrote
 
     def import_generated_models(self) -> None:
         """Import generated concrete model modules for all emitted labels."""

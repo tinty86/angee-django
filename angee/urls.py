@@ -2,35 +2,30 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterable
 
 from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.module_loading import import_string
+from django.utils.module_loading import module_has_submodule
 
 
 def _addon_urlpatterns(app_config: AppConfig) -> list[object]:
-    """Return URL patterns declared by one addon."""
+    """Return URL patterns from one addon's conventional ``urls.py`` module."""
 
-    declaration = getattr(app_config, "url_patterns", None)
-    if declaration is None:
+    if not module_has_submodule(app_config.module, "urls"):
         return []
-    patterns = _declared_object(app_config, "url_patterns", declaration)
-    if not isinstance(patterns, Iterable):
-        raise ImproperlyConfigured(f"{app_config.name}.url_patterns must reference an iterable")
-    return list(patterns)
-
-
-def _declared_object(app_config: AppConfig, attribute: str, declaration: object) -> object:
-    """Import one object declared on an app config."""
-
-    if not isinstance(declaration, str):
-        raise ImproperlyConfigured(f"{app_config.name}.{attribute} must be a dotted import string")
-    dotted_path = declaration if declaration.startswith(f"{app_config.name}.") else f"{app_config.name}.{declaration}"
+    module_path = f"{app_config.name}.urls"
     try:
-        return import_string(dotted_path)
+        module = importlib.import_module(module_path)
     except ImportError as error:
-        raise ImproperlyConfigured(f"{app_config.name}.{attribute} references {dotted_path!r}") from error
+        raise ImproperlyConfigured(f"{module_path} failed to import") from error
+    patterns = getattr(module, "urlpatterns", None)
+    if patterns is None:
+        return []
+    if not isinstance(patterns, Iterable):
+        raise ImproperlyConfigured(f"{module_path}.urlpatterns must be iterable")
+    return list(patterns)
 
 
 urlpatterns = [pattern for app_config in apps.get_app_configs() for pattern in _addon_urlpatterns(app_config)]

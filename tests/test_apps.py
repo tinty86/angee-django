@@ -143,9 +143,8 @@ def test_config_attributes_are_owned_by_consumers() -> None:
     class ManifestOnlyConfig(AppConfig):
         name = "tests.manifest_only"
         label = "manifest_only"
-        schemas = {}
-        resources = {}
-        url_patterns = "urls.urlpatterns"
+        schemas: dict[str, object] = {}
+        resources: dict[str, object] = {}
 
     class DependencyNodeConfig(AppConfig):
         name = "tests.marked_addon"
@@ -160,5 +159,4 @@ def test_config_attributes_are_owned_by_consumers() -> None:
 
     assert manifest_only.schemas == {}
     assert manifest_only.resources == {}
-    assert manifest_only.url_patterns == "urls.urlpatterns"
     assert dependency_node.depends_on == ()

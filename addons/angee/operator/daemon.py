@@ -119,12 +119,7 @@ class OperatorDaemon:
 
     @staticmethod
     def _setting(name: str) -> str | None:
-        """Return the named Django setting as a non-empty string, or ``None``.
-
-        The host owns the env→settings bridge (its ``settings.py`` reads the
-        operator deployment vars the stack exports); the daemon reads only
-        settings, never the environment.
-        """
+        """Return the named Django setting as a non-empty string, or ``None``."""
 
         raw = getattr(settings, name, None)
         if raw is not None and (text := str(raw).strip()):

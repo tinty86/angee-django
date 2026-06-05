@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
 import os
-import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, cast
@@ -11,7 +11,7 @@ from typing import Any, cast
 from django.apps import AppConfig, apps
 from django.core.asgi import get_asgi_application
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.module_loading import import_string
+from django.utils.module_loading import module_has_submodule
 
 _PROJECT_DIR_ENV = "ANGEE_PROJECT_DIR"
 
@@ -29,23 +29,12 @@ def _project_dir() -> Path | None:
 
 
 def _bootstrap() -> None:
-    """Make Angee project settings importable before Django builds the app."""
+    """Point Django at Angee's composed settings module."""
 
     project_dir = _project_dir()
     if project_dir is not None:
         os.environ.setdefault(_PROJECT_DIR_ENV, str(project_dir))
-        _prepend_import_paths((project_dir / "addons", project_dir))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "angee.compose.settings")
-
-
-def _prepend_import_paths(paths: Iterable[Path]) -> None:
-    """Place existing paths at the front of ``sys.path`` preserving order."""
-
-    normalized = tuple(str(path.resolve()) for path in paths if path.exists())
-    for path in reversed(normalized):
-        if path in sys.path:
-            sys.path.remove(path)
-        sys.path.insert(0, path)
 
 
 def _websocket_urlpatterns() -> list[object]:
@@ -58,30 +47,22 @@ def _websocket_urlpatterns() -> list[object]:
 
 
 def _addon_websocket_urlpatterns(app_config: AppConfig) -> list[object]:
-    """Return WebSocket URL patterns declared by one addon."""
+    """Return WebSocket URL patterns from one addon's conventional ``asgi.py``."""
 
-    declaration = getattr(app_config, "asgi_websocket_urlpatterns", None)
-    if declaration is None:
+    if not module_has_submodule(app_config.module, "asgi"):
         return []
-    contribution = _declared_object(app_config, "asgi_websocket_urlpatterns", declaration)
+    module_path = f"{app_config.name}.asgi"
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as error:
+        raise ImproperlyConfigured(f"{module_path} failed to import") from error
+    contribution = getattr(module, "websocket_urlpatterns", None)
+    if contribution is None:
+        return []
     patterns = cast(Callable[[], object], contribution)() if callable(contribution) else contribution
     if not isinstance(patterns, Iterable):
-        raise ImproperlyConfigured(
-            f"{app_config.name}.asgi_websocket_urlpatterns must reference an iterable or callable"
-        )
+        raise ImproperlyConfigured(f"{module_path}.websocket_urlpatterns must be iterable or callable")
     return list(patterns)
-
-
-def _declared_object(app_config: AppConfig, attribute: str, declaration: object) -> object:
-    """Import one object declared on an app config."""
-
-    if not isinstance(declaration, str):
-        raise ImproperlyConfigured(f"{app_config.name}.{attribute} must be a dotted import string")
-    dotted_path = declaration if declaration.startswith(f"{app_config.name}.") else f"{app_config.name}.{declaration}"
-    try:
-        return import_string(dotted_path)
-    except ImportError as error:
-        raise ImproperlyConfigured(f"{app_config.name}.{attribute} references {dotted_path!r}") from error
 
 
 def _application() -> Any:

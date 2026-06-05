@@ -12,6 +12,4 @@ class GraphQLConfig(AppConfig):
     name = "angee.graphql"
     depends_on = ("angee.base", "channels", "daphne")
     emits_runtime_models = False
-    url_patterns = "urls.urlpatterns"
-    asgi_websocket_urlpatterns = "asgi.websocket_urlpatterns"
     schemas = None

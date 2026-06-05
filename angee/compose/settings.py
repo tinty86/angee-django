@@ -70,9 +70,9 @@ else:
                 "angee.compose.settings needs ANGEE_PROJECT_DIR or a settings.yaml/settings.py project root"
             )
 
-# 2. Make the project and conventional local addons importable before loading
-# Python settings. Custom addon dirs from YAML are added after yamlconf loads.
-prepend_import_paths((project_dir / "addons", project_dir))
+# 2. Make the project importable before loading Python settings. Addon source
+# roots are configured by ANGEE_ADDON_DIRS after yamlconf/defaults load.
+prepend_import_paths((project_dir,))
 
 # 3. Load or synthesize the project settings module.
 project_settings: ModuleType | None = None

@@ -1,137 +1,346 @@
 # The Composer
 
-The composer is Angee's Django composition hook. It turns project settings and
-addon packages into one normal Django app: final settings, installed apps,
-generated concrete models, URL routes, ASGI routes, GraphQL schemas, resources,
-and permission artifacts.
+The composer is Angee's Django composition layer. It turns a project's normal
+Django settings contract and installed addon apps into one runnable Django
+project: final settings, a single ordered app registry, generated concrete ORM
+models, stable URL/ASGI entrypoints, and lifecycle inputs for GraphQL,
+resources, permissions, and other addons.
 
-## Two Hooks
+The important constraint is that Angee stays Django-shaped. A project declares
+root addons with `INSTALLED_APPS`; addons are plain Django apps with extra
+`AppConfig` attributes for explicit lifecycle declarations; HTTP and WebSocket
+routes use Django-style conventional modules. Settings are ready before Django
+app loading; generated models are imported during Django app loading.
 
-Composition enters Django twice.
+## Flow
 
-1. **Settings hook** — Django imports `angee.compose.settings`.
-   This module finds the project settings contract (`settings.yaml` or
-   `settings.py` beside `manage.py`, with `ANGEE_PROJECT_DIR` and
-   `ANGEE_PROJECT_SETTINGS` available for non-default layouts), makes the
-   project importable, loads project settings with `django-yamlconf`, evaluates
-   Angee defaults, then calls `Composer(globals()).compose_settings()` to finish
-   the Django settings namespace in place.
-2. **App-loading hook** — Django reaches `angee.compose.apps.ComposeConfig`
-   during `apps.populate()`. Its `import_models()` hook calls
-   `Runtime.from_django().materialize_models()` to render and emit
-   `runtime/<label>/models.py`, then import the generated model modules so
-   concrete models register under their owning addon labels.
+Composition has three phases.
 
-Settings are final before Django starts app loading. Runtime model emission
-happens only during app loading, never while settings are being built.
+1. **Settings bootstrap** — Django imports `angee.compose.settings`.
+   This module finds the project root, loads project settings, applies Angee
+   defaults, resolves the addon graph, and mutates the settings namespace that
+   Django is importing.
+2. **App loading** — Django populates the resolved `INSTALLED_APPS`.
+   When it reaches `angee.compose.apps.ComposeConfig.import_models()`, Angee
+   checks or explicitly emits the generated runtime, then imports concrete model
+   modules so Django registers them under the source addon labels.
+3. **Serving and lifecycle commands** — stable framework entrypoints such as
+   `angee.urls`, `angee.asgi`, `schema`, `resources`, and `rebac sync` read the
+   finished Django app registry. URL/ASGI serving imports conventional
+   `urls.py` / `asgi.py`; GraphQL, resources, permissions, runtime emission,
+   and settings autoconfig consume only the `AppConfig` declarations or addon
+   modules they own.
 
-## Settings Phase
+Settings composition never imports source models. Runtime emission never decides
+settings. Normal Django startup checks generated runtime files and imports them;
+only `angee build` writes runtime source files.
 
-`angee.compose.settings` is a normal Django settings module. After loading
-project settings, it asks `Composer(globals()).compose_settings()` to produce:
+## Settings Bootstrap
 
-- `INSTALLED_APPS`
-- `MIDDLEWARE`
-- `AUTHENTICATION_BACKENDS`
-- `MIGRATION_MODULES`
+`angee.compose.settings` is a normal Django settings module. It runs linearly:
+
+1. Resolve the project root.
+   `ANGEE_PROJECT_DIR` wins. Otherwise a `manage.py` invocation uses the
+   directory containing `manage.py`. For direct imports, such as `daphne
+   angee.asgi:application`, the current working directory is accepted when it
+   contains `settings.yaml` or `settings.py`.
+2. Resolve the project settings module.
+   `ANGEE_PROJECT_SETTINGS` names it, defaulting to `settings`. If a
+   `settings.py` exists, Angee imports it. If only `settings.yaml` exists, Angee
+   synthesizes a `settings` module so Django still sees a normal settings
+   module.
+3. Prepend the project root to `sys.path`.
+   This makes project `settings.py` importable before Python settings are
+   loaded. Addon source roots are not guessed here; they come later from the
+   `ANGEE_ADDON_DIRS` setting.
+4. Load project YAML through `django-yamlconf`.
+   Python settings seed the module and `settings.yaml` overlays them. `BASE_DIR`
+   is the project-root reference used by YAML expansion.
+5. Reject unsafe yamlconf behavior.
+   Angee turns `django_yamlconf` logged errors into `ImproperlyConfigured`, so
+   malformed YAML, bad `{REF}` expansion, recursive references, invalid dotted
+   keys, and invalid `:append` / `:prepend` types fail settings import. Angee
+   also rejects yamlconf's implicit ancestor `settings.yaml` cascade; only the
+   project `settings.yaml`, `**INTERNAL**`, `**ENVIRONMENT**`, and an explicit
+   `YAMLCONF_CONFFILE` may contribute settings.
+6. Evaluate `angee.compose.defaults`.
+   Defaults are evaluated with project settings as the seed, then copied into
+   the importing settings namespace.
+7. Prepend configured addon roots.
+   `ANGEE_ADDON_DIRS` is now known, so those directories and the project root
+   are put on `sys.path`.
+8. Call `Composer(globals()).compose_settings()`.
+
+`angee.compose.defaults` owns overridable framework defaults:
+
+- `BASE_DIR`
+- `DEBUG`
+- `ALLOWED_HOSTS`
+- `USE_TZ`
+- `DEFAULT_AUTO_FIELD`
+- `INSTALLED_APPS` with `angee.compose` prepended
+- `ANGEE_RUNTIME_MODULE`
+- `ANGEE_DATA_DIR`
+- `ANGEE_ADDON_DIRS`
+- `STATIC_URL`, `STATIC_ROOT`, `MEDIA_URL`, `MEDIA_ROOT`
+- default SQLite `DATABASES`
+
+Project settings may override these defaults before the composer runs. Reserved
+composition invariants are not defaults; they are owned by `Composer`.
+
+## Composer
+
+`Composer` receives the already-loaded settings namespace and finishes the
+settings that depend on the addon graph.
+
+It reads `INSTALLED_APPS` as the project's root addon list. There is no separate
+`ANGEE_ADDONS` list. Entries may be normal Django app strings or already-created
+`AppConfig` instances.
+
+It requires `ANGEE_RUNTIME_DIR`, normalizes it to a `Path`, and then asks
+`AppGraph` to resolve the full ordered app set.
+
+`AppGraph` owns app dependency resolution:
+
+- creates apps through Django's `AppConfig.create()`
+- registers aliases by full app name and Django app label
+- expands each config's `depends_on` closure
+- allows dependencies to refer to either app name or label
+- rejects duplicate apps and duplicate aliases
+- rejects unknown dependencies as `ImproperlyConfigured`
+- rejects dependency cycles as `ImproperlyConfigured`
+- sorts dependency traversal so emitted settings are deterministic
+
+After graph resolution, `Composer` writes the final settings:
+
+- `INSTALLED_APPS` becomes the resolved list of `AppConfig` instances
 - `ROOT_URLCONF = "angee.urls"`
 - `ASGI_APPLICATION = "angee.asgi.application"`
-- Angee and library defaults not explicitly overridden by the project
+- `ANGEE_RUNTIME_DIR` becomes the normalized runtime path
+- the runtime parent directory is prepended to `sys.path`
+- `MIGRATION_MODULES` redirects each runtime-emitting app label to
+  `<ANGEE_RUNTIME_MODULE>.<label>.migrations`
 
-Angee treats `django-yamlconf` errors as composition errors. Malformed YAML,
-bad `{REF}` expansion, recursive references, invalid dotted keys, and invalid
-merge types fail settings import. Angee also rejects implicit ancestor
-`settings.yaml` files; only the project `settings.yaml` and an explicit
-`YAMLCONF_CONFFILE` may contribute file-backed settings.
+Django accepts `AppConfig` instances in `INSTALLED_APPS`, so Django app loading
+uses the exact config objects the composer already resolved instead of resolving
+strings a second time.
 
-Boot environment reads use `django-environ`. `ANGEE_PROJECT_DIR` points at the
-project root, `ANGEE_PROJECT_SETTINGS` names the Python settings module
-(default `settings`), and `ANGEE_ADDON_DIRS` lists project addon source roots.
-When both Python settings and `settings.yaml` exist, Python settings seed the
-module and YAML overlays it.
+These settings are composer-owned and project/addon autoconfig may not redefine
+them with conflicting values:
 
-The project declares root apps with Django's `INSTALLED_APPS`. The composer
-reads that setting from the namespace it is initializing, resolves entries
-through Django `AppConfig.create()`, expands each addon's `depends_on`, orders
-the app graph deterministically, and emits `INSTALLED_APPS` as those
-`AppConfig` instances. Django accepts config instances in `INSTALLED_APPS`, so
-`apps.populate()` uses them directly instead of calling `AppConfig.create()` a
-second time.
+- `ANGEE_RUNTIME_DIR`
+- `ASGI_APPLICATION`
+- `INSTALLED_APPS`
+- `MIGRATION_MODULES`
+- `ROOT_URLCONF`
 
-Each installed app may also provide `autoconfig.py`. `AutoConfig` applies each
-app's `SETTINGS` mapping in dependency order through `django-yamlconf`, so
-yamlconf owns environment overrides, provenance, dotted keys, and
-`:append` / `:prepend` merging. A plain key is a default and is skipped when the
-setting already exists; a marked key always merges:
+For `MIGRATION_MODULES`, unrelated project entries are preserved. If a project
+already defines a different migration module for an emitted runtime app, the
+composer fails fast.
 
-- `AUTH_USER_MODEL` sets a default when absent
-- `MIDDLEWARE:append` appends middleware entries
-- `DATABASES.default.OPTIONS.timeout` updates one nested dictionary value
-- `ANGEE_GRAPHQL_IDE` is contributed by the GraphQL addon
+## Autoconfig
 
-Strings containing literal braces must use yamlconf's `:raw` marker. Typed
-environment overrides must declare `FOO:jsonenv: true`; otherwise
-`YAMLCONF_FOO` is a string. `django_yamlconf` is installed in the composed app
-set, so `ycexplain` and `yclist` are the provenance tools for composed settings.
+After `INSTALLED_APPS` is resolved, `Composer` applies addon settings through
+`AutoConfig` in dependency order.
 
-Addon order from `depends_on` gives the contribution order. Entry-level
-before/after ordering is intentionally deferred; if it becomes necessary, it
-belongs in `AutoConfig` as an `OrderingRelationship(..., add_missing=False)`
-style layer, not in `Composer`.
+Each app may provide an optional `<app>.autoconfig` module with a `SETTINGS`
+mapping. Keys use `django-yamlconf` syntax directly:
 
-## App-Loading Phase
+```python
+SETTINGS = {
+    "AUTH_USER_MODEL": "iam.User",
+    "MIDDLEWARE:append": ["django.middleware.common.CommonMiddleware"],
+    "AUTHENTICATION_BACKENDS:append": ["angee.iam.auth.AngeeBackend"],
+    "DATABASES.default.OPTIONS.timeout": 20,
+    "ANGEE_GRAPHQL_IDE": "graphiql",
+}
+```
 
-The app-loading phase composes ORM models.
+Rules:
 
-`Runtime.from_django().materialize_models()` reads the installed `AppConfig`
-objects from Django's app registry, collects abstract source models, applies
-`extends`, checks field collisions, renders concrete model modules under
-`runtime/<label>/models.py`, writes stale files, and imports the generated model
-modules.
+- `SETTINGS` must be a mapping.
+- Composer-owned settings are rejected.
+- A plain top-level key is a default; if the setting already exists from
+  project settings, YAML, environment, defaults, or an earlier addon, the addon
+  default is skipped.
+- `:append` and `:prepend` always merge.
+- Dotted keys update nested dictionaries without replacing the whole parent.
+- Literal braces in string settings require yamlconf's `:raw` marker.
+- Generic typed yamlconf env overrides require `FOO:jsonenv: true`; otherwise
+  `YAMLCONF_FOO` is a string.
 
-The generated runtime package is output, not source. It exists because Django
-requires concrete model classes to live in a real importable module with a real
-migrations package. Migrations live under `runtime/<label>/migrations/` and are
-owned by Django's migration machinery.
+Declared Angee settings may also come from the process environment without
+exposing yamlconf's prefix in stack files. If an addon declares a top-level
+setting whose name starts with `ANGEE_`, and the same name exists in
+`os.environ`, `AutoConfig` overlays that value through `django-yamlconf` into
+the Django settings namespace. Apps still read `django.conf.settings`; app code
+does not read `os.environ`.
 
-## Addon Contract
+For example, the operator addon declares `ANGEE_OPERATOR_URL` and
+`ANGEE_OPERATOR_TOKEN` defaults in its autoconfig. A dev stack may export
+`ANGEE_OPERATOR_URL` and `ANGEE_OPERATOR_TOKEN`; Angee turns those into Django
+settings during composition. A project may also set the same keys in
+`settings.yaml`.
 
-An addon is a plain Django app. Its `AppConfig` declares package identity,
-ordering, and the lifecycle declarations it contributes:
+`django_yamlconf` is installed through the app graph because `angee.compose`
+depends on it, so `ycexplain` and `yclist` are the provenance tools for
+composed settings.
 
-- `depends_on` for app ordering
-- `emits_runtime_models` when the runtime should materialize its abstract source
-  models
-- `schemas`, `url_patterns`, `asgi_websocket_urlpatterns`, `resources`, and
-  `permissions` when that lifecycle has work to do
+Entry-level before/after ordering for list settings is intentionally not built
+yet. Current order is addon dependency order plus `:append` / `:prepend`. If a
+real addon needs item-level ordering later, that belongs in `AutoConfig`, not in
+`Composer`.
 
-Those declarations point at conventional addon modules and files:
+## Runtime Build And Import
 
-- `models.py` for abstract model sources
-- `schema.py` for GraphQL schema contributions
-- `urls.py` for HTTP route contributions
-- `asgi.py` for ASGI or websocket route contributions
-- `resources/` for resource data files
-- `permissions.zed` for REBAC permissions
+The generated runtime is output, not source. It exists because Django concrete
+model classes must live in importable modules with migration packages.
 
-Settings contributions live in optional `autoconfig.py`, not on `AppConfig`.
+`Runtime.from_django()` reads:
+
+- installed app configs from Django's app registry
+- only apps with `emits_runtime_models = True`
+- `ANGEE_RUNTIME_DIR`
+- `ANGEE_RUNTIME_MODULE`, defaulting to `runtime`
+
+`Runtime` groups abstract source models by app label, applies `extends`
+extension bases, rejects field collisions, renders concrete model source, and
+imports generated model modules.
+
+Generated files live under `runtime/`:
+
+- `runtime/__init__.py`
+- `runtime/<label>/__init__.py`
+- `runtime/<label>/models.py`
+- `runtime/<label>/migrations/__init__.py`
+
+Migration files themselves are not generated by Angee. Django's
+`makemigrations` owns `runtime/<label>/migrations/`, and Angee cleanup preserves
+migrations.
+
+`ComposeConfig.import_models()` is the Django app-loading hook:
+
+- For `manage.py angee build`, it selects `ANGEE_RUNTIME_ACTION=emit`, emits the
+  runtime, and imports generated models.
+- For `manage.py angee build --check`, it selects `ANGEE_RUNTIME_ACTION=check`,
+  checks drift, and imports generated models.
+- For normal startup, it checks drift and imports generated models.
+- If the runtime is missing or stale outside the emit action, startup fails with
+  a clear message telling the user to run `angee build`.
+
+The `angee build` command runs after Django setup. If app loading already
+performed the emit action, the command verifies with `runtime.check()` and
+prints success. `angee build --check` verifies without writes. `angee clean`
+deletes generated runtime sources behind the generated sentinel guard and
+preserves migrations.
+
+## Addon AppConfig Contract
+
+An Angee addon is a plain Django app. It does not subclass an Angee base config.
+Each lifecycle reads the smallest contract it owns. Routes use conventional
+modules; GraphQL, resources, permissions, ordering, and runtime emission remain
+explicit `AppConfig` declarations.
+
+Common attributes:
+
+- `depends_on`: app names or labels that must load before this app
+- `emits_runtime_models`: whether Angee should materialize abstract source
+  models for this app
+- `schemas`: GraphQL schema contribution declaration, owned by
+  `angee.graphql`
+- `resources`: resource file declarations, owned by `angee.resources`
+- `permissions`: permission file declaration, owned by REBAC sync
+
+Conventions:
+
+- abstract source models live in `models.py`
+- GraphQL schema contributions usually live in `schema.py`
+- HTTP route contributions live in `urls.py` as iterable `urlpatterns`
+- WebSocket route contributions live in `asgi.py` as iterable
+  `websocket_urlpatterns` or a callable returning them
+- resource data usually lives under `resources/`
+- permission declarations usually live in `permissions.zed`
+- settings contributions live in optional `autoconfig.py`
+
+The GraphQL addon is the routing example:
+
+```python
+class GraphQLConfig(AppConfig):
+    name = "angee.graphql"
+    depends_on = ("angee.base", "channels", "daphne")
+    emits_runtime_models = False
+    schemas = None
+```
+
+The IAM addon is the explicit declaration example:
+
+```python
+class IAMConfig(AppConfig):
+    name = "angee.iam"
+    depends_on = ("angee.resources", "angee.graphql", "django.contrib.auth")
+    emits_runtime_models = True
+    schemas = "schema.schemas"
+    permissions = "permissions.zed"
+    resources = {
+        "master": ({"path": "resources/master/010_iam.vendor.yaml", "adopt": "slug"},),
+    }
+```
 
 ## Serving
 
-`angee.urls` and `angee.asgi` are stable framework entrypoints, not generated
-runtime files. They use the same composed Django settings and include route
-contributions from installed addon modules after Django has built the app
-registry.
+`angee.urls` and `angee.asgi` are stable framework entrypoints. They are not
+generated into the runtime directory.
 
-GraphQL, resources, permissions, and other lifecycles follow the same rule: each
-pass reads only the app config declarations it owns.
+`angee.urls` walks `apps.get_app_configs()` in the composed dependency order.
+For each app with a `urls.py` module, it imports the module and extends the
+global `urlpatterns` with that module's `urlpatterns` when present.
+
+`angee.asgi` supports direct Daphne imports. It sets default
+`DJANGO_SETTINGS_MODULE=angee.compose.settings`, discovers `ANGEE_PROJECT_DIR`
+from the environment or a nearby project settings file, builds Django's ASGI
+application, then wraps it in Channels routing only when installed addons
+contribute WebSocket patterns through `asgi.py`.
+
+Other lifecycle commands follow the same shape: they enumerate Django's app
+registry and consume only the AppConfig declarations or conventional route
+modules they own. The composer does not keep a parallel addon registry.
+
+## Example Project Shape
+
+A minimal YAML project declares roots and project-owned paths:
+
+```yaml
+SECRET_KEY: notes-example-dev-key
+DEBUG: true
+ALLOWED_HOSTS:
+  - "*"
+
+INSTALLED_APPS:
+  - angee.integrate
+  - angee.operator
+  - example.notes
+
+ANGEE_ADDON_DIRS:
+  - "{BASE_DIR}/addons"
+ANGEE_RUNTIME_DIR: "{BASE_DIR}/runtime"
+ANGEE_DATA_DIR: "{BASE_DIR}/../../.angee/data"
+```
+
+The project does not declare `ROOT_URLCONF`, `ASGI_APPLICATION`, or
+`MIGRATION_MODULES` for emitted runtime apps. Those are composer-owned.
 
 ## Invariants
 
-- There is one Django app set and one boot path.
-- No `ANGEE_BUILD` flag and no build/run split.
+- `INSTALLED_APPS` is the project root addon contract.
+- There is one resolved Django app set and one boot path.
+- Settings are final before Django app loading starts.
 - Settings composition does not import source models.
 - Runtime emission does not decide settings.
+- Normal startup never writes generated runtime files.
+- Apps read `django.conf.settings`; process environment is normalized during
+  settings composition.
+- Routes are discovered by conventional `urls.py` / `asgi.py`; other lifecycle
+  declarations remain explicit AppConfig facts.
 - Generated `runtime/` is output; edit addon source, not emitted files.
-- Destructive cleanup may touch only the configured generated runtime directory
-  after verifying Angee's generated sentinel, and it must preserve migrations.
+- Runtime cleanup may delete only the configured generated runtime directory,
+  only after verifying Angee's generated sentinel, and must preserve migrations.

@@ -17,10 +17,8 @@ _ACTOR = SubjectRef.of("auth/user", "abc")
 
 # --- endpoint resolution ------------------------------------------------------
 #
-# The daemon resolves purely from Django settings; the host owns the env→settings
-# bridge (its ``settings.py`` reads the operator vars the stack exports). pytest's
-# ``settings`` fixture isolates settings per test, so resolution is deterministic
-# without scrubbing the process environment.
+# The daemon resolves from Django settings only. Dev stack env and project YAML
+# are normalized by ``angee.compose.settings`` before apps read configuration.
 
 
 def test_endpoint_defaults_to_same_origin_proxy() -> None:

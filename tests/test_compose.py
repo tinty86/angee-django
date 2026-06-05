@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 from django.apps import apps
 
+import angee.compose as compose_package
+import angee.compose.runtime as runtime_module
+from angee.compose.apps import ComposeConfig
 from angee.compose.runtime import Runtime
 
 
 def runtime_for(tmp_path: Path) -> Runtime:
     """Return a runtime that emits the installed resource addon."""
 
-    return Runtime.from_addons(
+    return Runtime(
         (apps.get_app_config("resources"),),
         runtime_dir=tmp_path / "runtime",
     )
@@ -40,7 +45,7 @@ def test_runtime_renders_iam_user_sources(tmp_path: Path) -> None:
     """The IAM addon emits a concrete swappable user model."""
 
     iam_config = apps.get_app_config("iam")
-    runtime = Runtime.from_addons(
+    runtime = Runtime(
         (apps.get_app_config("resources"), iam_config),
         runtime_dir=tmp_path / "runtime",
     )
@@ -68,6 +73,7 @@ def test_runtime_emit_and_check_detect_drift(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="stale"):
         runtime.check()
+    assert (tmp_path / "runtime" / "resources" / "models.py").read_text(encoding="utf-8") == "# stale\n"
 
 
 def test_runtime_check_ignores_schema_command_output(tmp_path: Path) -> None:
@@ -111,3 +117,91 @@ def test_clean_then_emit_is_idempotent(tmp_path: Path, settings: Any) -> None:
     assert "ANGEE GENERATED RUNTIME" in (runtime.runtime_dir / "__init__.py").read_text(encoding="utf-8")
     runtime.clean()
     runtime.clean()
+
+
+def _compose_config() -> ComposeConfig:
+    """Return a ComposeConfig bound enough for a direct import_models call."""
+
+    config = ComposeConfig("angee.compose", compose_package)
+    config.apps = apps
+    return config
+
+
+def test_compose_config_build_check_action_does_not_emit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pre-setup build check path checks and imports without writing."""
+
+    calls: list[str] = []
+
+    class FakeRuntime:
+        def emit(self) -> None:
+            calls.append("emit")
+
+        def check(self) -> None:
+            calls.append("check")
+
+        def import_generated_models(self) -> None:
+            calls.append("import")
+
+    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
+    monkeypatch.setattr(sys, "argv", ["manage.py", "angee", "build", "--check"])
+    monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
+
+    _compose_config().import_models()
+
+    assert calls == ["check", "import"]
+    assert os.environ["ANGEE_RUNTIME_ACTION"] == "check"
+
+
+def test_compose_config_build_action_emits_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The explicit build path emits while source models are safe to inspect."""
+
+    calls: list[str] = []
+
+    class FakeRuntime:
+        def emit(self) -> None:
+            calls.append("emit")
+
+        def check(self) -> None:
+            calls.append("check")
+
+        def import_generated_models(self) -> None:
+            calls.append("import")
+
+    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
+    monkeypatch.setattr(sys, "argv", ["manage.py", "angee", "build"])
+    monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
+
+    _compose_config().import_models()
+
+    assert calls == ["emit", "import"]
+    assert os.environ["ANGEE_RUNTIME_ACTION"] == "emit"
+
+
+def test_compose_config_default_action_checks_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Normal Django startup imports generated models only after drift check."""
+
+    calls: list[str] = []
+
+    class FakeRuntime:
+        def emit(self) -> None:
+            calls.append("emit")
+
+        def check(self) -> None:
+            calls.append("check")
+
+        def import_generated_models(self) -> None:
+            calls.append("import")
+
+    monkeypatch.delenv("ANGEE_RUNTIME_ACTION", raising=False)
+    monkeypatch.setattr(sys, "argv", ["manage.py", "runserver"])
+    monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
+
+    _compose_config().import_models()
+
+    assert calls == ["check", "import"]

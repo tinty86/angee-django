@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -48,7 +49,9 @@ class Command(BaseCommand):
                 runtime.check()
                 message = "angee build --check: ok"
             else:
-                runtime.emit()
+                if os.environ.get("ANGEE_RUNTIME_ACTION") != "emit":
+                    runtime.emit()
+                runtime.check()
                 message = "angee build: ok"
         except RuntimeError as error:
             raise CommandError(str(error)) from error

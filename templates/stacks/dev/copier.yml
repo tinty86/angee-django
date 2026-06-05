@@ -27,10 +27,6 @@ ANGEE_ROOT:
   type: str
   default: .angee
 
-django_settings:
-  type: str
-  default: angee.compose.settings
-
 django_port:
   type: int
   default: 8100

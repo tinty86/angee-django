@@ -13,6 +13,16 @@ from django.core.exceptions import ImproperlyConfigured
 from angee.compose.appgraph import AppGraph
 from angee.compose.autoconfig import AutoConfig
 
+COMPOSER_OWNED_SETTINGS = frozenset(
+    {
+        "ANGEE_RUNTIME_DIR",
+        "ASGI_APPLICATION",
+        "INSTALLED_APPS",
+        "MIGRATION_MODULES",
+        "ROOT_URLCONF",
+    }
+)
+
 
 class Composer:
     """Compose Angee's Django settings from project-declared apps."""
@@ -21,7 +31,6 @@ class Composer:
         """Store the settings namespace being composed."""
 
         self.namespace = namespace
-        self.app_configs: tuple[AppConfig, ...] = ()
 
     def compose_settings(self) -> None:
         """Apply Angee's composed settings into ``namespace``."""
@@ -47,8 +56,8 @@ class Composer:
             raise ImproperlyConfigured("settings must define ANGEE_RUNTIME_DIR")
         runtime_dir = self.path_value(runtime_setting)
 
-        self.app_configs = AppGraph().resolve(root_apps)
-        self.namespace["INSTALLED_APPS"] = list(self.app_configs)
+        app_configs = AppGraph().resolve(root_apps)
+        self.namespace["INSTALLED_APPS"] = list(app_configs)
         self.set_composer_setting("ROOT_URLCONF", "angee.urls")
         self.set_composer_setting("ASGI_APPLICATION", "angee.asgi.application")
         self.set_composer_setting("ANGEE_RUNTIME_DIR", runtime_dir)
@@ -57,18 +66,19 @@ class Composer:
             sys.path.remove(runtime_parent)
         sys.path.insert(0, runtime_parent)
 
-        autoconfig = AutoConfig(self.namespace)
-        for app_config in self.app_configs:
+        autoconfig = AutoConfig(self.namespace, reserved_settings=COMPOSER_OWNED_SETTINGS)
+        for app_config in app_configs:
             autoconfig.update_app(app_config)
 
         runtime_module = str(self.namespace.get("ANGEE_RUNTIME_MODULE", "runtime"))
-        runtime_model_labels = {
-            config.label for config in self.app_configs if getattr(config, "emits_runtime_models", False)
-        }
-        self.namespace["MIGRATION_MODULES"] = {
-            **dict(self.namespace.get("MIGRATION_MODULES", {})),
-            **{label: f"{runtime_module}.{label}.migrations" for label in sorted(runtime_model_labels)},
-        }
+        migration_modules = dict(self.namespace.get("MIGRATION_MODULES", {}))
+        for label in sorted(config.label for config in app_configs if getattr(config, "emits_runtime_models", False)):
+            module = f"{runtime_module}.{label}.migrations"
+            configured = migration_modules.get(label)
+            if configured is not None and configured != module:
+                raise ImproperlyConfigured(f"Project settings define Composer-owned MIGRATION_MODULES[{label!r}]")
+            migration_modules[label] = module
+        self.namespace["MIGRATION_MODULES"] = migration_modules
 
     def path_value(self, value: object) -> Path:
         """Return ``value`` as an absolute path."""
