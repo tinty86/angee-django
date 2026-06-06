@@ -1,5 +1,12 @@
 # IAM + Roles Lift — backend & frontend (roles-as-namespace)
 
+> **STATUS: SUPERSEDED — kept only as context for the active frontend lift.** The
+> roles-as-namespace core + the IAM Permission Hub shipped, but this plan's full
+> machine-identity design (`Service`/`ApiKey`/`ImpersonationEvent`, the runtime
+> `auth/role` hierarchy, `ANGEE_AUTH_SERVICE_TOKENS`) was **not** built. The
+> shipped milestone is in `/CHANGELOG.md`; the deferred patterns are in the
+> `iam-roles-lift-plan` memory. Retire this file once the frontend lift lands.
+
 Lift the auth/identity surface from P1 (`../angee-django-p1/addons/auth`) into this
 repo's **`iam`** addon, using the **roles-as-namespace** model we settled on the
 whiteboard. This is the backend counterpart the frontend plan's §1.6 auth UI

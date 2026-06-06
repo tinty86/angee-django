@@ -282,7 +282,7 @@ The IAM addon is the explicit declaration example:
 ```python
 class IAMConfig(AppConfig):
     name = "angee.iam"
-    depends_on = ("angee.resources", "angee.graphql", "django.contrib.auth")
+    depends_on = ("angee.resources", "angee.graphql", "django.contrib.auth", "django.contrib.sessions")
     schemas = "schema.schemas"
     permissions = "permissions.zed"
     resources = {

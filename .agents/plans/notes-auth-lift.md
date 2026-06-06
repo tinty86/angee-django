@@ -1,5 +1,10 @@
 # Notes + Auth Lift — consolidated plan (single source of truth)
 
+> **STATUS: backend DONE — kept as the single source of truth the active frontend
+> lift (`frontend-stack-upgrade-popover-dry.md`) still cites.** The backend/auth
+> surface shipped (see `/CHANGELOG.md`); retire this file together with the
+> frontend lift when that completes.
+
 This is the **one** plan. It supersedes and replaces every prior `.agents/plans/*.md`
 (M1 `lift-auth-graphql`, M2 `clean-build-schema-emit`/`m2-aggregates`/`m2-dev-stack`,
 the `2026-05-30-*` review docs, `m3-frontend`/`m3-frontend-production`, and the interim

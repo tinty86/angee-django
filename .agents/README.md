@@ -26,6 +26,7 @@ between sessions lives here and is committed; only genuinely throwaway scratch
   spawned agent.
 - `pm/` — project-management bookkeeping; `pm/templates/` holds reusable
   templates.
+- `tools/` — small repo-scoped scripts and helpers used by agentic workflows.
 
 ## Conventions
 

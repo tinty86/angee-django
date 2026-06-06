@@ -44,10 +44,10 @@ actually unique to your product.
   schema, one permission schema, typed TS.
 - **Data modeling** — abstract models with opaque `sqid` IDs and a `StateField`,
   plus drop-in mixins for timestamps, audit, history, revisions, archiving, and
-  tagging; `EncryptedTextField` for secrets at rest.
+  tagging; `EncryptedField` for secrets at rest.
 - **Permissions (REBAC)** — Zanzibar-shape authorization via `django-zed-rebac`:
   reads scope through the manager, writes check the instance; each addon ships a
-  `rebac.zed` fragment the composer merges and `rebac sync` loads.
+  `permissions.zed` fragment the composer merges and `rebac sync` loads.
 - **GraphQL API** — auto-CRUD, search, and aggregates from model `Meta`;
   real-time subscriptions (channels + daphne); persisted operations and
   typed-codegen output for the client.

@@ -46,7 +46,8 @@ on top.
 ```text
 .
 ├── angee/                  # `django-angee` — framework core + composer (PEP 420 namespace, no __init__.py)
-│   ├── base/               # framework core addon: runtime foundation, app contracts, GraphQL buckets
+│   ├── base/               # framework core: the model toolkit (abstract models, mixins, fields, managers)
+│   ├── graphql/            # the GraphQL runtime — schema buckets, auto-CRUD, subscriptions, SDL (`manage.py schema`)
 │   └── compose/            # the composer — emits the concrete runtime (`manage.py angee build`)
 ├── addons/angee/           # base addons shipped with Angee — same `angee.*` namespace, built on the core
 │   ├── iam/                # IAM base addon — identity, the swappable user model, connections, OIDC login
@@ -57,6 +58,7 @@ on top.
 ├── packages/               # frontend workspace (pnpm) — the shared React layer (`angee-react`)
 │   ├── sdk/                # `@angee/sdk` — headless bindings
 │   ├── base/               # `@angee/base` — the single rendered (styled) binding
+│   ├── storybook/          # `@angee/storybook` — the storybook-first component workshop
 │   └── e2e/                # `@angee/e2e` — Playwright e2e harness (`docs/testing/e2e.md`)
 ├── templates/              # Copier templates the operator renders
 │   ├── stacks/dev/         # dev Stack template (`angee init --dev`)

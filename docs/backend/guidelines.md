@@ -40,7 +40,7 @@ normalizes, or renames a Django object, delete it.
 
 ## Package Layering
 
-The framework core is four packages with a one-way dependency rule that a test
+The framework core is three packages with a one-way dependency rule that a test
 enforces:
 
 - `angee.base` is the model foundation (models, fields, mixins, managers,
@@ -49,12 +49,16 @@ enforces:
 - `angee.graphql` is the GraphQL runtime (schema assembly, Strawberry helpers,
   serving, subscriptions, and SDL commands). It may import `angee.base`, never
   `angee.compose`.
-- `angee.resources` is the resource subsystem. It may import `angee.base`, never
-  `angee.compose`.
 - `angee.compose` is the build-time composer. It may import `angee.base` and
   discover plain Django addon configs, but no serving module (`asgi`, `urls`,
   `views`, `consumers`, `signals`, `models`, `graphql`) may import
   `angee.compose`.
+
+The same one-way rule extends downward to the base addons under `addons/angee/`
+(`angee.resources`, `angee.iam`, `angee.integrate`, `angee.operator`): an addon
+may import `angee.base` and `angee.graphql`, but never `angee.compose`. The
+resource subsystem (`angee.resources`) is itself a base addon, not part of the
+core — it owns the resource ledger described below.
 
 Rules that follow from the layering:
 
