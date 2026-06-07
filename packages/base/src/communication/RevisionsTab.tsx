@@ -1,9 +1,5 @@
 import * as React from "react";
-import {
-  useResourceRevisions,
-  type ResourceRevision,
-  type UseResourceRevisionsResult,
-} from "@angee/sdk";
+import { useResourceRevisions, type ResourceRevision } from "@angee/sdk";
 
 import { EmptyState } from "../fragments/EmptyState";
 import { ErrorBanner } from "../fragments/ErrorBanner";
@@ -14,7 +10,6 @@ export interface RevisionsTabProps {
   model: string;
   recordId: string | null | undefined;
   enabled?: boolean;
-  result?: UseResourceRevisionsResult;
 }
 
 const REVISION_META_FIELDS = new Set(["id", "createdAt", "comment", "__typename"]);
@@ -23,15 +18,13 @@ export function RevisionsTab({
   enabled = true,
   model,
   recordId,
-  result,
 }: RevisionsTabProps): React.ReactElement {
   const activeRecordId = typeof recordId === "string" && recordId !== ""
     ? recordId
     : null;
-  const owned = useResourceRevisions(model, activeRecordId, {
-    enabled: result === undefined && enabled && activeRecordId !== null,
+  const revisions = useResourceRevisions(model, activeRecordId, {
+    enabled: enabled && activeRecordId !== null,
   });
-  const revisions = result ?? owned;
 
   if (!activeRecordId) {
     return (
@@ -80,7 +73,6 @@ export function RevisionsTab({
 }
 
 function revisionSnapshot(revision: ResourceRevision): unknown {
-  if (typeof revision.body === "string") return revision.body;
   for (const [field, value] of Object.entries(revision)) {
     if (!REVISION_META_FIELDS.has(field) && value != null) return value;
   }

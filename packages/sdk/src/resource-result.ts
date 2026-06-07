@@ -37,6 +37,7 @@ export interface DeletePreview {
   root: DeletePreviewNode;
 }
 
+/** One newest-first field snapshot returned for a record revision. */
 export interface ResourceRevision extends Row {
   id: string;
   createdAt: string;

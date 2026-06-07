@@ -101,6 +101,7 @@ describe("fieldMetadataFromSDL", () => {
     expect(required(metadata.types.NoteType).rootFields).toEqual({
       list: "notes",
       revisions: "noteRevisions",
+      revisionFields: ["createdAt", "comment", "body"],
     });
   });
 });

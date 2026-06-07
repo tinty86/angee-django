@@ -22,6 +22,15 @@ export interface SelectionField {
 }
 
 const GRAPHQL_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
+type RootFieldNameKey =
+  | "detail"
+  | "list"
+  | "aggregate"
+  | "groupBy"
+  | "revisions"
+  | "create"
+  | "update"
+  | "delete";
 
 function assertName(name: string): string {
   if (!GRAPHQL_NAME.test(name)) {
@@ -99,7 +108,7 @@ export function typeNameForModel(modelLabel: string): string {
 function requireRootField(
   modelLabel: string,
   rootFields: ModelRootFieldMetadata | null | undefined,
-  key: keyof ModelRootFieldMetadata,
+  key: RootFieldNameKey,
 ): string {
   const field = rootFields?.[key];
   if (!field) {

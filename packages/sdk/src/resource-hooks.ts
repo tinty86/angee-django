@@ -3,11 +3,7 @@ import { useMutation as useUrqlMutation } from "urql";
 
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
 import { useDocumentQuery } from "./document-query";
-import {
-  useModelRootFields,
-  useSchemaFieldMetadata,
-  type SchemaFieldMetadata,
-} from "./model-metadata";
+import { useModelRootFields } from "./model-metadata";
 import {
   useInvalidateModels,
   useRegisterModelRefetch,
@@ -31,7 +27,6 @@ import {
   clampPageSize,
   DEFAULT_PAGE_SIZE,
   type MutationAction,
-  typeNameForModel,
 } from "./selection";
 import type {
   ResourceFilter,
@@ -287,12 +282,8 @@ export function useResourceRevisions(
   options: UseResourceRevisionsOptions = {},
 ): UseResourceRevisionsResult {
   const { enabled = true } = options;
-  const metadata = useSchemaFieldMetadata();
   const rootFields = useModelRootFields(modelLabel);
-  const revisionFields = useMemo(
-    () => revisionSelectionFields(modelLabel, metadata),
-    [modelLabel, metadata],
-  );
+  const revisionFields = rootFields?.revisionFields ?? [];
   const active =
     enabled && Boolean(modelLabel) && Boolean(id) && rootFields !== null;
 
@@ -315,15 +306,6 @@ export function useResourceRevisions(
     error: run.error,
     refetch: run.refetch,
   };
-}
-
-function revisionSelectionFields(
-  modelLabel: string,
-  metadata: SchemaFieldMetadata,
-): readonly string[] {
-  const revisionType = metadata.types[`${typeNameForModel(modelLabel)}Revision`];
-  if (!revisionType) return ["createdAt", "comment"];
-  return Object.keys(revisionType.fields).filter((field) => field !== "id");
 }
 
 export interface ResourceMutationVariables {

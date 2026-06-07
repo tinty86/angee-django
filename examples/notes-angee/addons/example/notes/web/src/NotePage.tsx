@@ -92,16 +92,6 @@ export function NotePage(): React.ReactElement {
   const revisions = useResourceRevisions(MODEL, activeRecordId, {
     enabled: activeRecordId !== null,
   });
-  const revisionResult = React.useMemo(
-    () => revisions,
-    [
-      revisions.count,
-      revisions.error,
-      revisions.fetching,
-      revisions.refetch,
-      revisions.revisions,
-    ],
-  );
   const tabs = React.useMemo(
     () => [
       {
@@ -135,16 +125,10 @@ export function NotePage(): React.ReactElement {
         label: "Activity",
         icon: "activity",
         count: revisions.count,
-        children: (
-          <RevisionsTab
-            model={MODEL}
-            recordId={activeRecordId}
-            result={revisionResult}
-          />
-        ),
+        children: <RevisionsTab model={MODEL} recordId={activeRecordId} />,
       },
     ] satisfies readonly ChatterTab[],
-    [activeRecordId, revisionResult],
+    [activeRecordId, revisions.count],
   );
   const chatter = React.useMemo(() => ({ tabs }), [tabs]);
   useChatterContent(chatter);

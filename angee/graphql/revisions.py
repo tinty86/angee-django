@@ -15,7 +15,13 @@ from strawberry.scalars import JSON
 
 from angee.base.mixins import RevisionMixin
 from angee.base.models import instance_from_public_id
+from angee.graphql.access import gated_read_fields
 from angee.graphql.introspection import django_model, surface_name
+
+_SURFACE_CACHE: dict[tuple[type[models.Model], str], type] = {}
+_REVISION_TYPE_CACHE: dict[tuple[type[models.Model], str], Any] = {}
+_REVISION_FIRST_DEFAULT = 50
+_REVISION_FIRST_MAX = 200
 
 
 def revisions(
@@ -30,33 +36,42 @@ def revisions(
         raise ImproperlyConfigured(f"revisions({surface_name(node)}) needs a RevisionMixin model")
     if not model.revisioned_fields:
         raise ImproperlyConfigured(f"revisions({surface_name(node)}) needs revisioned_fields")
+    _validate_revision_visibility(model)
 
     singular = name or model._meta.model_name
+    cache_key = (model, singular)
+    if cached := _SURFACE_CACHE.get(cache_key):
+        return cached
+
     attr = f"{singular}_revisions"
-    revision_type = _revision_type(model)
+    revision_type = _revision_type(model, singular)
     annotations: dict[str, Any] = {attr: _list_annotation(revision_type)}
     namespace: dict[str, Any] = {
         "__annotations__": annotations,
         attr: strawberry.field(resolver=_revision_resolver(model, revision_type)),
     }
-    type_name = f"{singular[:1].upper()}{singular[1:]}RevisionQuery"
+    type_name = f"{_type_stem(singular)}RevisionQuery"
     surface = type(type_name, (), namespace)
-    return strawberry.type(surface)
+    typed_surface = strawberry.type(surface)
+    _SURFACE_CACHE[cache_key] = typed_surface
+    return typed_surface
 
 
 def _revision_resolver(model: type[models.Model], revision_type: Any) -> Any:
     """Return a field resolver for one model's newest-first revisions."""
 
-    def resolve(id: relay.GlobalID) -> list[Any]:
+    def resolve(id: relay.GlobalID, first: int = _REVISION_FIRST_DEFAULT) -> list[Any]:
         """Return actor-visible revisions for one model instance."""
 
         instance = _resolve_instance(model, id.node_id)
         if instance is None:
             return []
-        return [revision_type(version) for version in cast(Any, instance).revisions]
+        versions = cast(Any, instance).revisions[:_revision_first(first)]
+        return [revision_type(version) for version in versions]
 
     resolve.__annotations__ = {
         "id": relay.GlobalID,
+        "first": int,
         "return": _list_annotation(revision_type),
     }
     return resolve
@@ -74,8 +89,12 @@ def _resolve_instance(
         return None
 
 
-def _revision_type(model: type[models.Model]) -> Any:
+def _revision_type(model: type[models.Model], singular: str) -> Any:
     """Return the Strawberry revision projection for ``model``."""
+
+    cache_key = (model, singular)
+    if cached := _REVISION_TYPE_CACHE.get(cache_key):
+        return cached
 
     annotations: dict[str, Any] = {
         "id": strawberry.ID,
@@ -100,14 +119,39 @@ def _revision_type(model: type[models.Model]) -> Any:
         "__init__": __init__,
         "__module__": __name__,
     }
-    type_name = f"{model._meta.object_name}Revision"
-    return strawberry.type(type(type_name, (), namespace))
+    type_name = f"{_type_stem(singular)}Revision"
+    revision_type = strawberry.type(type(type_name, (), namespace))
+    _REVISION_TYPE_CACHE[cache_key] = revision_type
+    return revision_type
+
+
+def _validate_revision_visibility(model: type[models.Model]) -> None:
+    """Fail before schema build when revision snapshots would bypass redaction."""
+
+    gated = sorted(gated_read_fields(model) & set(model.revisioned_fields))
+    if gated:
+        raise ImproperlyConfigured(
+            f"{model._meta.label}: revisioned_fields {gated} are field-gated "
+            "reads; exposing revision snapshots would leak gated values"
+        )
 
 
 def _list_annotation(item_type: Any) -> Any:
     """Return a runtime ``list[item_type]`` annotation for Strawberry."""
 
     return list[item_type]
+
+
+def _type_stem(singular: str) -> str:
+    """Return the GraphQL type stem for a generated revision surface name."""
+
+    return singular[:1].upper() + singular[1:]
+
+
+def _revision_first(first: int) -> int:
+    """Return a non-negative revision query limit capped by the public contract."""
+
+    return min(max(first, 0), _REVISION_FIRST_MAX)
 
 
 def _revisioned_field(
@@ -122,6 +166,8 @@ def _revisioned_field(
         raise ImproperlyConfigured(f"{model._meta.label}.revisioned_fields includes unknown field {name!r}") from error
     if not isinstance(field, models.Field):
         raise ImproperlyConfigured(f"{model._meta.label}.revisioned_fields includes non-column field {name!r}")
+    if field.is_relation:
+        raise ImproperlyConfigured(f"{model._meta.label}.revisioned_fields includes relation field {name!r}")
     return field
 
 

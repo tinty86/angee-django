@@ -52,6 +52,8 @@ export interface ModelRootFieldMetadata {
   groupBy?: string;
   /** Query field returning newest-first field revisions for one record. */
   revisions?: string;
+  /** Selectable fields on the revision projection type, excluding `id`. */
+  revisionFields?: readonly string[];
   /** Mutation field creating one record. */
   create?: string;
   /** Mutation field updating one record. */
@@ -216,8 +218,10 @@ function rootFieldsForType(
       if (rootFields.groupBy === undefined && isGroupByField(field, type)) {
         rootFields.groupBy = name;
       }
-      if (rootFields.revisions === undefined && isRevisionsField(field, type)) {
+      const revision = revisionFieldMetadata(field, type);
+      if (rootFields.revisions === undefined && revision) {
         rootFields.revisions = name;
+        rootFields.revisionFields = revision.fields;
       }
     }
   }
@@ -281,12 +285,18 @@ function isGroupByField(
   return "key" in rowFields && "count" in rowFields;
 }
 
-function isRevisionsField(
+function revisionFieldMetadata(
   field: GraphQLField<unknown, unknown>,
   type: GraphQLObjectType,
-): boolean {
-  return hasArgument(field, "id")
-    && returnsCollectionOf(field.type, `${inputBaseName(type)}Revision`);
+): { fields: readonly string[] } | null {
+  if (!hasArgument(field, "id")) return null;
+  const revisionType = listItemObjectType(field.type);
+  if (!revisionType || revisionType.name !== `${inputBaseName(type)}Revision`) {
+    return null;
+  }
+  return {
+    fields: Object.keys(revisionType.getFields()).filter((name) => name !== "id"),
+  };
 }
 
 function returnsDirectObject(type: GraphQLOutputType, name: string): boolean {
