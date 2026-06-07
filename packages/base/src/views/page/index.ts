@@ -117,6 +117,7 @@ function columnDescriptor<
     field: props.field,
     ...(props.header !== undefined ? { header: props.header } : {}),
     ...(props.widget !== undefined ? { widget: props.widget } : {}),
+    ...(props.options !== undefined ? { options: props.options } : {}),
     ...(props.sortable !== undefined ? { sortable: props.sortable } : {}),
     ...(props.aggregate !== undefined ? { aggregate: props.aggregate } : {}),
     ...(props.align !== undefined ? { align: props.align } : {}),

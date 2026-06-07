@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Row } from "@angee/sdk";
+import type { ModelFieldMetadata, ModelMetadata, Row } from "@angee/sdk";
 
 import type {
   DataToolbarCustomFilter,
@@ -22,10 +22,15 @@ import {
   readPath,
   statusLabel,
 } from "./ListInternals";
+import { titleCase } from "../lib/titleCase";
 import type { ColumnDescriptor } from "./page";
+import { enumOptions } from "./model-metadata-defaults";
+
+const DATE_GROUP_GRANULARITIES = ["year", "quarter", "month", "week", "day"] as const;
 
 export function buildGroupOptions<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
+  metadata: ModelMetadata | null,
   defaultGroups: DataViewGroup | readonly DataViewGroup[] | null | undefined,
 ): readonly DataToolbarGroupOption[] {
   const options: DataToolbarGroupOption[] = [];
@@ -37,28 +42,35 @@ export function buildGroupOptions<TRow extends Row>(
   };
 
   for (const defaultGroup of defaultGroupList(defaultGroups)) {
+    const field = metadata?.fields[defaultGroup.field];
+    const type = dateGroupType(defaultGroup.field, field) ? "date" : "value";
     addOption({
       id: defaultGroup.field,
-      label: groupFieldLabel(defaultGroup.field),
+      label: field?.label ?? groupFieldLabel(defaultGroup.field),
       group: defaultGroup,
-      type: looksLikeDateField(defaultGroup.field) ? "date" : "value",
+      type,
+      ...(type === "date" ? { granularities: DATE_GROUP_GRANULARITIES } : {}),
     });
   }
 
   for (const column of columns) {
-    if (looksLikeDateField(column.field)) {
+    const field = metadata?.fields[column.field];
+    if (dateGroupType(column.field, field)) {
       addOption({
         id: column.field,
-        label: groupFieldLabel(column.field),
+        // Group labels are field-derived (groupFieldLabel trims a trailing
+        // "At"), independent of the column's display header.
+        label: field?.label ?? groupFieldLabel(column.field),
         group: { field: column.field, granularity: "day" },
         type: "date",
+        granularities: DATE_GROUP_GRANULARITIES,
       });
       continue;
     }
-    if (supportsChoiceFacet(column)) {
+    if (supportsChoiceFacet(column, metadata)) {
       addOption({
         id: column.field,
-        label: column.header ?? groupFieldLabel(column.field),
+        label: field?.label ?? groupFieldLabel(column.field),
         group: { field: column.field },
         type: "value",
       });
@@ -84,62 +96,110 @@ function isDataViewGroupList(
 export function buildFilterOptions<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   rows: readonly TRow[],
+  fields: readonly DataToolbarFilterField[],
 ): readonly DataToolbarFilterOption[] {
+  const filterFields = new Map(fields.map((field) => [field.field ?? field.id, field]));
   return columns.flatMap((column) => {
-    if (!supportsChoiceFacet(column)) return [];
-    return statusValues(column, rows).map((value) => ({
-      id: `${column.field}:${value}`,
-      label: statusLabel(value),
-      chipLabel: statusLabel(value),
-      filter: { [column.field]: { exact: value } },
+    const filterField = filterFields.get(column.field);
+    if (filterField?.type !== "selection") return [];
+    return selectionOptions(column, rows, filterField).map((option) => ({
+      id: `${column.field}:${option.value}`,
+      label: option.label,
+      chipLabel: option.label,
+      filter: { [column.field]: { exact: option.value } },
     }));
   });
+}
+
+function selectionOptions<TRow extends Row>(
+  column: ColumnDescriptor<TRow>,
+  rows: readonly TRow[],
+  field: DataToolbarFilterField,
+): readonly { value: string; label: ReactNode }[] {
+  if (field.options && field.options.length > 0) return field.options;
+  return statusValues(column, rows).map((value) => ({
+    value,
+    label: statusLabel(value),
+  }));
 }
 
 export function buildFilterFields<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   rows: readonly TRow[],
+  metadata: ModelMetadata | null,
 ): readonly DataToolbarFilterField[] {
   const fields: DataToolbarFilterField[] = [];
   for (const column of columns) {
-    if (column.field === DEFAULT_TEXT_FILTER_FIELD) {
+    const field = metadata?.fields[column.field];
+    const filterType = filterFieldType(column, field);
+    if (!filterType) continue;
+    if (filterType === "selection") {
       fields.push({
         id: column.field,
         field: column.field,
-        label: column.header ?? groupFieldLabel(column.field),
-        type: "text",
-      });
-      continue;
-    }
-    if (looksLikeDateField(column.field)) {
-      fields.push({
-        id: column.field,
-        field: column.field,
-        label: column.header ?? groupFieldLabel(column.field),
-        type: "datetime",
-      });
-      continue;
-    }
-    if (supportsChoiceFacet(column)) {
-      fields.push({
-        id: column.field,
-        field: column.field,
-        label: column.header ?? groupFieldLabel(column.field),
+        label: column.header ?? field?.label ?? titleCase(column.field),
         type: "selection",
-        options: statusValues(column, rows).map((value) => ({
-          value,
-          label: statusLabel(value),
-        })),
+        options: enumOptions(field).length > 0
+          ? enumOptions(field)
+          : statusValues(column, rows).map((value) => ({
+              value,
+              label: statusLabel(value),
+            })),
       });
+      continue;
     }
+    fields.push({
+      id: column.field,
+      field: column.field,
+      label: column.header ?? field?.label ?? titleCase(column.field),
+      type: filterType,
+    });
   }
   return fields;
+}
+
+function filterFieldType<TRow extends Row>(
+  column: ColumnDescriptor<TRow>,
+  field: ModelFieldMetadata | undefined,
+): DataToolbarFilterField["type"] | null {
+  if (field?.kind === "enum") return "selection";
+  if (field?.kind === "scalar" && field.scalar === "String") return "text";
+  if (field?.kind === "scalar" && field.scalar === "DateTime") return "datetime";
+  if (field?.kind === "scalar" && field.scalar === "Date") return "date";
+  if (column.field === DEFAULT_TEXT_FILTER_FIELD) return "text";
+  if (looksLikeDateField(column.field)) return "datetime";
+  if (supportsChoiceFacet(column, null)) return "selection";
+  return null;
+}
+
+function dateGroupType(
+  fieldName: string,
+  field: ModelFieldMetadata | undefined,
+): boolean {
+  if (field?.kind === "scalar") {
+    return field.scalar === "DateTime" || field.scalar === "Date";
+  }
+  return looksLikeDateField(fieldName);
+}
+
+export function supportsChoiceFacet<TRow extends Row>(
+  column: ColumnDescriptor<TRow>,
+  metadata: ModelMetadata | null,
+): boolean {
+  const field = metadata?.fields[column.field];
+  if (field?.kind === "enum") return true;
+  if (column.options && column.options.length > 0) return true;
+  if (column.tone) return true;
+  return column.field === "status";
 }
 
 function statusValues<TRow extends Row>(
   column: ColumnDescriptor<TRow>,
   rows: readonly TRow[],
 ): string[] {
+  if (column.options && column.options.length > 0) {
+    return column.options.map((option) => option.value);
+  }
   if (column.tone) {
     const toneValues = Object.keys(column.tone).filter(
       (key) => key === key.toUpperCase(),
@@ -152,15 +212,6 @@ function statusValues<TRow extends Row>(
     if (typeof value === "string" && value.trim()) values.add(value);
   }
   return [...values].sort((left, right) => left.localeCompare(right));
-}
-
-export function supportsChoiceFacet<TRow extends Row>(
-  column: ColumnDescriptor<TRow>,
-): boolean {
-  if (column.tone) return true;
-  // TODO: derive facet/group fields from addon/schema choices, not a
-  // hardcoded lifecycle status field.
-  return column.field === "status";
 }
 
 export function activeFilterIdsFor(
@@ -216,7 +267,7 @@ export function customFilterChipsFor(
       chips.push({
         id: customFilterId(field, operator),
         label: customFilterChipLabel({
-          fieldLabel: fieldLabels.get(field) ?? groupFieldLabel(field),
+          fieldLabel: fieldLabels.get(field) ?? titleCase(field),
           operator,
           value: operatorValue,
         }),

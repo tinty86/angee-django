@@ -10,18 +10,13 @@ import {
   Group,
   NEW_RECORD_ID,
   Spinner,
-  type DataToolbarFilterField,
-  type DataToolbarFilterOption,
-  type DataToolbarGroupOption,
   type DataViewDefaultGroups,
   type RecordSmartButtonDescriptor,
   useChatterContent,
 } from "@angee/base";
-import { useAuthoredQuery, useResourceRecord } from "@angee/sdk";
+import { useAuthoredQuery, useModelMetadata, useResourceRecord } from "@angee/sdk";
 import { useParams } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
-
-import { NOTE_STATUS_OPTIONS, NOTE_STATUS_TONES } from "./note-status";
 
 const MODEL = "notes.Note";
 const NOTE_REVISIONS_QUERY = `
@@ -50,53 +45,6 @@ type NoteRevisionsVariables = Record<string, unknown> & {
   id: string;
 };
 
-const NOTE_FILTERS: readonly DataToolbarFilterOption[] = NOTE_STATUS_OPTIONS.map(
-  (option) => ({
-    id: `status:${option.value}`,
-    label: option.label,
-    chipLabel: option.label,
-    filter: { status: { exact: option.value } },
-  }),
-);
-
-const NOTE_FILTER_FIELDS: readonly DataToolbarFilterField[] = [
-  {
-    id: "title",
-    field: "title",
-    label: "Title",
-    type: "text",
-  },
-  {
-    id: "status",
-    field: "status",
-    label: "Status",
-    type: "selection",
-    options: NOTE_STATUS_OPTIONS,
-  },
-  {
-    id: "updatedAt",
-    field: "updatedAt",
-    label: "Updated At",
-    type: "datetime",
-  },
-];
-
-const NOTE_GROUPS: readonly DataToolbarGroupOption[] = [
-  {
-    id: "updatedAt",
-    label: "Updated",
-    group: { field: "updatedAt", granularity: "year" },
-    type: "date",
-    granularities: ["year", "quarter", "month", "week", "day"],
-  },
-  {
-    id: "status",
-    label: "Status",
-    group: { field: "status" },
-    type: "value",
-  },
-];
-
 const NOTE_DEFAULT_GROUPS = {
   list: { field: "updatedAt", granularity: "month" },
   board: { field: "status" },
@@ -113,49 +61,29 @@ const RECORD_SUBTITLE_FIELDS: readonly string[] = [
 const noteList = (
   <List
     model={MODEL}
-    filters={NOTE_FILTERS}
-    filterFields={NOTE_FILTER_FIELDS}
-    groupOptions={NOTE_GROUPS}
     list={GroupListView}
     defaultGroups={NOTE_DEFAULT_GROUPS}
     pageSize={50}
     order={{ updatedAt: "DESC" }}
   >
-    <Column field="title" header="Title" />
-    <Column field="tags" header="Tags" sortable={false} />
-    <Column field="status" header="Status" tone={NOTE_STATUS_TONES} />
-    <Column
-      field="wordCount"
-      header="Word Count"
-      align="right"
-      aggregate="sum"
-    />
-    <Column field="updatedAt" header="Updated At" />
+    <Column field="title" />
+    <Column field="tags" sortable={false} />
+    <Column field="status" widget="statusBadge" />
+    <Column field="wordCount" align="right" aggregate="sum" />
+    <Column field="updatedAt" />
   </List>
 );
 
 const noteForm = (
   <Form model={MODEL} returning={RECORD_SUBTITLE_FIELDS}>
-    <Field name="title" label="Title" widget="text" title />
-    <Field
-      name="status"
-      label="Status"
-      widget="statusbar"
-      options={NOTE_STATUS_OPTIONS}
-    />
+    <Field name="title" widget="text" title />
+    <Field name="status" widget="statusbar" />
     <Group label="Details" columns={2}>
-      <Field
-        name="createdByLabel"
-        label="Owner"
-        widget="userRef"
-        readOnly
-      />
+      <Field name="createdByLabel" label="Owner" widget="userRef" readOnly />
       <Field name="reminderAt" label="Reminder" widget="datetime" />
-      <Field name="tags" label="Tags" widget="tagInput" />
+      <Field name="tags" widget="tagInput" />
     </Group>
-    <Group label="Body">
-      <Field name="body" label="Body" widget="markdown.editor" />
-    </Group>
+    <Field name="body" widget="markdown.editor" />
   </Form>
 );
 
@@ -169,11 +97,14 @@ const recordSmartButtons = [
 /** The record crumb for `/notes/$id` — resolves the note title from the cache. */
 export function NoteCrumb({ id }: { id: string }): React.ReactElement {
   const isNew = id === NEW_RECORD_ID;
+  const metadata = useModelMetadata(MODEL);
+  const representationField = metadata?.recordRepresentation ?? "title";
   const { fetching, record } = useResourceRecord(MODEL, isNew ? null : id, {
     enabled: !isNew && id !== "",
-    fields: ["title"],
+    fields: [representationField],
   });
-  const title = typeof record?.title === "string" ? record.title.trim() : "";
+  const value = record?.[representationField];
+  const title = typeof value === "string" ? value.trim() : "";
   if (isNew) return <>New</>;
   if (fetching) return <>…</>;
   return <>{title || "Note"}</>;

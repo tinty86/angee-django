@@ -5,7 +5,6 @@ import {
   createApp,
   type BaseAddon,
 } from "@angee/base";
-import { cacheConfigFromSDL } from "@angee/sdk";
 import notes from "@angee-example/notes-web";
 import iam from "@angee/iam";
 import operator from "@angee/operator";
@@ -38,8 +37,8 @@ createApp({
     public: { schema: "public" },
   },
   schemas: {
-    public: { url: "/graphql/public/", cache: cacheConfigFromSDL(publicSDL) },
-    console: { url: "/graphql/console/", cache: cacheConfigFromSDL(consoleSDL) },
+    public: { url: "/graphql/public/", sdl: publicSDL },
+    console: { url: "/graphql/console/", sdl: consoleSDL },
   },
   // The console is the primary surface, so it is the default schema; the public
   // login shell pins itself back to the public client above.

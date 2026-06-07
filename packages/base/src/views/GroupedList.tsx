@@ -16,6 +16,7 @@ import {
   useResourceList,
   type AggregateBucket,
   type GroupByDimension,
+  type ModelMetadata,
   type ResourceTypeName,
   type Row,
   type UseResourceListOptions,
@@ -92,6 +93,7 @@ export interface GroupedListBodyProps<TRow extends Row> {
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   emptyMessage: React.ReactNode;
+  modelMetadata?: ModelMetadata | null;
   onPagerStateChange: (state: GroupPagerState) => void;
 }
 
@@ -114,6 +116,7 @@ export function GroupedListBody<TRow extends Row>({
   rowHref,
   onRowClick,
   emptyMessage,
+  modelMetadata = null,
   onPagerStateChange,
 }: GroupedListBodyProps<TRow>): React.ReactElement {
   const colSpan = Math.max(1, visibleColumnCount + 1);
@@ -181,6 +184,7 @@ export function GroupedListBody<TRow extends Row>({
             rowHref={rowHref}
             onRowClick={onRowClick}
             emptyMessage={emptyMessage}
+            modelMetadata={modelMetadata}
             onPagerStateChange={handlePagerStateChange}
           />
           {measures.length > 0 ? (
@@ -214,6 +218,7 @@ interface GroupRenderProps<TRow extends Row> {
   interactive: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
+  modelMetadata?: ModelMetadata | null;
 }
 
 interface GroupLevelProps<TRow extends Row> extends GroupRenderProps<TRow> {
@@ -253,6 +258,7 @@ function GroupLevel<TRow extends Row>({
   interactive,
   rowHref,
   onRowClick,
+  modelMetadata = null,
 }: GroupLevelProps<TRow>): React.ReactElement | null {
   const axis = axes[0];
   const currentGroup = groups[0];
@@ -409,6 +415,7 @@ function GroupLevel<TRow extends Row>({
             rowHref={rowHref}
             onRowClick={onRowClick}
             emptyMessage={emptyMessage}
+            modelMetadata={modelMetadata}
             expanded={expandedKeys.has(key)}
             page={pageByKey[key] ?? 1}
             onToggle={toggleExpanded}
@@ -539,6 +546,7 @@ function GroupSection<TRow extends Row>({
   interactive,
   rowHref,
   onRowClick,
+  modelMetadata = null,
   expanded,
   page,
   bodyId,
@@ -549,7 +557,7 @@ function GroupSection<TRow extends Row>({
   const regionId = React.useId();
   const expandable = bucket.filter !== undefined && bucket.filter !== null;
   const active = expanded && expandable;
-  const label = bucketLabel(bucket, group);
+  const label = bucketLabel(bucket, group, modelMetadata);
   const cumulativeFilter = React.useMemo(
     () => combineFilters(parentFilter, bucket.filter),
     [bucket.filter, parentFilter],
@@ -628,6 +636,7 @@ function GroupSection<TRow extends Row>({
           rowHref={rowHref}
           onRowClick={onRowClick}
           emptyMessage={emptyMessage}
+          modelMetadata={modelMetadata}
         />
       ) : (
         <LeafGroupSection
@@ -689,6 +698,7 @@ function BranchGroupSection<TRow extends Row>({
   interactive,
   rowHref,
   onRowClick,
+  modelMetadata = null,
 }: BranchGroupSectionProps<TRow>): React.ReactElement | null {
   return (
     <GroupLevel
@@ -713,6 +723,7 @@ function BranchGroupSection<TRow extends Row>({
       rowHref={rowHref}
       onRowClick={onRowClick}
       emptyMessage={emptyMessage}
+      modelMetadata={modelMetadata}
     />
   );
 }
@@ -904,9 +915,10 @@ function stableBucketKey(bucket: AggregateBucket): string {
 function bucketLabel(
   bucket: AggregateBucket,
   group: DataViewGroup | undefined,
+  metadata: ModelMetadata | null,
 ): string {
   if (!group) return "All records";
-  const [label] = bucketValueLabels(bucket, [group]);
+  const [label] = bucketValueLabels(bucket, [group], metadata);
   return label ?? "All records";
 }
 

@@ -378,9 +378,8 @@ the owning framework level inside this slice.
 5. Update the resume-state line below; commit each green slice on
    `ui-refactor-dry` (terse message, no AI attribution).
 
-**Resume state:** chrome slice committed as 050e087; D2 (reusable List/Form +
-DataPage DSL, both reviewers folded incl. 13-item round, naming decision: DSL
-owns bare element names) COMMITTED as 9502155 — gated (typecheck, 270 vitest,
-69/69 e2e). NEXT: D3 — DataPage owns record-route navigation ("new" sentinel
-first, base path from matched route, routed/controlled collision; pin
-deep-link e2e cases before deleting NotePage's navigation glue).
+**Resume state:** chrome 050e087; D2 9502155; D3 (routed DataPage, both
+reviewers folded via --resume) COMMITTED as 18663e0 — gated (typecheck, 272
+vitest, 72/72 e2e incl. 3 deep-link pins). NEXT: D4 — SDL field metadata +
+backend enum-descriptions step (django-reviewer + angee build/migrate/schema
+--check in the gate). LAUNCH COMMAND IS HANDED TO THE USER (fresh slice).

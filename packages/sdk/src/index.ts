@@ -45,6 +45,19 @@ export {
   useResetClient,
   useSchemaClients,
 } from "./graphql-provider";
+export {
+  EMPTY_SCHEMA_FIELD_METADATA,
+  ModelMetadataProvider,
+  fieldMetadataFromSDL,
+  modelMetadataForLabel,
+  useModelMetadata,
+  useSchemaFieldMetadata,
+  type ModelEnumValueMetadata,
+  type ModelFieldKind,
+  type ModelFieldMetadata,
+  type ModelMetadata,
+  type SchemaFieldMetadata,
+} from "./model-metadata";
 
 // Resource data access.
 export {

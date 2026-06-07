@@ -10,7 +10,7 @@ import {
 } from "@urql/core";
 import type { FetchBody } from "@urql/core/internal";
 
-import type { CacheConfig } from "./cache-config";
+import { cacheConfigFromSDL, type CacheConfig } from "./cache-config";
 
 type FetchFn = typeof globalThis.fetch;
 
@@ -116,6 +116,8 @@ export function bearerAuth(token: string): AuthFetch {
 export interface AngeeUrqlClientOptions {
   /** HTTP GraphQL endpoint for this named schema. */
   url: string;
+  /** Printed GraphQL SDL for this schema; derives cache and field metadata. */
+  sdl?: string;
   /** WebSocket endpoint; derived from `url` when omitted. */
   wsEndpoint?: string;
   /** Schema-derived graphcache keying + relay resolvers. */
@@ -147,7 +149,9 @@ export interface AngeeUrqlClientOptions {
 export function createUrqlClient(options: AngeeUrqlClientOptions): Client {
   const baseFetch = options.fetch ?? globalThis.fetch;
   const auth = options.auth ?? sessionAuth({ endpoint: options.csrfEndpoint });
-  const cache = options.cache ?? { keys: {}, resolvers: {} };
+  const cache = options.cache ?? (
+    options.sdl ? cacheConfigFromSDL(options.sdl) : { keys: {}, resolvers: {} }
+  );
 
   return createClient({
     url: options.url,

@@ -19,6 +19,7 @@ import type {
   AggregateMeasureOperator,
   GroupByDimension,
   GroupByOrder,
+  ModelMetadata,
   Row,
 } from "@angee/sdk";
 import { format, formatDistanceToNow } from "date-fns";
@@ -458,6 +459,7 @@ export function ListCellContent<TRow extends Row>({
         field={{
           name: column.field,
           label: column.header,
+          options: column.options,
         }}
         readOnly
       />
@@ -807,15 +809,24 @@ function aggregateKeyField(group: DataViewGroup): string {
 export function bucketValueLabels(
   bucket: AggregateBucket,
   groupStack: readonly DataViewGroup[],
+  metadata: ModelMetadata | null = null,
 ): string[] {
   return groupStack.map((group) => {
     const value = bucket.key?.[aggregateKeyField(group)];
-    return groupKey(value, group);
+    return groupKey(value, group, metadata);
   });
 }
 
-export function groupKey(value: unknown, group: DataViewGroup): string {
+export function groupKey(
+  value: unknown,
+  group: DataViewGroup,
+  metadata: ModelMetadata | null = null,
+): string {
   if (value == null) return "No value";
+  const enumLabel = typeof value === "string"
+    ? enumValueLabel(metadata, group.field, value)
+    : null;
+  if (enumLabel) return enumLabel;
   const date = parseDate(value);
   if (!date) return typeof value === "string" ? statusLabel(value) : String(value);
   if (group.granularity === "year") return String(date.getFullYear());
@@ -830,6 +841,26 @@ export function groupKey(value: unknown, group: DataViewGroup): string {
     return `Week of ${format(date, "MMMM d, yyyy")}`;
   }
   return format(date, "MMMM d, yyyy");
+}
+
+function enumValueLabel(
+  metadata: ModelMetadata | null,
+  field: string,
+  value: string,
+): string | null {
+  const fieldMetadata = metadata?.fields[field];
+  const values = fieldMetadata?.values ?? [];
+  const normalized = normalizeEnumValue(value);
+  const option = values.find(
+    (candidate) =>
+      candidate.value === value
+      || normalizeEnumValue(candidate.value) === normalized,
+  );
+  return option ? String(option.label) : null;
+}
+
+function normalizeEnumValue(value: string): string {
+  return value.trim().replace(/[\s-]+/g, "_").toLowerCase();
 }
 
 export function cellContent<TRow extends Row>(

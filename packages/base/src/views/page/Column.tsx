@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { BadgeVariant } from "../../ui/badge";
+import type { WidgetOption } from "../../widgets/types";
 
 import { PAGE_ELEMENT_SLOT } from "./types";
 
@@ -20,6 +21,8 @@ export interface ColumnProps<
   field: string;
   header?: ReactNode;
   widget?: string;
+  /** Options passed to enum-like cell widgets; derived from SDL when omitted. */
+  options?: readonly WidgetOption[];
   sortable?: boolean;
   aggregate?: ColumnAggregate;
   align?: PageColumnAlign;
@@ -33,6 +36,8 @@ export interface ColumnDescriptor<
   field: string;
   header?: ReactNode;
   widget?: string;
+  /** Options passed to enum-like cell widgets; derived from SDL when omitted. */
+  options?: readonly WidgetOption[];
   sortable?: boolean;
   aggregate?: ColumnAggregate;
   align?: PageColumnAlign;

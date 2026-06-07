@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   useResourceAggregate,
+  useModelMetadata,
   type ResourceTypeName,
   type Row,
   type UseAggregateOptions,
@@ -62,6 +63,7 @@ import {
   removeCustomFilter,
   textFilterValue,
 } from "./list-view-utils";
+import { columnsWithMetadataDefaults } from "./model-metadata-defaults";
 import type { ColumnDescriptor } from "./page";
 import { useBulkDelete } from "./useBulkDelete";
 
@@ -146,6 +148,11 @@ function ListViewBody<TRow extends Row = Row>({
 }: ListViewShellProps<TRow> & {
   dataView: DataViewContextValue;
 }): React.ReactElement {
+  const modelMetadata = useModelMetadata(model);
+  const resolvedColumns = React.useMemo(
+    () => columnsWithMetadataDefaults(columns, modelMetadata),
+    [columns, modelMetadata],
+  );
   const activeDefaultGroup = defaultGroupForView(
     defaultGroup,
     defaultGroups,
@@ -192,19 +199,20 @@ function ListViewBody<TRow extends Row = Row>({
     grouping && dataView.state.view === "list" && groupDimensions.length > 0;
   const surface = useDataViewSurface({
     model,
-    columns,
+    columns: resolvedColumns,
     fields,
     filter,
     order,
     pageSize,
     dataView,
+    modelMetadata,
     groupStack: grouping ? undefined : EMPTY_GROUP_STACK,
     enabled: !groupedListMode,
     onListStateChange,
   });
   const flatMeasures = React.useMemo(
-    () => groupMeasuresFromColumns(columns),
-    [columns],
+    () => groupMeasuresFromColumns(resolvedColumns),
+    [resolvedColumns],
   );
   const [groupPagerState, setGroupPagerState] =
     React.useState<GroupPagerState | null>(null);
@@ -249,24 +257,32 @@ function ListViewBody<TRow extends Row = Row>({
         ? mergeGroupOptions(
             explicitGroupOptions,
             buildGroupOptions(
-              columns,
+              resolvedColumns,
+              modelMetadata,
               defaultGroupsForToolbar(defaultGroup, defaultGroups),
             ),
           )
         : undefined,
-    [columns, defaultGroup, defaultGroups, explicitGroupOptions, grouping],
+    [
+      defaultGroup,
+      defaultGroups,
+      explicitGroupOptions,
+      grouping,
+      modelMetadata,
+      resolvedColumns,
+    ],
+  );
+  const inferredFilterFields = React.useMemo(
+    () => buildFilterFields(resolvedColumns, surface.rows, modelMetadata),
+    [modelMetadata, resolvedColumns, surface.rows],
   );
   const inferredFilterOptions = React.useMemo(
-    () => buildFilterOptions(columns, surface.rows),
-    [columns, surface.rows],
+    () => buildFilterOptions(resolvedColumns, surface.rows, inferredFilterFields),
+    [inferredFilterFields, resolvedColumns, surface.rows],
   );
   const filterOptions = React.useMemo(
     () => mergeFilterOptions(explicitFilters, inferredFilterOptions),
     [explicitFilters, inferredFilterOptions],
-  );
-  const inferredFilterFields = React.useMemo(
-    () => buildFilterFields(columns, surface.rows),
-    [columns, surface.rows],
   );
   const filterFields = React.useMemo(
     () => mergeFilterFields(explicitFilterFields, inferredFilterFields),
@@ -361,7 +377,7 @@ function ListViewBody<TRow extends Row = Row>({
         {groupedListMode ? (
           <GroupedListBody
             model={model}
-            columns={columns}
+            columns={resolvedColumns}
             table={surface.table}
             tableColumns={surface.tableColumns}
             columnVisibility={surface.columnVisibility}
@@ -370,6 +386,7 @@ function ListViewBody<TRow extends Row = Row>({
             onVisibleFieldToggle={surface.toggleVisibleField}
             dataView={dataView}
             groupDimensions={groupDimensions}
+            modelMetadata={modelMetadata}
             requestedFields={surface.requestedFields}
             mergedFilter={surface.mergedFilter}
             sortOrder={surface.sortOrder}
@@ -386,7 +403,7 @@ function ListViewBody<TRow extends Row = Row>({
           </div>
         ) : grouping && dataView.state.view === "board" ? (
           <BoardView
-            columns={columns}
+            columns={resolvedColumns}
             groups={surface.groupedRows}
             dataView={dataView}
             selectedIds={surface.selectedIds}
@@ -400,7 +417,7 @@ function ListViewBody<TRow extends Row = Row>({
             model={model}
             filter={surface.mergedFilter}
             measures={flatMeasures}
-            columns={columns}
+            columns={resolvedColumns}
             table={surface.table}
             rowModels={surface.rowModels}
             listItems={surface.listItems}
@@ -421,7 +438,7 @@ function ListViewBody<TRow extends Row = Row>({
           />
         ) : (
           <FlatListBody
-            columns={columns}
+            columns={resolvedColumns}
             table={surface.table}
             rowModels={surface.rowModels}
             listItems={surface.listItems}

@@ -1,5 +1,6 @@
 import { useWidget, type WidgetMap } from "@angee/sdk";
 
+import { booleanBadgeWidget } from "./booleanBadge";
 import { booleanWidget } from "./boolean";
 import { comboboxWidget } from "./combobox";
 import { dateWidget } from "./date";
@@ -41,6 +42,7 @@ export const defaultWidgets = {
   url: urlWidget,
   phone: phoneWidget,
   boolean: booleanWidget,
+  booleanBadge: booleanBadgeWidget,
   booleanToggle: booleanToggleWidget,
   date: dateWidget,
   json: jsonWidget,

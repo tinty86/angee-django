@@ -4,6 +4,8 @@ import { useBlocker } from "@tanstack/react-router";
 import {
   useResourceMutation,
   useResourceRecord,
+  useModelMetadata,
+  type ModelMetadata,
   type Row,
 } from "@angee/sdk";
 
@@ -41,6 +43,7 @@ import {
   type GroupProps,
   type PageFieldKind,
 } from "./page";
+import { fieldsWithMetadataDefaults } from "./model-metadata-defaults";
 
 export type FieldKind = PageFieldKind;
 export type FormField = FieldDescriptor;
@@ -129,8 +132,21 @@ export function FormView({
   }
   const childFields = parsePageFields(children);
   const childGroups = parsePageGroups(children);
-  const resolvedFields = fields ?? childFields;
-  const resolvedGroups = groups ?? childGroups;
+  const modelMetadata = useModelMetadata(model);
+  const declaredFields = fields ?? childFields;
+  const declaredGroups = groups ?? childGroups;
+  const resolvedFields = React.useMemo(
+    () => fieldsWithMetadataDefaults(declaredFields, modelMetadata),
+    [declaredFields, modelMetadata],
+  );
+  const resolvedGroups = React.useMemo(
+    () =>
+      declaredGroups.map((group) => ({
+        ...group,
+        fields: fieldsWithMetadataDefaults(group.fields, modelMetadata),
+      })),
+    [declaredGroups, modelMetadata],
+  );
   const isCreate = id == null;
   const selection = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
@@ -217,7 +233,7 @@ export function FormView({
     }
   }, [emptyValues, isCreate, record, resolvedFields, form]);
 
-  const titleField = titleFieldFor(resolvedFields);
+  const titleField = titleFieldFor(resolvedFields, modelMetadata);
   const statusField = resolvedFields.find((field) => field.widget === "statusbar");
   const bodyField = React.useMemo(
     () => bodyFieldFor(resolvedFields, titleField, statusField),
@@ -681,8 +697,10 @@ function formSections(
 
 function titleFieldFor(
   fields: readonly FieldDescriptor[],
+  metadata: ModelMetadata | null,
 ): FieldDescriptor | undefined {
   return fields.find((field) => field.title) ??
+    fields.find((field) => field.name === metadata?.recordRepresentation) ??
     fields.find((field) => field.name === "title");
 }
 

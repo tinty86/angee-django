@@ -4,6 +4,12 @@ import type { Client } from "@urql/core";
 
 import { createUrqlClient, type AngeeUrqlClientOptions } from "./graphql-client";
 import { makeContext } from "./make-context";
+import {
+  EMPTY_SCHEMA_FIELD_METADATA,
+  ModelMetadataProvider,
+  fieldMetadataFromSDL,
+  type SchemaFieldMetadata,
+} from "./model-metadata";
 
 /** One client per named schema, built once from the per-schema endpoint config. */
 export function createSchemaClients(
@@ -14,6 +20,16 @@ export function createSchemaClients(
     clients[name] = createUrqlClient(options);
   }
   return clients;
+}
+
+function createSchemaMetadata(
+  config: Record<string, AngeeUrqlClientOptions>,
+): Record<string, SchemaFieldMetadata> {
+  const metadata: Record<string, SchemaFieldMetadata> = {};
+  for (const [name, options] of Object.entries(config)) {
+    if (options.sdl) metadata[name] = fieldMetadataFromSDL(options.sdl);
+  }
+  return metadata;
 }
 
 /**
@@ -27,17 +43,24 @@ export function GraphQLProvider(props: {
   children: ReactNode;
 }): ReactNode {
   const client = props.clients[props.schema];
+  const metadata =
+    SchemaMetadataContext.useMaybe()?.[props.schema] ?? EMPTY_SCHEMA_FIELD_METADATA;
   if (!client) {
     const known = Object.keys(props.clients).join(", ") || "none";
     throw new Error(
       `No GraphQL client for schema "${props.schema}"; configured schemas: ${known}.`,
     );
   }
-  return createElement(UrqlProvider, { value: client }, props.children);
+  return createElement(ModelMetadataProvider, {
+    metadata,
+    children: createElement(UrqlProvider, { value: client }, props.children),
+  });
 }
 
 const ResetContext = makeContext<() => void>("GraphQLClientReset");
 const ClientsContext = makeContext<Record<string, Client>>("GraphQLClients");
+const SchemaMetadataContext =
+  makeContext<Record<string, SchemaFieldMetadata>>("GraphQLSchemaMetadata");
 
 const NO_RESET = (): void => {};
 const NO_CLIENTS: Record<string, Client> = {};
@@ -61,15 +84,19 @@ export function GraphQLClientProvider(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [config, generation],
   );
+  const schemaMetadata = useMemo(() => createSchemaMetadata(config), [config]);
   const reset = useCallback(() => setGeneration((current) => current + 1), []);
   return ResetContext.Provider({
     value: reset,
     children: ClientsContext.Provider({
       value: clients,
-      children: createElement(GraphQLProvider, {
-        clients,
-        schema: props.schema,
-        children: props.children,
+      children: SchemaMetadataContext.Provider({
+        value: schemaMetadata,
+        children: createElement(GraphQLProvider, {
+          clients,
+          schema: props.schema,
+          children: props.children,
+        }),
       }),
     }),
   });

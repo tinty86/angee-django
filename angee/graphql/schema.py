@@ -13,6 +13,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
+from django_choices_field import TextChoicesField
 from rebac import MissingActorError, PermissionDenied, RebacMixin
 from rebac.graphql.strawberry import RebacExtension
 from rebac.graphql.strawberry_django import RebacDjangoOptimizerExtension
@@ -26,7 +27,7 @@ from angee.graphql.introspection import (
     surface_field_names,
     surface_name,
 )
-from graphql import GraphQLError
+from graphql import GraphQLEnumType, GraphQLError
 
 DEFAULT_SCHEMA_NAME = "public"
 """Default GraphQL schema name served by Angee hosts."""
@@ -203,7 +204,7 @@ class GraphQLSchemas:
         if query is None:
             raise ImproperlyConfigured(f"GraphQL schema {name!r} has no query root")
         self._assert_rebac_managers(name, parts.types)
-        return AngeeSchema(
+        schema = AngeeSchema(
             query=query,
             mutation=self._merge_root(name, "mutation", parts.mutation),
             subscription=self._merge_root(
@@ -221,6 +222,8 @@ class GraphQLSchemas:
                 ],
             ),
         )
+        self._describe_text_choices_enums(schema, parts.types)
+        return schema
 
     def render_sdl(self) -> dict[str, str]:
         """Return printed GraphQL SDL for every contributed schema."""
@@ -286,6 +289,75 @@ class GraphQLSchemas:
         except ImproperlyConfigured:
             return None
 
+    def _describe_text_choices_enums(
+        self,
+        schema: strawberry.Schema,
+        types: tuple[object, ...],
+    ) -> None:
+        """Copy Django ``TextChoices`` labels onto matching GraphQL enums."""
+
+        labels_by_enum = self._text_choices_labels_by_enum(types)
+        for type_name, graphql_type in schema._schema.type_map.items():
+            if not isinstance(graphql_type, GraphQLEnumType):
+                continue
+            labels = labels_by_enum.get(type_name)
+            if labels is None:
+                continue
+            for graphql_name, value in graphql_type.values.items():
+                label = labels.get(value.value)
+                if label is None:
+                    label = labels.get(graphql_name)
+                if label is not None:
+                    value.description = label
+
+    def _text_choices_labels_by_enum(
+        self,
+        types: tuple[object, ...],
+    ) -> dict[str, dict[Any, str]]:
+        """Return GraphQL enum names keyed to their Django choice labels."""
+
+        labels_by_enum: dict[str, dict[Any, str]] = {}
+        for surface in types:
+            model = self._django_model_or_none(surface)
+            if model is None:
+                continue
+            for field in model._meta.get_fields():
+                if not isinstance(field, TextChoicesField):
+                    continue
+                labels: dict[Any, str] = {}
+                for member in field.choices_enum:
+                    label = str(member.label)
+                    labels[member.value] = label
+                    labels[member.name] = label
+                self._merge_choice_enum_labels(
+                    labels_by_enum,
+                    field.choices_enum.__name__,
+                    labels,
+                )
+                self._merge_choice_enum_labels(
+                    labels_by_enum,
+                    f"{model.__name__}{_pascal_case(field.name)}",
+                    labels,
+                )
+        return labels_by_enum
+
+    def _merge_choice_enum_labels(
+        self,
+        labels_by_enum: dict[str, dict[Any, str]],
+        enum_name: str,
+        labels: dict[Any, str],
+    ) -> None:
+        """Record one enum's labels, failing on drift for the same enum name."""
+
+        existing = labels_by_enum.setdefault(enum_name, {})
+        for value, label in labels.items():
+            previous = existing.setdefault(value, label)
+            if previous != label:
+                raise ImproperlyConfigured(
+                    f"GraphQL enum {enum_name!r} has conflicting labels for value {value!r}: "
+                    f"{previous!r} and {label!r}"
+                )
+
 
 def schema_parts_for(app_config: AppConfig) -> dict[str, SchemaParts]:
     """Return normalized GraphQL schema parts declared by one addon."""
@@ -303,6 +375,12 @@ def schema_parts_for(app_config: AppConfig) -> dict[str, SchemaParts]:
             raise ImproperlyConfigured(f"{app_config.name}.schemas[{name!r}] must be a mapping")
         parts[name] = SchemaParts.from_mapping(app_config, name, raw_entry)
     return parts
+
+
+def _pascal_case(name: str) -> str:
+    """Return ``snake_case`` text as ``PascalCase``."""
+
+    return "".join(part.capitalize() for part in name.split("_"))
 
 
 def _raw_schemas(app_config: AppConfig) -> object:

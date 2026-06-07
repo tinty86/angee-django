@@ -151,22 +151,22 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
     ],
   );
   const toolbarGroupOptions = React.useMemo(
-    () => groupOptions ?? buildGroupOptions(columns, defaultGroup),
+    () => groupOptions ?? buildGroupOptions(columns, null, defaultGroup),
     [columns, defaultGroup, groupOptions],
   );
   const groupingEnabled =
     toolbarGroupOptions.length > 0 || dataView.state.groupStack.length > 0;
-  const inferredFilterOptions = React.useMemo(
-    () => buildFilterOptions(columns, surface.sourceRows),
+  const inferredFilterFields = React.useMemo(
+    () => buildFilterFields(columns, surface.sourceRows, null),
     [columns, surface.sourceRows],
+  );
+  const inferredFilterOptions = React.useMemo(
+    () => buildFilterOptions(columns, surface.sourceRows, inferredFilterFields),
+    [columns, inferredFilterFields, surface.sourceRows],
   );
   const filterOptions = React.useMemo(
     () => mergeFilterOptions(explicitFilters, inferredFilterOptions),
     [explicitFilters, inferredFilterOptions],
-  );
-  const inferredFilterFields = React.useMemo(
-    () => buildFilterFields(columns, surface.sourceRows),
-    [columns, surface.sourceRows],
   );
   const filterFields = React.useMemo(
     () => mergeFilterFields(explicitFilterFields, inferredFilterFields),

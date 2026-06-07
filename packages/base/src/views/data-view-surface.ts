@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-virtual";
 import {
   useResourceList,
+  type ModelMetadata,
   type ResourceTypeName,
   type Row,
   type UseResourceListOptions,
@@ -61,6 +62,7 @@ export interface UseDataViewSurfaceProps<TRow extends Row = Row> {
   order?: UseResourceListOptions<ResourceTypeName>["order"];
   pageSize?: number;
   dataView: DataViewContextValue;
+  modelMetadata?: ModelMetadata | null;
   groupStack?: readonly DataViewGroup[];
   enabled?: boolean;
   onListStateChange?: (state: ListViewState<TRow>) => void;
@@ -73,6 +75,7 @@ export interface UseRowsDataViewSurfaceProps<
   columns: readonly ColumnDescriptor<TRow>[];
   pageSize?: number;
   dataView: DataViewContextValue;
+  modelMetadata?: ModelMetadata | null;
   groupStack?: readonly DataViewGroup[];
   fetching?: boolean;
   error?: Error | null;
@@ -129,6 +132,7 @@ export function useDataViewSurface<TRow extends Row = Row>({
   order,
   pageSize,
   dataView,
+  modelMetadata = null,
   groupStack,
   enabled = true,
   onListStateChange,
@@ -200,6 +204,7 @@ export function useDataViewSurface<TRow extends Row = Row>({
     rows,
     columns,
     dataView,
+    modelMetadata,
     groupStack,
     getRowId: modelRowId,
   });
@@ -222,6 +227,7 @@ export function useRowsDataViewSurface<
   columns,
   pageSize,
   dataView,
+  modelMetadata = null,
   groupStack,
   fetching = false,
   error = null,
@@ -296,6 +302,7 @@ export function useRowsDataViewSurface<
     rows: pageRows,
     columns,
     dataView,
+    modelMetadata,
     groupStack,
     getRowId: stringRowId,
   });
@@ -313,12 +320,14 @@ function useDataViewPresentationSurface<TRow extends Row>({
   rows,
   columns,
   dataView,
+  modelMetadata,
   groupStack,
   getRowId,
 }: {
   rows: readonly TRow[];
   columns: readonly ColumnDescriptor<TRow>[];
   dataView: DataViewContextValue;
+  modelMetadata?: ModelMetadata | null;
   groupStack?: readonly DataViewGroup[];
   getRowId: (row: TRow, index: number) => string;
 }): DataViewPresentationSurface<TRow> {
@@ -398,8 +407,8 @@ function useDataViewPresentationSurface<TRow extends Row>({
   );
   const rowGroupStack = groupStack ?? dataView.state.groupStack;
   const groupedRows = React.useMemo(
-    () => groupRows(rowModels, rowGroupStack),
-    [rowGroupStack, rowModels],
+    () => groupRows(rowModels, rowGroupStack, modelMetadata),
+    [modelMetadata, rowGroupStack, rowModels],
   );
   const listItems = React.useMemo(
     () => flattenListItems(groupedRows),
@@ -561,6 +570,7 @@ function compareClientValues(left: unknown, right: unknown): number {
 function groupRows<TRow extends Row>(
   rows: readonly TableRowModel<TRow>[],
   groupStack: readonly DataViewGroup[],
+  modelMetadata: ModelMetadata | null = null,
   depth = 0,
   parentPath: readonly string[] = [],
 ): readonly RowGroup<TRow>[] {
@@ -577,7 +587,7 @@ function groupRows<TRow extends Row>(
   }
   const groups = new Map<string, TableRowModel<TRow>[]>();
   for (const row of rows) {
-    const key = groupKey(readPath(row.original, group.field), group);
+    const key = groupKey(readPath(row.original, group.field), group, modelMetadata);
     const next = groups.get(key) ?? [];
     next.push(row);
     groups.set(key, next);
@@ -591,7 +601,7 @@ function groupRows<TRow extends Row>(
       depth,
       rows: groupRows,
       children: groupRows.length > 0
-        ? groupRowsByRest(groupRows, rest, depth + 1, path)
+        ? groupRowsByRest(groupRows, rest, modelMetadata, depth + 1, path)
         : [],
     };
   });
@@ -600,10 +610,11 @@ function groupRows<TRow extends Row>(
 function groupRowsByRest<TRow extends Row>(
   rows: readonly TableRowModel<TRow>[],
   groupStack: readonly DataViewGroup[],
+  modelMetadata: ModelMetadata | null,
   depth: number,
   parentPath: readonly string[],
 ): readonly RowGroup<TRow>[] {
-  return groupRows(rows, groupStack, depth, parentPath).filter(
+  return groupRows(rows, groupStack, modelMetadata, depth, parentPath).filter(
     (group) => group.label !== null || group.children.length > 0,
   );
 }
