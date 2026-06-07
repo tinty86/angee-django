@@ -33,7 +33,7 @@ CLI, REST, **and** GraphQL so a human, a script, or an agent drives the exact
 same lifecycle. The operator is deliberately framework-agnostic: it knows
 nothing about Django or React, it just runs whatever Services you declare.
 
-> The operator lives in its own repository, `ang-ee/angee`, and its full docs are
+> The operator lives in its own repository, `ang-ee/angee-operator`, and its full docs are
 > published at **[docs.angee.ai](https://docs.angee.ai)** — start with
 > [Concepts](https://docs.angee.ai/guide/concepts).
 
@@ -153,7 +153,7 @@ Access is by invitation to the **`ang-ee` GitHub organization**. Once you are
 invited you should receive a GitHub email — accept it, and you will have the two
 repositories:
 
-- **[`ang-ee/angee`](https://github.com/ang-ee/angee)** — the operator and CLI.
+- **[`ang-ee/angee-operator`](https://github.com/ang-ee/angee-operator)** — the operator and CLI.
 - **[`ang-ee/angee-django`](https://github.com/ang-ee/angee-django)** — the
   framework, base addons, and default Host (the Django / React Runtime).
 

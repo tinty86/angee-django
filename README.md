@@ -21,7 +21,7 @@ the first and default **Host** for Angee — a platform for building
 Angee comes in two halves:
 
 - **The operator** — a Go control plane (repo
-  [`fyltr/angee`](https://github.com/fyltr/angee)) that pulls source
+  [`ang-ee/angee-operator`](https://github.com/ang-ee/angee-operator)) that pulls source
   repositories and composes them into **Workspaces** (Sources and/or agentic
   configuration) and **Stacks** (dev or prod), running them on docker-compose or
   process-compose.
@@ -64,7 +64,7 @@ are.*
 ## Quick start
 
 ```sh
-git clone https://github.com/fyltr/angee-django.git
+git clone https://github.com/ang-ee/angee-django.git
 cd angee-django
 curl -fsSL https://angee.ai/install.sh | sh   # the angee CLI, if not already installed
 angee init --dev                              # set up the angee dev stack from the template

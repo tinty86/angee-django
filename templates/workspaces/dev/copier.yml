@@ -28,7 +28,7 @@ _angee:
       default: main
     repo_url:
       type: str
-      default: https://github.com/fyltr/angee-django.git
+      default: https://github.com/ang-ee/angee-django.git
     source_cache_path:
       type: str
       default: "../.."
@@ -95,7 +95,7 @@ base_ref:
 
 repo_url:
   type: str
-  default: https://github.com/fyltr/angee-django.git
+  default: https://github.com/ang-ee/angee-django.git
 
 source_cache_path:
   type: str
