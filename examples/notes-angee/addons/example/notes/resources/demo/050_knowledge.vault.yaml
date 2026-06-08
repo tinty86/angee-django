@@ -1,0 +1,12 @@
+_meta:
+  model: knowledge.Vault
+rows:
+  - xref: vault_handbook
+    fields:
+      owner: notes.user_admin
+      name: Handbook
+      description: The team handbook — guides, architecture, and how we work.
+      icon: book
+      accent: indigo
+      created_by: notes.user_admin
+      updated_by: notes.user_admin

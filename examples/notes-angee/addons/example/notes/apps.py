@@ -21,5 +21,8 @@ class NotesConfig(AppConfig):
             "resources/demo/010_iam.user.yaml",
             "resources/demo/020_notes.note.yaml",
             "resources/demo/030_iam.oauth_client.yaml",
+            "resources/demo/050_knowledge.vault.yaml",
+            "resources/demo/060_knowledge.page.yaml",
+            "resources/demo/070_knowledge.markdown_page.yaml",
         ),
     }
