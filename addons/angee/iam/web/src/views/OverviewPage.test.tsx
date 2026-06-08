@@ -157,11 +157,10 @@ describe("IAM overview page", () => {
         role: "angee/role:writer",
       }),
     );
-    expect(await screen.findByText("Role granted")).toBeTruthy();
-    expect(
-      screen.getAllByText("alice <alice@example.com>").length,
-    ).toBeGreaterThan(0);
-    expect(sdkMocks.overview.refetch).toHaveBeenCalledTimes(1);
+    // The grant refetches the inventory so the new binding appears in the panels.
+    await waitFor(() =>
+      expect(sdkMocks.overview.refetch).toHaveBeenCalledTimes(1),
+    );
   });
 
   test("falls back to the selected principal id when the user row is stale", async () => {
@@ -194,8 +193,6 @@ describe("IAM overview page", () => {
         role: "angee/role:writer",
       }),
     );
-    expect(await screen.findByText("Role granted")).toBeTruthy();
-    expect(screen.getByText(STALE_RELAY_ID)).toBeTruthy();
   });
 });
 

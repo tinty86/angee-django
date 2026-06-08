@@ -11,7 +11,8 @@ export type PageElementKind =
   | "group"
   | "action"
   | "list"
-  | "form";
+  | "form"
+  | "metric";
 
 export const PAGE_ELEMENT_SLOT = Symbol.for("@angee/base.page.element");
 

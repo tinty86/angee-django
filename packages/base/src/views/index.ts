@@ -32,6 +32,14 @@ export {
   type GraphViewProps,
 } from "./GraphView";
 export {
+  DashboardView,
+  type DashboardViewProps,
+} from "./DashboardView";
+export {
+  Metric,
+  type MetricProps,
+} from "./dashboard/Metric";
+export {
   Form,
   type FormProps,
 } from "./Form";

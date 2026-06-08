@@ -33,7 +33,7 @@ test.describe("iam console — admin", () => {
     page,
   }) => {
     await page.goto("/iam");
-    await expect(page.getByText("Grant Role")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("Grant access")).toBeVisible({ timeout: 20000 });
     const principal = page.getByLabel("Principal");
     await expect(principal).toBeVisible();
     await expect(page.getByLabel("Role")).toBeVisible();

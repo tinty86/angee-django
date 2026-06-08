@@ -402,14 +402,19 @@ RelativeTime; NoteChatter/NoteActivityPanel/RailEmptyState deleted; smart
 buttons = only versions w/ real count; placeholder Angee/Comments tabs reuse
 EmptyState, no fake counts) COMMITTED as 917ebb5 — gated (ruff/mypy 91 files,
 schema --check, no migrations, typecheck, 289 vitest, 72/72 e2e). Architecture
-+ django reviews IN FLIGHT on 917ebb5 (django one vetting revisions.py for
-actor-scope leak / N+1 — fold via --resume if needed).
++ django reviews folded as cb6466c: revision field-redaction guard
+(revisioned_fields ∩ gated_read_fields fails loud — no history leak of
+read-gated columns), bounded first arg, relation-field reject, RevisionsTab
+owns its query (urql dedup) dropping the body short-circuit + result-prop
+plumbing. Re-gated: ruff/mypy, FULL PYTEST 273 (gate gap fixed — pytest now
+in the host gate), schema --check, typecheck, vitest, 72/72 e2e.
 
-ALL SEVEN SLICES DONE (D1,D1b,D2,D3,D4,D5,D5b,D6). The notes addon is now
-near-pure declarative TSX: chrome derived, List/Form reusable declarations,
-routed record nav, labels/options/filters/groups from the SDL, revisions +
-chatter framework-owned. Branch ui-refactor-dry; not yet pushed (architect
-pushes). Pending: D6 review fold; optional iam-auth flake hardening.
+ALL SLICES DONE + REVIEWED (D1,D1b,D2,D3,D4,D5,D5b,D6, all folds). The notes
+addon is now near-pure declarative TSX: chrome derived, List/Form reusable
+declarations, routed record nav, labels/options/filters/groups from the SDL,
+revisions + chatter framework-owned. Layering sdk→base→consumer verified.
+Branch ui-refactor-dry; NOT pushed (architect pushes). Optional remaining:
+iam-auth.spec.ts:34 timing-flake hardening.
 
 Known flaky (not ours, pre-existing): iam-auth.spec.ts:34 OAuth-button waits
 15s for the availableConnections query to render under full-suite load; passes
