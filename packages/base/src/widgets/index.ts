@@ -25,7 +25,13 @@ import { themePickerWidget } from "./themePicker";
 import { userRefWidget } from "./userRef";
 import type { WidgetDefinition } from "./types";
 
-export { Markdown } from "./markdown";
+export {
+  Markdown,
+  WikilinkProvider,
+  useWikilinkResolver,
+  type WikilinkResolver,
+  type WikilinkTarget,
+} from "./markdown";
 
 export type {
   WidgetDefinition,

@@ -1,11 +1,14 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ComponentType,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { markdown } from "@codemirror/lang-markdown";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -21,7 +24,10 @@ import {
   ListOrdered,
   Quote,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "../lib/cn";
@@ -352,8 +358,131 @@ function ModeButton({
   );
 }
 
+/** How a `[[wikilink]]` resolves: a way to open it, and whether it is broken. */
+export interface WikilinkTarget {
+  /** Open the linked page; absent when the link does not resolve. */
+  onActivate?: () => void;
+  /** The target does not resolve to a page (rendered as a broken link). */
+  broken: boolean;
+}
+
+/** Resolve a `[[target]]` to its navigation, supplied by the host. */
+export type WikilinkResolver = (target: string) => WikilinkTarget;
+
+const WikilinkContext = createContext<WikilinkResolver | null>(null);
+
+/**
+ * Make `[[wikilinks]]` in any descendant {@link Markdown} clickable by supplying
+ * a resolver. Without a provider, `[[...]]` renders as plain text.
+ */
+export function WikilinkProvider({
+  resolve,
+  children,
+}: {
+  resolve: WikilinkResolver;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <WikilinkContext.Provider value={resolve}>
+      {children}
+    </WikilinkContext.Provider>
+  );
+}
+
+export function useWikilinkResolver(): WikilinkResolver | null {
+  return useContext(WikilinkContext);
+}
+
+const WIKILINK_PREFIX = "wikilink:";
+const WIKILINK_PATTERN = /\[\[([^\]|\n]+?)(?:\|([^\]\n]+?))?\]\]/g;
+
+interface MdastNode {
+  type: string;
+  value?: string;
+  url?: string;
+  children?: MdastNode[];
+}
+
+/**
+ * A remark plugin that turns `[[target]]` / `[[target|display]]` in text into
+ * link nodes whose href carries the target on a custom scheme (rendered by the
+ * components map below). Operates on the parsed tree so code spans/blocks — where
+ * `[[...]]` is a literal example — are left untouched.
+ */
+function remarkWikilinks() {
+  return (tree: MdastNode): void => transformWikilinks(tree);
+}
+
+function transformWikilinks(node: MdastNode): void {
+  if (!node.children) return;
+  const next: MdastNode[] = [];
+  for (const child of node.children) {
+    if (child.type === "inlineCode" || child.type === "code") {
+      next.push(child);
+    } else if (
+      child.type === "text" &&
+      typeof child.value === "string" &&
+      child.value.includes("[[")
+    ) {
+      next.push(...splitWikilinks(child.value));
+    } else {
+      transformWikilinks(child);
+      next.push(child);
+    }
+  }
+  node.children = next;
+}
+
+function splitWikilinks(value: string): MdastNode[] {
+  const out: MdastNode[] = [];
+  let last = 0;
+  for (const match of value.matchAll(WIKILINK_PATTERN)) {
+    const start = match.index ?? 0;
+    if (start > last) out.push({ type: "text", value: value.slice(last, start) });
+    const target = (match[1] ?? "").trim();
+    const display = (match[2] ?? match[1] ?? "").trim();
+    out.push({
+      type: "link",
+      url: `${WIKILINK_PREFIX}${encodeURIComponent(target)}`,
+      children: [{ type: "text", value: display }],
+    });
+    last = start + match[0].length;
+  }
+  if (last < value.length) out.push({ type: "text", value: value.slice(last) });
+  return out;
+}
+
+function wikilinkComponents(resolve: WikilinkResolver): Components {
+  return {
+    a({ href, children }) {
+      if (typeof href !== "string" || !href.startsWith(WIKILINK_PREFIX)) {
+        return <a href={href}>{children}</a>;
+      }
+      const { onActivate, broken } = resolve(
+        decodeURIComponent(href.slice(WIKILINK_PREFIX.length)),
+      );
+      return (
+        <button
+          type="button"
+          disabled={!onActivate}
+          onClick={onActivate}
+          className={cn(
+            "rounded-sm font-medium underline decoration-dotted underline-offset-2 outline-none focus-visible:focus-ring",
+            broken
+              ? "text-danger-text/80"
+              : "text-link hover:bg-brand-soft",
+          )}
+        >
+          {children}
+        </button>
+      );
+    },
+  };
+}
+
 /** Render a markdown string as styled prose (GFM). The reusable read primitive
- * behind the markdown widgets and any read-only markdown surface. */
+ * behind the markdown widgets and any read-only markdown surface. A
+ * {@link WikilinkProvider} ancestor makes `[[wikilinks]]` clickable. */
 export function Markdown({
   value,
   className,
@@ -361,9 +490,21 @@ export function Markdown({
   value: string | null | undefined;
   className?: string;
 }): ReactElement {
+  const resolve = useWikilinkResolver();
   return (
     <div className={cn(PROSE_CLASS, className)}>
-      <ReactMarkdown remarkPlugins={PREVIEW_PLUGINS}>{value ?? ""}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={resolve ? [...PREVIEW_PLUGINS, remarkWikilinks] : PREVIEW_PLUGINS}
+        components={resolve ? wikilinkComponents(resolve) : undefined}
+        urlTransform={
+          resolve
+            ? (url) =>
+                url.startsWith(WIKILINK_PREFIX) ? url : defaultUrlTransform(url)
+            : undefined
+        }
+      >
+        {value ?? ""}
+      </ReactMarkdown>
     </div>
   );
 }
