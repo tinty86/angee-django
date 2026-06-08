@@ -1,6 +1,6 @@
-import type { ReactElement } from "react";
+import { useMemo, type ReactElement } from "react";
 
-import { Select } from "../ui/select";
+import { RelationField, type RelationOption } from "./RelationField";
 import { widgetLabel } from "./label";
 import type { WidgetDefinition, WidgetRenderProps } from "./types";
 
@@ -10,15 +10,21 @@ function Many2OneEdit({
   field,
   readOnly,
 }: WidgetRenderProps<string>): ReactElement {
+  const options = useMemo<RelationOption[]>(
+    () =>
+      (field?.options ?? []).map((option) => ({
+        value: option.value,
+        label: typeof option.label === "string" ? option.label : option.value,
+      })),
+    [field?.options],
+  );
   return (
-    <Select
+    <RelationField
       value={value ?? ""}
-      options={field?.options ?? []}
+      onChange={(next) => onChange?.(next)}
+      options={options}
       readOnly={readOnly}
-      disabled={readOnly}
       aria-label={widgetLabel(field, "Related record")}
-      placeholder={widgetLabel(field, "Related record")}
-      onValueChange={(next) => onChange?.(next)}
     />
   );
 }

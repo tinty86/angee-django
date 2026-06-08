@@ -5,6 +5,7 @@ import {
   useResourceMutation,
   useResourceRecord,
   useModelMetadata,
+  useSchemaFieldMetadata,
   type ModelMetadata,
   type Row,
 } from "@angee/sdk";
@@ -43,7 +44,12 @@ import {
   type GroupProps,
   type PageFieldKind,
 } from "./page";
-import { fieldsWithMetadataDefaults } from "./model-metadata-defaults";
+import {
+  fieldsWithMetadataDefaults,
+  relationFieldInfo,
+  type RelationFieldInfo,
+} from "./model-metadata-defaults";
+import { RelationFieldWidget } from "./RelationFieldWidget";
 
 export type FieldKind = PageFieldKind;
 export type FormField = FieldDescriptor;
@@ -136,6 +142,7 @@ export function FormView({
   const childFields = parsePageFields(children);
   const childGroups = parsePageGroups(children);
   const modelMetadata = useModelMetadata(model);
+  const schemaMetadata = useSchemaFieldMetadata();
   const declaredFields = fields ?? childFields;
   const declaredGroups = groups ?? childGroups;
   const resolvedFields = React.useMemo(
@@ -154,6 +161,18 @@ export function FormView({
     () => flattenedFormFields(resolvedFields, resolvedGroups),
     [resolvedFields, resolvedGroups],
   );
+  // Object-relation fields with no explicit options auto-wire to the searchable
+  // creatable picker; the SDL resolves each one's model, display field, and
+  // whether it can be created inline.
+  const relationByField = React.useMemo(() => {
+    const map = new Map<string, RelationFieldInfo>();
+    for (const field of formFields) {
+      if (field.options) continue;
+      const info = relationFieldInfo(field.name, modelMetadata, schemaMetadata);
+      if (info) map.set(field.name, info);
+    }
+    return map;
+  }, [formFields, modelMetadata, schemaMetadata]);
   const isCreate = id == null;
   const selection = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
@@ -426,6 +445,7 @@ export function FormView({
                   {(api) => (
                     <BoundFieldRow
                       field={field}
+                      relation={relationByField.get(field.name)}
                       value={api.state.value}
                       errors={api.state.meta.errors}
                       onChange={(next) => api.handleChange(next)}
@@ -601,11 +621,13 @@ function FormSection({
 
 function BoundFieldRow({
   field,
+  relation,
   value,
   errors,
   onChange,
 }: {
   field: FieldDescriptor;
+  relation?: RelationFieldInfo;
   value: unknown;
   errors: readonly unknown[];
   onChange: (value: unknown) => void;
@@ -626,12 +648,21 @@ function BoundFieldRow({
           readOnly ? READONLY_FIELD_CONTROL_CLASS : EDITABLE_FIELD_CONTROL_CLASS,
         )}
       >
-        <FieldWidget
-          field={field}
-          value={value}
-          readOnly={field.readOnly}
-          onChange={onChange}
-        />
+        {relation && !readOnly ? (
+          <RelationFieldWidget
+            value={typeof value === "string" ? value : null}
+            onChange={onChange}
+            relation={relation}
+            aria-label={fieldAriaLabel(field)}
+          />
+        ) : (
+          <FieldWidget
+            field={field}
+            value={value}
+            readOnly={field.readOnly}
+            onChange={onChange}
+          />
+        )}
       </div>
       <FieldFooter description={field.description} errors={messages} />
     </FieldRoot>

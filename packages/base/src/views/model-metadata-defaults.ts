@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type {
   ModelFieldMetadata,
   ModelMetadata,
+  SchemaFieldMetadata,
 } from "@angee/sdk";
 
 import type { WidgetOption } from "../widgets";
@@ -11,6 +12,89 @@ import type {
 } from "./page";
 import { titleCase } from "../lib/titleCase";
 import { groupFieldLabel } from "./ListInternals";
+
+/** A form field's resolved relation target — which model the picker lists, its
+ * display field, and whether the related model can be created inline. */
+export interface RelationFieldInfo {
+  /** Related model label, e.g. `"Vendor"`. */
+  model: string;
+  /** Field shown as the option label. */
+  labelField: string;
+  /** A create mutation exists for the related model. */
+  canCreate: boolean;
+}
+
+// Server-owned fields a create form never edits.
+const NON_EDITABLE_FIELDS = new Set([
+  "id",
+  "createdAt",
+  "updatedAt",
+  "createdBy",
+  "createdByLabel",
+  "updatedBy",
+  "updatedByLabel",
+]);
+
+const SCALAR_WIDGET: Readonly<Record<string, string>> = {
+  Boolean: "switch",
+  Int: "integer",
+  Float: "float",
+  DateTime: "datetime",
+  Date: "date",
+  JSON: "json",
+};
+
+/**
+ * Resolve a form field to its relation target, or `null` when it is not an
+ * object relation whose related model is listable. Only nested object fields
+ * (`kind: "relation"`) qualify — a bare `ID` scalar FK is opaque to the SDL, so
+ * it stays an explicitly-configured field.
+ */
+export function relationFieldInfo(
+  fieldName: string,
+  modelMetadata: ModelMetadata | null,
+  schemaMetadata: SchemaFieldMetadata,
+): RelationFieldInfo | null {
+  const field = modelMetadata?.fields[fieldName];
+  if (field?.kind !== "relation" || !field.relationTarget) return null;
+  const related = schemaMetadata.types[field.relationTarget];
+  // Without a list root field the picker has no way to fetch options.
+  if (!related?.rootFields?.list) return null;
+  return {
+    model: stripTypeSuffix(field.relationTarget),
+    labelField: related.recordRepresentation ?? "id",
+    canCreate: Boolean(related.rootFields.create),
+  };
+}
+
+/**
+ * Editable fields for a model's inline create form, derived from its metadata:
+ * scalars, enums, and object relations, minus `id` and audit fields. Used by the
+ * relation picker's create dialog so an object relation can be created inline
+ * with no per-consumer field list.
+ */
+export function formFieldsFromMetadata(
+  metadata: ModelMetadata | null,
+): FieldDescriptor[] {
+  if (!metadata) return [];
+  const fields: FieldDescriptor[] = [];
+  for (const field of Object.values(metadata.fields)) {
+    if (NON_EDITABLE_FIELDS.has(field.name) || field.kind === "list") continue;
+    fields.push(formFieldDescriptor(field));
+  }
+  return fields;
+}
+
+function formFieldDescriptor(field: ModelFieldMetadata): FieldDescriptor {
+  if (field.kind === "enum") return { name: field.name, widget: "select" };
+  if (field.kind === "relation") return { name: field.name, widget: "many2one" };
+  const widget = field.scalar ? SCALAR_WIDGET[field.scalar] : undefined;
+  return widget ? { name: field.name, widget } : { name: field.name };
+}
+
+function stripTypeSuffix(typeName: string): string {
+  return typeName.endsWith("Type") ? typeName.slice(0, -4) : typeName;
+}
 
 const ENUM_OPTION_WIDGETS = new Set([
   "select",
@@ -47,12 +131,21 @@ export function fieldsWithMetadataDefaults(
 ): readonly FieldDescriptor[] {
   return fields.map((field) => {
     const fieldMetadata = metadata?.fields[field.name];
+    // A nested object relation with no explicit widget defaults to many2one, so
+    // the form selects `<field>.id` and the relation renderer can take over.
+    const widget =
+      field.widget === undefined
+        && field.options === undefined
+        && fieldMetadata?.kind === "relation"
+        ? "many2one"
+        : field.widget;
     const options = enumOptions(fieldMetadata);
     return {
       ...field,
+      ...(widget !== field.widget ? { widget } : {}),
       label: fieldLabel(field.name, fieldMetadata, field.label),
       ...(field.options === undefined
-        && isEnumOptionWidget(field.widget ?? field.kind)
+        && isEnumOptionWidget(widget ?? field.kind)
         && options.length > 0
         ? { options }
         : {}),

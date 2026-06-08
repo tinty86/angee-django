@@ -269,7 +269,7 @@ describe("FormView", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Vendor" }).textContent).toContain(
+      expect(screen.getByRole("button", { name: /Vendor/ }).textContent).toContain(
         "Vendor One",
       ),
     );
