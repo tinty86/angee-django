@@ -1,0 +1,176 @@
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
+import { useNavigate, useParams } from "@tanstack/react-router";
+
+import {
+  EmptyState,
+  Explorer,
+  LoadingPanel,
+  RelationPicker,
+  TreeView,
+} from "@angee/base";
+import { useAuthoredQuery, useResourceRecord } from "@angee/sdk";
+
+import {
+  KNOWLEDGE_PAGES_QUERY,
+  KNOWLEDGE_PAGE_QUERY,
+  KNOWLEDGE_VAULTS_QUERY,
+  type KnowledgePageData,
+  type KnowledgePagesData,
+  type KnowledgeVaultsData,
+  type OffsetPaginationVariables,
+  type PageIdVariables,
+} from "../data/documents";
+import { pageTreeRows, type KnowledgeTreeRow } from "../data/page-rows";
+import { BacklinksPanel } from "./BacklinksPanel";
+import { PageReader } from "./PageReader";
+
+/** The Django model label backing the page crumb. */
+const PAGE_MODEL = "knowledge.Page";
+// One safety-capped read each of vaults/pages; the browser scopes the set
+// client-side so the navigator and reader share one fetch.
+const KNOWLEDGE_LIST_LIMIT = 500;
+
+/** Reader route for one page — its relay id, percent-encoded into the path. */
+function pageDetailPath(id: string): string {
+  return `/knowledge/${encodeURIComponent(id)}`;
+}
+
+/**
+ * The knowledge wiki: an `Explorer` of a vault switcher + page-tree navigator,
+ * the open page's reader, and a backlinks aside. Vaults/pages load once; the
+ * switcher and tree drive client-side scoping, and selecting a page reads it.
+ */
+export function KnowledgePage(): ReactElement {
+  const variables = useMemo<OffsetPaginationVariables>(
+    () => ({ pagination: { offset: 0, limit: KNOWLEDGE_LIST_LIMIT } }),
+    [],
+  );
+  const vaultsQuery = useAuthoredQuery<KnowledgeVaultsData, OffsetPaginationVariables>(
+    KNOWLEDGE_VAULTS_QUERY,
+    variables,
+  );
+  const pagesQuery = useAuthoredQuery<KnowledgePagesData, OffsetPaginationVariables>(
+    KNOWLEDGE_PAGES_QUERY,
+    variables,
+  );
+
+  const vaults = vaultsQuery.data?.vaults.results ?? [];
+  const pages = pagesQuery.data?.pages.results ?? [];
+
+  // The open page is route state: `/knowledge/$id` reads that page into the
+  // content + aside; `/knowledge` is the empty reader.
+  const navigate = useNavigate();
+  const params = useParams({ strict: false });
+  const openPageId =
+    "id" in params && typeof params.id === "string" ? params.id : null;
+  const openPage = useCallback(
+    (id: string) => {
+      void navigate({ to: pageDetailPath(id) });
+    },
+    [navigate],
+  );
+  const closePage = useCallback(() => {
+    void navigate({ to: "/knowledge" });
+  }, [navigate]);
+
+  const detailVariables = useMemo<PageIdVariables>(
+    () => ({ id: openPageId ?? "" }),
+    [openPageId],
+  );
+  const detailQuery = useAuthoredQuery<KnowledgePageData, PageIdVariables>(
+    KNOWLEDGE_PAGE_QUERY,
+    detailVariables,
+    { enabled: openPageId !== null },
+  );
+  const detail = detailQuery.data?.page ?? null;
+
+  const [pinnedVaultId, setPinnedVaultId] = useState<string | null>(null);
+  const vaultId = pinnedVaultId ?? vaults[0]?.id ?? "";
+  const vaultOptions = useMemo(
+    () => vaults.map((vault) => ({ value: vault.id, label: vault.name })),
+    [vaults],
+  );
+  const treeRows = useMemo(
+    () => pageTreeRows(pages, vaultId),
+    [pages, vaultId],
+  );
+
+  if (vaultsQuery.fetching && vaults.length === 0) {
+    return <LoadingPanel message="Loading knowledge" />;
+  }
+  if (vaults.length === 0) {
+    return (
+      <div className="grid h-full place-content-center p-8">
+        <EmptyState
+          icon="vault"
+          title={vaultsQuery.error ? "Knowledge unavailable" : "No vaults"}
+          description={
+            vaultsQuery.error?.message ?? "No vaults are available to you."
+          }
+        />
+      </div>
+    );
+  }
+
+  const navigator = (
+    <div className="flex h-full flex-col gap-2 p-2">
+      <RelationPicker
+        aria-label="Vault"
+        value={vaultId}
+        options={vaultOptions}
+        placeholder="Select a vault"
+        searchPlaceholder="Search vaults…"
+        onChange={(value) => {
+          setPinnedVaultId(value);
+          closePage();
+        }}
+      />
+      <TreeView<KnowledgeTreeRow>
+        rows={treeRows}
+        parent="parent"
+        label="title"
+        rowKey="id"
+        icon="icon"
+        selectedId={openPageId ?? undefined}
+        onSelect={(row) => openPage(row.id)}
+        className="min-h-0 flex-1 overflow-auto"
+      />
+    </div>
+  );
+
+  return (
+    <Explorer
+      autoSave="knowledge.browser"
+      navigator={navigator}
+      aside={<BacklinksPanel backlinks={detail?.backlinks ?? []} onOpen={openPage} />}
+    >
+      {openPageId ? (
+        <PageReader detail={detail} fetching={detailQuery.fetching} />
+      ) : (
+        <div className="grid h-full place-content-center p-8">
+          <EmptyState
+            icon="note"
+            title="Select a page"
+            description="Choose a page from the tree to read it."
+          />
+        </div>
+      )}
+    </Explorer>
+  );
+}
+
+/** The record crumb for `/knowledge/$id` — the page's title. */
+export function PageCrumb({ id }: { id: string }): ReactElement {
+  const { fetching, record } = useResourceRecord(PAGE_MODEL, id || null, {
+    enabled: id !== "",
+    fields: ["title"],
+  });
+  const title = typeof record?.title === "string" ? record.title.trim() : "";
+  if (fetching) return <>…</>;
+  return <>{title || "Page"}</>;
+}
