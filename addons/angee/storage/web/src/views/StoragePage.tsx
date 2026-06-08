@@ -4,9 +4,11 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   EmptyState,
   Explorer,
+  Glyph,
   LoadingPanel,
   PreviewPane,
   RelationPicker,
+  SelectionBarAction,
   TreeView,
   type FieldDescriptor,
   type PreviewFile,
@@ -34,6 +36,7 @@ import {
   type StorageFileRow,
   type StorageTreeRow,
 } from "../data/file-rows";
+import { useFileActions } from "../data/use-file-actions";
 import { useStorageUpload } from "../data/use-upload";
 import { FileBrowserContent } from "./FileBrowserContent";
 import { FileDetail } from "./FileDetail";
@@ -150,6 +153,28 @@ export function StoragePage(): ReactElement {
     [],
   );
   const uploads = useStorageUpload({ onUploaded: () => filesQuery.refetch() });
+  const fileActions = useFileActions({ onChanged: () => filesQuery.refetch() });
+  // The selection bar's bulk verbs: Restore in the Trash scope, else Trash.
+  const renderBulkActions = (ids: ReadonlySet<string>, clear: () => void) =>
+    effectiveScope === TRASH_SCOPE ? (
+      <SelectionBarAction
+        surface="brand"
+        pending={fileActions.busy}
+        onClick={() => void fileActions.restoreMany(ids).then(clear)}
+      >
+        <Glyph name="restore" />
+        Restore
+      </SelectionBarAction>
+    ) : (
+      <SelectionBarAction
+        surface="brand"
+        pending={fileActions.busy}
+        onClick={() => void fileActions.trashMany(ids).then(clear)}
+      >
+        <Glyph name="trash" />
+        Trash
+      </SelectionBarAction>
+    );
   // Uploads land in the active drive, into the current folder (or its root); the
   // Trash scope is not an upload target.
   const canUpload = driveId !== "" && effectiveScope !== TRASH_SCOPE;
@@ -245,6 +270,7 @@ export function StoragePage(): ReactElement {
           fetching={filesQuery.fetching}
           error={filesQuery.error}
           rowHref={rowHref}
+          bulkActions={renderBulkActions}
           uploads={uploads}
           uploadTarget={uploadTarget}
           canUpload={canUpload}

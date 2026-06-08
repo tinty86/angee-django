@@ -41,12 +41,6 @@ export function FileDetail({
       returning={[...SUBTITLE_FIELDS]}
       submitLabel="Rename"
       onSaved={onChanged}
-      toolbarStart={
-        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-          <Glyph name="chevron-left" />
-          Files
-        </Button>
-      }
       toolbar={
         <>
           {canDownload ? (

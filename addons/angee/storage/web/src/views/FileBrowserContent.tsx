@@ -1,10 +1,10 @@
-import { useRef, useState, type ReactElement } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 
 import { Button, Glyph, RowsListView, cn } from "@angee/base";
 
 import type { StorageFileRow } from "../data/file-rows";
 import type { StorageUpload, UploadStatus, UploadTarget, UploadTask } from "../data/use-upload";
-import { fileColumns } from "./file-columns";
+import { fileColumns, fileGalleryCard } from "./file-columns";
 
 const STATUS_LABEL: Readonly<Record<UploadStatus, string>> = {
   hashing: "Preparing…",
@@ -21,6 +21,8 @@ export interface FileBrowserContentProps {
   error: Error | null;
   /** Detail route for a clicked row — the list renders each row as a link. */
   rowHref: (row: StorageFileRow) => string;
+  /** Bulk actions rendered in the selection bar when files are selected. */
+  bulkActions: (selectedIds: ReadonlySet<string>, clear: () => void) => ReactNode;
   uploads: StorageUpload;
   uploadTarget: UploadTarget;
   canUpload: boolean;
@@ -36,6 +38,7 @@ export function FileBrowserContent({
   fetching,
   error,
   rowHref,
+  bulkActions,
   uploads,
   uploadTarget,
   canUpload,
@@ -76,6 +79,9 @@ export function FileBrowserContent({
           fetching={fetching}
           error={error}
           rowHref={rowHref}
+          selectable
+          bulkActions={bulkActions}
+          gallery={{ renderCard: fileGalleryCard }}
           emptyMessage={canUpload ? "Drop files here or use Upload." : "No files here yet."}
           pageSize={50}
           toolbarActions={

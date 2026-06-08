@@ -16,6 +16,10 @@ export interface FileActions {
   trash: (id: string) => Promise<void>;
   /** Pull a file back out of the Trash. */
   restore: (id: string) => Promise<void>;
+  /** Soft-delete many files in one pass, refetching once. */
+  trashMany: (ids: Iterable<string>) => Promise<void>;
+  /** Restore many files in one pass, refetching once. */
+  restoreMany: (ids: Iterable<string>) => Promise<void>;
 }
 
 /**
@@ -52,5 +56,13 @@ export function useFileActions(
     busy,
     trash: (id) => run(() => deleteFile({ id })),
     restore: (id) => run(() => restoreFile({ id })),
+    trashMany: (ids) =>
+      run(async () => {
+        for (const id of ids) await deleteFile({ id });
+      }),
+    restoreMany: (ids) =>
+      run(async () => {
+        for (const id of ids) await restoreFile({ id });
+      }),
   };
 }
