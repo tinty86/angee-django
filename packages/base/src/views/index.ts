@@ -40,6 +40,10 @@ export {
   type TreeViewProps,
 } from "./TreeView";
 export {
+  GalleryView,
+  type GalleryViewProps,
+} from "./GalleryView";
+export {
   Tree,
   FolderTree,
   type TreeNode,
