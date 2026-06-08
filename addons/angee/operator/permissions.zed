@@ -6,12 +6,17 @@
 definition operator/role {
     // Roles-as-namespace with a runtime hierarchy: `includes` lets one operator
     // role imply another, and resources gate on `effective_member` so granted +
-    // implied members both resolve. Platform admins (angee/role:admin) are
-    // implicit members of every operator role.
+    // implied members both resolve. Platform admins (angee/role:admin) reach
+    // every operator role through the const-backed `admin` relation — synthetic,
+    // no per-object tuple, the same universal-admin path operator/connection
+    // uses — so a superuser resolves as an effective operator-admin without a
+    // seeded role grant. The `angee/role:admin#member` listing stays in `member`
+    // to keep the type grantable directly and satisfy the rebac.W004 check.
     relation member:   auth/user | auth/group#member | angee/role:admin#member
     relation includes: operator/role#effective_member
+    relation admin:    angee/role // rebac:const=admin
 
-    permission effective_member = member + includes
+    permission effective_member = member + includes + admin->member
 }
 
 definition operator/connection {
