@@ -145,17 +145,25 @@ export function FormView({
   const schemaMetadata = useSchemaFieldMetadata();
   const declaredFields = fields ?? childFields;
   const declaredGroups = groups ?? childGroups;
+  const isCreate = id == null;
   const resolvedFields = React.useMemo(
-    () => fieldsWithMetadataDefaults(declaredFields, modelMetadata),
-    [declaredFields, modelMetadata],
+    () =>
+      withModeLockedFields(
+        fieldsWithMetadataDefaults(declaredFields, modelMetadata),
+        isCreate,
+      ),
+    [declaredFields, modelMetadata, isCreate],
   );
   const resolvedGroups = React.useMemo(
     () =>
       declaredGroups.map((group) => ({
         ...group,
-        fields: fieldsWithMetadataDefaults(group.fields, modelMetadata),
+        fields: withModeLockedFields(
+          fieldsWithMetadataDefaults(group.fields, modelMetadata),
+          isCreate,
+        ),
       })),
-    [declaredGroups, modelMetadata],
+    [declaredGroups, modelMetadata, isCreate],
   );
   const formFields = React.useMemo(
     () => flattenedFormFields(resolvedFields, resolvedGroups),
@@ -173,7 +181,6 @@ export function FormView({
     }
     return map;
   }, [formFields, modelMetadata, schemaMetadata]);
-  const isCreate = id == null;
   const selection = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
     for (const field of formFields) addFieldSelection(paths, field);
@@ -786,6 +793,23 @@ function addFieldSelection(
     return;
   }
   paths.add(field.name);
+}
+
+/**
+ * Lock a field for the wrong mode: a `createOnly` field is read-only on an edit
+ * (an immutable key, or a create-time input the patch type rejects); an
+ * `editOnly` field is read-only on a create (a field the create input omits).
+ * Read-only fields are rendered uneditable and `mutationData` never sends them.
+ * No effect on plain fields.
+ */
+function withModeLockedFields(
+  fields: readonly FieldDescriptor[],
+  isCreate: boolean,
+): readonly FieldDescriptor[] {
+  return fields.map((field) => {
+    const locked = isCreate ? field.editOnly : field.createOnly;
+    return locked && !field.readOnly ? { ...field, readOnly: true } : field;
+  });
 }
 
 function flattenedFormFields(

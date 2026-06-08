@@ -19,6 +19,10 @@ export interface FieldProps {
   label?: ReactNode;
   widget?: string;
   readOnly?: boolean;
+  /** Editable only while creating; read-only (and never patched) on an edit. */
+  createOnly?: boolean;
+  /** Editable only while editing; read-only (and never sent) on a create. */
+  editOnly?: boolean;
   title?: boolean;
   body?: boolean;
   kind?: PageFieldKind;
@@ -32,6 +36,10 @@ export interface FieldDescriptor {
   label?: ReactNode;
   widget?: string;
   readOnly?: boolean;
+  /** Editable only while creating; read-only (and never patched) on an edit. */
+  createOnly?: boolean;
+  /** Editable only while editing; read-only (and never sent) on a create. */
+  editOnly?: boolean;
   title?: boolean;
   body?: boolean;
   kind?: PageFieldKind;

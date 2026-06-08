@@ -1,5 +1,10 @@
 export { ConsoleShell, type ConsoleShellProps } from "./ConsoleShell";
-export { ControlBand, type ControlBandProps } from "./ControlBand";
+export {
+  ControlBand,
+  ControlBandProvider,
+  type ControlBandProps,
+  type ControlBandProviderProps,
+} from "./ControlBand";
 export { PublicShell, type PublicShellProps } from "./PublicShell";
 export {
   Statusline,
