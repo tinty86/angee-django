@@ -10,6 +10,9 @@ import {
   Group,
   NEW_RECORD_ID,
   RevisionsTab,
+  Statusline,
+  StatusSegment,
+  StatuslineSpacer,
   type ChatterTab,
   type DataViewDefaultGroups,
   type RecordSmartButtonDescriptor,
@@ -157,6 +160,26 @@ export function NotePage(): React.ReactElement {
         {noteList}
         {noteForm}
       </DataPage>
+      <Statusline>
+        <StatusSegment icon="check" tone="success">
+          Synced
+        </StatusSegment>
+        <StatusSegment icon="notes">
+          {creating
+            ? "New note"
+            : activeRecordId
+              ? "Editing note"
+              : "All notes"}
+        </StatusSegment>
+        {activeRecordId ? (
+          <StatusSegment icon="versions">
+            {revisions.count} {revisions.count === 1 ? "revision" : "revisions"}
+          </StatusSegment>
+        ) : null}
+        <StatuslineSpacer />
+        <StatusSegment>notes.Note</StatusSegment>
+        <StatusSegment icon="grid">console</StatusSegment>
+      </Statusline>
     </div>
   );
 }
