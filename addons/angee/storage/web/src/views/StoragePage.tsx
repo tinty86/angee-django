@@ -10,6 +10,7 @@ import {
   RelationPicker,
   SelectionBarAction,
   TreeView,
+  useConfirm,
   type FieldDescriptor,
   type PreviewFile,
 } from "@angee/base";
@@ -44,6 +45,7 @@ import { useStorageUpload } from "../data/use-upload";
 import { FileBrowserContent } from "./FileBrowserContent";
 import { FileDetail } from "./FileDetail";
 import { NewFolderControl } from "./NewFolderControl";
+import { SelectedFolderControl } from "./SelectedFolderControl";
 
 /** Detail route for one file row — its relay id, percent-encoded into the path. */
 function fileDetailPath(id: string): string {
@@ -159,8 +161,14 @@ export function StoragePage(): ReactElement {
   const uploads = useStorageUpload({ onUploaded: () => filesQuery.refetch() });
   const fileActions = useFileActions({ onChanged: () => filesQuery.refetch() });
   const folderActions = useFolderActions({
-    onChanged: () => foldersQuery.refetch(),
+    // A folder write can move files (delete falls them back to the root), so
+    // refetch both trees.
+    onChanged: () => {
+      void foldersQuery.refetch();
+      void filesQuery.refetch();
+    },
   });
+  const confirm = useConfirm();
   // Dropping a file on a navigator node moves it: the Trash node trashes, All
   // files moves to the drive root, any folder node moves into that folder.
   const handleFileDrop = useCallback(
@@ -183,6 +191,26 @@ export function StoragePage(): ReactElement {
     },
     [driveId, effectiveScope, folderActions],
   );
+  // The active folder scope (a real folder, not the All/Trash pseudo-nodes); its
+  // navigator footer offers rename + delete.
+  const selectedFolder =
+    effectiveScope !== ALL_SCOPE && effectiveScope !== TRASH_SCOPE
+      ? treeRows.find((row) => row.id === effectiveScope)
+      : undefined;
+  const handleRenameFolder = (name: string): void => {
+    void folderActions.rename(effectiveScope, name);
+  };
+  const handleDeleteFolder = async (): Promise<void> => {
+    if (!selectedFolder) return;
+    const ok = await confirm({
+      title: `Delete "${selectedFolder.name}"?`,
+      body: "Files inside this folder move to the drive root.",
+      confirm: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    void folderActions.remove(effectiveScope).then(() => setScope(ALL_SCOPE));
+  };
   // The selection bar's bulk verbs: Restore in the Trash scope, else Trash.
   const renderBulkActions = (ids: ReadonlySet<string>, clear: () => void) =>
     effectiveScope === TRASH_SCOPE ? (
@@ -268,6 +296,15 @@ export function StoragePage(): ReactElement {
         }
         className="min-h-0 flex-1 overflow-auto"
       />
+      {selectedFolder ? (
+        <SelectedFolderControl
+          key={selectedFolder.id}
+          name={selectedFolder.name}
+          busy={folderActions.busy}
+          onRename={handleRenameFolder}
+          onDelete={handleDeleteFolder}
+        />
+      ) : null}
       <NewFolderControl busy={folderActions.busy} onCreate={handleNewFolder} />
     </div>
   );

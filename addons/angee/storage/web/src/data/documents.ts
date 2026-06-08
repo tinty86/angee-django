@@ -116,6 +116,35 @@ export const CREATE_FOLDER_MUTATION = `
   }
 `;
 
+export type UpdateFolderVariables = { data: { id: string; name?: string } };
+export interface UpdateFolderData {
+  updateFolder: { id: string; name: string };
+}
+
+export const UPDATE_FOLDER_MUTATION = `
+  mutation StorageUpdateFolder($data: FolderPatch!) {
+    updateFolder(data: $data) {
+      id
+      name
+    }
+  }
+`;
+
+/** Delete a folder; its files fall back to the drive root (FK SET_NULL). */
+export type DeleteFolderVariables = { id: string };
+export interface DeleteFolderData {
+  deleteFolder: { totalDeletedCount: number; hasBlockers: boolean };
+}
+
+export const DELETE_FOLDER_MUTATION = `
+  mutation StorageDeleteFolder($id: ID!) {
+    deleteFolder(id: $id, confirm: true) {
+      totalDeletedCount
+      hasBlockers
+    }
+  }
+`;
+
 /** `id` for the trash/restore mutations; the relay GlobalID of the file. */
 export type FileIdVariables = { id: string };
 export interface FileDeleteData {
