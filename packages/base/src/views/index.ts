@@ -48,6 +48,12 @@ export {
   type TimelineViewProps,
 } from "./TimelineView";
 export {
+  Notebook,
+  Tab,
+  type NotebookProps,
+  type TabProps,
+} from "./Notebook";
+export {
   Tree,
   FolderTree,
   type TreeNode,
