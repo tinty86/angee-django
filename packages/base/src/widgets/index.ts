@@ -32,6 +32,11 @@ export type {
   WidgetRenderProps,
 } from "./types";
 export { widgetLabel } from "./label";
+export {
+  RelationField,
+  type RelationFieldProps,
+  type RelationOption,
+} from "./RelationField";
 
 export const defaultWidgets = {
   text: textWidget,

@@ -256,12 +256,16 @@ export function useResourceRecord(
   const active =
     enabled && Boolean(modelLabel) && Boolean(id) && rootFields !== null;
 
+  // Assemble the detail document only when actually reading a record. A
+  // create-only form (no id, or disabled) never loads one, so it must not
+  // require a `detail` root field — models exposed list-only (e.g. a drive
+  // queried through `drives` with no `drive(id)`) can still be created inline.
   const document = useMemo(
     () =>
-      rootFields
+      active && rootFields
         ? assembleDetailDocument(modelLabel, stableFields, rootFields)
         : DISABLED_DOCUMENTS.query,
-    [modelLabel, rootFields, stableFields],
+    [active, modelLabel, rootFields, stableFields],
   );
   const variables = useMemo(() => ({ id: id ?? "" }), [id]);
 

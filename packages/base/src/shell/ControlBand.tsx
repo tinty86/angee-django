@@ -16,7 +16,13 @@ export const controlBandItemClassName =
 
 export interface ControlBandProviderProps {
   children: React.ReactNode;
-  host: HTMLElement | null;
+  /**
+   * Where bands below render: an element to portal into, `null` while a shell's
+   * host is still mounting, or `undefined` to force inline — the last is how a
+   * band-bearing view inside a dialog opts out of the shell's band and keeps its
+   * controls in the dialog.
+   */
+  host: HTMLElement | null | undefined;
 }
 
 export function ControlBandProvider({

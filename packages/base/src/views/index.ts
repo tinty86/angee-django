@@ -23,6 +23,11 @@ export {
   type RowsListViewProps,
 } from "./RowsListView";
 export {
+  RelationPicker,
+  type RelationPickerProps,
+  type RelationCreateConfig,
+} from "./RelationPicker";
+export {
   GraphView,
   type GraphViewEdge,
   type GraphViewEdgeStyle,
