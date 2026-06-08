@@ -31,6 +31,7 @@ import {
 
 import { Glyph } from "../chrome/Glyph";
 import { RelativeTime } from "../fragments/RelativeTime";
+import { writeDndPayload, type DndPayload } from "../lib/dnd";
 import { titleCase } from "../lib/titleCase";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -157,6 +158,7 @@ export interface FlatListBodyProps<TRow extends Row> {
   selectable?: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
+  draggableRow?: (row: TRow) => DndPayload | null;
   emptyMessage: React.ReactNode;
   fetching: boolean;
   footerAggregate?: AggregateBucket | null;
@@ -180,6 +182,7 @@ export function FlatListBody<TRow extends Row>({
   selectable = true,
   rowHref,
   onRowClick,
+  draggableRow,
   emptyMessage,
   fetching,
   footerAggregate,
@@ -265,6 +268,7 @@ export function FlatListBody<TRow extends Row>({
                       selectable,
                       rowHref,
                       onRowClick,
+                      draggableRow,
                       measures,
                     })
                   : null;
@@ -507,6 +511,7 @@ export function RecordRow<TRow extends Row>({
   selectable = true,
   rowHref,
   onRowClick,
+  draggableRow,
 }: {
   row: TableRowModel<TRow>;
   dataView: DataViewContextValue;
@@ -514,7 +519,9 @@ export function RecordRow<TRow extends Row>({
   selectable?: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
+  draggableRow?: (row: TRow) => DndPayload | null;
 }): React.ReactElement {
+  const dragProps = rowDragProps(draggableRow?.(row.original) ?? null);
   const href = rowHref?.(row.original);
   if (href) {
     return (
@@ -523,6 +530,7 @@ export function RecordRow<TRow extends Row>({
         dataView={dataView}
         selectable={selectable}
         href={href}
+        dragProps={dragProps}
       />
     );
   }
@@ -533,8 +541,22 @@ export function RecordRow<TRow extends Row>({
       interactive={interactive}
       selectable={selectable}
       onRowClick={onRowClick}
+      dragProps={dragProps}
     />
   );
+}
+
+type RowDragProps =
+  | { draggable: true; onDragStart: React.DragEventHandler }
+  | undefined;
+
+/** Native-drag props for a row carrying a dnd payload (the wire format seam). */
+function rowDragProps(payload: DndPayload | null): RowDragProps {
+  if (!payload) return undefined;
+  return {
+    draggable: true,
+    onDragStart: (event) => writeDndPayload(event.dataTransfer, payload),
+  };
 }
 
 function LinkedRecordRow<TRow extends Row>({
@@ -542,11 +564,13 @@ function LinkedRecordRow<TRow extends Row>({
   dataView,
   selectable,
   href,
+  dragProps,
 }: {
   row: TableRowModel<TRow>;
   dataView: DataViewContextValue;
   selectable: boolean;
   href: string;
+  dragProps?: RowDragProps;
 }): React.ReactElement {
   const id = row.id;
   const selected = dataView.state.selectedIds.has(id);
@@ -565,6 +589,7 @@ function LinkedRecordRow<TRow extends Row>({
   );
   return (
     <TableRow
+      {...dragProps}
       interactive
       role="link"
       tabIndex={0}
@@ -609,17 +634,20 @@ function PlainRecordRow<TRow extends Row>({
   interactive,
   selectable,
   onRowClick,
+  dragProps,
 }: {
   row: TableRowModel<TRow>;
   dataView: DataViewContextValue;
   interactive: boolean;
   selectable: boolean;
   onRowClick?: (row: TRow) => void;
+  dragProps?: RowDragProps;
 }): React.ReactElement {
   const id = row.id;
   const selected = dataView.state.selectedIds.has(id);
   return (
     <TableRow
+      {...dragProps}
       interactive={interactive}
       data-selected={selected ? "" : undefined}
       onClick={onRowClick ? () => onRowClick(row.original) : undefined}
@@ -671,6 +699,7 @@ function renderListItem<TRow extends Row>({
   selectable,
   rowHref,
   onRowClick,
+  draggableRow,
   measures,
 }: {
   item: ListRenderItem<TRow>;
@@ -680,6 +709,7 @@ function renderListItem<TRow extends Row>({
   selectable: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
+  draggableRow?: (row: TRow) => DndPayload | null;
   measures: readonly GroupMeasure[];
 }): React.ReactElement {
   if (item.kind === "group") {
@@ -703,6 +733,7 @@ function renderListItem<TRow extends Row>({
       selectable={selectable}
       rowHref={rowHref}
       onRowClick={onRowClick}
+      draggableRow={draggableRow}
     />
   );
 }

@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import type { Row } from "@angee/sdk";
 
 import { cn } from "../lib/cn";
+import { writeDndPayload, type DndPayload } from "../lib/dnd";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
 
@@ -26,6 +27,8 @@ export interface GalleryViewProps<TRow extends Row = Row> {
   /** Navigation target for a card — renders it as a link (mirrors `rowHref`). */
   cardHref?: (row: TRow) => string;
   onCardClick?: (row: TRow) => void;
+  /** Make a card draggable by returning its dnd payload, or `null`. */
+  draggableRow?: (row: TRow) => DndPayload | null;
   selectedIds?: ReadonlySet<string>;
   onToggleSelected?: (id: string, selected: boolean) => void;
   className?: string;
@@ -40,6 +43,7 @@ export function GalleryView<TRow extends Row = Row>({
   renderCard,
   cardHref,
   onCardClick,
+  draggableRow,
   selectedIds,
   onToggleSelected,
   className,
@@ -58,6 +62,7 @@ export function GalleryView<TRow extends Row = Row>({
               subtitleField={subtitleField}
               renderCard={renderCard}
               href={cardHref?.(row)}
+              dragPayload={draggableRow?.(row) ?? null}
               onClick={onCardClick}
               selected={selectedIds?.has(id) ?? false}
               onToggle={
@@ -80,6 +85,7 @@ function GalleryCard<TRow extends Row>({
   subtitleField,
   renderCard,
   href,
+  dragPayload,
   onClick,
   selected,
   onToggle,
@@ -90,6 +96,7 @@ function GalleryCard<TRow extends Row>({
   subtitleField?: keyof TRow & string;
   renderCard?: (row: TRow) => ReactNode;
   href?: string;
+  dragPayload?: DndPayload | null;
   onClick?: (row: TRow) => void;
   selected: boolean;
   onToggle?: (next: boolean) => void;
@@ -101,6 +108,13 @@ function GalleryCard<TRow extends Row>({
       "cursor-pointer hover:border-border-strong focus-visible:focus-ring",
     selected && "border-brand",
   );
+  const dragProps = dragPayload
+    ? {
+        draggable: true,
+        onDragStart: (event: React.DragEvent) =>
+          writeDndPayload(event.dataTransfer, dragPayload),
+      }
+    : undefined;
   const title = cardTitle(row, titleField);
   // Card body (custom or default) plus the selection checkbox overlay — kept at
   // card level so a custom `renderCard` still gets selection. The checkbox stops
@@ -138,7 +152,9 @@ function GalleryCard<TRow extends Row>({
   if (href) {
     return (
       <Card asChild density="sm" className={cardClass}>
-        <a href={href}>{content}</a>
+        <a href={href} {...dragProps}>
+          {content}
+        </a>
       </Card>
     );
   }
@@ -156,7 +172,7 @@ function GalleryCard<TRow extends Row>({
       }
     : {};
   return (
-    <Card {...interactive} density="sm" className={cardClass}>
+    <Card {...dragProps} {...interactive} density="sm" className={cardClass}>
       {content}
     </Card>
   );

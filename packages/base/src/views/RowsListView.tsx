@@ -2,6 +2,7 @@ import * as React from "react";
 import { LayoutGrid, List } from "lucide-react";
 
 import { Button } from "../ui/button";
+import type { DndPayload } from "../lib/dnd";
 import { GalleryView } from "./GalleryView";
 import {
   ControlBand,
@@ -79,6 +80,8 @@ export interface RowsListViewProps<TRow extends StringIdRow = StringIdRow> {
     selectedIds: ReadonlySet<string>,
     clear: () => void,
   ) => React.ReactNode;
+  /** Make each row/card draggable by returning its dnd payload, or `null`. */
+  draggableRow?: (row: TRow) => DndPayload | null;
 }
 
 /** Card presentation for {@link RowsListViewProps.gallery}; mirrors GalleryView. */
@@ -134,6 +137,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
   toolbarActions,
   gallery,
   bulkActions,
+  draggableRow,
   dataView,
 }: RowsListViewProps<TRow> & {
   dataView: DataViewContextValue;
@@ -290,6 +294,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
             renderCard={gallery.renderCard}
             cardHref={rowHref}
             onCardClick={onRowClick}
+            draggableRow={draggableRow}
             selectedIds={selectable ? surface.selectedIds : undefined}
             onToggleSelected={
               selectable ? dataView.toggleSelectedId : undefined
@@ -314,6 +319,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
             selectable={selectable}
             rowHref={rowHref}
             onRowClick={onRowClick}
+            draggableRow={draggableRow}
             emptyMessage={emptyMessage}
             fetching={fetching}
           />
