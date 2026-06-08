@@ -1,4 +1,10 @@
 import { fileIconName } from "../lib/file-display";
+import {
+  DRIVE_TYPE,
+  FOLDER_TYPE,
+  relationGlobalId,
+  toGlobalId,
+} from "../lib/global-id";
 import type { StorageFile, StorageFolder } from "./documents";
 
 // The browser fetches every drive/folder/file once and scopes client-side, so
@@ -41,7 +47,10 @@ export function fileRows(
 ): StorageFileRow[] {
   const { driveId, scope } = options;
   return files
-    .filter((file) => file.drive === driveId && inScope(file, scope))
+    .filter(
+      (file) =>
+        toGlobalId(DRIVE_TYPE, file.drive) === driveId && inScope(file, scope),
+    )
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map((file) => ({
       id: file.id,
@@ -54,8 +63,8 @@ export function fileRows(
       owner: file.createdByLabel ?? "—",
       updatedAt: file.updatedAt,
       url: file.url,
-      drive: file.drive,
-      folder: file.folder,
+      drive: toGlobalId(DRIVE_TYPE, file.drive),
+      folder: relationGlobalId(FOLDER_TYPE, file.folder),
     }));
 }
 
@@ -63,7 +72,7 @@ function inScope(file: StorageFile, scope: string): boolean {
   if (scope === TRASH_SCOPE) return file.isTrashed;
   if (file.isTrashed) return false;
   if (scope === ALL_SCOPE) return true;
-  return file.folder === scope;
+  return relationGlobalId(FOLDER_TYPE, file.folder) === scope;
 }
 
 /** The selected file's full record, for the preview pane. */
@@ -85,11 +94,12 @@ export function folderTreeRows(
     { id: TRASH_SCOPE, name: "Trash", parent: "", icon: "trash" },
   ];
   for (const folder of folders) {
-    if (folder.isVirtual || folder.drive !== driveId) continue;
+    if (folder.isVirtual) continue;
+    if (toGlobalId(DRIVE_TYPE, folder.drive ?? "") !== driveId) continue;
     rows.push({
       id: folder.id,
       name: folder.name,
-      parent: folder.parent ?? "",
+      parent: relationGlobalId(FOLDER_TYPE, folder.parent) ?? "",
       icon: "folder",
     });
   }
