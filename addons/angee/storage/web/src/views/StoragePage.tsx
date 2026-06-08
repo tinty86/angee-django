@@ -159,12 +159,7 @@ export function StoragePage(): ReactElement {
           setScope(ALL_SCOPE);
           setSelectedFileId(null);
         }}
-        create={{
-          model: "Drive",
-          fields: driveCreateFields,
-          prefillField: "name",
-          title: "New drive",
-        }}
+        create={{ model: "Drive", fields: driveCreateFields }}
         onCreated={() => drivesQuery.refetch()}
       />
       <TreeView<StorageTreeRow>

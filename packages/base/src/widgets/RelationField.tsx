@@ -1,8 +1,8 @@
-import { useMemo, useState, type ReactElement, type ReactNode } from "react";
-import { Command } from "cmdk";
+import { useMemo, useState, type ReactElement } from "react";
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { Command } from "../ui/command";
 import {
   PopoverContent,
   PopoverPortal,
@@ -24,33 +24,26 @@ export interface RelationFieldProps {
   placeholder?: string;
   searchPlaceholder?: string;
   readOnly?: boolean;
-  disabled?: boolean;
-  /** Accessible name for the trigger and the search list. */
+  /** Accessible name for the trigger; the selected value is appended to it. */
   "aria-label"?: string;
-  className?: string;
   /**
    * When set, the popover offers a "Create …" row for the typed query whenever
    * it matches no option — the searchable, in-place create affordance.
    */
   onCreate?: (query: string) => void;
-  /** Footer label for the create row; defaults to `Create "<query>"`. */
-  createLabel?: (query: string) => ReactNode;
 }
 
 const TRIGGER_CLASS =
   "flex h-9 w-full items-center gap-2 rounded-md border border-border bg-sheet px-3 " +
   "text-left text-13 text-fg outline-none transition-colors hover:border-border-strong " +
   "focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60";
-const ITEM_CLASS =
-  "flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-13 text-fg outline-none " +
-  "data-[selected=true]:bg-inset [&_.glyph]:size-3.5 [&_.glyph]:text-fg-muted";
 
 /**
  * A searchable relation picker: a trigger showing the selected record, and a
- * popover with a search box, the filtered options, and — when `onCreate` is
- * given and the typed query matches nothing — a "Create …" row. Pure UI; the
- * caller owns the options and what happens on create (`RelationPicker` wires it
- * to an inline create form).
+ * popover (the owned `Command` list) with a search box, the filtered options,
+ * and — when `onCreate` is given and the typed query matches nothing — a
+ * "Create …" row. Pure UI; the caller owns the options and what happens on
+ * create (`RelationPicker` wires it to an inline create form).
  */
 export function RelationField({
   value,
@@ -59,11 +52,8 @@ export function RelationField({
   placeholder = "Select…",
   searchPlaceholder = "Search…",
   readOnly,
-  disabled,
   "aria-label": ariaLabel,
-  className,
   onCreate,
-  createLabel,
 }: RelationFieldProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -83,6 +73,11 @@ export function RelationField({
     (option) => option.label.trim().toLowerCase() === normalized,
   );
   const showCreate = Boolean(onCreate) && normalized.length > 0 && !exactMatch;
+  const triggerLabel = selected
+    ? ariaLabel
+      ? `${ariaLabel}: ${selected.label}`
+      : selected.label
+    : ariaLabel;
 
   function dismiss(): void {
     setOpen(false);
@@ -98,9 +93,9 @@ export function RelationField({
       }}
     >
       <PopoverTrigger
-        className={cn(TRIGGER_CLASS, className)}
-        disabled={readOnly || disabled}
-        aria-label={ariaLabel}
+        className={TRIGGER_CLASS}
+        disabled={readOnly}
+        aria-label={triggerLabel}
       >
         <span className={cn("min-w-0 flex-1 truncate", !selected && "text-fg-muted")}>
           {selected ? selected.label : placeholder}
@@ -111,17 +106,15 @@ export function RelationField({
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverContent className="min-w-56 p-0">
             <Command shouldFilter={false} label={ariaLabel}>
-              <div className="flex h-9 items-center gap-2 border-b border-border-subtle px-3 text-fg">
-                <Glyph decorative name="search" className="text-fg-muted" />
+              <Command.Search>
                 <Command.Input
                   autoFocus
                   value={query}
                   onValueChange={setQuery}
                   placeholder={searchPlaceholder}
-                  className="h-full min-w-0 flex-1 bg-transparent text-13 outline-none placeholder:text-fg-muted"
                 />
-              </div>
-              <Command.List className="max-h-64 overflow-y-auto p-1">
+              </Command.Search>
+              <Command.List>
                 {filtered.map((option) => (
                   <Command.Item
                     key={option.value}
@@ -130,7 +123,6 @@ export function RelationField({
                       onChange?.(option.value);
                       dismiss();
                     }}
-                    className={ITEM_CLASS}
                   >
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
                     {option.value === value ? (
@@ -140,23 +132,21 @@ export function RelationField({
                 ))}
                 {showCreate ? (
                   <Command.Item
-                    value={`__create__:${query}`}
+                    value="__create__"
                     onSelect={() => {
                       onCreate?.(query.trim());
                       dismiss();
                     }}
-                    className={cn(ITEM_CLASS, "text-brand-text")}
+                    className="text-brand-text"
                   >
                     <Glyph decorative name="plus" />
                     <span className="min-w-0 flex-1 truncate">
-                      {createLabel ? createLabel(query.trim()) : `Create “${query.trim()}”`}
+                      Create “{query.trim()}”
                     </span>
                   </Command.Item>
                 ) : null}
                 {filtered.length === 0 && !showCreate ? (
-                  <div className="px-3 py-6 text-center text-13 text-fg-muted">
-                    No matches.
-                  </div>
+                  <Command.Empty>No matches.</Command.Empty>
                 ) : null}
               </Command.List>
             </Command>

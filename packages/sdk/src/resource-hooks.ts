@@ -291,12 +291,14 @@ export function useResourceRevisions(
   const active =
     enabled && Boolean(modelLabel) && Boolean(id) && rootFields !== null;
 
+  // Like useResourceRecord: assemble only when actually reading, so a disabled
+  // revisions hook on a model with no revisions root field can't throw.
   const document = useMemo(
     () =>
-      rootFields
+      active && rootFields
         ? assembleRevisionsDocument(modelLabel, revisionFields, rootFields)
         : DISABLED_DOCUMENTS.query,
-    [modelLabel, revisionFields, rootFields],
+    [active, modelLabel, revisionFields, rootFields],
   );
   const variables = useMemo(() => ({ id: id ?? "" }), [id]);
 
