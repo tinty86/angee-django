@@ -208,6 +208,9 @@ class PagePatch:
     title: str | None = strawberry.UNSET
     kind: str | None = strawberry.UNSET
     icon: str | None = strawberry.UNSET
+    # Reparent (move) within the vault — null lifts the page to the root. The
+    # REBAC `parent->write` gate authorises the destination.
+    parent: relay.GlobalID | None = strawberry.UNSET
 
 
 @strawberry.type
