@@ -44,6 +44,10 @@ export {
   type GalleryViewProps,
 } from "./GalleryView";
 export {
+  TimelineView,
+  type TimelineViewProps,
+} from "./TimelineView";
+export {
   Tree,
   FolderTree,
   type TreeNode,
