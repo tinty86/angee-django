@@ -155,7 +155,15 @@ Rules that follow from the layering:
   `permissions.zed` beside the owning app. Permission sync is the library's
   own `manage.py rebac sync`. Use the library's
   field-backed relations (`// rebac:field=...`) when a relationship is already
-  represented by a Django FK or one-to-one field.
+  represented by a Django FK or one-to-one field. See the REBAC section below for
+  this project's fail-closed posture and its traps.
+- For a vendor-backed capability, keep catalogue models pure metadata, put the
+  provider implementation choice on the connection as a dotted-path `impl_class`
+  string (never on the catalogue), give each host its own addon, name things in
+  the domain's own terms, and keep side-effecting work on the operator — Django
+  stays the catalogue.
+- Cross-addon dependencies are one-way (e.g. `integrate → iam`, never the
+  reverse); reject a bridge/diamond addon that would couple both ways.
 - GraphQL authoring is native Strawberry. Addons expose a `schemas` mapping in
   conventional `schema.py` modules. Each named schema contributes Strawberry
   types into fixed buckets (`query`, `mutation`, `subscription`, `types`,
@@ -163,6 +171,78 @@ Rules that follow from the layering:
   `Schema` per name.
 - Use symbolic model references across addon boundaries; avoid import cycles.
 - Build output must be byte-deterministic.
+
+## REBAC
+
+REBAC is owned by `django-zed-rebac` (see the Rules entry and `docs/stack.md`).
+This project runs **fail-closed**: `REBAC_STRICT_MODE=True` and
+`REBAC_SUPERUSER_BYPASS=False`, so every actor — superusers included — reaches
+data through REBAC, never a queryset bypass.
+
+- Bracket every server-side read/write in `system_context`/`asystem_context` and
+  resolve the actor with `@rebac_subject`; a bare `Model.objects.create()` under
+  an actor is denied.
+- A per-row `create` permission cannot gate an insert (the unsaved row has no id →
+  deny). Gate explicitly with a preflight (`has_access("write")` /
+  `rebac.check_new`), then insert via `row.sudo()` + `save()`; `.sudo()` never
+  auto-clears, so follow with `.with_actor(actor)`.
+- Model universal-admin reach as a const-backed relation
+  (`relation admin: angee/role // rebac:const=admin`, no tuple or FK) resolving
+  membership in `angee/role:admin`. Admin-gate a table-less/synthetic resource
+  with a `managed=False` abstract anchor model (passes `rebac.E009`, emits no
+  table) plus that const admin, and keep an `| angee/role:admin#member` arm in
+  `member` or `rebac.W004` fires.
+- There is no `rebac_roles` command — grant roles with `rebac.roles.grant`. A
+  superuser created without a real `save()` (bulk_create, loaddata, or skipped as
+  unchanged) is never in `angee/role:admin#member`, so const-admin reach fails
+  until re-granted.
+- Never `select_related` a REBAC-guarded relation into an actor-scoped queryset —
+  it fails live ("loaded N rows outside actor scope") while passing unit tests.
+  Resolve the field elevated by FK id under `system_context`, and verify by
+  rendering the live page, not just the test.
+- Derive operator/edge token scope from `<ns>/role:<id>#effective_member` (folds
+  in role-hierarchy `includes`), never `roles_of`/`roleRefs` (a direct-grants UX
+  hint that under-grants).
+- `rebac sync` persists the zed into DB `Schema*` tables, and the system checks
+  gate every subcommand on that persisted state — so editing the zed can deadlock
+  the sync. Unstick with `rebac --skip-checks sync --force-overwrite --yes` then
+  `rebac sync`; never smoke-test a zed against the shared example DB.
+
+## Pitfalls
+
+Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
+
+- **`uv run` tool shebangs are stale** — run Python tools by module:
+  `uv run python -m pytest`, `uv run python -m mypy angee addons`,
+  `uv run python -m ruff check .`. Bare `uv run pytest`/`mypy` fail to spawn.
+- **Regenerate the SDL after `angee build`** — re-run `manage.py schema`
+  (+ `--check`). A missing `runtime/schemas/*.graphql` makes Vite ENOENT and the
+  SPA silently fails to mount (every e2e fails at list load) while `:5173` still
+  returns 200; check `runtime/schemas/` before chasing app/test regressions.
+- **`makemigrations` must name every changed app** — include `resources` (and
+  `base`) or `resources load` fails with `no such table: resources_resource`.
+- **A resource yaml loads only when listed** in the addon's `AppConfig.resources`
+  manifest (`{tier: (paths,)}`); an unlisted file silently loads nothing.
+- **Use `angee.base.fields.SqidField`** on any model whose sqid can be selected
+  through a nullable join — `django_sqids.SqidsField` crashes on a NULL (REBAC
+  `// rebac:field=` arrows run over nullable FKs).
+- **A status field is read/write-asymmetric** — GraphQL serializes it on read as
+  the uppercase enum NAME (`ACTIVE`) but the writable `Patch.status` `String`
+  takes the lowercase model value (`"disabled"`).
+- **Intersect write-only fields out of the read/return selection** — a field
+  absent from the SDL read type (e.g. `password`) makes the detail query invalid
+  and the form loads blank if it is selected.
+- **Validation surfaces two ways** — Django `ValidationError` flows through
+  `extensions.validationErrors` (camelCased), but GraphQL input-coercion errors
+  fire before resolvers and never reach it, so guard required inputs client-side
+  from `rootFields.requiredCreateFields`.
+- **In test-client logins pass the backend** —
+  `force_login(user, backend="django.contrib.auth.backends.ModelBackend")`; the
+  default pins `RebacBackend`, whose `get_user` fails outside actor scope and
+  yields `AnonymousUser`.
+- **After adding or moving an addon** run `pnpm install`, and delete any stale
+  gitignored `runtime/*/migrations/*.py` that imports a moved module before
+  `makemigrations`.
 
 ## Framework Contracts
 
@@ -252,11 +332,12 @@ Run the narrowest relevant check while editing, then the broad check before
 handoff:
 
 ```sh
-uv run ruff check . --no-cache
-uv run mypy angee addons
-uv run vulture
-uv run pytest
+uv run python -m ruff check . --no-cache
+uv run python -m mypy angee addons
+uv run python -m vulture
+uv run python -m pytest
 uv run examples/notes-angee/manage.py angee build --check
 ```
 
-If a command is not wired yet, say so plainly.
+Use the `python -m` module form (see Pitfalls: bare `uv run pytest`/`mypy` fail to
+spawn on this repo's venv). If a command is not wired yet, say so plainly.

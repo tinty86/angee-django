@@ -228,3 +228,21 @@ backend and frontend guidelines and follow "verify before claiming done" above._
 - Frontend rules live in `docs/frontend/guidelines.md`.
 - Root rules stay here. Do not duplicate language-specific guidance in this
   file.
+
+## Where Knowledge Lives
+
+Project knowledge is checked in, not held in any agent's private memory — so the
+whole team and every future agent inherits it.
+
+- **Durable knowledge — conventions, gotchas/pitfalls, and architecture
+  decisions — goes into the checked-in docs.** When you learn something that will
+  matter next time, extend the owning guideline (`docs/backend/guidelines.md`,
+  `docs/frontend/guidelines.md`, `docs/guidelines.md`, or `docs/stack.md`) as a
+  terse rule or a `Pitfalls` entry. Don't restate code contracts (field/API
+  inventories) — those live beside the code (see "Let Code Carry Code Contracts"
+  in `docs/guidelines.md`).
+- **Agent work-state — plans, working notes, handovers — goes into `.agents/`**
+  (committed; see `.agents/README.md`), not a private store.
+- **Do not rely on private or per-agent memory for anything about this project.**
+  A private note is invisible to teammates and to the next agent; capture the
+  durable rule in `docs/` and the work-state in `.agents/` instead.
