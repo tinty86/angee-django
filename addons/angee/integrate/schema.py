@@ -18,12 +18,10 @@ from strawberry_django.pagination import OffsetPaginated
 from angee.graphql.crud import crud
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
-from angee.iam.schema import PlatformAdminPermission
+from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 
 Vendor = apps.get_model("integrate", "Vendor")
 Connection = apps.get_model("integrate", "Connection")
-
-_ADMIN_PERMISSION_CLASSES: list[type] = [PlatformAdminPermission]
 
 
 @strawberry_django.type(Vendor)

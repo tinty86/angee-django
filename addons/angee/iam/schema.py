@@ -28,7 +28,6 @@ from rebac import (
 from rebac import (
     backend as rebac_backend,
 )
-from rebac.managers import RebacManager
 from rebac.models import active_relationship_model
 from rebac.roles import (
     ROLE_RELATION,
@@ -44,7 +43,6 @@ from rebac.roles import (
 )
 from rebac.schema.ast import PermArrow, PermBinOp, PermNil, PermRef
 from strawberry import auto, relay
-from strawberry.permission import BasePermission
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
@@ -57,6 +55,9 @@ from angee.iam.credentials import CredentialKind
 from angee.iam.oidc import client as client_module
 from angee.iam.oidc import state
 from angee.iam.oidc.errors import INVALID_STATE, OidcFlowError
+from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
+from angee.iam.permissions import is_authenticated as _is_authenticated
+from angee.iam.permissions import request_from_info as _request
 
 
 def _has_module_spec(dotted_path: str) -> bool:
@@ -556,33 +557,6 @@ class ExternalAccountInput:
     display_name: str = ""
     avatar_url: str = ""
     status: str = "active"
-
-
-class PlatformAdminPermission(BasePermission):
-    """Allow only actors that reach IAM's const-backed platform admin role."""
-
-    message = "Platform admin permission required."
-    error_extensions = {"code": "PERMISSION_DENIED"}
-
-    def has_permission(
-        self,
-        source: Any,
-        info: strawberry.Info,
-        **kwargs: Any,
-    ) -> bool:
-        """Return whether the request user has platform-admin reach."""
-
-        del source, kwargs
-        user = getattr(_request(info), "user", None)
-        if not _is_authenticated(user):
-            return False
-        user_pk = cast(Any, user).pk
-        if isinstance(User._default_manager, RebacManager):
-            return cast(bool, User.objects.filter(pk=user_pk).exists())
-        return bool(getattr(user, "is_superuser", False))
-
-
-_ADMIN_PERMISSION_CLASSES: list[type[BasePermission]] = [PlatformAdminPermission]
 
 
 def _available_connections(
@@ -1269,12 +1243,6 @@ class IAMPermissionHubMutation:
             return bool(rebac_revoke(actor=principal, role=role_ref))
 
 
-def _request(info: strawberry.Info) -> HttpRequest:
-    """Return the Django request from Strawberry's context."""
-
-    return cast(HttpRequest, info.context.request)
-
-
 def _session_user(info: strawberry.Info) -> Any:
     """Return the authenticated session user or raise a REBAC denial."""
 
@@ -1282,14 +1250,6 @@ def _session_user(info: strawberry.Info) -> Any:
     if not _is_authenticated(user):
         raise PermissionDenied("Authentication required.")
     return user
-
-
-def _is_authenticated(user: Any) -> bool:
-    """Return whether ``user`` is a real authenticated session user."""
-
-    return not isinstance(user, AnonymousUser) and bool(
-        getattr(user, "is_authenticated", False)
-    )
 
 
 def _enabled_oidc_oauth_client(oauth_client_sqid: str) -> Any:
