@@ -7,7 +7,8 @@ rows:
   # "Continue with <provider>" flow up to the provider redirect.
   - _xref: demo_google
     fields:
-      vendor: iam.google
+      slug: google
+      icon: google
       display_name: Google (demo)
       client_id: demo-oidc-client
       is_oidc: true

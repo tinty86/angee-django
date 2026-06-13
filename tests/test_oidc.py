@@ -28,7 +28,7 @@ from angee.iam.oidc.errors import (
     INVALID_STATE,
     OidcFlowError,
 )
-from tests.conftest import Credential, ExternalAccount, OAuthClient, Vendor, _create_missing_tables
+from tests.conftest import Credential, ExternalAccount, OAuthClient, _create_missing_tables
 
 
 def test_discovery_fallback_fills_blank_authorize_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,9 +283,9 @@ def test_resolver_existing_external_account_returns_owner(
     """An existing external account resolves through its owner relationship."""
 
     user = get_user_model().objects.create_user(username="oidc-owner", email="owner@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-existing",
         owner=user,
         email="owner@example.com",
@@ -308,9 +308,9 @@ def test_resolver_blocks_non_active_account(oidc_tables: None) -> None:
     """A revoked/expired/disabled external account must not log its owner in."""
 
     user = get_user_model().objects.create_user(username="revoked-owner", email="rev@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-revoked",
         owner=user,
         email="rev@example.com",
@@ -328,8 +328,8 @@ def test_resolver_blocks_inactive_user(oidc_tables: None) -> None:
     user = get_user_model().objects.create_user(username="inactive-owner", email="ina@example.com")
     user.is_active = False
     user.save(update_fields=["is_active"])
-    vendor, oauth_client = _vendor_and_oauth_client()
-    ExternalAccount.objects.link(vendor, "sub-inactive", owner=user, email="ina@example.com")
+    oauth_client = _oauth_client()
+    ExternalAccount.objects.link(oauth_client, "sub-inactive", owner=user, email="ina@example.com")
 
     with pytest.raises(OidcFlowError):
         identity.resolve(oauth_client, sub="sub-inactive", email="ina@example.com", claims={"sub": "sub-inactive"})
@@ -342,7 +342,7 @@ def test_resolver_link_on_email_match_uses_signed_email_claim(
     """link_on_email_match follows the P1 policy without requiring email_verified."""
 
     user = get_user_model().objects.create_user(username="verify-match", email="vm@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client(link_on_email_match=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(link_on_email_match=True, allowed_email_domains=["example.com"])
 
     resolved = identity.resolve(
         oauth_client,
@@ -353,7 +353,7 @@ def test_resolver_link_on_email_match_uses_signed_email_claim(
 
     assert resolved.pk == user.pk
     with system_context(reason="test oidc assertions"):
-        account = ExternalAccount.objects.get(vendor=vendor, external_id="sub-unverified")
+        account = ExternalAccount.objects.get(oauth_client=oauth_client, external_id="sub-unverified")
     assert account.email == "vm@example.com"
 
 @pytest.mark.django_db(transaction=True)
@@ -362,7 +362,7 @@ def test_resolver_create_on_login_uses_signed_email_claim(
 ) -> None:
     """create_on_login follows the P1 policy without requiring email_verified."""
 
-    vendor, oauth_client = _vendor_and_oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
 
     user = identity.resolve(
         oauth_client,
@@ -373,7 +373,7 @@ def test_resolver_create_on_login_uses_signed_email_claim(
 
     assert user.email == "new@example.com"
     with system_context(reason="test oidc assertions"):
-        account = ExternalAccount.objects.get(vendor=vendor, external_id="sub-unverified-new")
+        account = ExternalAccount.objects.get(oauth_client=oauth_client, external_id="sub-unverified-new")
     assert account.email == "new@example.com"
 
 @pytest.mark.django_db(transaction=True)
@@ -383,7 +383,7 @@ def test_resolver_link_on_email_match_creates_external_account(
     """Email-match login links a new external account to an existing user."""
 
     user = get_user_model().objects.create_user(username="email-match", email="match@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client(link_on_email_match=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(link_on_email_match=True, allowed_email_domains=["example.com"])
 
     resolved = identity.resolve(
         oauth_client,
@@ -394,7 +394,7 @@ def test_resolver_link_on_email_match_creates_external_account(
 
     assert resolved.pk == user.pk
     with system_context(reason="test oidc assertions"):
-        account = ExternalAccount.objects.get(vendor=vendor, external_id="sub-email")
+        account = ExternalAccount.objects.get(oauth_client=oauth_client, external_id="sub-email")
     assert account.email == "match@example.com"
 
 
@@ -404,7 +404,7 @@ def test_resolver_create_on_login_provisions_user_and_external_account(
 ) -> None:
     """Create-on-login provisions a non-superuser user and linked account."""
 
-    vendor, oauth_client = _vendor_and_oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
 
     user = identity.resolve(
         oauth_client,
@@ -416,7 +416,7 @@ def test_resolver_create_on_login_provisions_user_and_external_account(
     assert user.email == "new@example.com"
     assert user.is_superuser is False
     with system_context(reason="test oidc assertions"):
-        account = ExternalAccount.objects.get(vendor=vendor, external_id="sub-new")
+        account = ExternalAccount.objects.get(oauth_client=oauth_client, external_id="sub-new")
     assert account.email == "new@example.com"
     assert account.display_name == "New User"
 
@@ -427,7 +427,7 @@ def test_resolver_create_on_login_sets_user_names_from_claims(
 ) -> None:
     """Provisioned users receive first and last names from OIDC name claims."""
 
-    _vendor, oauth_client = _vendor_and_oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
 
     user = identity.resolve(
         oauth_client,
@@ -452,7 +452,7 @@ def test_async_resolver_create_on_login_provisions_user_and_external_account(
 ) -> None:
     """The ASGI-facing resolver path provisions through thread-sensitive sync ORM."""
 
-    vendor, oauth_client = _vendor_and_oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
+    oauth_client = _oauth_client(create_on_login=True, allowed_email_domains=["example.com"])
 
     user = async_to_sync(identity.aresolve)(
         oauth_client,
@@ -464,7 +464,7 @@ def test_async_resolver_create_on_login_provisions_user_and_external_account(
     assert user.email == "async@example.com"
     assert user.is_superuser is False
     with system_context(reason="test oidc assertions"):
-        account = ExternalAccount.objects.get(vendor=vendor, external_id="sub-async")
+        account = ExternalAccount.objects.get(oauth_client=oauth_client, external_id="sub-async")
     assert account.email == "async@example.com"
     assert account.display_name == "Async User"
 
@@ -475,7 +475,7 @@ def test_resolver_disallowed_domain_raises_403(
 ) -> None:
     """Domain policy blocks linking and provisioning."""
 
-    _vendor, oauth_client = _vendor_and_oauth_client(
+    oauth_client = _oauth_client(
         link_on_email_match=True,
         create_on_login=True,
         allowed_email_domains=["allowed.example"],
@@ -501,7 +501,7 @@ def test_complete_link_populates_credential_token_fields(
     """Credential link persists token-derived expiry, scopes, and refresh telemetry."""
 
     link_user = get_user_model().objects.create_user(username="token-fields", email="tokens@example.com")
-    _vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     state_token, _record = oidc_state.issue(
         oauth_client,
         "https://app.example/callback",
@@ -536,7 +536,7 @@ def test_complete_link_populates_credential_token_fields(
     with system_context(reason="test oidc assertions"):
         credential = Credential.objects.get(user=link_user, oauth_client=oauth_client, external_account=account)
     account.refresh_from_db()
-    assert account.credentials_provider_id == oauth_client.pk
+    assert account.oauth_client_id == oauth_client.pk
     assert account.credential_id == credential.pk
     assert account.credential_status == "active"
     assert credential.expires_at is not None
@@ -554,7 +554,7 @@ def test_credential_upsert_reasserts_active_status(
     """Re-upserting an OAuth credential reactivates a previously revoked row."""
 
     user = get_user_model().objects.create_user(username="reactivated", email="reactivated@example.com")
-    _vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     credential = Credential.objects.upsert_for_user(user, oauth_client, "oauth", {"access_token": "first-token"})
     with system_context(reason="test oidc setup"):
         Credential.objects.filter(pk=credential.pk).update(status=CredentialStatus.REVOKED)
@@ -574,7 +574,7 @@ def test_userinfo_claims_merge_into_login_and_link_claims(
     """Userinfo claims enrich ID-token claims before login resolve and account link."""
 
     link_user = get_user_model().objects.create_user(username="merged-claims", email="merged@example.com")
-    _vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     token_response = {"access_token": "access", "id_token": "id-token"}
     id_claims = {
         "sub": "sub-merged",
@@ -664,9 +664,9 @@ def test_complete_link_rejects_account_owned_by_another_user(
 
     owner = get_user_model().objects.create_user(username="linked-owner", email="owner@example.com")
     other = get_user_model().objects.create_user(username="linked-other", email="other@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-linked",
         owner=owner,
         email="owner@example.com",
@@ -712,7 +712,7 @@ def test_complete_link_binds_to_state_user_after_session_swap(
 
     start_user = get_user_model().objects.create_user(username="link-start", email="start@example.com")
     swapped_user = get_user_model().objects.create_user(username="link-swapped", email="swapped@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client()
+    oauth_client = _oauth_client()
     state_token, _record = oidc_state.issue(
         oauth_client,
         "https://app.example/callback",
@@ -810,7 +810,7 @@ def oidc_tables() -> Iterator[None]:
                     schema_editor.delete_model(model)
 
 
-def _vendor_and_oauth_client(**overrides: Any) -> tuple[Vendor, OAuthClient]:
+def _oauth_client(slug: str = "oidc", **overrides: Any) -> OAuthClient:
     """Create one enabled OIDC OAuth client for resolver tests."""
 
     defaults = {
@@ -831,9 +831,7 @@ def _vendor_and_oauth_client(**overrides: Any) -> tuple[Vendor, OAuthClient]:
     }
     defaults.update(overrides)
     with system_context(reason="test oidc setup"):
-        vendor = Vendor.objects.create(slug="oidc", display_name="OIDC")
-        oauth_client = OAuthClient.objects.create(vendor=vendor, **defaults)
-    return vendor, oauth_client
+        return OAuthClient.objects.create(slug=slug, **defaults)
 
 
 def _stub_oauth_client(**overrides: Any) -> SimpleNamespace:

@@ -14,4 +14,10 @@ class IntegrateConfig(AppConfig):
     name = "angee.integrate"
     label = "integrate"
     depends_on = ("angee.iam",)
+    schemas = "schema.schemas"
     permissions = "permissions.zed"
+
+    resources = {
+        "master": ({"path": "resources/master/010_integrate.vendor.yaml", "adopt": "slug"},),
+    }
+    """Default third-party vendor catalogue, adopted by slug so reloads stay idempotent."""

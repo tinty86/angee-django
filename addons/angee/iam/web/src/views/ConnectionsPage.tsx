@@ -24,7 +24,6 @@ import {
 import type {
   IAMExternalAccountSummary,
   IAMOAuthClient,
-  IAMVendorSummary,
 } from "../documents";
 import { userLabel } from "../identity-labels";
 import { IAM_LIST_LIMIT } from "../list-config";
@@ -35,7 +34,6 @@ import {
   externalAccountFormFromAccount,
   providerDefaultValues,
   providerFormGroups,
-  vendorFormFields,
   type ExternalAccountFormState,
 } from "./ConnectionDialogs";
 import {
@@ -44,26 +42,15 @@ import {
 } from "./ConnectionListColumns";
 import { ConnectionSummary } from "./ConnectionSummary";
 
-const VENDOR_MODEL = "Vendor";
 const OAUTH_CLIENT_MODEL = "OAuthClient";
 const EXTERNAL_ACCOUNT_MODEL = "ExternalAccount";
 const USER_MODEL = "User";
 
-const VENDOR_FIELDS = [
-  "slug",
-  "displayName",
-  "websiteUrl",
-  "icon",
-  "description",
-] as const;
 const USER_OPTION_FIELDS = ["username", "email"] as const;
 const OAUTH_CLIENT_FIELDS = [
   "displayName",
-  "vendor.id",
-  "vendor.slug",
-  "vendor.displayName",
-  "vendorLabel",
-  "vendorSlug",
+  "slug",
+  "icon",
   "environment",
   "clientId",
   "clientSecret",
@@ -95,12 +82,12 @@ const EXTERNAL_ACCOUNT_FIELDS = [
   "status",
   "credentialStatus",
   "lastUsedAt",
-  "vendor.id",
-  "vendor.slug",
-  "vendor.displayName",
+  "providerSlug",
+  "providerLabel",
+  "providerIcon",
 ] as const;
 
-type DialogKind = "vendor" | "provider" | "account" | null;
+type DialogKind = "provider" | "account" | null;
 
 interface UserOptionRow extends Row {
   id: string;
@@ -110,10 +97,6 @@ interface UserOptionRow extends Row {
 
 export function ConnectionsPage(): ReactElement {
   const toast = useToast();
-  const vendors = useResourceList(VENDOR_MODEL, {
-    fields: VENDOR_FIELDS,
-    pageSize: IAM_LIST_LIMIT,
-  });
   const users = useResourceList(USER_MODEL, {
     fields: USER_OPTION_FIELDS,
     pageSize: IAM_LIST_LIMIT,
@@ -132,7 +115,6 @@ export function ConnectionsPage(): ReactElement {
     { fields: EXTERNAL_ACCOUNT_FIELDS },
   );
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const [vendorId, setVendorId] = useState<string | null>(null);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState<ExternalAccountFormState>(() =>
     emptyExternalAccountForm(""),
@@ -140,13 +122,15 @@ export function ConnectionsPage(): ReactElement {
   const [actionError, setActionError] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
 
-  const vendorOptions = useMemo(
+  const oauthClientOptions = useMemo(
     () =>
-      (vendors.rows as unknown as readonly IAMVendorSummary[]).map((vendor) => ({
-        value: vendor.id,
-        label: vendor.displayName || vendor.slug,
-      })),
-    [vendors.rows],
+      (oauthClients.rows as unknown as readonly IAMOAuthClient[]).map(
+        (client) => ({
+          value: client.id,
+          label: client.displayName || client.slug,
+        }),
+      ),
+    [oauthClients.rows],
   );
   const userOptions = useMemo(
     () =>
@@ -156,15 +140,11 @@ export function ConnectionsPage(): ReactElement {
       })),
     [users.rows],
   );
-  const firstVendorId = vendorOptions[0]?.value ?? "";
+  const firstOauthClientId = oauthClientOptions[0]?.value ?? "";
   const providerGroups = useMemo(() => providerFormGroups(), []);
-  const providerDefaults = useMemo(
-    () => providerDefaultValues(firstVendorId),
-    [firstVendorId],
-  );
+  const providerDefaults = useMemo(() => providerDefaultValues(), []);
 
   function refetchConnections(): void {
-    vendors.refetch();
     oauthClients.refetch();
     externalAccounts.refetch();
     setRefreshVersion((current) => current + 1);
@@ -175,12 +155,7 @@ export function ConnectionsPage(): ReactElement {
     setActionError(null);
   }
 
-  function openVendor(vendor?: IAMVendorSummary): void {
-    setVendorId(vendor?.id ?? null);
-    setDialog("vendor");
-  }
-
-  function openProvider(client?: IAMOAuthClient): void {
+  function openProvider(client?: { id: string }): void {
     setProviderId(client?.id ?? null);
     setDialog("provider");
   }
@@ -188,24 +163,38 @@ export function ConnectionsPage(): ReactElement {
   function openExternalAccount(account?: IAMExternalAccountSummary): void {
     setAccountForm(
       account
-        ? externalAccountFormFromAccount(account)
-        : emptyExternalAccountForm(firstVendorId),
+        ? // Edit: resolve the exact originating client by its unique (slug,
+          // environment) key. On a miss leave it empty so the user must pick
+          // explicitly — never silently re-point the account at another client.
+          externalAccountFormFromAccount(account, clientIdForAccount(account))
+        : emptyExternalAccountForm(firstOauthClientId),
     );
     setActionError(null);
     setDialog("account");
   }
 
+  function clientIdForAccount(account: IAMExternalAccountSummary): string {
+    const match = (
+      oauthClients.rows as unknown as readonly IAMOAuthClient[]
+    ).find(
+      (client) =>
+        client.slug === account.providerSlug &&
+        client.environment === account.providerEnvironment,
+    );
+    return match?.id ?? "";
+  }
+
   async function handleAccountSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!accountForm.vendor || !accountForm.externalId.trim()) {
-      setActionError("Vendor and external ID are required.");
+    if (!accountForm.oauthClient || !accountForm.externalId.trim()) {
+      setActionError("Login provider and external ID are required.");
       return;
     }
     setActionError(null);
     try {
       await createExternalAccount({
         data: {
-          vendor: accountForm.vendor,
+          oauthClient: accountForm.oauthClient,
           externalId: accountForm.externalId.trim(),
           owner: accountForm.owner || null,
           email: accountForm.email.trim(),
@@ -226,16 +215,15 @@ export function ConnectionsPage(): ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
-      <OptionsError vendors={vendors.error} users={users.error} />
+      <OptionsError
+        oauthClients={oauthClients.error}
+        users={users.error}
+      />
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={() => openVendor()}>
-          <Glyph name="plus" />
-          New vendor
-        </Button>
         <Button
           type="button"
           variant="secondary"
-          disabled={vendorOptions.length === 0}
+          disabled={oauthClientOptions.length === 0}
           onClick={() => openExternalAccount()}
         >
           <Glyph name="plus" />
@@ -244,7 +232,6 @@ export function ConnectionsPage(): ReactElement {
         <Button
           type="button"
           variant="primary"
-          disabled={vendorOptions.length === 0}
           onClick={() => openProvider()}
         >
           <Glyph name="plus" />
@@ -254,7 +241,7 @@ export function ConnectionsPage(): ReactElement {
       <ConnectionSummary
         refreshVersion={refreshVersion}
         onAccountEdit={openExternalAccount}
-        onVendorEdit={openVendor}
+        onProviderEdit={openProvider}
       />
       <ManagementSection
         title="OIDC providers"
@@ -283,22 +270,6 @@ export function ConnectionsPage(): ReactElement {
         />
       </ManagementSection>
       <ResourceFormDialog
-        open={dialog === "vendor"}
-        title={vendorId ? "Edit vendor" : "New vendor"}
-        onClose={closeDialog}
-      >
-        <FormView
-          model={VENDOR_MODEL}
-          id={vendorId}
-          fields={vendorFormFields()}
-          returning={VENDOR_FIELDS}
-          submitLabel={vendorId ? "Save vendor" : "Create vendor"}
-          onSaved={() =>
-            handleResourceSaved(vendorId ? "Vendor updated" : "Vendor created")
-          }
-        />
-      </ResourceFormDialog>
-      <ResourceFormDialog
         open={dialog === "provider"}
         title={providerId ? "Edit OIDC provider" : "New OIDC provider"}
         size="lg"
@@ -321,7 +292,7 @@ export function ConnectionsPage(): ReactElement {
       <ExternalAccountDialog
         open={dialog === "account"}
         form={accountForm}
-        vendors={vendorOptions}
+        oauthClients={oauthClientOptions}
         users={userOptions}
         error={actionError ?? createAccountState.error?.message ?? null}
         pending={createAccountState.fetching}
@@ -340,18 +311,18 @@ export function ConnectionsPage(): ReactElement {
 }
 
 function OptionsError({
-  vendors,
+  oauthClients,
   users,
 }: {
-  vendors: Error | null;
+  oauthClients: Error | null;
   users: Error | null;
 }): ReactElement | null {
-  if (!vendors && !users) return null;
+  if (!oauthClients && !users) return null;
   return (
     <>
-      {vendors ? (
-        <Alert intent="danger" title="Vendors unavailable">
-          {vendors.message}
+      {oauthClients ? (
+        <Alert intent="danger" title="Login providers unavailable">
+          {oauthClients.message}
         </Alert>
       ) : null}
       {users ? (

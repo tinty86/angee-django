@@ -13,7 +13,6 @@ import {
   FieldRow,
   useResolvedWidget,
   type DialogSize,
-  type FormField,
   type GroupDescriptor,
   type WidgetOption,
   type WidgetRenderProps,
@@ -30,7 +29,7 @@ const accountStatusOptions = [
 ] satisfies readonly WidgetOption[];
 
 export interface ExternalAccountFormState {
-  vendor: string;
+  oauthClient: string;
   owner: string;
   externalId: string;
   email: string;
@@ -71,7 +70,7 @@ export function ResourceFormDialog({
 export function ExternalAccountDialog({
   open,
   form,
-  vendors,
+  oauthClients,
   users,
   error,
   pending,
@@ -81,7 +80,7 @@ export function ExternalAccountDialog({
 }: {
   open: boolean;
   form: ExternalAccountFormState;
-  vendors: readonly WidgetOption[];
+  oauthClients: readonly WidgetOption[];
   users: readonly WidgetOption[];
   error: string | null;
   pending: boolean;
@@ -116,13 +115,13 @@ export function ExternalAccountDialog({
         </div>
       ) : null}
       <WidgetField
-        name="vendor"
-        label="Vendor"
+        name="oauthClient"
+        label="Login provider"
         widget="many2one"
-        value={form.vendor}
-        options={vendors}
+        value={form.oauthClient}
+        options={oauthClients}
         required
-        onChange={(vendor) => onFormChange({ ...form, vendor })}
+        onChange={(oauthClient) => onFormChange({ ...form, oauthClient })}
       />
       <WidgetField
         name="owner"
@@ -205,16 +204,6 @@ function WidgetField({
   );
 }
 
-export function vendorFormFields(): readonly FormField[] {
-  return [
-    { name: "displayName", label: "Display name", title: true },
-    { name: "slug", label: "Slug" },
-    { name: "websiteUrl", label: "Website URL", widget: "url" },
-    { name: "icon", label: "Icon" },
-    { name: "description", label: "Description", widget: "textarea", body: true },
-  ];
-}
-
 export function providerFormGroups(): readonly GroupDescriptor[] {
   return [
     {
@@ -223,9 +212,8 @@ export function providerFormGroups(): readonly GroupDescriptor[] {
       actions: [],
       fields: [
         { name: "displayName", label: "Display name", title: true },
-        // No options/widget: a nested object relation, so FormView auto-wires
-        // the searchable picker and the inline "Create vendor" affordance.
-        { name: "vendor", label: "Vendor" },
+        { name: "slug", label: "Slug" },
+        { name: "icon", label: "Icon" },
         { name: "environment", label: "Environment" },
         { name: "clientId", label: "Client ID" },
         { name: "clientSecret", label: "Client secret" },
@@ -274,9 +262,8 @@ export function providerFormGroups(): readonly GroupDescriptor[] {
   ];
 }
 
-export function providerDefaultValues(vendor: string): Record<string, unknown> {
+export function providerDefaultValues(): Record<string, unknown> {
   return {
-    vendor,
     environment: "prod",
     isOidc: true,
     isEnabled: true,
@@ -292,9 +279,11 @@ export function providerDefaultValues(vendor: string): Record<string, unknown> {
   };
 }
 
-export function emptyExternalAccountForm(vendor: string): ExternalAccountFormState {
+export function emptyExternalAccountForm(
+  oauthClient: string,
+): ExternalAccountFormState {
   return {
-    vendor,
+    oauthClient,
     owner: "",
     externalId: "",
     email: "",
@@ -306,9 +295,10 @@ export function emptyExternalAccountForm(vendor: string): ExternalAccountFormSta
 
 export function externalAccountFormFromAccount(
   account: IAMExternalAccountSummary,
+  oauthClient: string,
 ): ExternalAccountFormState {
   return {
-    vendor: account.vendor.id,
+    oauthClient,
     owner: "",
     externalId: account.externalId,
     email: account.email,

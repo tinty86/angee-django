@@ -116,8 +116,8 @@ function ProviderMark({ label }: { label: string }): ReactNode {
 
 function connectionLabel(connection: AvailableConnection): string {
   return (
-    connection.vendor.displayName.trim() ||
     connection.oauthClientDisplayName.trim() ||
+    connection.oauthClientSlug.trim() ||
     "provider"
   );
 }

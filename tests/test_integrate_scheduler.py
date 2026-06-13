@@ -11,11 +11,15 @@ from django.db import connection
 from django.utils import timezone
 from rebac import system_context
 
-from angee.iam.models import AccountStatus
-from angee.integrate.models import Bridge, CapabilityStatus
+from angee.integrate.models import Bridge, CapabilityStatus, ConnectionStatus
 from angee.integrate.registry import bridge_models, capability_models
 from angee.integrate.scheduler import run_due_bridges
-from tests.conftest import ExternalAccount, Vendor, _create_missing_tables
+from tests.conftest import (
+    IAM_CONNECTION_TEST_MODELS,
+    INTEGRATE_TEST_MODELS,
+    _create_missing_tables,
+    make_connection,
+)
 
 
 class SchedulerBridge(Bridge):
@@ -62,7 +66,7 @@ def scheduler_tables(transactional_db: Any) -> Iterator[None]:
     """Create the IAM and bridge tables required by scheduler tests."""
 
     del transactional_db
-    created_iam_models = _create_missing_tables()
+    created_iam_models = _create_missing_tables(IAM_CONNECTION_TEST_MODELS + INTEGRATE_TEST_MODELS)
     bridge_created = False
     if SchedulerBridge._meta.db_table not in connection.introspection.table_names():
         with connection.schema_editor() as schema_editor:
@@ -87,20 +91,20 @@ def test_run_due_bridges_runs_only_due_rows(scheduler_tables: None) -> None:
 
     del scheduler_tables
     now = timezone.now()
-    account = _external_account("due-only")
+    connection = make_connection("due-only")
     with system_context(reason="test integrate scheduler setup"):
         due = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"items": 2},
             next_sync_at=now - timedelta(seconds=1),
         )
         future = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"items": 3},
             next_sync_at=now + timedelta(seconds=1),
         )
         unscheduled = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"items": 4},
             next_sync_at=None,
         )
@@ -122,10 +126,10 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
     del scheduler_tables
     now = timezone.now()
-    account = _external_account("success-telemetry")
+    connection = make_connection("success-telemetry")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"items": 7},
             poll_interval=42,
             next_sync_at=now,
@@ -144,15 +148,15 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_records_errors_and_rolls_up_account_status(scheduler_tables: None) -> None:
-    """Failing syncs record bridge errors, reschedule, and push account status."""
+def test_run_due_bridges_records_errors_and_rolls_up_connection_status(scheduler_tables: None) -> None:
+    """Failing syncs record bridge errors, reschedule, and push connection status."""
 
     del scheduler_tables
     now = timezone.now()
-    account = _external_account("error-rollup")
+    connection = make_connection("error-rollup")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"mode": "error"},
             poll_interval=17,
             next_sync_at=now,
@@ -162,30 +166,30 @@ def test_run_due_bridges_records_errors_and_rolls_up_account_status(scheduler_ta
 
     assert result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
-    account.refresh_from_db()
+    connection.refresh_from_db()
     assert bridge.last_sync_started_at == now
     assert bridge.last_sync_status == "error"
     assert bridge.status == CapabilityStatus.ERROR
     assert bridge.last_error == "RuntimeError: vendor unavailable"
     assert bridge.last_error_at is not None
     assert bridge.next_sync_at == now + timedelta(seconds=17)
-    assert account.status == AccountStatus.ERROR
-    assert account.capability_statuses == {str(bridge.pk): AccountStatus.ERROR.value}
-    assert account.last_error == "RuntimeError: vendor unavailable"
-    assert account.last_error_at is not None
-    assert account.last_used_at is not None
+    assert connection.status == ConnectionStatus.ERROR
+    assert connection.capability_statuses == {str(bridge.pk): ConnectionStatus.ERROR.value}
+    assert connection.last_error == "RuntimeError: vendor unavailable"
+    assert connection.last_error_at is not None
+    assert connection.last_used_at is not None
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_success_recovers_bridge_and_account_status(scheduler_tables: None) -> None:
-    """A healthy sync after an error clears the bridge and account rollup."""
+def test_run_due_bridges_success_recovers_bridge_and_connection_status(scheduler_tables: None) -> None:
+    """A healthy sync after an error clears the bridge and connection rollup."""
 
     del scheduler_tables
     first_now = timezone.now()
-    account = _external_account("recovery")
+    connection = make_connection("recovery")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            account=account,
+            connection=connection,
             config={"mode": "error"},
             poll_interval=23,
             next_sync_at=first_now,
@@ -195,9 +199,9 @@ def test_run_due_bridges_success_recovers_bridge_and_account_status(scheduler_ta
 
     assert error_result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
-    account.refresh_from_db()
+    connection.refresh_from_db()
     assert bridge.status == CapabilityStatus.ERROR
-    assert account.status == AccountStatus.ERROR
+    assert connection.status == ConnectionStatus.ERROR
 
     second_now = first_now + timedelta(minutes=1)
     with system_context(reason="test integrate scheduler setup"):
@@ -209,57 +213,57 @@ def test_run_due_bridges_success_recovers_bridge_and_account_status(scheduler_ta
 
     assert success_result == {"ran": 1, "errors": 0}
     bridge.refresh_from_db()
-    account.refresh_from_db()
+    connection.refresh_from_db()
     assert bridge.status == CapabilityStatus.ACTIVE
     assert bridge.last_error == ""
     assert bridge.last_error_at is None
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 5
     assert bridge.next_sync_at == second_now + timedelta(seconds=23)
-    assert account.status == AccountStatus.ACTIVE
-    assert account.capability_statuses == {str(bridge.pk): AccountStatus.ACTIVE.value}
-    assert account.last_error == ""
-    assert account.last_error_at is None
+    assert connection.status == ConnectionStatus.ACTIVE
+    assert connection.capability_statuses == {str(bridge.pk): ConnectionStatus.ACTIVE.value}
+    assert connection.last_error == ""
+    assert connection.last_error_at is None
 
 
 @pytest.mark.django_db(transaction=True)
-def test_external_account_rollup_tracks_capability_contributions(scheduler_tables: None) -> None:
-    """One failing capability keeps the account in error until that contribution recovers."""
+def test_connection_rollup_tracks_capability_contributions(scheduler_tables: None) -> None:
+    """One failing capability keeps the connection in error until that contribution recovers."""
 
     del scheduler_tables
-    account = _external_account("multi-capability")
+    connection = make_connection("multi-capability")
 
-    account.note_capability_status(
+    connection.note_capability_status(
         capability_key="bridge-a",
         status=CapabilityStatus.ERROR,
         error="bridge-a failed",
     )
-    account.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    account.refresh_from_db()
+    connection.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
+    connection.refresh_from_db()
 
-    assert account.capability_statuses == {
-        "bridge-a": AccountStatus.ERROR.value,
-        "bridge-b": AccountStatus.ACTIVE.value,
+    assert connection.capability_statuses == {
+        "bridge-a": ConnectionStatus.ERROR.value,
+        "bridge-b": ConnectionStatus.ACTIVE.value,
     }
-    assert account.status == AccountStatus.ERROR
-    assert account.last_error == "bridge-a failed"
+    assert connection.status == ConnectionStatus.ERROR
+    assert connection.last_error == "bridge-a failed"
 
-    account.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    account.refresh_from_db()
+    connection.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
+    connection.refresh_from_db()
 
-    assert account.status == AccountStatus.ERROR
-    assert account.last_error == "bridge-a failed"
+    assert connection.status == ConnectionStatus.ERROR
+    assert connection.last_error == "bridge-a failed"
 
-    account.note_capability_status(capability_key="bridge-a", status=CapabilityStatus.ACTIVE)
-    account.refresh_from_db()
+    connection.note_capability_status(capability_key="bridge-a", status=CapabilityStatus.ACTIVE)
+    connection.refresh_from_db()
 
-    assert account.capability_statuses == {
-        "bridge-a": AccountStatus.ACTIVE.value,
-        "bridge-b": AccountStatus.ACTIVE.value,
+    assert connection.capability_statuses == {
+        "bridge-a": ConnectionStatus.ACTIVE.value,
+        "bridge-b": ConnectionStatus.ACTIVE.value,
     }
-    assert account.status == AccountStatus.ACTIVE
-    assert account.last_error == ""
-    assert account.last_error_at is None
+    assert connection.status == ConnectionStatus.ACTIVE
+    assert connection.last_error == ""
+    assert connection.last_error_at is None
 
 
 @pytest.mark.django_db(transaction=True)
@@ -277,11 +281,3 @@ def test_integrate_registry_discovers_bridge_models_in_deterministic_order(sched
     assert SchedulerBridge in discovered_capability_models
     assert bridge_labels == tuple(sorted(bridge_labels))
     assert capability_labels == tuple(sorted(capability_labels))
-
-
-def _external_account(slug: str) -> ExternalAccount:
-    """Create one vendor and linked external account for a scheduler test."""
-
-    with system_context(reason="test integrate scheduler setup"):
-        vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
-        return ExternalAccount.objects.create(vendor=vendor, external_id=f"{slug}-external")

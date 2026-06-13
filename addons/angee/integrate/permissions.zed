@@ -1,7 +1,30 @@
 // Authorization schema for the integrate addon.
 // @rebac_package: integrate
 // @rebac_package_version: 0.1.0
-// @rebac_schema_revision: 2
+// @rebac_schema_revision: 3
+
+definition integrate/vendor {
+    relation admin: angee/role // rebac:const=admin
+
+    // Const-admin create can't gate an id-less insert, so console creates run
+    // elevated (system_context) behind PlatformAdminPermission. Catalogue rows
+    // are also seeded from install-tier resources.
+    permission create = admin->member
+    permission read = admin->member
+    permission write = admin->member
+    permission delete = admin->member
+}
+
+definition integrate/connection {
+    relation owner: auth/user // rebac:field=owner
+    relation admin: angee/role // rebac:const=admin
+
+    permission create = admin->member
+    // The owner manages their own integration; platform admins reach all.
+    permission read = owner + admin->member
+    permission write = owner + admin->member
+    permission delete = owner + admin->member
+}
 
 definition integrate/webhook_subscription {
     relation owner: auth/user // rebac:field=owner

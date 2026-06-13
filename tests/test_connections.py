@@ -16,7 +16,7 @@ from rebac.models import active_relationship_model
 
 from angee.iam.credentials import CredentialKind, StaticTokenCredentialHandler
 from angee.iam.models import AccountStatus
-from tests.conftest import Credential, ExternalAccount, OAuthClient, Vendor, _create_missing_tables
+from tests.conftest import Credential, ExternalAccount, OAuthClient, _create_missing_tables
 
 
 @pytest.mark.django_db(transaction=True)
@@ -37,30 +37,25 @@ def test_connection_managers_are_idempotent_and_delegate_static_token_material()
         call_command("rebac", "sync", verbosity=0)
 
         with system_context(reason="test connections"):
-            vendor = Vendor.objects.create(
-                slug="example",
-                display_name="Example",
-                website_url="https://example.com",
-            )
             oauth_client = OAuthClient.objects.create(
-                vendor=vendor,
+                slug="example",
                 display_name="Example prod",
                 client_id="example-client",
                 client_secret="secret",
             )
 
             first_account = ExternalAccount.objects.link(
-                vendor,
+                oauth_client,
                 "ext-123",
                 email="alice@example.com",
                 display_name="Alice",
-                status=AccountStatus.ERROR,
+                status=AccountStatus.REVOKED,
                 identity_claims={"sub": "ext-123"},
                 last_error="needs review",
                 owner=user,
             )
             second_account = ExternalAccount.objects.link(
-                vendor,
+                oauth_client,
                 "ext-123",
             )
 
@@ -68,7 +63,7 @@ def test_connection_managers_are_idempotent_and_delegate_static_token_material()
             assert ExternalAccount.objects.count() == 1
             second_account.refresh_from_db()
             assert second_account.identity_claims == {"sub": "ext-123"}
-            assert second_account.status == AccountStatus.ERROR
+            assert second_account.status == AccountStatus.REVOKED
             assert second_account.last_error == "needs review"
             assert _owner_tuple_exists(user, second_account)
 
@@ -136,9 +131,8 @@ def test_connection_managers_authorize_their_own_writes() -> None:
         )
         call_command("rebac", "sync", verbosity=0)
         with system_context(reason="test setup"):
-            vendor = Vendor.objects.create(slug="selfsuff", display_name="SelfSuff")
             oauth_client = OAuthClient.objects.create(
-                vendor=vendor,
+                slug="selfsuff",
                 display_name="SelfSuff prod",
                 client_id="selfsuff-client",
                 client_secret="secret",
@@ -146,7 +140,7 @@ def test_connection_managers_authorize_their_own_writes() -> None:
 
         # No ambient system_context here: the managers authorize their own writes.
         account = ExternalAccount.objects.link(
-            vendor, "ext-self", owner=user, email="bob@example.com"
+            oauth_client, "ext-self", owner=user, email="bob@example.com"
         )
         credential = Credential.objects.upsert_for_user(
             user,
@@ -181,10 +175,15 @@ def test_external_account_owner_lookup_uses_active_relationship_storage() -> Non
         )
         call_command("rebac", "sync", verbosity=0)
         with system_context(reason="test setup"):
-            vendor = Vendor.objects.create(slug="registry", display_name="Registry")
+            oauth_client = OAuthClient.objects.create(
+                slug="registry",
+                display_name="Registry prod",
+                client_id="registry-client",
+                client_secret="secret",
+            )
 
         account = ExternalAccount.objects.link(
-            vendor,
+            oauth_client,
             "registry-sub",
             owner=user,
             email="registry@example.com",
@@ -205,12 +204,9 @@ def test_oauth_client_manager_syncs_shape_and_secret_from_settings(settings: Any
 
     created_models = _create_missing_tables()
     try:
-        with system_context(reason="test setup"):
-            Vendor.objects.create(slug="google", display_name="Google")
-
         settings.ANGEE_IAM_OAUTH_CLIENTS = (
             {
-                "vendor": "google",
+                "slug": "google",
                 "environment": "prod",
                 "display_name": "Google Login",
                 "client_id": "google-client",
@@ -229,7 +225,7 @@ def test_oauth_client_manager_syncs_shape_and_secret_from_settings(settings: Any
 
         assert len(synced) == 1
         with system_context(reason="test assertions"):
-            oauth_client = OAuthClient.objects.get(vendor__slug="google", environment="prod")
+            oauth_client = OAuthClient.objects.get(slug="google", environment="prod")
         assert oauth_client.display_name == "Google Login"
         assert oauth_client.client_secret == "from-settings"
         assert oauth_client.is_oidc is True
@@ -237,7 +233,7 @@ def test_oauth_client_manager_syncs_shape_and_secret_from_settings(settings: Any
 
         settings.ANGEE_IAM_OAUTH_CLIENTS = (
             {
-                "vendor": "google",
+                "slug": "google",
                 "environment": "prod",
                 "display_name": "Google Login Updated",
                 "client_id": "google-client-updated",
@@ -265,11 +261,9 @@ def test_oauth_clients_command_runs_the_settings_sync(settings: Any) -> None:
 
     created_models = _create_missing_tables()
     try:
-        with system_context(reason="test setup"):
-            Vendor.objects.create(slug="github", display_name="GitHub")
         settings.ANGEE_IAM_OAUTH_CLIENTS = (
             {
-                "vendor": "github",
+                "slug": "github",
                 "display_name": "GitHub Login",
                 "client_id": "gh-client",
                 "client_secret": "gh-secret",
@@ -280,7 +274,7 @@ def test_oauth_clients_command_runs_the_settings_sync(settings: Any) -> None:
         call_command("oauth_clients", verbosity=0)
 
         with system_context(reason="test assertions"):
-            oauth_client = OAuthClient.objects.get(vendor__slug="github", environment="prod")
+            oauth_client = OAuthClient.objects.get(slug="github", environment="prod")
         assert oauth_client.display_name == "GitHub Login"
         assert oauth_client.client_id == "gh-client"
         assert oauth_client.client_secret == "gh-secret"

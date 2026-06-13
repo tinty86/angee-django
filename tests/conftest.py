@@ -14,13 +14,15 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
 from django.db import connection, models
 from django.test import RequestFactory
-from rebac import actor_context
+from rebac import actor_context, system_context
 
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
+from angee.iam.credentials import CredentialKind
 from angee.iam.models import Credential as AbstractCredential
 from angee.iam.models import ExternalAccount as AbstractExternalAccount
 from angee.iam.models import OAuthClient as AbstractOAuthClient
-from angee.iam.models import Vendor as AbstractVendor
+from angee.integrate.models import Connection as AbstractConnection
+from angee.integrate.models import Vendor as AbstractVendor
 from angee.integrate.models import WebhookSubscription as AbstractWebhookSubscription
 from angee.knowledge.models import Link as AbstractLink
 from angee.knowledge.models import MarkdownPage as AbstractMarkdownPage
@@ -31,19 +33,6 @@ from angee.storage.models import Drive as AbstractDrive
 from angee.storage.models import File as AbstractFile
 from angee.storage.models import Folder as AbstractFolder
 from angee.storage.models import MimeType as AbstractMimeType
-
-
-class Vendor(AbstractVendor):
-    """Concrete IAM vendor used by tests that run without composed runtime models."""
-
-    class Meta(AbstractVendor.Meta):
-        """Django model options for the canonical test vendor."""
-
-        abstract = False
-        app_label = "iam"
-        db_table = "test_connections_vendor"
-        rebac_resource_type = "auth/vendor"
-        rebac_id_attr = "sqid"
 
 
 class ExternalAccount(AbstractExternalAccount):
@@ -82,6 +71,32 @@ class Credential(AbstractCredential):
         app_label = "iam"
         db_table = "test_connections_credential"
         rebac_resource_type = "auth/credential"
+        rebac_id_attr = "sqid"
+
+
+class Vendor(AbstractVendor):
+    """Concrete integration vendor catalogue row used by source-addon tests."""
+
+    class Meta(AbstractVendor.Meta):
+        """Django model options for the canonical test vendor."""
+
+        abstract = False
+        app_label = "integrate"
+        db_table = "test_integrate_vendor"
+        rebac_resource_type = "integrate/vendor"
+        rebac_id_attr = "sqid"
+
+
+class Connection(AbstractConnection):
+    """Concrete integration connection used by source-addon tests."""
+
+    class Meta(AbstractConnection.Meta):
+        """Django model options for the canonical test connection."""
+
+        abstract = False
+        app_label = "integrate"
+        db_table = "test_integrate_connection"
+        rebac_resource_type = "integrate/connection"
         rebac_id_attr = "sqid"
 
 
@@ -142,8 +157,37 @@ class MarkdownPage(AbstractMarkdownPage):
         rebac_id_attr = "sqid"
 
 
-IAM_CONNECTION_TEST_MODELS = (Vendor, ExternalAccount, OAuthClient, Credential)
+IAM_CONNECTION_TEST_MODELS = (OAuthClient, ExternalAccount, Credential)
 """Concrete IAM connection models created on demand by IAM test fixtures."""
+
+INTEGRATE_TEST_MODELS = (Vendor, Connection)
+"""Concrete integration catalogue/connection models created on demand by integrate fixtures."""
+
+
+def make_connection(slug: str) -> Any:
+    """Create the iam credential chain and an integrate ``Connection`` for tests.
+
+    Builds owner → OAuth client → credential → vendor → connection so a
+    capability/bridge fixture has a connection to run over. Requires the iam +
+    integrate test tables (see ``INTEGRATE_TEST_MODELS``).
+    """
+
+    user_model = get_user_model()
+    with system_context(reason="test integrate connection setup"):
+        user = user_model.objects.create_user(username=f"{slug}-owner", email=f"{slug}@example.com")
+        oauth_client = OAuthClient.objects.create(
+            slug=slug,
+            display_name=slug.title(),
+            client_id=f"{slug}-cid",
+        )
+        credential = Credential.objects.upsert_for_user(
+            user,
+            oauth_client,
+            CredentialKind.STATIC_TOKEN,
+            {"api_key": "x"},
+        )
+        vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
+        return Connection.objects.create(vendor=vendor, credential=credential, owner=user)
 
 class Link(AbstractLink):
     """Concrete knowledge wikilink edge used by source-addon tests."""

@@ -33,65 +33,16 @@ from angee.iam.credentials import CredentialKind, handler_for
 
 
 class AccountStatus(models.TextChoices):
-    """Lifecycle state for a linked external account."""
+    """Identity lifecycle for a linked external account.
+
+    Pure identity health — does the account's login/credential still work. The
+    integration-health rollup across capabilities lives on
+    ``integrate.ConnectionStatus``, not here.
+    """
 
     ACTIVE = "active", "Active"
     EXPIRED = "expired", "Expired"
     REVOKED = "revoked", "Revoked"
-    ERROR = "error", "Error"
-    DISABLED = "disabled", "Disabled"
-
-    @classmethod
-    def from_value(cls, value: object) -> AccountStatus:
-        """Return the member for one string or enum account-status value."""
-
-        raw = str(getattr(value, "value", value))
-        try:
-            return cast(AccountStatus, cls(raw))
-        except ValueError as error:
-            raise ValueError(f"Unsupported account status for rollup: {raw}") from error
-
-    @classmethod
-    def from_capability(cls, status: object) -> AccountStatus:
-        """Return the account status one capability status contributes to the rollup."""
-
-        raw = str(getattr(status, "value", status))
-        mapping = {
-            "active": cls.from_value(cls.ACTIVE),
-            "paused": cls.from_value(cls.DISABLED),
-            "disabled": cls.from_value(cls.DISABLED),
-            "error": cls.from_value(cls.ERROR),
-        }
-        try:
-            return mapping[raw]
-        except KeyError as error:
-            raise ValueError(f"Unsupported capability status for account rollup: {raw}") from error
-
-    @classmethod
-    def rollup(cls, statuses: Iterable[object]) -> AccountStatus:
-        """Return the most severe account status across capability contributions."""
-
-        members = tuple(cls.from_value(status) for status in statuses)
-        return max(members, key=lambda member: member.precedence) if members else cls.from_value(cls.ACTIVE)
-
-    @property
-    def precedence(self) -> int:
-        """Return rollup precedence — the highest wins when statuses combine."""
-
-        order = (
-            AccountStatus.ACTIVE,
-            AccountStatus.DISABLED,
-            AccountStatus.ERROR,
-            AccountStatus.EXPIRED,
-            AccountStatus.REVOKED,
-        )
-        return order.index(self)
-
-    @property
-    def is_error(self) -> bool:
-        """Return whether this status is an error, expiry, or revocation state."""
-
-        return self in (AccountStatus.ERROR, AccountStatus.EXPIRED, AccountStatus.REVOKED)
 
 
 class CredentialStatus(models.TextChoices):
@@ -254,42 +205,16 @@ class User(SqidMixin, AbstractBaseUser, RebacPermissionsMixin, AngeeModel):
         return self.first_name
 
 
-class Vendor(SqidMixin, AuditMixin, AngeeModel):
-    """Admin-managed third-party vendor reference catalogue."""
-
-    runtime = True
-
-    sqid = SqidField(real_field_name="id", prefix="vnd", min_length=8)
-    slug = models.SlugField(unique=True)
-    display_name = models.CharField(max_length=128)
-    website_url = models.URLField(blank=True)
-    icon = models.CharField(max_length=128, blank=True)
-    description = models.TextField(blank=True)
-
-    class Meta:
-        """Django model options for IAM vendors."""
-
-        abstract = True
-        ordering = ("slug",)
-        rebac_resource_type = "auth/vendor"
-        rebac_id_attr = "sqid"
-
-    def __str__(self) -> str:
-        """Return the display label used by Django surfaces."""
-
-        return self.display_name or self.slug
-
-
-class AccountQuerySet(RebacQuerySet[Any]):
+class ExternalAccountQuerySet(RebacQuerySet[Any]):
     """REBAC-scoped reads for external accounts."""
 
-    def console_external_accounts(self) -> AccountQuerySet:
-        """Return admin-visible external accounts with guarded vendor joins."""
+    def console_external_accounts(self) -> ExternalAccountQuerySet:
+        """Return admin-visible external accounts with guarded FK joins."""
 
-        return cast(AccountQuerySet, self.rebac_select_related("vendor", "credential"))
+        return cast(ExternalAccountQuerySet, self.rebac_select_related("oauth_client", "credential"))
 
 
-class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: ignore[misc]
+class ExternalAccountManager(RebacManager.from_queryset(ExternalAccountQuerySet)):  # type: ignore[misc]
     """Manager for idempotent external account linking.
 
     Actor-less framework writes run under ``system_context``; update paths do not maintain ``updated_by``.
@@ -309,13 +234,13 @@ class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: igno
 
     def link(
         self,
-        vendor: Any,
+        oauth_client: Any,
         external_id: str,
         *,
         owner: Any | None = None,
         **identity: Any,
     ) -> Any:
-        """Create or update one ``(vendor, external_id)`` external account."""
+        """Create or update one ``(oauth_client, external_id)`` external account."""
 
         reason = "iam.connections.link"
         update_values = _validated_manager_values(
@@ -336,7 +261,7 @@ class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: igno
         }
         with system_context(reason=reason), transaction.atomic():
             instance, created = self.update_or_create(
-                vendor=vendor,
+                oauth_client=oauth_client,
                 external_id=external_id,
                 defaults=update_values,
                 create_defaults=create_values,
@@ -405,13 +330,19 @@ class AccountManager(RebacManager.from_queryset(AccountQuerySet)):  # type: igno
 
 
 class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
-    """Vendor account identity shared by principals through REBAC grants."""
+    """A user's identity at a provider, shared by principals through REBAC grants.
+
+    Identity only: which client minted it (``oauth_client``), which external
+    subject (``external_id``), and the credential that authenticates as it. The
+    integration that *runs over* a connection lives in ``integrate.Connection``,
+    which owns the capability-health rollup.
+    """
 
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="eac", min_length=8)
-    vendor = models.ForeignKey(
-        "iam.Vendor",
+    oauth_client = models.ForeignKey(
+        "iam.OAuthClient",
         on_delete=models.PROTECT,
         related_name="external_accounts",
     )
@@ -419,13 +350,6 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
     email = models.EmailField(blank=True)
     display_name = models.CharField(max_length=255, blank=True)
     avatar_url = models.URLField(blank=True)
-    credentials_provider = models.ForeignKey(
-        "iam.OAuthClient",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
     credential = models.ForeignKey(
         "iam.Credential",
         on_delete=models.SET_NULL,
@@ -434,13 +358,12 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
         related_name="+",
     )
     status = StateField(choices_enum=AccountStatus, default=AccountStatus.ACTIVE)
-    capability_statuses = models.JSONField(default=dict)
     identity_claims = models.JSONField(default=dict)
     last_error = models.TextField(blank=True)
     last_error_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
 
-    objects = AccountManager()
+    objects = ExternalAccountManager()
 
     class Meta:
         """Django model options for external accounts."""
@@ -451,16 +374,16 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
         rebac_id_attr = "sqid"
         constraints = (
             models.UniqueConstraint(
-                fields=("vendor", "external_id"),
-                name="uniq_iam_external_account_vendor_external_id",
+                fields=("oauth_client", "external_id"),
+                name="uniq_iam_external_account_oauth_client_external_id",
             ),
         )
 
     def __str__(self) -> str:
-        """Return a stable vendor-qualified account label."""
+        """Return a stable provider-qualified account label."""
 
-        vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
-        return f"{vendor_slug}:{self.external_id}"
+        client_slug = getattr(getattr(self, "oauth_client", None), "slug", "?")
+        return f"{client_slug}:{self.external_id}"
 
     @property
     def credential_status(self) -> str:
@@ -479,48 +402,6 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
                 return str(value)
         return email
 
-    def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
-        """Record one capability contribution, recompute this account, and persist.
-
-        The account owns this write: direct callers do not need an ambient
-        ``system_context`` or transaction, and scheduler callers safely nest
-        inside their own framework operation context. Unsaved instances are
-        updated in memory only because there is no account row to persist.
-        """
-
-        reported_at = timezone.now()
-        incoming_status = AccountStatus.from_capability(status)
-        capability_statuses = dict(self.capability_statuses or {})
-        # Deleted capabilities can leave stale contributions until pruning has an owner.
-        capability_statuses[str(capability_key)] = incoming_status.value
-        rolled_status = AccountStatus.rollup(capability_statuses.values())
-
-        self.capability_statuses = capability_statuses
-        self.status = rolled_status
-        self.last_used_at = reported_at
-        if rolled_status.is_error:
-            if error:
-                self.last_error = error
-            self.last_error_at = reported_at
-        else:
-            self.last_error = ""
-            self.last_error_at = None
-
-        if self.pk is None:
-            return
-
-        with system_context(reason="iam.external_account.rollup"), transaction.atomic():
-            self.save(
-                update_fields=[
-                    "capability_statuses",
-                    "last_error",
-                    "last_error_at",
-                    "last_used_at",
-                    "status",
-                    "updated_at",
-                ]
-            )
-
 
 class OAuthClientQuerySet(RebacQuerySet[Any]):
     """REBAC-scoped reads for OAuth client registration."""
@@ -533,18 +414,13 @@ class OAuthClientQuerySet(RebacQuerySet[Any]):
             self.system_context(reason="iam.graphql.available_connections")
             .filter(is_enabled=True, is_oidc=True)
             .exclude(client_id="")
-            .exclude(discovery_url="")
-            .annotate(
-                picker_vendor_slug=models.F("vendor__slug"),
-                picker_vendor_display_name=models.F("vendor__display_name"),
-                picker_vendor_icon=models.F("vendor__icon"),
-            ),
+            .exclude(discovery_url=""),
         )
 
     def console_oauth_clients(self) -> OAuthClientQuerySet:
-        """Return admin-visible OAuth clients with guarded vendor joins."""
+        """Return admin-visible OAuth clients (self-describing; no vendor join)."""
 
-        return cast(OAuthClientQuerySet, self.rebac_select_related("vendor"))
+        return cast(OAuthClientQuerySet, self)
 
 
 class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # type: ignore[misc]
@@ -553,6 +429,7 @@ class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # ty
     seed_fields = frozenset(
         {
             "display_name",
+            "icon",
             "client_id",
             "issuer",
             "authorize_endpoint",
@@ -574,8 +451,8 @@ class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # ty
             "allowed_email_domains",
         }
     )
-    setting_fields = seed_fields | frozenset({"vendor", "environment", "client_secret"})
-    required_setting_fields = frozenset({"vendor", "display_name", "client_id"})
+    setting_fields = seed_fields | frozenset({"slug", "environment", "client_secret"})
+    required_setting_fields = frozenset({"slug", "display_name", "client_id"})
 
     def sync_from_settings(
         self,
@@ -617,15 +494,13 @@ class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # ty
         """Upsert one settings-authored OAuth client row."""
 
         self._validate_setting_entry(index, entry)
-        vendor_slug = str(entry["vendor"])
+        slug = str(entry["slug"])
         environment = str(entry.get("environment") or "prod")
         defaults = {field: entry[field] for field in sorted(self.seed_fields) if field in entry}
         if "client_secret" in entry:
             defaults["client_secret"] = str(entry.get("client_secret") or "")
-        vendor_model = self.model._meta.get_field("vendor").remote_field.model
-        vendor = vendor_model.objects.get(slug=vendor_slug)
         oauth_client, _created = self.update_or_create(
-            vendor=vendor,
+            slug=slug,
             environment=environment,
             defaults=defaults,
         )
@@ -645,16 +520,20 @@ class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # ty
 
 
 class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
-    """OAuth/OIDC client registration and login policy for a vendor."""
+    """OAuth/OIDC client registration and login policy.
+
+    Self-describing: ``slug`` is iam's own login-client key and ``icon``/
+    ``display_name`` its own login-button branding — iam renders the OIDC button
+    without reading any catalogue. The integration-side third-party catalogue is
+    ``integrate.Vendor``; that ``slug`` is a deliberately independent namespace,
+    not a foreign key into this one.
+    """
 
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="clt", min_length=8)
-    vendor = models.ForeignKey(
-        "iam.Vendor",
-        on_delete=models.PROTECT,
-        related_name="oauth_clients",
-    )
+    slug = models.SlugField()
+    icon = models.CharField(max_length=128, blank=True)
     environment = models.CharField(max_length=32, default="prod")
     display_name = models.CharField(max_length=128)
     client_id = models.CharField(max_length=255)
@@ -684,23 +563,22 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
         """Django model options for OAuth clients."""
 
         abstract = True
-        ordering = ("vendor__slug", "environment")
+        ordering = ("slug", "environment")
         rebac_resource_type = "auth/oauth_client"
         rebac_id_attr = "sqid"
         constraints = (
             models.UniqueConstraint(
-                fields=("vendor", "environment"),
-                name="uniq_iam_oauth_client_vendor_environment",
+                fields=("slug", "environment"),
+                name="uniq_iam_oauth_client_slug_environment",
             ),
         )
 
     def __str__(self) -> str:
-        """Return the configured OAuth client display name or vendor environment."""
+        """Return the configured OAuth client display name or slug environment."""
 
         if self.display_name:
             return self.display_name
-        vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
-        return f"{vendor_slug} ({self.environment})"
+        return f"{self.slug or '?'} ({self.environment})"
 
     @property
     def configuration_state(self) -> str:
@@ -713,24 +591,6 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
         if not self.discovery_url and not (self.authorize_endpoint and self.token_endpoint):
             return "needs_endpoints"
         return "ready"
-
-    @property
-    def vendor_label(self) -> str:
-        """Return the linked vendor display label."""
-
-        vendor = getattr(self, "vendor", None)
-        if vendor is None:
-            return ""
-        return str(getattr(vendor, "display_name", "") or "")
-
-    @property
-    def vendor_slug(self) -> str:
-        """Return the linked vendor slug."""
-
-        vendor = getattr(self, "vendor", None)
-        if vendor is None:
-            return ""
-        return str(getattr(vendor, "slug", "") or "")
 
     @property
     def default_scope_values(self) -> list[str]:
@@ -799,9 +659,7 @@ class CredentialQuerySet(RebacQuerySet[Any]):
             CredentialQuerySet,
             self.rebac_select_related(
                 "oauth_client",
-                "oauth_client__vendor",
                 "external_account",
-                "external_account__vendor",
             ),
         )
 

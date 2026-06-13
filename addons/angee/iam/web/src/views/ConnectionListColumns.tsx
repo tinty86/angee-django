@@ -44,7 +44,11 @@ export const oauthClientColumns: readonly ListColumn<IAMOAuthClient>[] = [
     header: "Client",
     render: (row) => <span className="font-medium text-fg">{row.displayName}</span>,
   },
-  { field: "vendorLabel", header: "Vendor" },
+  {
+    field: "slug",
+    header: "Slug",
+    render: (row) => <Code truncate>{row.slug}</Code>,
+  },
   {
     field: "environment",
     header: "Environment",
@@ -91,9 +95,9 @@ export const externalAccountColumns: readonly ListColumn<IAMExternalAccountSumma
     ),
   },
   {
-    field: "vendor.displayName",
-    header: "Vendor",
-    render: (row) => row.vendor.displayName || row.vendor.slug,
+    field: "providerLabel",
+    header: "Provider",
+    render: (row) => row.providerLabel || row.providerSlug,
   },
   { field: "email", header: "Email" },
   { field: "status", header: "Status", tone: STATUS_TONES },

@@ -19,7 +19,7 @@ from rebac.roles import grant
 from angee.iam import identity
 from angee.iam.credentials import CredentialKind
 from angee.iam.oidc.errors import OidcFlowError
-from tests.conftest import Credential, ExternalAccount, OAuthClient, Vendor, addon_schema, execute_schema
+from tests.conftest import Credential, ExternalAccount, OAuthClient, addon_schema, execute_schema
 from tests.conftest import _create_missing_tables as _create_connection_tables
 from tests.conftest import result_data as _data
 
@@ -32,11 +32,11 @@ def test_available_connections_returns_only_enabled_oauth_clients_without_secret
 ) -> None:
     """The public picker is system-scoped but only exposes safe configured OIDC rows."""
 
-    _vendor_and_oauth_client("enabled", is_oidc=True, is_enabled=True, client_secret="secret")
-    _vendor_and_oauth_client("disabled", is_oidc=True, is_enabled=False, client_secret="secret")
-    _vendor_and_oauth_client("oauth", is_oidc=False, is_enabled=True, client_secret="secret")
-    _vendor_and_oauth_client("no-client", is_oidc=True, is_enabled=True, client_id="", client_secret="secret")
-    _vendor_and_oauth_client(
+    _oauth_client("enabled", is_oidc=True, is_enabled=True, client_secret="secret")
+    _oauth_client("disabled", is_oidc=True, is_enabled=False, client_secret="secret")
+    _oauth_client("oauth", is_oidc=False, is_enabled=True, client_secret="secret")
+    _oauth_client("no-client", is_oidc=True, is_enabled=True, client_id="", client_secret="secret")
+    _oauth_client(
         "no-endpoints",
         is_oidc=True,
         is_enabled=True,
@@ -56,8 +56,9 @@ def test_available_connections_returns_only_enabled_oauth_clients_without_secret
                 results {
                   oauthClientSqid
                   oauthClientDisplayName
+                  oauthClientSlug
+                  oauthClientIcon
                   isOidc
-                  vendor { slug displayName icon }
                 }
               }
             }
@@ -67,31 +68,31 @@ def test_available_connections_returns_only_enabled_oauth_clients_without_secret
 
     connections = data["availableConnections"]["results"]
     assert data["availableConnections"]["totalCount"] == 1
-    assert [row["vendor"]["slug"] for row in connections] == ["enabled"]
+    assert [row["oauthClientSlug"] for row in connections] == ["enabled"]
     assert connections[0]["isOidc"] is True
     assert "clientSecret" not in public_schema.as_str()
 
 
-def test_available_connections_joins_vendor_without_per_row_queries(
+def test_available_connections_reads_client_columns_without_per_row_queries(
     iam_connection_tables: None,
 ) -> None:
-    """The picker joins vendor columns, so its query count stays flat as rows grow."""
+    """The picker reads the self-describing client's own columns, so its query count stays flat as rows grow."""
 
     query = """
         query {
           availableConnections(pagination: {limit: 10}) {
             totalCount
-            results { oauthClientSqid vendor { slug displayName icon } }
+            results { oauthClientSqid oauthClientSlug oauthClientDisplayName oauthClientIcon }
           }
         }
     """
-    _vendor_and_oauth_client("solo", is_oidc=True, is_enabled=True)
+    _oauth_client("solo", is_oidc=True, is_enabled=True)
     public_schema = _schema("public")
     with CaptureQueriesContext(connection) as one_row:
         _data(_execute(public_schema, query))
 
-    _vendor_and_oauth_client("dup-a", is_oidc=True, is_enabled=True)
-    _vendor_and_oauth_client("dup-b", is_oidc=True, is_enabled=True)
+    _oauth_client("dup-a", is_oidc=True, is_enabled=True)
+    _oauth_client("dup-b", is_oidc=True, is_enabled=True)
     with CaptureQueriesContext(connection) as three_rows:
         data = _data(_execute(public_schema, query))
 
@@ -104,8 +105,8 @@ def test_login_start_rejects_non_oidc_or_disabled_oauth_client(
 ) -> None:
     """OIDC start fails closed when the selected OAuth client cannot run login."""
 
-    _vendor, non_oidc = _vendor_and_oauth_client("oauth", is_oidc=False, is_enabled=True)
-    _vendor, disabled = _vendor_and_oauth_client("off", is_oidc=True, is_enabled=False)
+    non_oidc = _oauth_client("oauth", is_oidc=False, is_enabled=True)
+    disabled = _oauth_client("off", is_oidc=True, is_enabled=False)
     public_schema = _schema("public")
     query = """
         mutation LoginStart($oauthClientSqid: String!) {
@@ -130,7 +131,7 @@ def test_login_start_returns_oidc_flow_error_payload(
 ) -> None:
     """Start-flow OIDC errors are returned as typed payloads, not GraphQL errors."""
 
-    _vendor, oauth_client = _vendor_and_oauth_client(
+    oauth_client = _oauth_client(
         "misconfigured",
         is_oidc=True,
         is_enabled=True,
@@ -179,7 +180,7 @@ def test_login_complete_provisions_and_logs_in(
 ) -> None:
     """OIDC completion delegates identity resolution then writes the session."""
 
-    _vendor, oauth_client = _vendor_and_oauth_client("oidc", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("oidc", is_oidc=True, is_enabled=True)
     user = User.objects.create_user(
         username="oidc-user",
         email="oidc@example.com",
@@ -270,7 +271,7 @@ def test_login_complete_returns_oidc_flow_error_payload(
 ) -> None:
     """Completion OIDC errors are returned as typed payloads, not GraphQL errors."""
 
-    _vendor, oauth_client = _vendor_and_oauth_client("oidc-error", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("oidc-error", is_oidc=True, is_enabled=True)
     public_schema = _schema("public")
     request = _request(AnonymousUser())
     start = _data(
@@ -340,9 +341,9 @@ def test_link_account_complete_returns_account_claims_intent_and_coerced_next(
     """Link completion returns rich result fields and uses the safe stored next path."""
 
     user = User.objects.create_user(username="link-user", email="link@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client("link-rich", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("link-rich", is_oidc=True, is_enabled=True)
     account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-link-rich",
         owner=user,
         email="link@example.com",
@@ -427,7 +428,7 @@ def test_link_account_complete_returns_account_claims_intent_and_coerced_next(
     }
 
 
-def test_vendor_and_oauth_client_crud_are_admin_only(
+def test_oauth_client_crud_are_admin_only(
     iam_connection_tables: None,
 ) -> None:
     """Console CRUD is denied to non-admins and allowed for platform admins."""
@@ -440,68 +441,51 @@ def test_vendor_and_oauth_client_crud_are_admin_only(
     )
     grant(actor=admin, role=app_settings.REBAC_UNIVERSAL_ADMIN_ROLE)
     console_schema = _schema("console")
-    create_vendor = """
-        mutation CreateVendor {
-          createVendor(data: {
+    create_oauth_client = """
+        mutation CreateOAuthClient {
+          createOauthClient(data: {
             slug: "console",
-            displayName: "Console"
+            icon: "console.svg",
+            displayName: "Console prod",
+            clientId: "console-client",
+            clientSecret: "console-secret",
+            isOidc: true,
+            isEnabled: true,
+            authorizeEndpoint: "https://issuer.example/authorize",
+            tokenEndpoint: "https://issuer.example/token"
           }) {
             id
             slug
+            icon
+            displayName
+            isOidc
+            configurationState
+            clientSecret
           }
         }
     """
 
-    denied = _execute(console_schema, create_vendor, user=user)
+    denied = _execute(console_schema, create_oauth_client, user=user)
     assert denied.errors is not None
 
-    created = _data(_execute(console_schema, create_vendor, user=admin))
-    vendor_id = created["createVendor"]["id"]
-    assert created["createVendor"]["slug"] == "console"
-
     oauth_client = _data(
-        _execute(
-            console_schema,
-            """
-            mutation CreateOAuthClient($vendor: ID!) {
-              createOauthClient(data: {
-                vendor: $vendor,
-                displayName: "Console prod",
-                clientId: "console-client",
-                clientSecret: "console-secret",
-                isOidc: true,
-                isEnabled: true,
-                authorizeEndpoint: "https://issuer.example/authorize",
-                tokenEndpoint: "https://issuer.example/token"
-              }) {
-                id
-                displayName
-                isOidc
-                configurationState
-                clientSecret
-                vendorLabel
-                vendorSlug
-              }
-            }
-            """,
-            {"vendor": vendor_id},
-            user=admin,
-        )
+        _execute(console_schema, create_oauth_client, user=admin)
     )["createOauthClient"]
+    oauth_client_id = oauth_client["id"]
+    assert oauth_client["slug"] == "console"
+    assert oauth_client["icon"] == "console.svg"
     assert oauth_client["displayName"] == "Console prod"
     assert oauth_client["isOidc"] is True
     assert oauth_client["configurationState"] == "ready"
     assert oauth_client["clientSecret"] == "console-secret"
-    assert oauth_client["vendorLabel"] == "Console"
-    assert oauth_client["vendorSlug"] == "console"
     with system_context(reason="test.iam.oauth_client_secret"):
         stored_client = OAuthClient.objects.get(client_id="console-client")
     assert stored_client.client_secret == "console-secret"
 
     external_account_mutation = """
-        mutation CreateExternalAccount($vendor: ID!, $owner: String!) {
+        mutation CreateExternalAccount($oauthClient: ID!, $owner: String!) {
           createExternalAccount(data: {
-            vendor: $vendor,
+            oauthClient: $oauthClient,
             owner: $owner,
             externalId: "admin-sub",
             email: "admin@example.com",
@@ -513,7 +497,7 @@ def test_vendor_and_oauth_client_crud_are_admin_only(
             email
             displayName
             status
-            vendor { slug }
+            providerSlug
           }
         }
     """
@@ -521,22 +505,60 @@ def test_vendor_and_oauth_client_crud_are_admin_only(
         _execute(
             console_schema,
             external_account_mutation,
-            {"vendor": vendor_id, "owner": str(admin.pk)},
+            {"oauthClient": oauth_client_id, "owner": str(admin.pk)},
             user=admin,
         )
     )["createExternalAccount"]
     assert linked["externalId"] == "admin-sub"
     assert linked["email"] == "admin@example.com"
-    assert linked["vendor"]["slug"] == "console"
+    assert linked["providerSlug"] == "console"
     with system_context(reason="test.iam.external_account"):
         account = ExternalAccount.objects.get(external_id="admin-sub")
     assert ExternalAccount.objects.owner_for(account) == admin
     assert _execute(
         console_schema,
         external_account_mutation,
-        {"vendor": vendor_id, "owner": str(admin.pk)},
+        {"oauthClient": oauth_client_id, "owner": str(admin.pk)},
         user=user,
     ).errors is not None
+
+
+def test_console_external_accounts_render_provider_projection(
+    iam_connection_tables: None,
+) -> None:
+    """The admin externalAccounts list renders provider_* through the guarded join.
+
+    Exercises ``console_external_accounts()``'s ``rebac_select_related`` path (not
+    the write path), which runs the actor-scope guard over the joined OAuth client
+    — see memory ``rebac-select-related-actor-scope-trap``.
+    """
+
+    admin = User.objects.create_superuser(
+        username="ea-list-admin",
+        email="ea-list-admin@example.com",
+        password="x",
+    )
+    grant(actor=admin, role=app_settings.REBAC_UNIVERSAL_ADMIN_ROLE)
+    oauth_client = _oauth_client("listco", display_name="ListCo prod")
+    ExternalAccount.objects.link(oauth_client, "list-sub", owner=admin, email="u@example.com")
+
+    accounts = _data(
+        _execute(
+            _schema("console"),
+            """
+            query {
+              externalAccounts {
+                results { externalId providerSlug providerEnvironment providerLabel }
+              }
+            }
+            """,
+            user=admin,
+        )
+    )["externalAccounts"]["results"]
+    row = next(item for item in accounts if item["externalId"] == "list-sub")
+    assert row["providerSlug"] == "listco"
+    assert row["providerEnvironment"] == "prod"
+    assert row["providerLabel"] == "ListCo prod"
 
 
 def test_oauth_client_secret_is_console_readable_and_public_hidden(
@@ -575,15 +597,15 @@ def test_my_connected_accounts_are_scoped_to_session_user(
 
     alice = User.objects.create_user(username="alice", email="alice@example.com")
     bob = User.objects.create_user(username="bob", email="bob@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client("scope", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("scope", is_oidc=True, is_enabled=True)
     alice_account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "alice-ext",
         owner=alice,
         email="alice@vendor.example",
     )
     bob_account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "bob-ext",
         owner=bob,
         email="bob@vendor.example",
@@ -636,9 +658,9 @@ def test_unlink_account_only_removes_callers_credential(
 
     alice = User.objects.create_user(username="unlink-alice", email="alice@example.com")
     bob = User.objects.create_user(username="unlink-bob", email="bob@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client("unlink", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("unlink", is_oidc=True, is_enabled=True)
     account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "shared-ext",
         owner=alice,
         email="shared@example.com",
@@ -692,14 +714,14 @@ def test_unlink_account_revokes_owner_so_oidc_login_is_blocked(
         email="owner@example.com",
         password="password",
     )
-    vendor, oauth_client = _vendor_and_oauth_client(
+    oauth_client = _oauth_client(
         "unlink-oidc",
         is_oidc=True,
         is_enabled=True,
         revoke_endpoint="https://issuer.example/revoke",
     )
     account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-unlinked",
         owner=user,
         email="owner@example.com",
@@ -756,9 +778,9 @@ def test_unlink_account_blocks_last_oidc_sign_in_method_for_passwordless_user(
     """Passwordless users cannot remove their last OIDC sign-in credential."""
 
     user = User.objects.create_user(username="unlink-passwordless", email="passwordless@example.com")
-    vendor, oauth_client = _vendor_and_oauth_client("unlink-guard", is_oidc=True, is_enabled=True)
+    oauth_client = _oauth_client("unlink-guard", is_oidc=True, is_enabled=True)
     account = ExternalAccount.objects.link(
-        vendor,
+        oauth_client,
         "sub-guard",
         owner=user,
         email="passwordless@example.com",
@@ -858,14 +880,15 @@ def _request(user: Any) -> Any:
     return request
 
 
-def _vendor_and_oauth_client(
+def _oauth_client(
     slug: str,
     **oauth_client_overrides: Any,
-) -> tuple[Vendor, OAuthClient]:
-    """Create one vendor and OAuth client under system context."""
+) -> OAuthClient:
+    """Create one self-describing OAuth client under system context."""
 
     defaults: dict[str, Any] = {
-        "display_name": f"{slug.title()} prod",
+        "display_name": slug.title(),
+        "icon": f"{slug}.svg",
         "client_id": f"{slug}-client",
         "client_secret": "secret",
         "issuer": "https://issuer.example",
@@ -881,13 +904,7 @@ def _vendor_and_oauth_client(
     }
     defaults.update(oauth_client_overrides)
     with system_context(reason="test iam graphql setup"):
-        vendor = Vendor.objects.create(
-            slug=slug,
-            display_name=slug.title(),
-            icon=f"{slug}.svg",
-        )
-        oauth_client = OAuthClient.objects.create(vendor=vendor, **defaults)
-    return vendor, oauth_client
+        return OAuthClient.objects.create(slug=slug, **defaults)
 
 
 class _Session(dict[str, Any]):

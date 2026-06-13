@@ -4,9 +4,9 @@ export const AVAILABLE_CONNECTIONS_QUERY = `
       results {
         oauthClientSqid
         oauthClientDisplayName
-        vendor {
-          displayName
-        }
+        oauthClientSlug
+        oauthClientIcon
+        isOidc
       }
     }
   }
@@ -157,13 +157,8 @@ export const IAM_OAUTH_CLIENTS_QUERY = `
       results {
         id
         displayName
-        vendor {
-          id
-          slug
-          displayName
-        }
-        vendorLabel
-        vendorSlug
+        slug
+        icon
         environment
         clientId
         clientSecret
@@ -191,33 +186,17 @@ export const IAM_OAUTH_CLIENTS_QUERY = `
   }
 `;
 
-export const IAM_VENDOR_OPTIONS_QUERY = `
-  query IamVendorOptions($pagination: OffsetPaginationInput) {
-    vendors(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        slug
-        displayName
-        websiteUrl
-        icon
-        description
-      }
-    }
-  }
-`;
-
 export const IAM_CONNECTION_SUMMARY_QUERY = `
   query IamConnectionSummary($pagination: OffsetPaginationInput) {
-    vendors(pagination: $pagination) {
+    oauthClients(pagination: $pagination) {
       totalCount
       results {
         id
-        slug
         displayName
-        websiteUrl
+        slug
         icon
-        description
+        environment
+        isEnabled
       }
     }
     externalAccounts(pagination: $pagination) {
@@ -231,11 +210,10 @@ export const IAM_CONNECTION_SUMMARY_QUERY = `
         status
         credentialStatus
         lastUsedAt
-        vendor {
-          id
-          slug
-          displayName
-        }
+        providerSlug
+        providerEnvironment
+        providerLabel
+        providerIcon
       }
     }
     credentialHealth(pagination: $pagination) {
@@ -269,38 +247,11 @@ export const IAM_EXTERNAL_ACCOUNTS_QUERY = `
         status
         credentialStatus
         lastUsedAt
-        vendor {
-          id
-          slug
-          displayName
-        }
+        providerSlug
+        providerEnvironment
+        providerLabel
+        providerIcon
       }
-    }
-  }
-`;
-
-export const IAM_CREATE_VENDOR_MUTATION = `
-  mutation IamCreateVendor($data: VendorInput!) {
-    createVendor(data: $data) {
-      id
-      slug
-      displayName
-      websiteUrl
-      icon
-      description
-    }
-  }
-`;
-
-export const IAM_UPDATE_VENDOR_MUTATION = `
-  mutation IamUpdateVendor($data: VendorPatch!) {
-    updateVendor(data: $data) {
-      id
-      slug
-      displayName
-      websiteUrl
-      icon
-      description
     }
   }
 `;
@@ -310,8 +261,8 @@ export const IAM_CREATE_OAUTH_CLIENT_MUTATION = `
     createOauthClient(data: $data) {
       id
       displayName
-      vendorLabel
-      vendorSlug
+      slug
+      icon
       environment
       isEnabled
       configurationState
@@ -325,8 +276,8 @@ export const IAM_UPDATE_OAUTH_CLIENT_MUTATION = `
     updateOauthClient(data: $data) {
       id
       displayName
-      vendorLabel
-      vendorSlug
+      slug
+      icon
       environment
       isEnabled
       configurationState
@@ -346,11 +297,10 @@ export const IAM_CREATE_EXTERNAL_ACCOUNT_MUTATION = `
       status
       credentialStatus
       lastUsedAt
-      vendor {
-        id
-        slug
-        displayName
-      }
+      providerSlug
+      providerEnvironment
+      providerLabel
+      providerIcon
     }
   }
 `;
@@ -367,16 +317,13 @@ export const IAM_GRANT_ROLE_MUTATION = `
   }
 `;
 
-/** Selection result for SDL `VendorType` in `IamAvailableConnections`. */
-export interface AvailableConnectionVendor {
-  displayName: string;
-}
-
 /** Selection result for an `availableConnections.results` item. */
 export interface AvailableConnection {
   oauthClientSqid: string;
   oauthClientDisplayName: string;
-  vendor: AvailableConnectionVendor;
+  oauthClientSlug: string;
+  oauthClientIcon: string;
+  isOidc: boolean;
 }
 
 /** Selection result for `IamAvailableConnections`. */
@@ -554,9 +501,8 @@ export interface IAMRebacSchemaData {
 export interface IAMOAuthClient extends Record<string, unknown> {
   id: string;
   displayName: string;
-  vendor: IAMVendorSummary;
-  vendorLabel: string;
-  vendorSlug: string;
+  slug: string;
+  icon: string;
   environment: string;
   clientId: string;
   clientSecret: string;
@@ -591,21 +537,11 @@ export interface IAMOAuthClientsData {
 
 export type IAMOAuthClientsVariables = IAMPaginationVariables;
 
-/** Selection result for `IamVendorOptions`. */
-export interface IAMVendorOptionsData {
-  vendors: {
-    totalCount: number;
-    results: IAMVendorSummary[];
-  };
-}
-
-export type IAMVendorOptionsVariables = IAMPaginationVariables;
-
 /** Selection result for `IamConnectionSummary`. */
 export interface IAMConnectionSummaryData {
-  vendors: {
+  oauthClients: {
     totalCount: number;
-    results: IAMVendorSummary[];
+    results: IAMOAuthClientSummary[];
   };
   externalAccounts: {
     totalCount: number;
@@ -628,14 +564,14 @@ export interface IAMExternalAccountsData {
 
 export type IAMExternalAccountsVariables = IAMPaginationVariables;
 
-/** Selection result for SDL `VendorType` in `IamConnectionSummary`. */
-export interface IAMVendorSummary {
+/** Selection result for SDL `OAuthClientType` in `IamConnectionSummary`. */
+export interface IAMOAuthClientSummary extends Record<string, unknown> {
   id: string;
-  slug: string;
   displayName: string;
-  websiteUrl: string;
+  slug: string;
   icon: string;
-  description: string;
+  environment: string;
+  isEnabled: boolean;
 }
 
 /** Selection result for SDL `ExternalAccountType` in `IamConnectionSummary`. */
@@ -648,11 +584,10 @@ export interface IAMExternalAccountSummary extends Record<string, unknown> {
   status: string;
   credentialStatus: string;
   lastUsedAt: string | null;
-  vendor: {
-    id: string;
-    slug: string;
-    displayName: string;
-  };
+  providerSlug: string;
+  providerEnvironment: string;
+  providerLabel: string;
+  providerIcon: string;
 }
 
 /** Selection result for SDL `CredentialType` in `IamConnectionSummary`. */
@@ -689,25 +624,6 @@ export interface IAMGrantRoleVariables extends Record<string, unknown> {
   role: string;
 }
 
-export interface IAMCreateVendorData {
-  createVendor: IAMVendorSummary;
-}
-
-export interface IAMUpdateVendorData {
-  updateVendor: IAMVendorSummary;
-}
-
-export interface IAMVendorInputVariables extends Record<string, unknown> {
-  data: {
-    id?: string;
-    slug?: string;
-    displayName?: string;
-    websiteUrl?: string;
-    icon?: string;
-    description?: string;
-  };
-}
-
 export interface IAMCreateOAuthClientData {
   createOauthClient: IAMOAuthClient;
 }
@@ -719,7 +635,8 @@ export interface IAMUpdateOAuthClientData {
 export interface IAMOAuthClientInputVariables extends Record<string, unknown> {
   data: {
     id?: string;
-    vendor?: string;
+    slug?: string;
+    icon?: string;
     displayName?: string;
     clientId?: string;
     clientSecret?: string;
@@ -751,7 +668,7 @@ export interface IAMCreateExternalAccountData {
 
 export interface IAMExternalAccountInputVariables extends Record<string, unknown> {
   data: {
-    vendor: string;
+    oauthClient: string;
     externalId: string;
     owner?: string | null;
     email?: string;

@@ -1,15 +1,19 @@
 """Source models for Angee's integration runtime primitives.
 
-Migration note: account-scoped webhook subscriptions now cascade with their
-account; a human must run ``uv run examples/notes-angee/manage.py makemigrations integrate``.
+This addon owns the integration layer: the third-party ``Vendor`` catalogue, the
+first-class ``Connection`` an integration runs over, the abstract
+``Capability``/``Bridge`` runtime, and outbound ``WebhookSubscription``. It draws
+a ``Credential`` (and optionally an ``ExternalAccount``) from ``iam`` to
+authenticate; it never owns identity.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -37,6 +41,191 @@ class CapabilityStatus(models.TextChoices):
     DISABLED = "disabled", "Disabled"
 
 
+class Vendor(SqidMixin, AuditMixin, AngeeModel):
+    """Admin-managed third-party catalogue (GitHub, Google, Slack, …).
+
+    The single source of truth for "what is this third party" — branding and
+    reference metadata only. New integration addons add their own row via an
+    install-tier resource seed (``adopt: slug``). The login-side ``OAuthClient``
+    in ``iam`` carries its own ``slug``; that is a deliberately independent
+    namespace, not a foreign key into this catalogue.
+    """
+
+    runtime = True
+
+    sqid = SqidField(real_field_name="id", prefix="vnd", min_length=8)
+    slug = models.SlugField(unique=True)
+    display_name = models.CharField(max_length=128)
+    website_url = models.URLField(blank=True)
+    icon = models.CharField(max_length=128, blank=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        """Django model options for integration vendors."""
+
+        abstract = True
+        ordering = ("slug",)
+        rebac_resource_type = "integrate/vendor"
+        rebac_id_attr = "sqid"
+
+    def __str__(self) -> str:
+        """Return the display label used by Django surfaces."""
+
+        return self.display_name or self.slug
+
+
+class ConnectionStatus(models.TextChoices):
+    """Aggregate integration health for a connection, rolled up from its capabilities.
+
+    Owns the rollup vocabulary that used to live on ``iam.AccountStatus``: a
+    connection is the substrate capabilities run over, so it — not the identity
+    account — aggregates their health.
+    """
+
+    ACTIVE = "active", "Active"
+    DISABLED = "disabled", "Disabled"
+    ERROR = "error", "Error"
+
+    @classmethod
+    def from_value(cls, value: object) -> ConnectionStatus:
+        """Return the member for one string or enum connection-status value."""
+
+        raw = str(getattr(value, "value", value))
+        try:
+            return cast(ConnectionStatus, cls(raw))
+        except ValueError as error:
+            raise ValueError(f"Unsupported connection status for rollup: {raw}") from error
+
+    @classmethod
+    def from_capability(cls, status: object) -> ConnectionStatus:
+        """Return the connection status one capability status contributes to the rollup."""
+
+        raw = str(getattr(status, "value", status))
+        mapping = {
+            "active": cls.from_value(cls.ACTIVE),
+            "paused": cls.from_value(cls.DISABLED),
+            "disabled": cls.from_value(cls.DISABLED),
+            "error": cls.from_value(cls.ERROR),
+        }
+        try:
+            return mapping[raw]
+        except KeyError as error:
+            raise ValueError(f"Unsupported capability status for connection rollup: {raw}") from error
+
+    @classmethod
+    def rollup(cls, statuses: Iterable[object]) -> ConnectionStatus:
+        """Return the most severe connection status across capability contributions."""
+
+        members = tuple(cls.from_value(status) for status in statuses)
+        return max(members, key=lambda member: member.precedence) if members else cls.from_value(cls.ACTIVE)
+
+    @property
+    def precedence(self) -> int:
+        """Return rollup precedence — the highest wins when statuses combine."""
+
+        order = (ConnectionStatus.ACTIVE, ConnectionStatus.DISABLED, ConnectionStatus.ERROR)
+        return order.index(self)
+
+    @property
+    def is_error(self) -> bool:
+        """Return whether this connection is in an error state."""
+
+        return self is ConnectionStatus.ERROR
+
+
+class Connection(SqidMixin, AuditMixin, AngeeModel):
+    """A product/workspace integration to a vendor account.
+
+    The first-class "what we're connected to and what runs over it": it draws a
+    ``credential`` (and optionally an ``account``) from ``iam`` to authenticate,
+    points at a catalogue ``vendor``, and owns the capability-health rollup. Its
+    capabilities/bridges (``integrate.Capability``) point back at it.
+    """
+
+    runtime = True
+
+    sqid = SqidField(real_field_name="id", prefix="con", min_length=8)
+    vendor = models.ForeignKey("integrate.Vendor", on_delete=models.PROTECT, related_name="connections")
+    # PROTECT: the credential is the connection's authentication. It may belong to
+    # a principal other than ``owner`` (an org/app-install credential), so deleting
+    # a credential still in use is refused rather than silently breaking the
+    # integration. The owner does not have to own the credential.
+    credential = models.ForeignKey("iam.Credential", on_delete=models.PROTECT, related_name="connections")
+    account = models.ForeignKey(
+        "iam.ExternalAccount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="connections",
+    )
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections")
+    config = models.JSONField(default=dict)
+    """Connection-scoped settings (endpoints, options); per-capability settings live on ``Capability.config``."""
+    status = StateField(choices_enum=ConnectionStatus, default=ConnectionStatus.ACTIVE)
+    capability_statuses = models.JSONField(default=dict)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+
+    objects = RebacManager()
+
+    class Meta:
+        """Django model options for integration connections."""
+
+        abstract = True
+        ordering = ("-updated_at",)
+        rebac_resource_type = "integrate/connection"
+        rebac_id_attr = "sqid"
+
+    def __str__(self) -> str:
+        """Return a stable vendor-qualified connection label."""
+
+        vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
+        return f"{vendor_slug}:{self.public_id}"
+
+    def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
+        """Record one capability contribution, recompute this connection, and persist.
+
+        The connection owns this write: direct callers do not need an ambient
+        ``system_context`` or transaction, and scheduler callers safely nest
+        inside their own framework operation context. Unsaved instances are
+        updated in memory only because there is no connection row to persist.
+        """
+
+        reported_at = timezone.now()
+        incoming_status = ConnectionStatus.from_capability(status)
+        capability_statuses = dict(self.capability_statuses or {})
+        # Deleted capabilities can leave stale contributions until pruning has an owner.
+        capability_statuses[str(capability_key)] = incoming_status.value
+        rolled_status = ConnectionStatus.rollup(capability_statuses.values())
+
+        self.capability_statuses = capability_statuses
+        self.status = rolled_status
+        self.last_used_at = reported_at
+        if rolled_status.is_error:
+            if error:
+                self.last_error = error
+            self.last_error_at = reported_at
+        else:
+            self.last_error = ""
+            self.last_error_at = None
+
+        if self.pk is None:
+            return
+
+        with system_context(reason="integrate.connection.rollup"), transaction.atomic():
+            self.save(
+                update_fields=[
+                    "capability_statuses",
+                    "last_error",
+                    "last_error_at",
+                    "last_used_at",
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+
 class Capability(SqidMixin, AuditMixin, AngeeModel):
     """Abstract base for domain-owned capabilities.
 
@@ -44,7 +233,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
     stays out of runtime emission by leaving ``runtime`` unset.
     """
 
-    account = models.ForeignKey("iam.ExternalAccount", on_delete=models.PROTECT, related_name="+")
+    connection = models.ForeignKey("integrate.Connection", on_delete=models.PROTECT, related_name="capabilities")
     config = models.JSONField(default=dict)
     status = StateField(choices_enum=CapabilityStatus, default=CapabilityStatus.ACTIVE)
     last_used_at = models.DateTimeField(null=True, blank=True)
@@ -60,11 +249,11 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         abstract = True
 
     def report_status(self, *, status: CapabilityStatus | str, error: str = "") -> None:
-        """Record local status telemetry and push this capability's account contribution.
+        """Record local status telemetry and push this capability's connection contribution.
 
-        The caller owns persistence for this capability row. ``ExternalAccount``
-        owns its rollup write and tracks each capability by the reporting
-        capability primary key.
+        The caller owns persistence for this capability row. ``Connection`` owns
+        its rollup write and tracks each capability by the reporting capability
+        primary key.
         """
 
         reported_at = timezone.now()
@@ -74,7 +263,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         self.last_error = error
         self.last_error_at = reported_at if error else None
 
-        self.account.note_capability_status(capability_key=str(self.pk), status=status, error=error)
+        self.connection.note_capability_status(capability_key=str(self.pk), status=status, error=error)
 
 
 class Bridge(Capability):
@@ -200,7 +389,7 @@ class WebhookSubscriptionManager(RebacManager):
         kind: EventKind,
         payload: Any,
         impl_app: str = "",
-        account: Any | None = None,
+        connection: Any | None = None,
     ) -> dict[str, int]:
         """Deliver one integration event to every matching enabled subscription.
 
@@ -214,7 +403,7 @@ class WebhookSubscriptionManager(RebacManager):
         errors = 0
         with system_context(reason="integrate.webhooks.deliver"):
             for subscription in self.filter(enabled=True).order_by("pk"):
-                if not subscription.matches(kind=kind, impl_app=impl_app, account=account):
+                if not subscription.matches(kind=kind, impl_app=impl_app, connection=connection):
                     continue
                 try:
                     status = subscription.deliver(body)
@@ -262,8 +451,8 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
     secret = EncryptedField()
     event_kinds = models.JSONField(default=list)
     impl_app_filter = models.JSONField(default=list)
-    account_filter = models.ForeignKey(
-        "iam.ExternalAccount",
+    connection_filter = models.ForeignKey(
+        "integrate.Connection",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -291,7 +480,7 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
         "updated_at",
     )
 
-    def matches(self, *, kind: str, impl_app: str, account: Any | None) -> bool:
+    def matches(self, *, kind: str, impl_app: str, connection: Any | None) -> bool:
         """Return whether this subscription should receive one event."""
 
         if kind not in {str(value) for value in self.event_kinds or ()}:
@@ -299,9 +488,9 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
         impl_app_filter = tuple(str(value) for value in self.impl_app_filter or ())
         if impl_app_filter and impl_app not in impl_app_filter:
             return False
-        if self.account_filter_id is None:
+        if self.connection_filter_id is None:
             return True
-        return account is not None and self.account_filter_id == getattr(account, "pk", None)
+        return connection is not None and self.connection_filter_id == getattr(connection, "pk", None)
 
     def deliver(self, body: bytes) -> str:
         """POST one signed event body to this subscription's pinned target; raise on non-2xx."""

@@ -85,7 +85,6 @@ def _iam_model(name: str) -> type[Any]:
 
 
 User = _iam_model("User")
-Vendor = _iam_model("Vendor")
 OAuthClient = _iam_model("OAuthClient")
 ExternalAccount = _iam_model("ExternalAccount")
 Credential = _iam_model("Credential")
@@ -136,25 +135,13 @@ class CurrentUserType(AngeeNode):
         return sorted(str(role) for role in rebac_roles_of(cast(Any, self)))
 
 
-@strawberry_django.type(Vendor)
-class VendorType(AngeeNode):
-    """GraphQL projection of an IAM vendor catalogue row."""
-
-    slug: auto
-    display_name: auto
-    website_url: auto
-    icon: auto
-    description: auto
-    created_at: auto
-    updated_at: auto
-
-
 @strawberry_django.type(OAuthClient)
 class OAuthClientType(AngeeNode):
     """Admin GraphQL projection of an IAM OAuth client registration."""
 
     display_name: auto
-    vendor: VendorType
+    slug: auto
+    icon: auto
     environment: auto
     client_id: auto
     issuer: auto
@@ -205,18 +192,6 @@ class OAuthClientType(AngeeNode):
 
         return str(cast(Any, self).configuration_state)
 
-    @strawberry_django.field
-    def vendor_label(self) -> str:
-        """Return the linked vendor display label."""
-
-        return str(cast(Any, self).vendor_label)
-
-    @strawberry_django.field
-    def vendor_slug(self) -> str:
-        """Return the linked vendor slug."""
-
-        return str(cast(Any, self).vendor_slug)
-
 
 @strawberry.type
 class CredentialOAuthClientType:
@@ -233,7 +208,6 @@ class CredentialOAuthClientType:
 class ExternalAccountType(AngeeNode):
     """GraphQL projection of a linked external identity."""
 
-    vendor: VendorType
     external_id: auto
     email: auto
     display_name: auto
@@ -248,6 +222,34 @@ class ExternalAccountType(AngeeNode):
         """Return the current OAuth credential status, if this account has one."""
 
         return str(cast(Any, self).credential_status)
+
+    @strawberry_django.field
+    def provider_slug(self) -> str:
+        """Return the originating OAuth client's slug (the provider key)."""
+
+        return str(getattr(cast(Any, self).oauth_client, "slug", "") or "")
+
+    @strawberry_django.field
+    def provider_environment(self) -> str:
+        """Return the originating OAuth client's environment.
+
+        ``(slug, environment)`` is the OAuth client's unique key, so the console
+        can resolve an account back to its exact client without ambiguity.
+        """
+
+        return str(getattr(cast(Any, self).oauth_client, "environment", "") or "")
+
+    @strawberry_django.field
+    def provider_label(self) -> str:
+        """Return the originating OAuth client's display label."""
+
+        return str(getattr(cast(Any, self).oauth_client, "display_name", "") or "")
+
+    @strawberry_django.field
+    def provider_icon(self) -> str:
+        """Return the originating OAuth client's branding icon."""
+
+        return str(getattr(cast(Any, self).oauth_client, "icon", "") or "")
 
 
 @strawberry_django.type(Credential)
@@ -390,17 +392,13 @@ class IAMRelationshipType:
 
 
 @strawberry.type
-class AvailableConnectionVendor:
-    """Picker-safe vendor fields for public connection selection."""
-
-    slug: str
-    display_name: str
-    icon: str
-
-
-@strawberry.type
 class AvailableConnection:
-    """Picker-safe OAuth client fields for public connection selection."""
+    """Picker-safe OAuth client fields for public connection selection.
+
+    The OAuth client is self-describing (``slug``/``display_name``/``icon`` are
+    its own columns), so the picker reads them straight off each row — one query
+    for the whole page, no per-row fetch and no catalogue join.
+    """
 
     @strawberry.field
     def oauth_client_sqid(self) -> strawberry.ID:
@@ -415,30 +413,22 @@ class AvailableConnection:
         return str(cast(Any, self).display_name)
 
     @strawberry.field
+    def oauth_client_slug(self) -> str:
+        """Return the OAuth client slug (the provider key)."""
+
+        return str(cast(Any, self).slug)
+
+    @strawberry.field
+    def oauth_client_icon(self) -> str:
+        """Return the OAuth client branding icon."""
+
+        return str(cast(Any, self).icon)
+
+    @strawberry.field
     def is_oidc(self) -> bool:
         """Return whether this connection can run OIDC login/link flows."""
 
         return bool(cast(Any, self).is_oidc)
-
-    @strawberry.field
-    def vendor(self) -> AvailableConnectionVendor:
-        """Return the picker-safe vendor projection from the joined columns.
-
-        ``OAuthClientQuerySet.available_connections`` annotates the vendor
-        columns onto each row, so this reads them off the same row — one query
-        for the whole page, no per-row vendor fetch. A ``select_related`` join
-        can't be used here: the picker is public/system-scoped, so there is no
-        actor to check a materialised REBAC-bound ``Vendor`` instance against
-        (the related-row guard fails closed). Annotated columns carry no such
-        instance.
-        """
-
-        row = cast(Any, self)
-        return AvailableConnectionVendor(
-            slug=str(row.picker_vendor_slug),
-            display_name=str(row.picker_vendor_display_name),
-            icon=str(row.picker_vendor_icon),
-        )
 
 
 @strawberry.type
@@ -495,35 +485,13 @@ class UnlinkAccountResult:
 
 
 @strawberry.input
-class VendorInput:
-    """Fields accepted when creating a vendor."""
-
-    slug: str
-    display_name: str
-    website_url: str = ""
-    icon: str = ""
-    description: str = ""
-
-
-@strawberry.input
-class VendorPatch:
-    """Fields accepted when updating a vendor."""
-
-    id: relay.GlobalID
-    slug: str | None = strawberry.UNSET
-    display_name: str | None = strawberry.UNSET
-    website_url: str | None = strawberry.UNSET
-    icon: str | None = strawberry.UNSET
-    description: str | None = strawberry.UNSET
-
-
-@strawberry.input
 class OAuthClientInput:
     """Admin-write fields accepted when creating an OAuth client."""
 
-    vendor: relay.GlobalID
+    slug: str
     display_name: str
     client_id: str
+    icon: str = ""
     client_secret: str = ""
     environment: str = "prod"
     issuer: str = ""
@@ -551,7 +519,8 @@ class OAuthClientPatch:
     """Admin-write fields accepted when updating an OAuth client."""
 
     id: relay.GlobalID
-    vendor: relay.GlobalID | None = strawberry.UNSET
+    slug: str | None = strawberry.UNSET
+    icon: str | None = strawberry.UNSET
     display_name: str | None = strawberry.UNSET
     client_id: str | None = strawberry.UNSET
     client_secret: str | None = strawberry.UNSET
@@ -580,7 +549,7 @@ class OAuthClientPatch:
 class ExternalAccountInput:
     """Fields accepted when manually linking an external account."""
 
-    vendor: relay.GlobalID
+    oauth_client: relay.GlobalID
     external_id: str
     owner: str | None = None
     email: str = ""
@@ -636,7 +605,7 @@ def _my_connected_accounts(
 def _console_oauth_clients(
     info: strawberry.Info,
 ) -> QuerySet[Any]:
-    """Return admin-visible OAuth clients with guarded vendor joins."""
+    """Return admin-visible OAuth clients (self-describing; no vendor join)."""
 
     del info
     return cast(QuerySet[Any], cast(Any, OAuthClient.objects).console_oauth_clients())
@@ -645,7 +614,7 @@ def _console_oauth_clients(
 def _console_external_accounts(
     info: strawberry.Info,
 ) -> QuerySet[Any]:
-    """Return admin-visible external accounts with guarded vendor joins."""
+    """Return admin-visible external accounts with guarded FK joins."""
 
     del info
     return cast(QuerySet[Any], cast(Any, ExternalAccount.objects).console_external_accounts())
@@ -925,18 +894,18 @@ def _user_principal(principal_id: str) -> Any:
     raise ValueError(f"User principal {principal_id!r} was not found.")
 
 
-def _vendor_from_id(vendor_id: relay.GlobalID) -> Any:
-    """Return the vendor addressed by one GraphQL global id."""
+def _oauth_client_from_id(oauth_client_id: relay.GlobalID) -> Any:
+    """Return the OAuth client addressed by one GraphQL global id."""
 
-    with system_context(reason="iam.graphql.external_account.vendor"):
-        vendor = instance_from_public_id(
-            Vendor,
-            vendor_id.node_id,
-            queryset=Vendor._default_manager.all(),
+    with system_context(reason="iam.graphql.external_account.oauth_client"):
+        oauth_client = instance_from_public_id(
+            OAuthClient,
+            oauth_client_id.node_id,
+            queryset=OAuthClient._default_manager.all(),
         )
-    if vendor is None:
-        raise ValueError(f"Vendor {vendor_id!s} was not found.")
-    return vendor
+    if oauth_client is None:
+        raise ValueError(f"OAuth client {oauth_client_id!s} was not found.")
+    return oauth_client
 
 
 def _user_graphql_type_name() -> str:
@@ -998,12 +967,6 @@ class IAMConsoleQuery:
     """Admin IAM connection queries."""
 
     users: OffsetPaginated[UserType] = strawberry_django.offset_paginated(
-        permission_classes=_ADMIN_PERMISSION_CLASSES,
-    )
-    vendors: OffsetPaginated[VendorType] = strawberry_django.offset_paginated(
-        permission_classes=_ADMIN_PERMISSION_CLASSES,
-    )
-    vendor: VendorType | None = strawberry_django.node(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
     oauth_clients: OffsetPaginated[OAuthClientType] = strawberry_django.offset_paginated(
@@ -1242,17 +1205,6 @@ def _revoke_remote_oauth_token(credential: Any) -> None:
         return
 
 
-_VENDOR_MUTATION = crud(
-    VendorType,
-    create=VendorInput,
-    update=VendorPatch,
-    delete=True,
-    permission_classes=_ADMIN_PERMISSION_CLASSES,
-    name="vendor",
-    write_context="iam.graphql.vendor",
-)
-"""Admin vendor CRUD: const-admin gated by ``PlatformAdminPermission``, written elevated."""
-
 _OAUTH_CLIENT_MUTATION = crud(
     OAuthClientType,
     create=OAuthClientInput,
@@ -1262,7 +1214,7 @@ _OAUTH_CLIENT_MUTATION = crud(
     name="oauth_client",
     write_context="iam.graphql.oauth_client",
 )
-"""Admin OAuth-client CRUD: same elevated const-admin shape as the vendor surface."""
+"""Admin OAuth-client CRUD: const-admin gated by ``PlatformAdminPermission``, written elevated."""
 
 
 @strawberry.type
@@ -1273,10 +1225,10 @@ class IAMExternalAccountMutation:
     def create_external_account(self, data: ExternalAccountInput) -> ExternalAccountType:
         """Create or update one external account via the account manager owner."""
 
-        vendor = _vendor_from_id(data.vendor)
+        oauth_client = _oauth_client_from_id(data.oauth_client)
         owner = _user_principal(data.owner) if data.owner is not None else None
         account = ExternalAccount.objects.link(
-            vendor,
+            oauth_client,
             data.external_id,
             owner=owner,
             email=data.email,
@@ -1345,7 +1297,6 @@ def _enabled_oidc_oauth_client(oauth_client_sqid: str) -> Any:
 
     oauth_client = (
         OAuthClient.objects.system_context(reason="iam.graphql.oidc_oauth_client")
-        .select_related("vendor")
         .filter(sqid=oauth_client_sqid)
         .first()
     )
@@ -1447,12 +1398,10 @@ schemas = {
         "types": [
             UserType,
             CurrentUserType,
-            VendorType,
             CredentialOAuthClientType,
             ExternalAccountType,
             CredentialType,
             AvailableConnection,
-            AvailableConnectionVendor,
             OidcStartPayload,
             LoginCompletePayload,
             LinkAccountResult,
@@ -1463,7 +1412,6 @@ schemas = {
         "query": [IAMQuery, IAMConsoleQuery],
         "mutation": [
             IAMMutation,
-            _VENDOR_MUTATION,
             _OAUTH_CLIENT_MUTATION,
             IAMExternalAccountMutation,
             IAMPermissionHubMutation,
@@ -1472,7 +1420,6 @@ schemas = {
         "types": [
             UserType,
             CurrentUserType,
-            VendorType,
             OAuthClientType,
             CredentialOAuthClientType,
             ExternalAccountType,
@@ -1485,7 +1432,6 @@ schemas = {
             IAMResourceSchemaType,
             IAMRelationshipType,
             AvailableConnection,
-            AvailableConnectionVendor,
             OidcStartPayload,
             LoginCompletePayload,
             LinkAccountResult,

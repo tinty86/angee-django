@@ -19,7 +19,13 @@ from angee.integrate.events import EventKind
 from angee.integrate.models import Bridge, Capability
 from angee.integrate.net import validate_public_url
 from angee.integrate.webhooks import HTTP_TIMEOUT_SECONDS, SIGNATURE_HEADER
-from tests.conftest import ExternalAccount, Vendor, WebhookSubscription, _create_missing_tables
+from tests.conftest import (
+    IAM_CONNECTION_TEST_MODELS,
+    INTEGRATE_TEST_MODELS,
+    WebhookSubscription,
+    _create_missing_tables,
+    make_connection,
+)
 
 
 class DispatchBridge(Bridge):
@@ -71,7 +77,7 @@ def webhook_tables(transactional_db: Any) -> Iterator[None]:
     """Create IAM and webhook tables required by source-addon webhook tests."""
 
     del transactional_db
-    created_iam_models = _create_missing_tables()
+    created_iam_models = _create_missing_tables(IAM_CONNECTION_TEST_MODELS + INTEGRATE_TEST_MODELS)
     webhook_created = False
     if WebhookSubscription._meta.db_table not in connection.introspection.table_names():
         with connection.schema_editor() as schema_editor:
@@ -175,8 +181,8 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
     connections = _record_connections(monkeypatch, status=202)
 
     user = get_user_model().objects.create_user(username="webhook-delivery", email="delivery@example.com")
-    account = _external_account("delivery-account")
-    other_account = _external_account("delivery-other")
+    conn = make_connection("delivery-account")
+    other_conn = make_connection("delivery-other")
     payload = {"bridge": "br_1"}
     body = b'{"bridge":"br_1"}'
 
@@ -187,7 +193,7 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
             secret="first-secret",
             event_kinds=[EventKind.BRIDGE_SYNCED.value],
             impl_app_filter=["notes"],
-            account_filter=account,
+            connection_filter=conn,
             consecutive_failures=3,
         )
         match_all = WebhookSubscription.objects.create(
@@ -221,14 +227,14 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
             target_url="https://hooks-account.example.test/events",
             secret="account-secret",
             event_kinds=[EventKind.BRIDGE_SYNCED.value],
-            account_filter=other_account,
+            connection_filter=other_conn,
         )
 
     result = WebhookSubscription.objects.deliver_event(
         kind=EventKind.BRIDGE_SYNCED,
         payload=payload,
         impl_app="notes",
-        account=account,
+        connection=conn,
     )
 
     assert result == {"delivered": 2, "errors": 0}
@@ -505,14 +511,6 @@ def _resolve_to(monkeypatch: pytest.MonkeyPatch, address: str) -> None:
         return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (address, port or 443))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-
-
-def _external_account(slug: str) -> ExternalAccount:
-    """Create one vendor and linked external account for webhook tests."""
-
-    with system_context(reason="test webhook account setup"):
-        vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
-        return ExternalAccount.objects.create(vendor=vendor, external_id=f"{slug}-external")
 
 
 def _signature(secret: str, body: bytes) -> str:

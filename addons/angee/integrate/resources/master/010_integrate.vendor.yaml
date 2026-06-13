@@ -1,5 +1,5 @@
 # Default third-party vendor catalogue (master tier). Model inferred from the
-# `iam.vendor` filename. Adopted by slug so a pre-existing vendor is linked
+# `integrate.vendor` filename. Adopted by slug so a pre-existing vendor is linked
 # instead of duplicated; master rows re-sync from this file when it changes.
 - xref: google
   slug: google

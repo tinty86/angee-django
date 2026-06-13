@@ -94,13 +94,13 @@ class OidcRedirectCompletion:
         Credential = cast(Any, apps.get_model("iam", "Credential"))
         email = self._claim_email(claims) or ""
         with system_context(reason="iam.oidc.link"), transaction.atomic():
-            account = Account.objects.filter(vendor=self.oauth_client.vendor, external_id=sub).first()
+            account = Account.objects.filter(oauth_client=self.oauth_client, external_id=sub).first()
             if account is not None:
                 owner = Account.objects.owner_for(account)
                 if owner is not None and owner.pk != link_user.pk:
                     raise OidcFlowError("account_already_linked", 409)
             account = Account.objects.link(
-                self.oauth_client.vendor,
+                self.oauth_client,
                 sub,
                 owner=link_user,
                 email=email,
@@ -114,9 +114,8 @@ class OidcRedirectCompletion:
                 tokens,
                 external_account=account,
             )
-            account.credentials_provider = self.oauth_client
             account.credential = credential
-            account.save(update_fields=["credentials_provider", "credential", "updated_at"])
+            account.save(update_fields=["credential", "updated_at"])
         return LinkCompletion(
             account=cast(models.Model, account),
             user=link_user,
@@ -225,9 +224,7 @@ class OidcIdentityResolver:
         Account = cast(Any, apps.get_model("iam", "ExternalAccount"))
         with system_context(reason="iam.oidc.resolve"), transaction.atomic():
             account = (
-                Account.objects.select_related("vendor")
-                .filter(vendor=self.oauth_client.vendor, external_id=sub)
-                .first()
+                Account.objects.filter(oauth_client=self.oauth_client, external_id=sub).first()
             )
             if account is not None:
                 # A revoked/expired/disabled account or a deactivated user must not log in.
@@ -247,7 +244,7 @@ class OidcIdentityResolver:
                 user = self._find_by_email(normalized_email)
                 if user is not None and user.is_active:
                     Account.objects.link(
-                        self.oauth_client.vendor,
+                        self.oauth_client,
                         sub,
                         owner=user,
                         email=normalized_email,
@@ -265,7 +262,7 @@ class OidcIdentityResolver:
             ):
                 user = self._create_for_identity(normalized_email, sub, claims=claims)
                 Account.objects.link(
-                    self.oauth_client.vendor,
+                    self.oauth_client,
                     sub,
                     owner=user,
                     email=normalized_email,

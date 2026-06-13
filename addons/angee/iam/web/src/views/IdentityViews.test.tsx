@@ -45,13 +45,11 @@ const sdkMocks = vi.hoisted(() => ({
   },
   lists: {
     User: listState(),
-    Vendor: listState(),
     OAuthClient: listState(),
     ExternalAccount: listState(),
   },
   records: {} as Record<string, Row | null>,
   revokeRole: vi.fn(),
-  mutateVendor: vi.fn(),
   mutateOauthClient: vi.fn(),
   createExternalAccount: vi.fn(),
   revokeState: {
@@ -119,7 +117,6 @@ vi.mock("@angee/sdk", async (importOriginal) => {
       refetch: vi.fn(),
     }),
     useResourceMutation: (model: string) => {
-      if (model === "Vendor") return [sdkMocks.mutateVendor, sdkMocks.mutationState];
       if (model === "OAuthClient") {
         return [sdkMocks.mutateOauthClient, sdkMocks.mutationState];
       }
@@ -159,7 +156,6 @@ describe("IAM identity views", () => {
     sdkMocks.records = {};
     sdkMocks.resourceListCalls = [];
     sdkMocks.revokeRole.mockReset();
-    sdkMocks.mutateVendor.mockReset();
     sdkMocks.mutateOauthClient.mockReset();
     sdkMocks.createExternalAccount.mockReset();
     sdkMocks.revokeState.fetching = false;
@@ -259,7 +255,6 @@ describe("IAM identity views", () => {
       expect(sdkMocks.mutateOauthClient).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            vendor: "vendor-1",
             displayName: "Acme prod",
             clientId: "acme-client",
             clientSecret: "acme-secret",
@@ -297,7 +292,7 @@ describe("IAM identity views", () => {
     await waitFor(() =>
       expect(sdkMocks.createExternalAccount).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          vendor: "vendor-1",
+          oauthClient: "client-1",
           externalId: "acct-123",
           email: "acct@example.com",
           status: "active",
@@ -349,16 +344,16 @@ describe("IAM identity views", () => {
     sdkMocks.lists.ExternalAccount.rows = [account as Row];
     sdkMocks.lists.ExternalAccount.total = 1;
     sdkMocks.connectionSummary.data = {
-      vendors: {
+      oauthClients: {
         totalCount: 1,
         results: [
           {
-            id: "vendor-1",
+            id: "client-1",
+            displayName: "Acme prod",
             slug: "acme",
-            displayName: "Acme",
-            websiteUrl: "",
             icon: "",
-            description: "",
+            environment: "prod",
+            isEnabled: true,
           },
         ],
       },
@@ -391,7 +386,7 @@ describe("IAM identity views", () => {
     await waitFor(() =>
       expect(sdkMocks.createExternalAccount).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          vendor: "vendor-1",
+          oauthClient: "client-1",
           externalId: "ops-sub",
           email: "ops-updated@example.com",
           displayName: "Ops identity",
@@ -418,24 +413,23 @@ function grantsData(): unknown {
 }
 
 function seedConnectionData(): void {
-  const vendor = {
-    id: "vendor-1",
+  const client = oauthClientFixture();
+  const summaryClient = {
+    id: "client-1",
+    displayName: "Acme prod",
     slug: "acme",
-    displayName: "Acme",
-    websiteUrl: "",
     icon: "",
-    description: "",
+    environment: "prod",
+    isEnabled: true,
   };
-  sdkMocks.lists.Vendor.rows = [vendor as Row];
-  sdkMocks.lists.Vendor.total = 1;
-  sdkMocks.lists.OAuthClient.rows = [];
-  sdkMocks.lists.OAuthClient.total = 0;
+  sdkMocks.lists.OAuthClient.rows = [client as Row];
+  sdkMocks.lists.OAuthClient.total = 1;
   sdkMocks.lists.ExternalAccount.rows = [];
   sdkMocks.lists.ExternalAccount.total = 0;
   sdkMocks.connectionSummary.data = {
-    vendors: {
+    oauthClients: {
       totalCount: 1,
-      results: [vendor],
+      results: [summaryClient],
     },
     externalAccounts: {
       totalCount: 0,
@@ -451,20 +445,11 @@ function seedConnectionData(): void {
 }
 
 function oauthClientFixture(overrides: Record<string, unknown> = {}): unknown {
-  const vendor = {
-    id: "vendor-1",
-    slug: "acme",
-    displayName: "Acme",
-    websiteUrl: "",
-    icon: "",
-    description: "",
-  };
   return {
     id: "client-1",
     displayName: "Acme prod",
-    vendor,
-    vendorLabel: "Acme",
-    vendorSlug: "acme",
+    slug: "acme",
+    icon: "",
     environment: "prod",
     clientId: "acme-client",
     clientSecret: "stored-secret",
@@ -501,11 +486,10 @@ function externalAccountFixture(): unknown {
     status: "active",
     credentialStatus: "",
     lastUsedAt: null,
-    vendor: {
-      id: "vendor-1",
-      slug: "acme",
-      displayName: "Acme",
-    },
+    providerSlug: "acme",
+    providerEnvironment: "prod",
+    providerLabel: "Acme prod",
+    providerIcon: "",
   };
 }
 

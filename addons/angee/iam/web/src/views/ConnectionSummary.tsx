@@ -19,7 +19,7 @@ import {
   type IAMConnectionSummaryVariables,
   type IAMCredentialSummary,
   type IAMExternalAccountSummary,
-  type IAMVendorSummary,
+  type IAMOAuthClientSummary,
 } from "../documents";
 import { toneFor } from "./ConnectionListColumns";
 
@@ -28,11 +28,11 @@ const SUMMARY_LIMIT = 8;
 export function ConnectionSummary({
   refreshVersion,
   onAccountEdit,
-  onVendorEdit,
+  onProviderEdit,
 }: {
   refreshVersion: number;
   onAccountEdit: (account: IAMExternalAccountSummary) => void;
-  onVendorEdit: (vendor: IAMVendorSummary) => void;
+  onProviderEdit: (client: IAMOAuthClientSummary) => void;
 }): ReactElement {
   const query = useAuthoredQuery<
     IAMConnectionSummaryData,
@@ -67,13 +67,13 @@ export function ConnectionSummary({
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <SummarySection
-        title="Vendors"
-        total={query.data?.vendors.totalCount ?? 0}
-        items={(query.data?.vendors.results ?? []).map((vendor) => (
-          <VendorSummaryRow
-            key={vendor.id}
-            vendor={vendor}
-            onClick={() => onVendorEdit(vendor)}
+        title="Login providers"
+        total={query.data?.oauthClients.totalCount ?? 0}
+        items={(query.data?.oauthClients.results ?? []).map((client) => (
+          <OAuthClientSummaryRow
+            key={client.id}
+            client={client}
+            onClick={() => onProviderEdit(client)}
           />
         ))}
       />
@@ -121,11 +121,11 @@ function SummarySection({
   );
 }
 
-function VendorSummaryRow({
-  vendor,
+function OAuthClientSummaryRow({
+  client,
   onClick,
 }: {
-  vendor: IAMVendorSummary;
+  client: IAMOAuthClientSummary;
   onClick: () => void;
 }): ReactElement {
   return (
@@ -135,10 +135,10 @@ function VendorSummaryRow({
       onClick={onClick}
     >
       <span className="truncate text-13 font-medium text-fg">
-        {vendor.displayName || vendor.slug}
+        {client.displayName || client.slug}
       </span>
       <Code truncate variant="muted">
-        {vendor.slug}
+        {client.slug}
       </Code>
     </button>
   );
@@ -162,7 +162,7 @@ function ExternalAccountSummaryRow({
           {account.displayName || account.email || account.externalId}
         </span>
         <span className="block truncate text-2xs text-fg-muted">
-          {account.vendor.displayName}
+          {account.providerLabel || account.providerSlug}
         </span>
       </span>
       <Badge variant={toneFor(account.credentialStatus)}>

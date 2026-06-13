@@ -13,10 +13,11 @@ class NotesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "example.notes"
     label = "notes"
-    depends_on = ("angee.iam",)
+    depends_on = ("angee.iam", "angee.integrate")
     schemas = "schema.schemas"
     permissions = "permissions.zed"
     resources = {
+        "install": ("resources/install/010_integrate.vendor.yaml",),
         "demo": (
             "resources/demo/010_iam.user.yaml",
             "resources/demo/020_notes.note.yaml",

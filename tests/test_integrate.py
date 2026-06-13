@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from django.db import models
 
-from angee.iam.models import AccountStatus
-from angee.integrate.models import Bridge, Capability, CapabilityStatus
-from tests.conftest import ExternalAccount
+from angee.integrate.models import Bridge, Capability, CapabilityStatus, ConnectionStatus
+from tests.conftest import Connection
 
 
 class ConcreteBridge(Bridge):
@@ -46,17 +45,17 @@ def test_concrete_bridge_inherits_scheduler_field() -> None:
 
 
 def test_report_status_records_telemetry_and_pushes_rollup() -> None:
-    """report_status writes local telemetry and calls the account rollup when present."""
+    """report_status writes local telemetry and calls the connection rollup when present."""
 
     calls: list[tuple[object, object, str]] = []
-    account = ExternalAccount()
+    connection = Connection()
 
     def note_capability_status(*, capability_key: object, status: object, error: str) -> None:
         calls.append((capability_key, status, error))
 
-    account.note_capability_status = note_capability_status  # type: ignore[method-assign]
+    connection.note_capability_status = note_capability_status  # type: ignore[method-assign]
     bridge = ConcreteBridge()
-    bridge.account = account
+    bridge.connection = connection
 
     bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
 
@@ -75,15 +74,15 @@ def test_report_status_records_telemetry_and_pushes_rollup() -> None:
     assert bridge.last_error_at is None
 
 
-def test_report_status_updates_unsaved_account_rollup_in_memory() -> None:
-    """report_status updates an unsaved account without trying to persist it."""
+def test_report_status_updates_unsaved_connection_rollup_in_memory() -> None:
+    """report_status updates an unsaved connection without trying to persist it."""
 
     bridge = ConcreteBridge()
-    bridge.account = ExternalAccount()
+    bridge.connection = Connection()
 
     bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
 
     assert bridge.status == CapabilityStatus.ERROR
-    assert bridge.account.status == AccountStatus.ERROR
-    assert bridge.account.capability_statuses == {"None": AccountStatus.ERROR.value}
-    assert bridge.account.last_error == "boom"
+    assert bridge.connection.status == ConnectionStatus.ERROR
+    assert bridge.connection.capability_statuses == {"None": ConnectionStatus.ERROR.value}
+    assert bridge.connection.last_error == "boom"

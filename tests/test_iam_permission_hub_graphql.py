@@ -339,7 +339,7 @@ def test_grant_role_ignores_non_user_relay_global_id(
         """,
         {
             "principalId": relay.to_base64(
-                iam_schema.VendorType,
+                iam_schema.OAuthClientType,
                 str(getattr(target, "sqid", target.pk)),
             ),
             "role": role,
