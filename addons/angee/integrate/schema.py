@@ -34,6 +34,10 @@ from angee.integrate.registry import bridge_models
 Vendor = apps.get_model("integrate", "Vendor")
 Integration = apps.get_model("integrate", "Integration")
 WebhookSubscription = apps.get_model("integrate", "WebhookSubscription")
+VCSIntegration = apps.get_model("integrate", "VCSIntegration")
+Repository = apps.get_model("integrate", "Repository")
+Source = apps.get_model("integrate", "Source")
+Template = apps.get_model("integrate", "Template")
 
 
 @strawberry_django.type(Vendor)
@@ -348,21 +352,293 @@ class WebhookActionMutation:
         return RotatedSecret(ok=True, secret=secret)
 
 
+# --- VCS inventory: integrations, repositories, sources, templates ----------
+
+
+@strawberry_django.type(VCSIntegration)
+class VCSIntegrationType(AngeeNode):
+    """Admin projection of a VCS integration (the git host capability)."""
+
+    integration: IntegrationType
+    client_class: auto
+    status: auto
+    config: JSON
+    last_sync_completed_at: auto
+    last_sync_status: auto
+    last_error: auto
+    created_at: auto
+    updated_at: auto
+
+    @strawberry_django.field(only=["client_class", "status"])
+    def display_name(self) -> str:
+        """Return a human label for the record header and relation pickers."""
+
+        return f"{cast(Any, self).client_class} ({cast(Any, self).status})"
+
+
+@strawberry_django.type(Repository)
+class RepositoryType(AngeeNode):
+    """Admin projection of one inventoried repository."""
+
+    vcs_integration: VCSIntegrationType
+    org: auto
+    name: auto
+    remote: auto
+    ssh_remote: auto
+    remote_id: auto
+    default_branch: auto
+    visibility: auto
+    web_url: auto
+    archived: auto
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(Source)
+class SourceType(AngeeNode):
+    """Admin projection of one source (a ref+path pointer into a repository)."""
+
+    repository: RepositoryType
+    kind: auto
+    ref: auto
+    path: auto
+    last_synced_at: auto
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(Template)
+class TemplateType(AngeeNode):
+    """Admin projection of one discovered template."""
+
+    source: SourceType
+    name: auto
+    kind: auto
+    path: auto
+    inputs: JSON
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry.type
+class RepoCandidate:
+    """A repository the host returns for the add typeahead (not yet inventoried)."""
+
+    name: str
+    org: str
+    remote: str
+    ssh_remote: str
+    default_branch: str
+    visibility: str
+    web_url: str
+    archived: bool
+
+
+@strawberry.input
+class VCSIntegrationInput:
+    """Fields accepted when creating a VCS integration.
+
+    ``client_class`` is an ``ImplClassField`` enum key (e.g. ``github``);
+    ``webhook_secret`` is write-only (never read back).
+    """
+
+    integration: relay.GlobalID
+    client_class: str = "none"
+    config: JSON | None = None
+    webhook_secret: str = ""
+
+
+@strawberry.input
+class VCSIntegrationPatch:
+    """Fields accepted when updating a VCS integration."""
+
+    id: relay.GlobalID
+    client_class: str | None = strawberry.UNSET
+    config: JSON | None = strawberry.UNSET
+    webhook_secret: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+
+
+@strawberry.input
+class SourceInput:
+    """Fields accepted when creating a source."""
+
+    repository: relay.GlobalID
+    kind: str
+    ref: str = ""
+    path: str = ""
+
+
+@strawberry.input
+class SourcePatch:
+    """Fields accepted when updating a source."""
+
+    id: relay.GlobalID
+    kind: str | None = strawberry.UNSET
+    ref: str | None = strawberry.UNSET
+    path: str | None = strawberry.UNSET
+
+
+def _repo_candidate(descriptor: Any) -> RepoCandidate:
+    """Project a host ``RepoDescriptor`` into a typeahead candidate."""
+
+    return RepoCandidate(
+        name=str(descriptor.name),
+        org=str(descriptor.org),
+        remote=str(descriptor.remote),
+        ssh_remote=str(descriptor.ssh_remote),
+        default_branch=str(descriptor.default_branch),
+        visibility=str(descriptor.visibility),
+        web_url=str(descriptor.web_url),
+        archived=bool(descriptor.archived),
+    )
+
+
+@strawberry.type
+class VCSConsoleQuery:
+    """Admin VCS inventory queries."""
+
+    vcs_integrations: OffsetPaginated[VCSIntegrationType] = strawberry_django.offset_paginated(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    vcs_integration: VCSIntegrationType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    repositories: OffsetPaginated[RepositoryType] = strawberry_django.offset_paginated(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    repository: RepositoryType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    sources: OffsetPaginated[SourceType] = strawberry_django.offset_paginated(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    source: SourceType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    templates: OffsetPaginated[TemplateType] = strawberry_django.offset_paginated(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    template: TemplateType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+
+    @strawberry.field(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def search_repositories(self, vcs_integration_id: relay.GlobalID, query: str) -> list[RepoCandidate]:
+        """Return host repositories matching ``query`` for the add typeahead."""
+
+        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.search_repositories")
+        with system_context(reason="integrate.graphql.search_repositories"):
+            return [_repo_candidate(descriptor) for descriptor in vcs.search_repositories(query)]
+
+
+_VCS_INTEGRATION_MUTATION = crud(
+    VCSIntegrationType,
+    create=VCSIntegrationInput,
+    update=VCSIntegrationPatch,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="vcs_integration",
+    write_context="integrate.graphql.vcs_integration",
+)
+"""Admin VCS-integration CRUD: webhook_secret is write-only; written elevated."""
+
+_SOURCE_MUTATION = crud(
+    SourceType,
+    create=SourceInput,
+    update=SourcePatch,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="source",
+    write_context="integrate.graphql.source",
+)
+"""Admin source CRUD: FK input resolves via strawberry-django; written elevated."""
+
+_REPOSITORY_MUTATION = crud(
+    RepositoryType,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="repository",
+    write_context="integrate.graphql.repository",
+)
+"""Admin repository delete: rows arrive via ``addRepository``/``discoverRepositories``."""
+
+
+@strawberry.type
+class VCSActionMutation:
+    """Operational actions on a VCS integration and its inventory."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def add_repository(self, vcs_integration_id: relay.GlobalID, name: str) -> RepositoryType:
+        """Inventory one repository by its host ``name`` (a picked typeahead result)."""
+
+        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.add_repository")
+        with system_context(reason="integrate.graphql.add_repository"):
+            return cast(RepositoryType, vcs.import_repository(name))
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def discover_repositories(self, vcs_integration_id: relay.GlobalID, org: str = "") -> ActionResult:
+        """Inventory every repository the account exposes (bulk import; prunes vanished)."""
+
+        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.discover_repositories")
+        with system_context(reason="integrate.graphql.discover_repositories"):
+            count = vcs.discover_repositories(org=org)
+        return ActionResult(ok=True, message=f"Inventoried {count} repository(ies).")
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def sync_vcs_integration(self, id: relay.GlobalID) -> ActionResult:
+        """Refresh every repository's sources for one VCS integration now."""
+
+        vcs = _resolve(VCSIntegration, id, reason="integrate.graphql.sync_vcs_integration")
+        now = timezone.now()
+        with system_context(reason="integrate.graphql.sync_vcs_integration"):
+            vcs.mark_sync_started(now=now)
+            try:
+                result = vcs.sync()
+            except Exception as error:  # noqa: BLE001 — sync failure is the result, not a 500
+                vcs.record_sync_error(error, now=now)
+                return ActionResult(ok=False, message=f"Sync failed: {error}")
+            vcs.record_sync(result, now=now)
+        return ActionResult(ok=True, message=f"Synced {result} item(s).")
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def refresh_source(self, id: relay.GlobalID) -> ActionResult:
+        """Re-enumerate one source's output rows now."""
+
+        source = _resolve(Source, id, reason="integrate.graphql.refresh_source")
+        with system_context(reason="integrate.graphql.refresh_source"):
+            count = source.refresh()
+        return ActionResult(ok=True, message=f"Synced {count} item(s).")
+
+
 # Extracted with an explicit annotation: a bare homogeneous list of two
 # AngeeNode-decorated types infers as ``list[type[AngeeNode]]`` and trips mypy's
 # invariance check; ``list[type]`` widens it. (iam's inline lists are heterogeneous,
 # so they don't hit this.)
-_CONSOLE_TYPES: list[type] = [VendorType, IntegrationType, WebhookSubscriptionType]
+_CONSOLE_TYPES: list[type] = [
+    VendorType,
+    IntegrationType,
+    WebhookSubscriptionType,
+    VCSIntegrationType,
+    RepositoryType,
+    SourceType,
+    TemplateType,
+    RepoCandidate,
+]
 
 schemas = {
     "console": {
-        "query": [IntegrateConsoleQuery],
+        "query": [IntegrateConsoleQuery, VCSConsoleQuery],
         "mutation": [
             _VENDOR_MUTATION,
             _INTEGRATION_MUTATION,
             _WEBHOOK_MUTATION,
+            _VCS_INTEGRATION_MUTATION,
+            _SOURCE_MUTATION,
+            _REPOSITORY_MUTATION,
             IntegrationActionMutation,
             WebhookActionMutation,
+            VCSActionMutation,
         ],
         "subscription": [changes(Integration, field="integrationChanged")],
         "types": _CONSOLE_TYPES,

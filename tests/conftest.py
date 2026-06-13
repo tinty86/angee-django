@@ -24,6 +24,7 @@ from angee.iam.models import OAuthClient as AbstractOAuthClient
 from angee.integrate.models import Integration as AbstractIntegration
 from angee.integrate.models import Vendor as AbstractVendor
 from angee.integrate.models import WebhookSubscription as AbstractWebhookSubscription
+from angee.integrate.vcs.client import RepoDescriptor, TreeEntry, VCSClient
 from angee.knowledge.models import Link as AbstractLink
 from angee.knowledge.models import MarkdownPage as AbstractMarkdownPage
 from angee.knowledge.models import Page as AbstractPage
@@ -188,6 +189,63 @@ def make_integration(slug: str) -> Any:
         )
         vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
         return Integration.objects.create(vendor=vendor, credential=credential, owner=user)
+
+
+class StubVCSClient(VCSClient):
+    """In-memory VCS client for tests; canned data rides on ``integration.config``.
+
+    Registered as the ``stub`` key in the test ``ANGEE_VCS_CLIENT_CLASSES`` so a
+    ``VCSIntegration(client_class="stub")`` resolves to it. Each test injects
+    ``stub_repos``/``stub_tree``/``stub_blobs`` through the integration config.
+    """
+
+    def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
+        """Return the configured repositories (filtered to ``org`` when given)."""
+
+        repos = [RepoDescriptor(**spec) for spec in self.integration.config.get("stub_repos", [])]
+        return [repo for repo in repos if not org or repo.org == org]
+
+    def get_repo(self, name: str) -> RepoDescriptor:
+        """Return one configured repository by name or raise."""
+
+        for spec in self.integration.config.get("stub_repos", []):
+            if spec["name"] == name:
+                return RepoDescriptor(**spec)
+        raise FileNotFoundError(name)
+
+    def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
+        """Return configured repositories whose name contains ``query``."""
+
+        return [repo for repo in self.ls_repos(org=org) if query in repo.name]
+
+    def ls_tree(self, repository: Any, *, ref: str, path: str, recursive: bool = False) -> list[TreeEntry]:
+        """Return the configured tree entries under ``path``."""
+
+        del repository, ref, recursive
+        prefix = path.strip("/")
+        entries = [TreeEntry(**spec) for spec in self.integration.config.get("stub_tree", [])]
+        return [entry for entry in entries if not prefix or entry.path == prefix or entry.path.startswith(f"{prefix}/")]
+
+    def cat_file(self, repository: Any, *, ref: str, path: str) -> bytes:
+        """Return the configured blob bytes for ``path`` or raise."""
+
+        del repository, ref
+        blobs = self.integration.config.get("stub_blobs", {})
+        if path in blobs:
+            return str(blobs[path]).encode("utf-8")
+        raise FileNotFoundError(path)
+
+    def rev_parse(self, repository: Any, ref: str) -> str:
+        """Return a fixed stub commit oid."""
+
+        del repository, ref
+        return "stubsha"
+
+    def verify_webhook(self, vcs_integration: Any, request: Any) -> bool:
+        """Accept every webhook in tests."""
+
+        del vcs_integration, request
+        return True
 
 class Link(AbstractLink):
     """Concrete knowledge wikilink edge used by source-addon tests."""

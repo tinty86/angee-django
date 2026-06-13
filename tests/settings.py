@@ -29,4 +29,7 @@ ANGEE_RUNTIME_MODULE = "tests.runtime"
 # (normally supplied by each addon's autoconfig) are declared explicitly here;
 # the enum field requires each to be non-empty at model-import time.
 ANGEE_STORAGE_BACKEND_CLASSES = {"local": "angee.storage.backends.LocalBackend"}
-ANGEE_VCS_CLIENT_CLASSES = {"none": "angee.integrate.vcs.client.NoopVCSClient"}
+ANGEE_VCS_CLIENT_CLASSES = {
+    "none": "angee.integrate.vcs.client.NoopVCSClient",
+    "stub": "tests.conftest.StubVCSClient",
+}

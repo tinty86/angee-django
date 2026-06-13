@@ -511,34 +511,72 @@ class VCSIntegration(Bridge):
 
         return self.client.verify_webhook(self, request)
 
+    def search_repositories(self, query: str) -> list[Any]:
+        """Return host repositories whose name matches ``query`` (the add typeahead)."""
+
+        return self.client.search_repos(query, org=self._search_scope())
+
+    def import_repository(self, name: str) -> Any:
+        """Inventory one repository by its host ``name`` (a picked typeahead result)."""
+
+        repository_model = apps.get_model("integrate", "Repository")
+        return repository_model.objects.add(self, self.client.get_repo(name))
+
+    def discover_repositories(self, *, org: str = "") -> int:
+        """Inventory every repository the account exposes (bulk import; prunes vanished)."""
+
+        repository_model = apps.get_model("integrate", "Repository")
+        return repository_model.objects.reconcile(self, self.client.ls_repos(org=org))
+
+    def _search_scope(self) -> str:
+        """Return the org/user the typeahead search scopes to (from ``config.github_org``)."""
+
+        return str(self.integration.config.get("github_org") or "")
+
 
 class RepositoryManager(RebacManager):
-    """Manager owning the reconcile of repository rows from a host listing."""
+    """Manager owning the upsert/reconcile of repository rows from a host listing."""
 
     def reconcile(self, vcs_integration: Any, descriptors: Iterable[Any]) -> int:
-        """Upsert one repository row per descriptor and prune rows that vanished."""
+        """Upsert one repository row per descriptor and prune rows that vanished.
 
-        seen: set[Any] = set()
+        Bulk import for ``discoverRepositories``: prunes against the full listing,
+        so the caller must pass every repository (see ``GitHubClient.ls_repos``
+        pagination), never a partial page.
+        """
+
         descriptor_list = list(descriptors)
+        seen: set[Any] = set()
         with system_context(reason="integrate.repository.reconcile"), transaction.atomic():
             for descriptor in descriptor_list:
-                repository, _created = self.update_or_create(
-                    vcs_integration=vcs_integration,
-                    name=descriptor.name,
-                    defaults={
-                        "org": descriptor.org,
-                        "remote": descriptor.remote,
-                        "ssh_remote": descriptor.ssh_remote,
-                        "remote_id": descriptor.remote_id,
-                        "default_branch": descriptor.default_branch,
-                        "visibility": descriptor.visibility,
-                        "web_url": descriptor.web_url,
-                        "archived": descriptor.archived,
-                    },
-                )
-                seen.add(repository.pk)
+                seen.add(self._upsert(vcs_integration, descriptor).pk)
             self.filter(vcs_integration=vcs_integration).exclude(pk__in=seen).delete()
         return len(descriptor_list)
+
+    def add(self, vcs_integration: Any, descriptor: Any) -> Any:
+        """Inventory one repository (no prune) — the typeahead "add this repo" path."""
+
+        with system_context(reason="integrate.repository.add"), transaction.atomic():
+            return self._upsert(vcs_integration, descriptor)
+
+    def _upsert(self, vcs_integration: Any, descriptor: Any) -> Any:
+        """Create or update one repository row from a host descriptor."""
+
+        repository, _created = self.update_or_create(
+            vcs_integration=vcs_integration,
+            name=descriptor.name,
+            defaults={
+                "org": descriptor.org,
+                "remote": descriptor.remote,
+                "ssh_remote": descriptor.ssh_remote,
+                "remote_id": descriptor.remote_id,
+                "default_branch": descriptor.default_branch,
+                "visibility": descriptor.visibility,
+                "web_url": descriptor.web_url,
+                "archived": descriptor.archived,
+            },
+        )
+        return repository
 
 
 class Repository(SqidMixin, AuditMixin, AngeeModel):

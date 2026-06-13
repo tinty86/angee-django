@@ -31,6 +31,8 @@ WEBHOOK_SIGNATURE_HEADER = "X-Hub-Signature-256"
 PER_PAGE = 100
 MAX_REPO_PAGES = 100
 """Hard cap on repository pages (~10k repos) so a pathological listing can't loop forever."""
+SEARCH_LIMIT = 20
+"""Repository search results returned for a typeahead query."""
 
 
 class GitHubApiError(Exception):
@@ -106,6 +108,20 @@ class GitHubClient(VCSClient):
 
         payload = self._get(f"/repos/{repository.name}/commits/{quote(ref, safe='')}")
         return str((payload or {}).get("sha", ""))
+
+    def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
+        """Return repositories whose name matches ``query`` via the search API (typeahead)."""
+
+        terms = f"{query} in:name"
+        if org:
+            terms += f" user:{org}"
+        payload = self._get(f"/search/repositories?q={quote(terms)}&per_page={SEARCH_LIMIT}")
+        return [self._descriptor(item) for item in (payload or {}).get("items", [])]
+
+    def get_repo(self, name: str) -> RepoDescriptor:
+        """Return one repository by ``owner/repo`` name; raise ``FileNotFoundError`` if absent."""
+
+        return self._descriptor(self._get(f"/repos/{name}"))
 
     def verify_webhook(self, vcs_integration: Any, request: Any) -> bool:
         """Verify an inbound push webhook's HMAC-SHA256 signature against the secret."""

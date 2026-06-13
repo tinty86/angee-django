@@ -92,6 +92,16 @@ class VCSClient:
 
         raise NotImplementedError("VCSClient subclasses must implement verify_webhook().")
 
+    def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
+        """Return repositories whose name matches ``query`` — the typeahead source."""
+
+        raise NotImplementedError("VCSClient subclasses must implement search_repos().")
+
+    def get_repo(self, name: str) -> RepoDescriptor:
+        """Return one repository by its ``owner/repo`` name; raise ``FileNotFoundError`` if absent."""
+
+        raise NotImplementedError("VCSClient subclasses must implement get_repo().")
+
 
 class NoopVCSClient(VCSClient):
     """Null-object client for a VCS integration with no real host provider.
@@ -133,3 +143,14 @@ class NoopVCSClient(VCSClient):
 
         del vcs_integration, request
         return False
+
+    def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
+        """Return no candidates."""
+
+        del query, org
+        return []
+
+    def get_repo(self, name: str) -> RepoDescriptor:
+        """Raise: a noop client resolves no repository."""
+
+        raise FileNotFoundError(name)
