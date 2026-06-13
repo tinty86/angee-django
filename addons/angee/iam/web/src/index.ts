@@ -1,6 +1,7 @@
 import {
   AUTH_LOGIN_METHOD_SLOT,
   type BaseAddon,
+  type BaseAddonRoute,
   type BaseMenuItem,
 } from "@angee/base";
 import { createElement } from "react";
@@ -8,38 +9,60 @@ import { createElement } from "react";
 import { OAuthCallbackPage } from "./OAuthCallbackPage";
 import { OAuthLoginMethods } from "./OAuthLoginMethods";
 import { LEGACY_LOGIN_CALLBACK_PATH, LOGIN_CALLBACK_PATH } from "./redirects";
-import { ConnectionsPage } from "./views/ConnectionsPage";
+import { CredentialsPage } from "./views/CredentialsPage";
+import { ExternalAccountsPage } from "./views/ExternalAccountsPage";
 import { GrantsPage } from "./views/GrantsPage";
 import { OverviewPage } from "./views/OverviewPage";
+import { ProvidersPage } from "./views/ProvidersPage";
 import { RelationshipsPage } from "./views/RelationshipsPage";
 import { RolesPage } from "./views/RolesPage";
 import { SchemaPage } from "./views/SchemaPage";
 import { UsersPage } from "./views/UsersPage";
 
+// Two top-bar dropdowns: "Roles" groups the REBAC views, "Federation" groups the
+// third-party sign-in surfaces. `TopMenu` renders a menu item with children as a
+// dropdown; a route-less parent inherits its first child's target.
 const identityMenu: readonly BaseMenuItem[] = [
   {
+    // Route-less app root: the rail icon inherits its target from the first
+    // child (Overview), so `iam.overview` is referenced by exactly one menu item.
     id: "iam",
-    label: "Identity",
+    label: "IAM",
     icon: "auth",
     group: "platform",
     children: [
-      { label: "Overview", route: "iam.overview", icon: "home" },
-      { label: "Users", route: "iam.users", icon: "users" },
-      { label: "Roles", route: "iam.roles", icon: "auth" },
-      { label: "Grants", route: "iam.grants", icon: "check" },
+      { id: "iam.overview", label: "Overview", route: "iam.overview", icon: "home" },
+      { id: "iam.users", label: "Users", route: "iam.users", icon: "users" },
       {
-        label: "Relationships",
-        route: "iam.relationships",
-        icon: "share",
+        id: "iam.roles.group",
+        label: "Roles",
+        icon: "auth",
+        children: [
+          { id: "iam.roles", label: "Roles", route: "iam.roles", icon: "auth" },
+          { id: "iam.grants", label: "Grants", route: "iam.grants", icon: "check" },
+          { id: "iam.relationships", label: "Relationships", route: "iam.relationships", icon: "share" },
+          { id: "iam.schema", label: "Schema", route: "iam.schema", icon: "columns" },
+        ],
       },
-      { label: "Schema", route: "iam.schema", icon: "columns" },
       {
-        label: "Connections",
-        route: "iam.connections",
+        id: "iam.federation",
+        label: "Federation",
         icon: "grid",
+        children: [
+          { id: "iam.providers", label: "Providers", route: "iam.providers", icon: "auth" },
+          { id: "iam.accounts", label: "External Accounts", route: "iam.accounts", icon: "users" },
+          { id: "iam.credentials", label: "Credentials", route: "iam.credentials", icon: "check" },
+        ],
       },
     ],
   },
+];
+
+// Each model page is a routed DataPage: a list route + a `$id` detail child the
+// list page swaps to inline.
+const consolePage = (name: string, path: string, component: BaseAddonRoute["component"]): readonly BaseAddonRoute[] => [
+  { name, path, shell: "console", component },
+  { name: `${name}.record`, path: `${path}/$id`, shell: "console", parent: name },
 ];
 
 const iam: BaseAddon = {
@@ -57,48 +80,15 @@ const iam: BaseAddon = {
       shell: "public",
       component: OAuthCallbackPage,
     },
-    {
-      name: "iam.overview",
-      path: "/iam",
-      shell: "console",
-      component: OverviewPage,
-    },
-    {
-      name: "iam.users",
-      path: "/iam/users",
-      shell: "console",
-      component: UsersPage,
-    },
-    {
-      name: "iam.roles",
-      path: "/iam/roles",
-      shell: "console",
-      component: RolesPage,
-    },
-    {
-      name: "iam.grants",
-      path: "/iam/grants",
-      shell: "console",
-      component: GrantsPage,
-    },
-    {
-      name: "iam.relationships",
-      path: "/iam/relationships",
-      shell: "console",
-      component: RelationshipsPage,
-    },
-    {
-      name: "iam.schema",
-      path: "/iam/schema",
-      shell: "console",
-      component: SchemaPage,
-    },
-    {
-      name: "iam.connections",
-      path: "/iam/connections",
-      shell: "console",
-      component: ConnectionsPage,
-    },
+    { name: "iam.overview", path: "/iam", shell: "console", component: OverviewPage },
+    ...consolePage("iam.users", "/iam/users", UsersPage),
+    { name: "iam.roles", path: "/iam/roles", shell: "console", component: RolesPage },
+    { name: "iam.grants", path: "/iam/grants", shell: "console", component: GrantsPage },
+    { name: "iam.relationships", path: "/iam/relationships", shell: "console", component: RelationshipsPage },
+    { name: "iam.schema", path: "/iam/schema", shell: "console", component: SchemaPage },
+    ...consolePage("iam.providers", "/iam/providers", ProvidersPage),
+    ...consolePage("iam.accounts", "/iam/accounts", ExternalAccountsPage),
+    ...consolePage("iam.credentials", "/iam/credentials", CredentialsPage),
   ],
   menus: identityMenu,
   slots: [

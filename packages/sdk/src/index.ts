@@ -77,6 +77,10 @@ export {
   type ResourceMutationVariables,
   type ResourceMutationResult,
 } from "./resource-hooks";
+export {
+  validationErrorsFromError,
+  type ValidationErrors,
+} from "./validation-errors";
 export type {
   Row,
   ResourceRevision,

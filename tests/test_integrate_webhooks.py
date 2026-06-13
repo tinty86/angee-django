@@ -24,7 +24,7 @@ from tests.conftest import (
     INTEGRATE_TEST_MODELS,
     WebhookSubscription,
     _create_missing_tables,
-    make_connection,
+    make_integration,
 )
 
 
@@ -181,8 +181,8 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
     connections = _record_connections(monkeypatch, status=202)
 
     user = get_user_model().objects.create_user(username="webhook-delivery", email="delivery@example.com")
-    conn = make_connection("delivery-account")
-    other_conn = make_connection("delivery-other")
+    conn = make_integration("delivery-account")
+    other_conn = make_integration("delivery-other")
     payload = {"bridge": "br_1"}
     body = b'{"bridge":"br_1"}'
 
@@ -193,7 +193,7 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
             secret="first-secret",
             event_kinds=[EventKind.BRIDGE_SYNCED.value],
             impl_app_filter=["notes"],
-            connection_filter=conn,
+            integration_filter=conn,
             consecutive_failures=3,
         )
         match_all = WebhookSubscription.objects.create(
@@ -227,14 +227,14 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
             target_url="https://hooks-account.example.test/events",
             secret="account-secret",
             event_kinds=[EventKind.BRIDGE_SYNCED.value],
-            connection_filter=other_conn,
+            integration_filter=other_conn,
         )
 
     result = WebhookSubscription.objects.deliver_event(
         kind=EventKind.BRIDGE_SYNCED,
         payload=payload,
         impl_app="notes",
-        connection=conn,
+        integration=conn,
     )
 
     assert result == {"delivered": 2, "errors": 0}

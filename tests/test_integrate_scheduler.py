@@ -11,14 +11,14 @@ from django.db import connection
 from django.utils import timezone
 from rebac import system_context
 
-from angee.integrate.models import Bridge, CapabilityStatus, ConnectionStatus
+from angee.integrate.models import Bridge, CapabilityStatus, IntegrationStatus
 from angee.integrate.registry import bridge_models, capability_models
 from angee.integrate.scheduler import run_due_bridges
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
     _create_missing_tables,
-    make_connection,
+    make_integration,
 )
 
 
@@ -91,20 +91,20 @@ def test_run_due_bridges_runs_only_due_rows(scheduler_tables: None) -> None:
 
     del scheduler_tables
     now = timezone.now()
-    connection = make_connection("due-only")
+    integration = make_integration("due-only")
     with system_context(reason="test integrate scheduler setup"):
         due = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"items": 2},
             next_sync_at=now - timedelta(seconds=1),
         )
         future = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"items": 3},
             next_sync_at=now + timedelta(seconds=1),
         )
         unscheduled = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"items": 4},
             next_sync_at=None,
         )
@@ -126,10 +126,10 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
     del scheduler_tables
     now = timezone.now()
-    connection = make_connection("success-telemetry")
+    integration = make_integration("success-telemetry")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"items": 7},
             poll_interval=42,
             next_sync_at=now,
@@ -148,15 +148,15 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_records_errors_and_rolls_up_connection_status(scheduler_tables: None) -> None:
-    """Failing syncs record bridge errors, reschedule, and push connection status."""
+def test_run_due_bridges_records_errors_and_rolls_up_integration_status(scheduler_tables: None) -> None:
+    """Failing syncs record bridge errors, reschedule, and push integration status."""
 
     del scheduler_tables
     now = timezone.now()
-    connection = make_connection("error-rollup")
+    integration = make_integration("error-rollup")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"mode": "error"},
             poll_interval=17,
             next_sync_at=now,
@@ -166,30 +166,30 @@ def test_run_due_bridges_records_errors_and_rolls_up_connection_status(scheduler
 
     assert result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
-    connection.refresh_from_db()
+    integration.refresh_from_db()
     assert bridge.last_sync_started_at == now
     assert bridge.last_sync_status == "error"
     assert bridge.status == CapabilityStatus.ERROR
     assert bridge.last_error == "RuntimeError: vendor unavailable"
     assert bridge.last_error_at is not None
     assert bridge.next_sync_at == now + timedelta(seconds=17)
-    assert connection.status == ConnectionStatus.ERROR
-    assert connection.capability_statuses == {str(bridge.pk): ConnectionStatus.ERROR.value}
-    assert connection.last_error == "RuntimeError: vendor unavailable"
-    assert connection.last_error_at is not None
-    assert connection.last_used_at is not None
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.capability_statuses == {str(bridge.pk): IntegrationStatus.ERROR.value}
+    assert integration.last_error == "RuntimeError: vendor unavailable"
+    assert integration.last_error_at is not None
+    assert integration.last_used_at is not None
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_success_recovers_bridge_and_connection_status(scheduler_tables: None) -> None:
-    """A healthy sync after an error clears the bridge and connection rollup."""
+def test_run_due_bridges_success_recovers_bridge_and_integration_status(scheduler_tables: None) -> None:
+    """A healthy sync after an error clears the bridge and integration rollup."""
 
     del scheduler_tables
     first_now = timezone.now()
-    connection = make_connection("recovery")
+    integration = make_integration("recovery")
     with system_context(reason="test integrate scheduler setup"):
         bridge = SchedulerBridge.objects.create(
-            connection=connection,
+            integration=integration,
             config={"mode": "error"},
             poll_interval=23,
             next_sync_at=first_now,
@@ -199,9 +199,9 @@ def test_run_due_bridges_success_recovers_bridge_and_connection_status(scheduler
 
     assert error_result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
-    connection.refresh_from_db()
+    integration.refresh_from_db()
     assert bridge.status == CapabilityStatus.ERROR
-    assert connection.status == ConnectionStatus.ERROR
+    assert integration.status == IntegrationStatus.ERROR
 
     second_now = first_now + timedelta(minutes=1)
     with system_context(reason="test integrate scheduler setup"):
@@ -213,57 +213,57 @@ def test_run_due_bridges_success_recovers_bridge_and_connection_status(scheduler
 
     assert success_result == {"ran": 1, "errors": 0}
     bridge.refresh_from_db()
-    connection.refresh_from_db()
+    integration.refresh_from_db()
     assert bridge.status == CapabilityStatus.ACTIVE
     assert bridge.last_error == ""
     assert bridge.last_error_at is None
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 5
     assert bridge.next_sync_at == second_now + timedelta(seconds=23)
-    assert connection.status == ConnectionStatus.ACTIVE
-    assert connection.capability_statuses == {str(bridge.pk): ConnectionStatus.ACTIVE.value}
-    assert connection.last_error == ""
-    assert connection.last_error_at is None
+    assert integration.status == IntegrationStatus.ACTIVE
+    assert integration.capability_statuses == {str(bridge.pk): IntegrationStatus.ACTIVE.value}
+    assert integration.last_error == ""
+    assert integration.last_error_at is None
 
 
 @pytest.mark.django_db(transaction=True)
-def test_connection_rollup_tracks_capability_contributions(scheduler_tables: None) -> None:
-    """One failing capability keeps the connection in error until that contribution recovers."""
+def test_integration_rollup_tracks_capability_contributions(scheduler_tables: None) -> None:
+    """One failing capability keeps the integration in error until that contribution recovers."""
 
     del scheduler_tables
-    connection = make_connection("multi-capability")
+    integration = make_integration("multi-capability")
 
-    connection.note_capability_status(
+    integration.note_capability_status(
         capability_key="bridge-a",
         status=CapabilityStatus.ERROR,
         error="bridge-a failed",
     )
-    connection.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    connection.refresh_from_db()
+    integration.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
+    integration.refresh_from_db()
 
-    assert connection.capability_statuses == {
-        "bridge-a": ConnectionStatus.ERROR.value,
-        "bridge-b": ConnectionStatus.ACTIVE.value,
+    assert integration.capability_statuses == {
+        "bridge-a": IntegrationStatus.ERROR.value,
+        "bridge-b": IntegrationStatus.ACTIVE.value,
     }
-    assert connection.status == ConnectionStatus.ERROR
-    assert connection.last_error == "bridge-a failed"
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_error == "bridge-a failed"
 
-    connection.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    connection.refresh_from_db()
+    integration.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
+    integration.refresh_from_db()
 
-    assert connection.status == ConnectionStatus.ERROR
-    assert connection.last_error == "bridge-a failed"
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_error == "bridge-a failed"
 
-    connection.note_capability_status(capability_key="bridge-a", status=CapabilityStatus.ACTIVE)
-    connection.refresh_from_db()
+    integration.note_capability_status(capability_key="bridge-a", status=CapabilityStatus.ACTIVE)
+    integration.refresh_from_db()
 
-    assert connection.capability_statuses == {
-        "bridge-a": ConnectionStatus.ACTIVE.value,
-        "bridge-b": ConnectionStatus.ACTIVE.value,
+    assert integration.capability_statuses == {
+        "bridge-a": IntegrationStatus.ACTIVE.value,
+        "bridge-b": IntegrationStatus.ACTIVE.value,
     }
-    assert connection.status == ConnectionStatus.ACTIVE
-    assert connection.last_error == ""
-    assert connection.last_error_at is None
+    assert integration.status == IntegrationStatus.ACTIVE
+    assert integration.last_error == ""
+    assert integration.last_error_at is None
 
 
 @pytest.mark.django_db(transaction=True)

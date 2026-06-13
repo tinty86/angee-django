@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import type { ActionDescriptor, ActionProps } from "./Action";
+import type {
+  ActionContext,
+  ActionDescriptor,
+  ActionProps,
+  ActionResult,
+} from "./Action";
 import type { ColumnDescriptor, ColumnProps } from "./Column";
 import type { FieldDescriptor, FieldProps } from "./Field";
 import type { GroupDescriptor, GroupProps } from "./Group";
@@ -27,8 +32,10 @@ export {
   type PageElementKind,
 } from "./types";
 export type {
+  ActionContext,
   ActionDescriptor,
   ActionProps,
+  ActionResult,
   ColumnDescriptor,
   ColumnProps,
   FieldDescriptor,
@@ -147,10 +154,14 @@ function actionDescriptor(props: ActionProps): ActionDescriptor {
   return cachedDescriptor(actionDescriptorCache, props, () => ({
     id: props.id,
     label: props.label,
+    ...(props.icon !== undefined ? { icon: props.icon } : {}),
     ...(props.disabled !== undefined ? { disabled: props.disabled } : {}),
     ...(props.danger !== undefined ? { danger: props.danger } : {}),
     ...(props.confirm !== undefined ? { confirm: props.confirm } : {}),
-    ...(props.onClick !== undefined ? { onClick: props.onClick } : {}),
+    ...(props.set !== undefined ? { set: props.set } : {}),
+    ...(props.prompt !== undefined ? { prompt: props.prompt } : {}),
+    ...(props.run !== undefined ? { run: props.run } : {}),
+    ...(props.visibleWhen !== undefined ? { visibleWhen: props.visibleWhen } : {}),
   }));
 }
 

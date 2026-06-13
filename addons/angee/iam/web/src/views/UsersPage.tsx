@@ -1,70 +1,63 @@
-import type { ReactElement } from "react";
+import * as React from "react";
+import { Action, Column, DataPage, Field, Form, Group, List } from "@angee/base";
 
-import {
-  RowsListView,
-  type ListColumn,
-} from "@angee/base";
-import {
-  useResourceList,
-  type Row,
-} from "@angee/sdk";
+const MODEL = "User";
 
-import { IAM_LIST_LIMIT } from "../list-config";
+const userList = (
+  <List model={MODEL} pageSize={50}>
+    <Column field="username" />
+    <Column field="email" />
+    <Column field="isStaff" />
+    <Column field="isActive" />
+  </List>
+);
 
-const USER_FIELDS = [
-  "username",
-  "email",
-  "fullName",
-  "isStaff",
-  "isActive",
-] as const;
-
-interface UserRow extends Row {
-  id: string;
-  username: string;
-  email: string;
-  fullName: string;
-  isStaff: boolean;
-  isActive: boolean;
-}
-
-const userColumns: readonly ListColumn<UserRow>[] = [
-  { field: "username", header: "Username" },
-  { field: "email", header: "Email" },
-  { field: "fullName", header: "Name" },
-  {
-    field: "isStaff",
-    header: "Staff",
-    widget: "booleanBadge",
-    options: [
-      { value: "true", label: "Staff" },
-      { value: "false", label: "Member" },
-    ],
-  },
-  {
-    field: "isActive",
-    header: "Active",
-    widget: "booleanBadge",
-    options: [
-      { value: "true", label: "Active" },
-      { value: "false", label: "Inactive" },
-    ],
-  },
-];
-
-export function UsersPage(): ReactElement {
-  const users = useResourceList("User", {
-    fields: USER_FIELDS,
-    pageSize: IAM_LIST_LIMIT,
-  });
-
-  return (
-    <RowsListView
-      rows={users.rows as unknown as readonly UserRow[]}
-      columns={userColumns}
-      fetching={users.fetching}
-      error={users.error}
-      pageSize={50}
+const userForm = (
+  <Form model={MODEL}>
+    <Field name="username" title />
+    <Group label="Profile" columns={2}>
+      <Field name="email" />
+      <Field name="firstName" />
+      <Field name="lastName" />
+    </Group>
+    <Group label="Access" columns={2}>
+      <Field name="isStaff" />
+      <Field name="isActive" />
+    </Group>
+    {/* Write-only: set on create, hashed server-side; password reset is separate. */}
+    <Field name="password" widget="text" kind="string" createOnly />
+    {/* Reset password collects a value and patches it through update (hashed server-side). */}
+    <Action
+      id="reset-password"
+      label="Reset password"
+      prompt={{
+        title: "Reset password",
+        body: "Set a new password for this user.",
+        fields: [{ name: "password", label: "New password", type: "password" }],
+      }}
     />
+    <Action
+      id="deactivate"
+      label="Deactivate"
+      danger
+      set={{ isActive: false }}
+      visibleWhen={(record) => record.isActive === true}
+    />
+    <Action
+      id="activate"
+      label="Activate"
+      set={{ isActive: true }}
+      visibleWhen={(record) => record.isActive === false}
+    />
+  </Form>
+);
+
+/** Users (full CRUD; password is write-only and hashed server-side). */
+export function UsersPage(): React.ReactElement {
+  return (
+    <DataPage model={MODEL} placement="inline" routed>
+      {userList}
+      {userForm}
+    </DataPage>
   );
 }

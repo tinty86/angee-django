@@ -150,161 +150,6 @@ export const IAM_REBAC_SCHEMA_QUERY = `
   }
 `;
 
-export const IAM_OAUTH_CLIENTS_QUERY = `
-  query IamOAuthClients($pagination: OffsetPaginationInput) {
-    oauthClients(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        displayName
-        slug
-        icon
-        environment
-        clientId
-        clientSecret
-        issuer
-        authorizeEndpoint
-        tokenEndpoint
-        revokeEndpoint
-        userinfoEndpoint
-        jwksUri
-        discoveryUrl
-        isOidc
-        isEnabled
-        configurationState
-        supportsRefresh
-        refreshRotates
-        supportsPkce
-        maxRefreshAgeSeconds
-        linkOnEmailMatch
-        createOnLogin
-        scopesCatalogue
-        defaultScopes
-        allowedEmailDomains
-      }
-    }
-  }
-`;
-
-export const IAM_CONNECTION_SUMMARY_QUERY = `
-  query IamConnectionSummary($pagination: OffsetPaginationInput) {
-    oauthClients(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        displayName
-        slug
-        icon
-        environment
-        isEnabled
-      }
-    }
-    externalAccounts(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        externalId
-        email
-        displayName
-        avatarUrl
-        status
-        credentialStatus
-        lastUsedAt
-        providerSlug
-        providerEnvironment
-        providerLabel
-        providerIcon
-      }
-    }
-    credentialHealth(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        kind
-        status
-        lastRefreshStatus
-        oauthClient {
-          displayName
-        }
-        externalAccount {
-          email
-        }
-      }
-    }
-  }
-`;
-
-export const IAM_EXTERNAL_ACCOUNTS_QUERY = `
-  query IamExternalAccounts($pagination: OffsetPaginationInput) {
-    externalAccounts(pagination: $pagination) {
-      totalCount
-      results {
-        id
-        externalId
-        email
-        displayName
-        avatarUrl
-        status
-        credentialStatus
-        lastUsedAt
-        providerSlug
-        providerEnvironment
-        providerLabel
-        providerIcon
-      }
-    }
-  }
-`;
-
-export const IAM_CREATE_OAUTH_CLIENT_MUTATION = `
-  mutation IamCreateOAuthClient($data: OAuthClientInput!) {
-    createOauthClient(data: $data) {
-      id
-      displayName
-      slug
-      icon
-      environment
-      isEnabled
-      configurationState
-      supportsPkce
-    }
-  }
-`;
-
-export const IAM_UPDATE_OAUTH_CLIENT_MUTATION = `
-  mutation IamUpdateOAuthClient($data: OAuthClientPatch!) {
-    updateOauthClient(data: $data) {
-      id
-      displayName
-      slug
-      icon
-      environment
-      isEnabled
-      configurationState
-      supportsPkce
-    }
-  }
-`;
-
-export const IAM_CREATE_EXTERNAL_ACCOUNT_MUTATION = `
-  mutation IamCreateExternalAccount($data: ExternalAccountInput!) {
-    createExternalAccount(data: $data) {
-      id
-      externalId
-      email
-      displayName
-      avatarUrl
-      status
-      credentialStatus
-      lastUsedAt
-      providerSlug
-      providerEnvironment
-      providerLabel
-      providerIcon
-    }
-  }
-`;
-
 export const IAM_REVOKE_ROLE_MUTATION = `
   mutation IamRevokeRole($principalId: String!, $role: String!) {
     revokeRole(principalId: $principalId, role: $role)
@@ -316,6 +161,22 @@ export const IAM_GRANT_ROLE_MUTATION = `
     grantRole(principalId: $principalId, role: $role)
   }
 `;
+
+export const IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION = `
+  mutation IamDiscoverOidcEndpoints($id: ID!) {
+    discoverOidcEndpoints(id: $id) { ok message }
+  }
+`;
+
+/** Selection result for `IamDiscoverOidcEndpoints`. */
+export interface DiscoverOidcEndpointsData {
+  discoverOidcEndpoints: { ok: boolean; message: string };
+}
+
+/** Variables addressing one record by global id. */
+export interface IamIdVariables extends Record<string, unknown> {
+  id: string;
+}
 
 /** Selection result for an `availableConnections.results` item. */
 export interface AvailableConnection {
@@ -497,113 +358,6 @@ export interface IAMRebacSchemaData {
   rebacSchema: IAMResourceSchema[];
 }
 
-/** Selection result for SDL `OAuthClientType` in `IamOAuthClients`. */
-export interface IAMOAuthClient extends Record<string, unknown> {
-  id: string;
-  displayName: string;
-  slug: string;
-  icon: string;
-  environment: string;
-  clientId: string;
-  clientSecret: string;
-  issuer: string;
-  authorizeEndpoint: string;
-  tokenEndpoint: string;
-  revokeEndpoint: string;
-  userinfoEndpoint: string;
-  jwksUri: string;
-  discoveryUrl: string;
-  isOidc: boolean;
-  isEnabled: boolean;
-  configurationState: string;
-  supportsRefresh: boolean;
-  refreshRotates: boolean;
-  supportsPkce: boolean;
-  maxRefreshAgeSeconds: number | null;
-  linkOnEmailMatch: boolean;
-  createOnLogin: boolean;
-  scopesCatalogue: string[];
-  defaultScopes: string[];
-  allowedEmailDomains: string[];
-}
-
-/** Selection result for `IamOAuthClients`. */
-export interface IAMOAuthClientsData {
-  oauthClients: {
-    totalCount: number;
-    results: IAMOAuthClient[];
-  };
-}
-
-export type IAMOAuthClientsVariables = IAMPaginationVariables;
-
-/** Selection result for `IamConnectionSummary`. */
-export interface IAMConnectionSummaryData {
-  oauthClients: {
-    totalCount: number;
-    results: IAMOAuthClientSummary[];
-  };
-  externalAccounts: {
-    totalCount: number;
-    results: IAMExternalAccountSummary[];
-  };
-  credentialHealth: {
-    totalCount: number;
-    results: IAMCredentialSummary[];
-  };
-}
-
-export type IAMConnectionSummaryVariables = IAMPaginationVariables;
-
-export interface IAMExternalAccountsData {
-  externalAccounts: {
-    totalCount: number;
-    results: IAMExternalAccountSummary[];
-  };
-}
-
-export type IAMExternalAccountsVariables = IAMPaginationVariables;
-
-/** Selection result for SDL `OAuthClientType` in `IamConnectionSummary`. */
-export interface IAMOAuthClientSummary extends Record<string, unknown> {
-  id: string;
-  displayName: string;
-  slug: string;
-  icon: string;
-  environment: string;
-  isEnabled: boolean;
-}
-
-/** Selection result for SDL `ExternalAccountType` in `IamConnectionSummary`. */
-export interface IAMExternalAccountSummary extends Record<string, unknown> {
-  id: string;
-  externalId: string;
-  email: string;
-  displayName: string;
-  avatarUrl: string;
-  status: string;
-  credentialStatus: string;
-  lastUsedAt: string | null;
-  providerSlug: string;
-  providerEnvironment: string;
-  providerLabel: string;
-  providerIcon: string;
-}
-
-/** Selection result for SDL `CredentialType` in `IamConnectionSummary`. */
-export interface IAMCredentialSummary {
-  id: string;
-  kind: string;
-  status: string;
-  lastRefreshStatus: string;
-  oauthClient: {
-    displayName: string;
-  };
-  externalAccount: {
-    email: string;
-  } | null;
-}
-
 /** Selection result for `IamRevokeRole`. */
 export interface IAMRevokeRoleData {
   revokeRole: boolean;
@@ -624,56 +378,3 @@ export interface IAMGrantRoleVariables extends Record<string, unknown> {
   role: string;
 }
 
-export interface IAMCreateOAuthClientData {
-  createOauthClient: IAMOAuthClient;
-}
-
-export interface IAMUpdateOAuthClientData {
-  updateOauthClient: IAMOAuthClient;
-}
-
-export interface IAMOAuthClientInputVariables extends Record<string, unknown> {
-  data: {
-    id?: string;
-    slug?: string;
-    icon?: string;
-    displayName?: string;
-    clientId?: string;
-    clientSecret?: string;
-    environment?: string;
-    issuer?: string;
-    authorizeEndpoint?: string;
-    tokenEndpoint?: string;
-    revokeEndpoint?: string;
-    userinfoEndpoint?: string;
-    jwksUri?: string;
-    discoveryUrl?: string;
-    isOidc?: boolean;
-    isEnabled?: boolean;
-    scopesCatalogue?: string[];
-    defaultScopes?: string[];
-    supportsRefresh?: boolean;
-    refreshRotates?: boolean;
-    supportsPkce?: boolean;
-    maxRefreshAgeSeconds?: number | null;
-    linkOnEmailMatch?: boolean;
-    createOnLogin?: boolean;
-    allowedEmailDomains?: string[];
-  };
-}
-
-export interface IAMCreateExternalAccountData {
-  createExternalAccount: IAMExternalAccountSummary;
-}
-
-export interface IAMExternalAccountInputVariables extends Record<string, unknown> {
-  data: {
-    oauthClient: string;
-    externalId: string;
-    owner?: string | null;
-    email?: string;
-    displayName?: string;
-    avatarUrl?: string;
-    status?: string;
-  };
-}

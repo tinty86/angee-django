@@ -9,7 +9,7 @@ import pytest
 import strawberry
 import strawberry_django
 from django.apps import AppConfig
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models
 from django_choices_field import IntegerChoicesField
 from graphql import GraphQLEnumType, GraphQLObjectType, get_named_type
@@ -162,6 +162,23 @@ class DenialQuery:
     @strawberry.field
     def permission_denied(self) -> str:
         raise PermissionDenied("denied")
+
+
+@strawberry.type
+class ValidationQuery:
+    @strawberry.field
+    def field_errors(self) -> str:
+        raise ValidationError(
+            {
+                "display_name": ["This field cannot be blank."],
+                "client_id": ["This field cannot be blank."],
+                "__all__": ["Provider is misconfigured."],
+            }
+        )
+
+    @strawberry.field
+    def plain_error(self) -> str:
+        raise ValidationError("Something went wrong.")
 
 
 @strawberry.type
@@ -328,6 +345,32 @@ def test_denial_errors_get_graphql_codes() -> None:
     assert denied_extensions is not None
     assert missing_actor_extensions["code"] == "UNAUTHENTICATED"
     assert denied_extensions["code"] == "PERMISSION_DENIED"
+
+
+def test_validation_errors_surface_per_field_extensions() -> None:
+    """Django model validation surfaces as camel-cased per-field extensions."""
+
+    schema = GraphQLSchemas([addon(public={"query": [ValidationQuery]})]).build("public")
+
+    field_result = schema.execute_sync("{ fieldErrors }")
+    plain_result = schema.execute_sync("{ plainError }")
+
+    assert field_result.errors is not None
+    extensions = field_result.errors[0].extensions
+    assert extensions is not None
+    assert extensions["code"] == "VALIDATION"
+    assert extensions["validationErrors"] == {
+        "displayName": ["This field cannot be blank."],
+        "clientId": ["This field cannot be blank."],
+    }
+    assert extensions["formErrors"] == ["Provider is misconfigured."]
+
+    # A non-dict ValidationError carries only a form-level message.
+    assert plain_result.errors is not None
+    plain_extensions = plain_result.errors[0].extensions
+    assert plain_extensions is not None
+    assert plain_extensions["validationErrors"] == {}
+    assert plain_extensions["formErrors"] == ["Something went wrong."]
 
 
 def test_graphql_identity_exports_relay_node_and_connection() -> None:

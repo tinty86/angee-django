@@ -45,7 +45,6 @@ import {
 } from "./ListView";
 import { GroupListView } from "./GroupListView";
 import {
-  Action,
   Column,
   Field,
   Group,
@@ -431,7 +430,7 @@ describe("DataPage", () => {
           columns={columns}
           recordId="note-1"
         >
-          <Form headerActions={<span>Form header action</span>}>
+          <Form>
             <Field name="title" label="Title" title />
             <Group label="Details" columns={2}>
               <Field name="priority" label="Priority" readOnly />
@@ -448,7 +447,6 @@ describe("DataPage", () => {
     );
     expect(screen.getByText("Details")).toBeTruthy();
     expect(screen.getByText("High")).toBeTruthy();
-    expect(screen.getByText("Form header action")).toBeTruthy();
   });
 
   test.each([
@@ -618,17 +616,6 @@ describe("DataPage", () => {
         </DataPage>
       ),
       message: /DataPage owns Form child "id" wiring/,
-    },
-    {
-      name: "top-level Form action",
-      element: (
-        <DataPage model="notes.Note" columns={columns}>
-          <Form>
-            <Action id="archive" label="Archive" />
-          </Form>
-        </DataPage>
-      ),
-      message: /Form actions are not rendered yet/,
     },
   ])("rejects invalid DataPage declarations: $name", ({ element, message }) => {
     expect(() => render(element)).toThrow(message);

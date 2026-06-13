@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from django.apps import apps
 from django.contrib.auth import BACKEND_SESSION_KEY, SESSION_KEY, get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
@@ -15,6 +16,7 @@ from django.test import RequestFactory
 from django.test.utils import CaptureQueriesContext, override_settings
 from rebac import app_settings, system_context
 from rebac.roles import grant
+from strawberry import relay
 
 from angee.iam import identity
 from angee.iam.credentials import CredentialKind
@@ -523,6 +525,258 @@ def test_oauth_client_crud_are_admin_only(
     ).errors is not None
 
 
+def test_user_crud_create_update_delete_are_admin_only(
+    iam_connection_tables: None,
+) -> None:
+    """User CRUD hashes the write-only password, never echoes it, and is admin gated."""
+
+    plain = User.objects.create_user(username="user-crud-plain", email="plain@example.com")
+    admin = _platform_admin("user-crud-admin")
+    console_schema = _schema("console")
+    create_user = """
+        mutation CreateUser {
+          createUser(data: {
+            username: "console-user",
+            password: "first-secret",
+            email: "console-user@example.com",
+            firstName: "Console",
+            lastName: "User",
+            isStaff: true,
+            isActive: true
+          }) {
+            username
+            email
+            firstName
+            lastName
+            isStaff
+            isActive
+            fullName
+          }
+        }
+    """
+
+    assert _execute(console_schema, create_user, user=plain).errors is not None
+
+    created = _data(_execute(console_schema, create_user, user=admin))["createUser"]
+    assert created == {
+        "username": "console-user",
+        "email": "console-user@example.com",
+        "firstName": "Console",
+        "lastName": "User",
+        "isStaff": True,
+        "isActive": True,
+        "fullName": "Console User",
+    }
+    # ``password`` is write-only: it is neither a field on ``UserType`` nor in its SDL.
+    assert "password" not in _sdl_block(console_schema.as_str(), "type UserType")
+    with system_context(reason="test.iam.user_crud.create"):
+        user = User.objects.get(username="console-user")
+        assert user.check_password("first-secret")
+    user_id = _user_global_id(user)
+
+    changed = _data(
+        _execute(
+            console_schema,
+            """
+            mutation UpdateUser($id: ID!) {
+              updateUser(data: {id: $id, firstName: "Renamed", isStaff: false}) {
+                firstName
+                isStaff
+              }
+            }
+            """,
+            {"id": user_id},
+            user=admin,
+        )
+    )["updateUser"]
+    assert changed == {"firstName": "Renamed", "isStaff": False}
+    with system_context(reason="test.iam.user_crud.update_field"):
+        user.refresh_from_db()
+        assert user.first_name == "Renamed"
+        assert user.is_staff is False
+        assert user.check_password("first-secret")
+
+    _data(
+        _execute(
+            console_schema,
+            """
+            mutation RehashUser($id: ID!) {
+              updateUser(data: {id: $id, password: "second-secret"}) {
+                username
+              }
+            }
+            """,
+            {"id": user_id},
+            user=admin,
+        )
+    )
+    with system_context(reason="test.iam.user_crud.update_password"):
+        user.refresh_from_db()
+        assert user.check_password("second-secret")
+        assert not user.check_password("first-secret")
+
+    assert _execute(
+        console_schema,
+        """
+        mutation DeleteUser($id: ID!) {
+          deleteUser(id: $id, confirm: true) { totalDeletedCount }
+        }
+        """,
+        {"id": user_id},
+        user=plain,
+    ).errors is not None
+
+    deleted = _data(
+        _execute(
+            console_schema,
+            """
+            mutation DeleteUser($id: ID!) {
+              deleteUser(id: $id, confirm: true) {
+                hasBlockers
+                totalDeletedCount
+              }
+            }
+            """,
+            {"id": user_id},
+            user=admin,
+        )
+    )["deleteUser"]
+    assert deleted["hasBlockers"] is False
+    assert deleted["totalDeletedCount"] >= 1
+    with system_context(reason="test.iam.user_crud.delete"):
+        assert not User.objects.filter(pk=user.pk).exists()
+
+
+def test_external_account_update_delete_are_admin_only(
+    iam_connection_tables: None,
+) -> None:
+    """Updating then deleting an external account revokes its owner tuple; admin gated."""
+
+    plain = User.objects.create_user(username="ea-update-plain", email="plain@example.com")
+    admin = _platform_admin("ea-update-admin")
+    oauth_client = _oauth_client("ea-update")
+    account = ExternalAccount.objects.link(
+        oauth_client,
+        "ea-update-sub",
+        owner=admin,
+        email="before@example.com",
+        display_name="Before",
+        status="active",
+    )
+    account_id = relay.to_base64("ExternalAccountType", account.sqid)
+    console_schema = _schema("console")
+    update_account = """
+        mutation UpdateExternalAccount($id: ID!) {
+          updateExternalAccount(data: {
+            id: $id,
+            email: "after@example.com",
+            displayName: "After",
+            status: "revoked"
+          }) {
+            email
+            displayName
+            status
+          }
+        }
+    """
+
+    assert _execute(console_schema, update_account, {"id": account_id}, user=plain).errors is not None
+
+    updated = _data(
+        _execute(console_schema, update_account, {"id": account_id}, user=admin)
+    )["updateExternalAccount"]
+    # ``status`` is a choices field exposed as a GraphQL enum, so it renders as the
+    # uppercase member name though the write input takes the raw ``"revoked"`` value.
+    assert updated == {
+        "email": "after@example.com",
+        "displayName": "After",
+        "status": "REVOKED",
+    }
+    with system_context(reason="test.iam.external_account.owner_before_delete"):
+        assert ExternalAccount.objects.owner_for(account) == admin
+
+    delete_account = """
+        mutation DeleteExternalAccount($id: ID!) {
+          deleteExternalAccount(id: $id, confirm: true) {
+            hasBlockers
+            totalDeletedCount
+          }
+        }
+    """
+
+    assert _execute(console_schema, delete_account, {"id": account_id}, user=plain).errors is not None
+
+    deleted = _data(
+        _execute(console_schema, delete_account, {"id": account_id}, user=admin)
+    )["deleteExternalAccount"]
+    assert deleted["hasBlockers"] is False
+    assert deleted["totalDeletedCount"] >= 1
+    with system_context(reason="test.iam.external_account.after_delete"):
+        assert not ExternalAccount.objects.filter(pk=account.pk).exists()
+        assert ExternalAccount.objects.owner_for(account) is None
+
+
+def test_credential_crud_create_delete_are_admin_only(
+    iam_connection_tables: None,
+) -> None:
+    """Creating a static-token credential renders ``displayName``; delete is admin gated."""
+
+    plain = User.objects.create_user(username="cred-crud-plain", email="plain@example.com")
+    admin = _platform_admin("cred-crud-admin")
+    owner = User.objects.create_user(username="cred-crud-owner", email="owner@example.com")
+    oauth_client = _oauth_client("cred-crud")
+    console_schema = _schema("console")
+    create_credential = """
+        mutation CreateCredential($user: ID!, $oauthClient: ID!) {
+          createCredential(data: {
+            user: $user,
+            oauthClient: $oauthClient,
+            apiKey: "static-token-value"
+          }) {
+            kind
+            status
+            displayName
+          }
+        }
+    """
+    variables = {
+        "user": _user_global_id(owner),
+        "oauthClient": relay.to_base64("OAuthClientType", oauth_client.sqid),
+    }
+
+    assert _execute(console_schema, create_credential, variables, user=plain).errors is not None
+
+    created = _data(
+        _execute(console_schema, create_credential, variables, user=admin)
+    )["createCredential"]
+    assert created["displayName"] == "cred-crud"
+    # ``api_key`` is write-only: it never surfaces on ``CredentialType``.
+    assert "apiKey" not in _sdl_block(console_schema.as_str(), "type CredentialType")
+    with system_context(reason="test.iam.credential_crud.create"):
+        credential = Credential.objects.get(user=owner, oauth_client=oauth_client)
+        assert credential.kind == CredentialKind.STATIC_TOKEN
+    credential_id = relay.to_base64("CredentialType", credential.sqid)
+
+    delete_credential = """
+        mutation DeleteCredential($id: ID!) {
+          deleteCredential(id: $id, confirm: true) {
+            hasBlockers
+            totalDeletedCount
+          }
+        }
+    """
+
+    assert _execute(console_schema, delete_credential, {"id": credential_id}, user=plain).errors is not None
+
+    deleted = _data(
+        _execute(console_schema, delete_credential, {"id": credential_id}, user=admin)
+    )["deleteCredential"]
+    assert deleted["hasBlockers"] is False
+    assert deleted["totalDeletedCount"] >= 1
+    with system_context(reason="test.iam.credential_crud.delete"):
+        assert not Credential.objects.filter(pk=credential.pk).exists()
+
+
 def test_console_external_accounts_render_provider_projection(
     iam_connection_tables: None,
 ) -> None:
@@ -824,10 +1078,18 @@ def test_unlink_account_blocks_last_oidc_sign_in_method_for_passwordless_user(
 
 @pytest.fixture()
 def iam_connection_tables(transactional_db: Any) -> Iterator[None]:
-    """Create concrete connection tables for IAM GraphQL tests."""
+    """Create concrete connection tables for IAM GraphQL tests.
+
+    Also materializes any other concrete ``auth``-app tables (e.g. test models
+    registered by sibling suites with ``app_label="auth"``): deleting a real
+    ``auth.User`` walks Django's deletion collector across every ``auth``-app
+    relation (``AuditMixin`` adds ``SET_NULL`` user FKs), so a phantom registered
+    model without a table would break ``deleteUser`` under suite ordering.
+    """
 
     del transactional_db
     created_models = _create_connection_tables()
+    created_models += _create_auth_app_tables()
     call_command("rebac", "sync", verbosity=0)
     try:
         yield
@@ -836,6 +1098,40 @@ def iam_connection_tables(transactional_db: Any) -> Iterator[None]:
             with connection.schema_editor() as schema_editor:
                 for model in reversed(created_models):
                     schema_editor.delete_model(model)
+
+
+def _create_auth_app_tables() -> list[Any]:
+    """Create missing tables for concrete managed models in the ``auth`` app."""
+
+    auth_models = tuple(
+        model
+        for model in apps.get_app_config("auth").get_models()
+        if model._meta.managed and not model._meta.abstract
+    )
+    return _create_connection_tables(auth_models)
+
+
+def test_discover_oidc_endpoints_is_admin_gated_and_validates_discovery_url(
+    iam_connection_tables: None,
+) -> None:
+    """Discover is admin-gated and reports when no discovery URL is configured."""
+
+    plain = User.objects.create_user(
+        username="discover-plain", email="discover-plain@example.com"
+    )
+    admin = _platform_admin("discover-admin")
+    client = _oauth_client("discoverable", discovery_url="")
+    client_id = relay.to_base64("OAuthClientType", client.sqid)
+    console_schema = _schema("console")
+    discover = "mutation($id: ID!){ discoverOidcEndpoints(id: $id){ ok message } }"
+
+    assert _execute(console_schema, discover, {"id": client_id}, user=plain).errors is not None
+
+    result = _data(
+        _execute(console_schema, discover, {"id": client_id}, user=admin)
+    )["discoverOidcEndpoints"]
+    assert result["ok"] is False
+    assert "discovery url" in result["message"].lower()
 
 
 def _schema(name: str) -> Any:
@@ -878,6 +1174,29 @@ def _request(user: Any) -> Any:
     request.user = user
     request.session = _Session()
     return request
+
+
+def _platform_admin(username: str) -> Any:
+    """Create a superuser holding the platform-admin role tuple."""
+
+    admin = User.objects.create_superuser(
+        username=username,
+        email=f"{username}@example.com",
+        password="admin",
+    )
+    grant(actor=admin, role=app_settings.REBAC_UNIVERSAL_ADMIN_ROLE)
+    return admin
+
+
+def _user_global_id(user: Any) -> str:
+    """Return the relay global id ``UserType`` mutations resolve for ``user``.
+
+    The source-addon test user is Django's default auth user (no ``sqid``), so its
+    public id is the primary key — the same value ``instance_from_public_id`` reads
+    back from the global id on the write path.
+    """
+
+    return relay.to_base64("UserType", str(getattr(user, "sqid", user.pk)))
 
 
 def _oauth_client(

@@ -12,6 +12,7 @@
   "dependencies": {
     "@angee/base": "workspace:*",
     "@angee/iam": "workspace:*",
+    "@angee/integrate": "workspace:*",
     "@angee/knowledge": "workspace:*",
     "@angee/sdk": "workspace:*",
     "@angee-example/notes-web": "workspace:*",

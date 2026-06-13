@@ -15,11 +15,16 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { AppRuntimeProvider, type Row } from "@angee/sdk";
+import {
+  AppRuntimeProvider,
+  ModelMetadataProvider,
+  type Row,
+  type SchemaFieldMetadata,
+} from "@angee/sdk";
 import { useMemo, useState, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ModalsHost } from "../feedback";
+import { ModalsHost, ToastProvider } from "../feedback";
 import { defaultWidgets } from "../widgets";
 import { Form } from "./Form";
 import { FormView, type FormField } from "./FormView";
@@ -32,18 +37,26 @@ import {
 const sdkMocks = vi.hoisted(() => ({
   record: null as Row | null,
   mutate: vi.fn(),
+  recordSelection: undefined as readonly string[] | undefined,
 }));
 
 vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   return {
     ...actual,
-    useResourceRecord: () => ({
-      record: sdkMocks.record,
-      fetching: false,
-      error: null,
-      refetch: vi.fn(),
-    }),
+    useResourceRecord: (
+      _model: string,
+      _id: string | null,
+      options?: { fields?: readonly string[] },
+    ) => {
+      sdkMocks.recordSelection = options?.fields;
+      return {
+        record: sdkMocks.record,
+        fetching: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    },
     useResourceMutation: () => [
       sdkMocks.mutate,
       { fetching: false, error: null },
@@ -94,6 +107,7 @@ describe("FormView", () => {
       wordCount: 3,
     };
     sdkMocks.mutate.mockReset();
+    sdkMocks.recordSelection = undefined;
     sdkMocks.mutate.mockImplementation(async ({ data }: { data: Row }) => ({
       ...sdkMocks.record,
       ...data,
@@ -126,14 +140,83 @@ describe("FormView", () => {
     ).toThrow(/cannot mix the fields\/groups props with element children/);
   });
 
-  test("throws when top-level actions are declared", () => {
-    expect(() =>
-      renderWithProviders(
-        <FormView model="notes.Note" id="note-1">
-          <Action id="archive" label="Archive" />
-        </FormView>,
+  test("renders declared record actions in the toolbar", async () => {
+    renderWithProviders(
+      <FormView model="notes.Note" id="note-1">
+        <Field name="title" label="Title" title />
+        <Action id="archive" label="Archive" set={{ status: "ARCHIVED" }} />
+      </FormView>,
+    );
+
+    await screen.findByRole("button", { name: "Archive" });
+  });
+
+  test("runs a declarative set action through the update mutation", async () => {
+    renderWithProviders(
+      <FormView model="notes.Note" id="note-1">
+        <Field name="title" label="Title" title />
+        <Action id="archive" label="Archive" set={{ status: "ARCHIVED" }} />
+      </FormView>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+
+    await waitFor(() =>
+      expect(sdkMocks.mutate).toHaveBeenCalledWith({
+        data: { id: "note-1", status: "ARCHIVED" },
+      }),
+    );
+  });
+
+  test("invokes a custom run action with the open-record context", async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(
+      <FormView model="notes.Note" id="note-1">
+        <Field name="title" label="Title" title />
+        <Action id="sync" label="Sync" run={run} />
+      </FormView>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sync" }));
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(run.mock.calls[0]?.[0]).toMatchObject({ record: { id: "note-1" } });
+  });
+
+  test("re-seeds when the record reference changes for the same id", async () => {
+    // A refetch (e.g. after a run action) lands a fresh record object under the
+    // same id; the form must reflect it without a stale render consuming it.
+    function Harness(): ReactElement {
+      const [version, setVersion] = useState(0);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              sdkMocks.record = { ...sdkMocks.record, id: "note-1", title: "Refetched" };
+              setVersion((current) => current + 1);
+            }}
+          >
+            refetch {version}
+          </button>
+          <FormView model="notes.Note" id="note-1" fields={fields} />
+        </>
+      );
+    }
+
+    renderWithProviders(<Harness />);
+    const title = await screen.findByLabelText("Title");
+    await waitFor(() =>
+      expect((title as HTMLInputElement).value).toBe("First"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refetch/ }));
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe(
+        "Refetched",
       ),
-    ).toThrow(/Form actions are not rendered yet/);
+    );
   });
 
   test("renders standalone Form from Field and Group children", async () => {
@@ -337,13 +420,136 @@ describe("FormView", () => {
     );
     expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
   });
+
+  test("projects only fields the SDL read type exposes (skips write-only inputs)", async () => {
+    // A write-only input (password) is declared on the form but absent from the
+    // read type. Selecting it would make the whole detail/return query invalid
+    // and the record would load as null (every field blank, "Untitled").
+    const metadata: SchemaFieldMetadata = {
+      types: {
+        UserType: {
+          typeName: "UserType",
+          recordRepresentation: "username",
+          fields: {
+            username: { name: "username", kind: "scalar", scalar: "String" },
+            email: { name: "email", kind: "scalar", scalar: "String" },
+            vendor: {
+              name: "vendor",
+              kind: "relation",
+              relationTarget: "VendorType",
+            },
+          },
+        },
+      },
+    };
+    sdkMocks.record = { id: "user-1", username: "ada", email: "ada@x.io" };
+
+    renderWithProviders(
+      <FormView
+        model="iam.User"
+        id="user-1"
+        fields={[
+          { name: "username", label: "Username", title: true },
+          { name: "email", label: "Email" },
+          { name: "vendor", label: "Vendor", widget: "many2one" },
+          { name: "password", label: "Password", createOnly: true },
+        ]}
+      />,
+      metadata,
+    );
+
+    await waitFor(() => expect(sdkMocks.recordSelection).toBeDefined());
+    const selection = sdkMocks.recordSelection ?? [];
+    expect(selection).toContain("id");
+    expect(selection).toContain("username");
+    expect(selection).toContain("email");
+    expect(selection).toContain("vendor.id"); // relation → `<field>.id`
+    expect(selection).not.toContain("password"); // write-only → never read back
+  });
+
+  test("blocks create and flags a missing required field inline", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    const metadata: SchemaFieldMetadata = {
+      types: {
+        NoteType: {
+          typeName: "NoteType",
+          fields: { code: { name: "code", kind: "scalar", scalar: "String" } },
+          rootFields: { create: "createNote", requiredCreateFields: ["code"] },
+        },
+      },
+    };
+
+    renderWithProviders(
+      <FormView model="notes.Note" fields={[{ name: "code", label: "Code" }]} />,
+      metadata,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    // The required field is flagged inline and the submit never reaches the server.
+    await screen.findByText("This field is required.");
+    expect(sdkMocks.mutate).not.toHaveBeenCalled();
+  });
+
+  test("renders server validation errors under their field and in the banner", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    sdkMocks.mutate.mockRejectedValue({
+      graphQLErrors: [
+        {
+          extensions: {
+            code: "VALIDATION",
+            validationErrors: {
+              reminderAt: ["This field cannot be blank."],
+            },
+            formErrors: ["Note is misconfigured."],
+          },
+        },
+      ],
+    });
+
+    renderWithProviders(<FormView model="notes.Note" fields={fields} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    // Field message renders under the Reminder field…
+    await screen.findByText("This field cannot be blank.");
+    // …and the form-level message stays in the banner.
+    expect(screen.getByText("Note is misconfigured.")).toBeTruthy();
+  });
+
+  test("shows a title-field server error in the header", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    sdkMocks.mutate.mockRejectedValue({
+      graphQLErrors: [
+        {
+          extensions: {
+            validationErrors: { title: ["This field cannot be blank."] },
+            formErrors: [],
+          },
+        },
+      ],
+    });
+
+    renderWithProviders(<FormView model="notes.Note" fields={fields} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    await screen.findByText("This field cannot be blank.");
+    // Only field errors → the banner prompts the user to fix highlighted fields.
+    expect(screen.getByText("Please fix the highlighted fields.")).toBeTruthy();
+  });
 });
 
 function renderForm(id: string | null): void {
   renderWithProviders(<FormView model="notes.Note" id={id} fields={fields} />);
 }
 
-function renderWithProviders(children: ReactElement): void {
+function renderWithProviders(
+  children: ReactElement,
+  metadata?: SchemaFieldMetadata,
+): void {
   const rootRoute = createRootRoute();
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -358,9 +564,13 @@ function renderWithProviders(children: ReactElement): void {
   render(
     <RouterContextProvider router={router}>
       <ModalsHost>
-        <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
-          {children}
-        </AppRuntimeProvider>
+        <ToastProvider>
+          <ModelMetadataProvider metadata={metadata}>
+            <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
+              {children}
+            </AppRuntimeProvider>
+          </ModelMetadataProvider>
+        </ToastProvider>
       </ModalsHost>
     </RouterContextProvider>,
   );

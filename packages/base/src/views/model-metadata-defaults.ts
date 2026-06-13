@@ -45,6 +45,25 @@ const SCALAR_WIDGET: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The default widget for a field from its SDL metadata: enums pick a select,
+ * object relations a `many2one` picker, string-list fields a tag input, and
+ * scalars map by GraphQL scalar (Boolean→switch, Int→integer, …). Returns
+ * `undefined` for a plain string scalar (the FormView text fallback). Shared by
+ * both the declared-field path (`fieldsWithMetadataDefaults`) and the inline
+ * relation-create path (`formFieldDescriptor`) so a field resolves the same
+ * widget wherever it is rendered.
+ */
+export function defaultWidgetFor(
+  field: ModelFieldMetadata | undefined,
+): string | undefined {
+  if (!field) return undefined;
+  if (field.kind === "enum") return "select";
+  if (field.kind === "relation") return "many2one";
+  if (field.kind === "list") return "tagInput";
+  return field.scalar ? SCALAR_WIDGET[field.scalar] : undefined;
+}
+
+/**
  * Resolve a form field to its relation target, or `null` when it is not an
  * object relation whose related model is listable. Only nested object fields
  * (`kind: "relation"`) qualify — a bare `ID` scalar FK is opaque to the SDL, so
@@ -86,9 +105,7 @@ export function formFieldsFromMetadata(
 }
 
 function formFieldDescriptor(field: ModelFieldMetadata): FieldDescriptor {
-  if (field.kind === "enum") return { name: field.name, widget: "select" };
-  if (field.kind === "relation") return { name: field.name, widget: "many2one" };
-  const widget = field.scalar ? SCALAR_WIDGET[field.scalar] : undefined;
+  const widget = defaultWidgetFor(field);
   return widget ? { name: field.name, widget } : { name: field.name };
 }
 
@@ -131,13 +148,13 @@ export function fieldsWithMetadataDefaults(
 ): readonly FieldDescriptor[] {
   return fields.map((field) => {
     const fieldMetadata = metadata?.fields[field.name];
-    // A nested object relation with no explicit widget defaults to many2one, so
-    // the form selects `<field>.id` and the relation renderer can take over.
+    // A declared field with no explicit widget inherits the SDL-derived default
+    // for its kind/scalar: enum→select, relation→many2one (selecting `<field>.id`
+    // for the picker), Boolean→switch, list→tagInput, etc. Without this every
+    // bare `<Field>` falls to the text widget — booleans then submit "" and fail.
     const widget =
-      field.widget === undefined
-        && field.options === undefined
-        && fieldMetadata?.kind === "relation"
-        ? "many2one"
+      field.widget === undefined && field.options === undefined
+        ? defaultWidgetFor(fieldMetadata)
         : field.widget;
     const options = enumOptions(fieldMetadata);
     return {

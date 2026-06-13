@@ -9,7 +9,7 @@ from typing import Any, ClassVar, cast
 
 import strawberry
 from django.apps import AppConfig, apps
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import NON_FIELD_ERRORS, ImproperlyConfigured, ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
@@ -20,6 +20,7 @@ from rebac.managers import RebacManager
 from strawberry.tools import merge_types
 from strawberry.types.base import get_object_definition
 from strawberry.types.execution import ExecutionContext
+from strawberry.utils.str_converters import to_camel_case
 
 from angee.graphql.introspection import (
     django_model,
@@ -47,6 +48,18 @@ _ROOT_TYPE_NAMES = {
 }
 
 
+def _unwrap_validation_error(exc: BaseException | None) -> ValidationError | None:
+    """Return the ``ValidationError`` in a resolver's exception chain, or ``None``."""
+
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, ValidationError):
+            return exc
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
 class AngeeSchema(strawberry.Schema):
     """Strawberry schema that exposes stable REBAC denial codes."""
 
@@ -59,6 +72,7 @@ class AngeeSchema(strawberry.Schema):
 
         for error in errors:
             self._apply_rebac_code(error)
+            self._apply_validation_error(error)
         super().process_errors(errors, execution_context)
 
     def _apply_rebac_code(self, error: GraphQLError) -> None:
@@ -72,6 +86,36 @@ class AngeeSchema(strawberry.Schema):
         else:
             return
         error.extensions = {**(error.extensions or {}), "code": code}
+
+    def _apply_validation_error(self, error: GraphQLError) -> None:
+        """Expose a Django ``ValidationError`` as a per-field error extension.
+
+        Model validation (``full_clean``) raises a ``ValidationError`` whose
+        ``message_dict`` keys are model field names. Surface them as
+        ``validationErrors`` (camel-cased to match the SDL field names a form
+        binds to) plus a ``formErrors`` list for non-field errors, so the client
+        renders each message under its field instead of one opaque banner.
+        """
+
+        validation = _unwrap_validation_error(error.original_error)
+        if validation is None:
+            return
+        field_errors: dict[str, list[str]] = {}
+        form_errors: list[str] = []
+        if hasattr(validation, "error_dict"):
+            for field, messages in validation.message_dict.items():
+                if field == NON_FIELD_ERRORS:
+                    form_errors.extend(messages)
+                else:
+                    field_errors[to_camel_case(field)] = list(messages)
+        else:
+            form_errors.extend(validation.messages)
+        error.extensions = {
+            **(error.extensions or {}),
+            "code": "VALIDATION",
+            "validationErrors": field_errors,
+            "formErrors": form_errors,
+        }
 
 
 @dataclass(frozen=True, slots=True)

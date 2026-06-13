@@ -101,7 +101,7 @@ describe("page element markers", () => {
     const groups = parsePageGroups(
       <Group label="Details" columns={2}>
         <Field name="tags" widget="tagInput" />
-        <Action id="archive" label="Archive" onClick={archive} danger />
+        <Action id="archive" label="Archive" run={archive} danger />
       </Group>,
     );
 
@@ -112,7 +112,7 @@ describe("page element markers", () => {
       fields: [{ name: "tags", widget: "tagInput" }],
       actions: [{ id: "archive", label: "Archive", danger: true }],
     });
-    expect(groups[0]?.actions[0]?.onClick).toBe(archive);
+    expect(groups[0]?.actions[0]?.run).toBe(archive);
   });
 
   test("parse top-level actions", () => {
@@ -121,11 +121,11 @@ describe("page element markers", () => {
     expect(
       parsePageActions(
         <>
-          <Action id="create" label="New" onClick={create} />
+          <Action id="create" label="New" run={create} />
           <Column field="title" />
         </>,
       ),
-    ).toEqual([{ id: "create", label: "New", onClick: create }]);
+    ).toEqual([{ id: "create", label: "New", run: create }]);
   });
 
   test("preserve parsed descriptor identity for stable element constants", () => {

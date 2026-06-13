@@ -47,7 +47,9 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import instance_from_public_id
+from angee.graphql.actions import ActionResult
 from angee.graphql.crud import crud
+from angee.graphql.deletion import DeletePreview
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam import identity
@@ -271,6 +273,20 @@ class CredentialType(AngeeNode):
         """Return a public-safe projection of the OAuth client."""
 
         return cast(CredentialOAuthClientType, cast(Any, self).oauth_client)
+
+    @strawberry_django.field(only=["oauth_client", "external_account"])
+    def display_name(self) -> str:
+        """Return a human label (provider + subject) for relation pickers.
+
+        Credential has no natural string column; this gives ``recordRepresentation``
+        something to show when a credential is picked (e.g. on a Connection form).
+        """
+
+        client = getattr(cast(Any, self), "oauth_client", None)
+        provider = str(getattr(client, "slug", "") or getattr(client, "display_name", "") or "credential")
+        account = getattr(cast(Any, self), "external_account", None)
+        subject = str(getattr(account, "external_id", "") or "") if account else ""
+        return f"{provider}: {subject}" if subject else provider
 
 
 @strawberry.type
@@ -557,6 +573,61 @@ class ExternalAccountInput:
     display_name: str = ""
     avatar_url: str = ""
     status: str = "active"
+
+
+@strawberry.input
+class ExternalAccountPatch:
+    """Admin-write fields accepted when updating an external account (scalars only)."""
+
+    id: relay.GlobalID
+    email: str | None = strawberry.UNSET
+    display_name: str | None = strawberry.UNSET
+    avatar_url: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+
+
+@strawberry.input
+class UserInput:
+    """Admin-write fields accepted when creating a user. ``password`` is write-only."""
+
+    username: str
+    password: str
+    email: str = ""
+    first_name: str = ""
+    last_name: str = ""
+    is_staff: bool = False
+    is_active: bool = True
+
+
+@strawberry.input
+class UserPatch:
+    """Admin-write fields accepted when updating a user. ``password`` re-hashes when set."""
+
+    id: relay.GlobalID
+    username: str | None = strawberry.UNSET
+    password: str | None = strawberry.UNSET
+    email: str | None = strawberry.UNSET
+    first_name: str | None = strawberry.UNSET
+    last_name: str | None = strawberry.UNSET
+    is_staff: bool | None = strawberry.UNSET
+    is_active: bool | None = strawberry.UNSET
+
+
+@strawberry.input
+class CredentialInput:
+    """Admin-write fields for a static-token credential (OAuth credentials arrive via login)."""
+
+    user: relay.GlobalID
+    oauth_client: relay.GlobalID
+    api_key: str
+
+
+@strawberry.input
+class CredentialPatch:
+    """Admin-write fields accepted when updating a credential."""
+
+    id: relay.GlobalID
+    status: str | None = strawberry.UNSET
 
 
 def _available_connections(
@@ -943,6 +1014,9 @@ class IAMConsoleQuery:
     users: OffsetPaginated[UserType] = strawberry_django.offset_paginated(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
+    user: UserType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
     oauth_clients: OffsetPaginated[OAuthClientType] = strawberry_django.offset_paginated(
         resolver=_console_oauth_clients,
         permission_classes=_ADMIN_PERMISSION_CLASSES,
@@ -954,8 +1028,14 @@ class IAMConsoleQuery:
         resolver=_console_external_accounts,
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
+    external_account: ExternalAccountType | None = strawberry_django.node(
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
     credential_health: OffsetPaginated[CredentialType] = strawberry_django.offset_paginated(
         resolver=_console_credentials,
+        permission_classes=_ADMIN_PERMISSION_CLASSES,
+    )
+    credential: CredentialType | None = strawberry_django.node(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
 
@@ -1179,6 +1259,38 @@ def _revoke_remote_oauth_token(credential: Any) -> None:
         return
 
 
+def _user_from_global_id(user_id: relay.GlobalID) -> Any:
+    """Return the user addressed by one GraphQL global id, or raise."""
+
+    with system_context(reason="iam.graphql.user.lookup"):
+        user = instance_from_public_id(User, user_id.node_id, queryset=User._default_manager.all())
+    if user is None:
+        raise ValueError(f"User {user_id!s} was not found.")
+    return user
+
+
+def _admin_delete(
+    model: Any,
+    node_id: str,
+    *,
+    reason: str,
+    confirm: bool,
+    before_delete: Any = None,
+) -> DeletePreview:
+    """Preview-then-delete one row elevated (mirrors ``crud``'s delete resolver)."""
+
+    with system_context(reason=reason), transaction.atomic():
+        instance = instance_from_public_id(model, node_id, queryset=model._default_manager.all())
+        if instance is None:
+            raise ValueError(f"{model._meta.object_name} {node_id!r} was not found")
+        preview = DeletePreview.from_instance(instance)
+        if confirm and not preview.has_blockers:
+            if before_delete is not None:
+                before_delete(instance)
+            instance.delete()
+    return preview
+
+
 _OAUTH_CLIENT_MUTATION = crud(
     OAuthClientType,
     create=OAuthClientInput,
@@ -1212,6 +1324,130 @@ class IAMExternalAccountMutation:
         )
         return cast(ExternalAccountType, account)
 
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def update_external_account(self, data: ExternalAccountPatch) -> ExternalAccountType:
+        """Update one external account's scalar identity fields."""
+
+        with system_context(reason="iam.graphql.external_account.update"), transaction.atomic():
+            account = instance_from_public_id(
+                ExternalAccount, data.id.node_id, queryset=ExternalAccount._default_manager.all()
+            )
+            if account is None:
+                raise ValueError(f"External account {data.id!s} was not found")
+            for field in ("email", "display_name", "avatar_url", "status"):
+                value = getattr(data, field)
+                if value is not strawberry.UNSET:
+                    setattr(account, field, value)
+            account.save()
+        return cast(ExternalAccountType, account)
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def delete_external_account(self, id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
+        """Revoke the owner grant, then delete the account (owner is a REBAC tuple)."""
+
+        def revoke(account: Any) -> None:
+            owner = ExternalAccount.objects.owner_for(account)
+            if owner is not None:
+                ExternalAccount.objects.revoke_owner(account, owner)
+
+        return _admin_delete(
+            ExternalAccount,
+            id.node_id,
+            reason="iam.graphql.external_account.delete",
+            confirm=confirm,
+            before_delete=revoke,
+        )
+
+
+@strawberry.type
+class IAMUserMutation:
+    """Admin CRUD for users; ``password`` is write-only and hashed via ``set_password``."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def create_user(self, data: UserInput) -> UserType:
+        """Create one user with a hashed password."""
+
+        with system_context(reason="iam.graphql.user.create"), transaction.atomic():
+            user = User.objects.create_user(
+                data.username,
+                email=data.email,
+                password=data.password,
+                first_name=data.first_name,
+                last_name=data.last_name,
+                is_staff=data.is_staff,
+                is_active=data.is_active,
+            )
+        return cast(UserType, user)
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def update_user(self, data: UserPatch) -> UserType:
+        """Update one user; re-hash the password only when a new one is supplied."""
+
+        with system_context(reason="iam.graphql.user.update"), transaction.atomic():
+            user = instance_from_public_id(User, data.id.node_id, queryset=User._default_manager.all())
+            if user is None:
+                raise ValueError(f"User {data.id!s} was not found")
+            for field in ("username", "email", "first_name", "last_name", "is_staff", "is_active"):
+                value = getattr(data, field)
+                if value is not strawberry.UNSET:
+                    setattr(user, field, value)
+            if data.password is not strawberry.UNSET and data.password:
+                user.set_password(data.password)
+            user.save()
+        return cast(UserType, user)
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def delete_user(self, id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
+        """Delete one user when unblocked."""
+
+        return _admin_delete(User, id.node_id, reason="iam.graphql.user.delete", confirm=confirm)
+
+
+@strawberry.type
+class IAMCredentialMutation:
+    """Admin CRUD for credentials; create is static-token only (OAuth ones arrive via login)."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def create_credential(self, data: CredentialInput) -> CredentialType:
+        """Create one static-token credential for a user through the kind handler."""
+
+        user = _user_from_global_id(data.user)
+        oauth_client = _oauth_client_from_id(data.oauth_client)
+        credential = Credential.objects.upsert_for_user(
+            user,
+            oauth_client,
+            CredentialKind.STATIC_TOKEN,
+            {"api_key": data.api_key},
+        )
+        return cast(CredentialType, credential)
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def update_credential(self, data: CredentialPatch) -> CredentialType:
+        """Update one credential's status."""
+
+        with system_context(reason="iam.graphql.credential.update"), transaction.atomic():
+            credential = instance_from_public_id(
+                Credential, data.id.node_id, queryset=Credential._default_manager.all()
+            )
+            if credential is None:
+                raise ValueError(f"Credential {data.id!s} was not found")
+            if data.status is not strawberry.UNSET and data.status is not None:
+                credential.status = data.status
+                credential.save(update_fields=["status", "updated_at"])
+        return cast(CredentialType, credential)
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def delete_credential(self, id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
+        """Best-effort remote revoke, then delete the credential when unblocked."""
+
+        return _admin_delete(
+            Credential,
+            id.node_id,
+            reason="iam.graphql.credential.delete",
+            confirm=confirm,
+            before_delete=_revoke_remote_oauth_token,
+        )
+
 
 @strawberry.type
 class IAMPermissionHubMutation:
@@ -1241,6 +1477,27 @@ class IAMPermissionHubMutation:
             transaction.atomic(),
         ):
             return bool(rebac_revoke(actor=principal, role=role_ref))
+
+
+@strawberry.type
+class OAuthClientActionMutation:
+    """Operational actions on an OAuth/OIDC login provider."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def discover_oidc_endpoints(self, id: relay.GlobalID) -> ActionResult:
+        """Fetch the provider's OIDC discovery document and fill blank endpoints."""
+
+        oauth_client = _oauth_client_from_id(id)
+        if not str(getattr(oauth_client, "discovery_url", "") or ""):
+            return ActionResult(ok=False, message="Set a discovery URL first.")
+        with system_context(reason="iam.graphql.discover_oidc_endpoints"):
+            try:
+                discovery = client_module.fetch_discovery(oauth_client)
+            except Exception as error:  # noqa: BLE001 — surface discovery failure to the operator
+                return ActionResult(ok=False, message=f"Discovery failed: {error}")
+            oauth_client.save()
+        issuer = discovery.get("issuer") if isinstance(discovery, dict) else None
+        return ActionResult(ok=True, message=f"Discovered endpoints for {issuer or 'provider'}.")
 
 
 def _session_user(info: strawberry.Info) -> Any:
@@ -1373,8 +1630,11 @@ schemas = {
         "mutation": [
             IAMMutation,
             _OAUTH_CLIENT_MUTATION,
+            IAMUserMutation,
             IAMExternalAccountMutation,
+            IAMCredentialMutation,
             IAMPermissionHubMutation,
+            OAuthClientActionMutation,
         ],
         "subscription": [changes(User, field="userChanged")],
         "types": [

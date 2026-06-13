@@ -1,7 +1,7 @@
 """Source models for Angee's integration runtime primitives.
 
 This addon owns the integration layer: the third-party ``Vendor`` catalogue, the
-first-class ``Connection`` an integration runs over, the abstract
+first-class ``Integration`` an integration runs over, the abstract
 ``Capability``/``Bridge`` runtime, and outbound ``WebhookSubscription``. It draws
 a ``Credential`` (and optionally an ``ExternalAccount``) from ``iam`` to
 authenticate; it never owns identity.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -74,11 +75,11 @@ class Vendor(SqidMixin, AuditMixin, AngeeModel):
         return self.display_name or self.slug
 
 
-class ConnectionStatus(models.TextChoices):
-    """Aggregate integration health for a connection, rolled up from its capabilities.
+class IntegrationStatus(models.TextChoices):
+    """Aggregate health for an integration, rolled up from its capabilities.
 
-    Owns the rollup vocabulary that used to live on ``iam.AccountStatus``: a
-    connection is the substrate capabilities run over, so it — not the identity
+    Owns the rollup vocabulary that used to live on ``iam.AccountStatus``: an
+    integration is the substrate capabilities run over, so it — not the identity
     account — aggregates their health.
     """
 
@@ -87,18 +88,18 @@ class ConnectionStatus(models.TextChoices):
     ERROR = "error", "Error"
 
     @classmethod
-    def from_value(cls, value: object) -> ConnectionStatus:
-        """Return the member for one string or enum connection-status value."""
+    def from_value(cls, value: object) -> IntegrationStatus:
+        """Return the member for one string or enum integration-status value."""
 
         raw = str(getattr(value, "value", value))
         try:
-            return cast(ConnectionStatus, cls(raw))
+            return cast(IntegrationStatus, cls(raw))
         except ValueError as error:
-            raise ValueError(f"Unsupported connection status for rollup: {raw}") from error
+            raise ValueError(f"Unsupported integration status for rollup: {raw}") from error
 
     @classmethod
-    def from_capability(cls, status: object) -> ConnectionStatus:
-        """Return the connection status one capability status contributes to the rollup."""
+    def from_capability(cls, status: object) -> IntegrationStatus:
+        """Return the integration status one capability status contributes to the rollup."""
 
         raw = str(getattr(status, "value", status))
         mapping = {
@@ -110,11 +111,11 @@ class ConnectionStatus(models.TextChoices):
         try:
             return mapping[raw]
         except KeyError as error:
-            raise ValueError(f"Unsupported capability status for connection rollup: {raw}") from error
+            raise ValueError(f"Unsupported capability status for integration rollup: {raw}") from error
 
     @classmethod
-    def rollup(cls, statuses: Iterable[object]) -> ConnectionStatus:
-        """Return the most severe connection status across capability contributions."""
+    def rollup(cls, statuses: Iterable[object]) -> IntegrationStatus:
+        """Return the most severe integration status across capability contributions."""
 
         members = tuple(cls.from_value(status) for status in statuses)
         return max(members, key=lambda member: member.precedence) if members else cls.from_value(cls.ACTIVE)
@@ -123,17 +124,17 @@ class ConnectionStatus(models.TextChoices):
     def precedence(self) -> int:
         """Return rollup precedence — the highest wins when statuses combine."""
 
-        order = (ConnectionStatus.ACTIVE, ConnectionStatus.DISABLED, ConnectionStatus.ERROR)
+        order = (IntegrationStatus.ACTIVE, IntegrationStatus.DISABLED, IntegrationStatus.ERROR)
         return order.index(self)
 
     @property
     def is_error(self) -> bool:
-        """Return whether this connection is in an error state."""
+        """Return whether this integration is in an error state."""
 
-        return self is ConnectionStatus.ERROR
+        return self is IntegrationStatus.ERROR
 
 
-class Connection(SqidMixin, AuditMixin, AngeeModel):
+class Integration(SqidMixin, AuditMixin, AngeeModel):
     """A product/workspace integration to a vendor account.
 
     The first-class "what we're connected to and what runs over it": it draws a
@@ -144,25 +145,25 @@ class Connection(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="con", min_length=8)
-    vendor = models.ForeignKey("integrate.Vendor", on_delete=models.PROTECT, related_name="connections")
-    # PROTECT: the credential is the connection's authentication. It may belong to
+    sqid = SqidField(real_field_name="id", prefix="int", min_length=8)
+    vendor = models.ForeignKey("integrate.Vendor", on_delete=models.PROTECT, related_name="integrations")
+    # PROTECT: the credential is the integration's authentication. It may belong to
     # a principal other than ``owner`` (an org/app-install credential), so deleting
     # a credential still in use is refused rather than silently breaking the
     # integration. The owner does not have to own the credential.
-    credential = models.ForeignKey("iam.Credential", on_delete=models.PROTECT, related_name="connections")
+    credential = models.ForeignKey("iam.Credential", on_delete=models.PROTECT, related_name="integrations")
     account = models.ForeignKey(
         "iam.ExternalAccount",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="connections",
+        related_name="integrations",
     )
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections")
-    config = models.JSONField(default=dict)
-    """Connection-scoped settings (endpoints, options); per-capability settings live on ``Capability.config``."""
-    status = StateField(choices_enum=ConnectionStatus, default=ConnectionStatus.ACTIVE)
-    capability_statuses = models.JSONField(default=dict)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="integrations")
+    config = models.JSONField(default=dict, blank=True)
+    """Integration-scoped settings (endpoints, options); per-capability settings live on ``Capability.config``."""
+    status = StateField(choices_enum=IntegrationStatus, default=IntegrationStatus.ACTIVE)
+    capability_statuses = models.JSONField(default=dict, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     last_error = models.TextField(blank=True)
     last_error_at = models.DateTimeField(null=True, blank=True)
@@ -170,34 +171,34 @@ class Connection(SqidMixin, AuditMixin, AngeeModel):
     objects = RebacManager()
 
     class Meta:
-        """Django model options for integration connections."""
+        """Django model options for integrations."""
 
         abstract = True
         ordering = ("-updated_at",)
-        rebac_resource_type = "integrate/connection"
+        rebac_resource_type = "integrate/integration"
         rebac_id_attr = "sqid"
 
     def __str__(self) -> str:
-        """Return a stable vendor-qualified connection label."""
+        """Return a stable vendor-qualified integration label."""
 
         vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
         return f"{vendor_slug}:{self.public_id}"
 
     def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
-        """Record one capability contribution, recompute this connection, and persist.
+        """Record one capability contribution, recompute this integration, and persist.
 
-        The connection owns this write: direct callers do not need an ambient
+        The integration owns this write: direct callers do not need an ambient
         ``system_context`` or transaction, and scheduler callers safely nest
         inside their own framework operation context. Unsaved instances are
-        updated in memory only because there is no connection row to persist.
+        updated in memory only because there is no integration row to persist.
         """
 
         reported_at = timezone.now()
-        incoming_status = ConnectionStatus.from_capability(status)
+        incoming_status = IntegrationStatus.from_capability(status)
         capability_statuses = dict(self.capability_statuses or {})
         # Deleted capabilities can leave stale contributions until pruning has an owner.
         capability_statuses[str(capability_key)] = incoming_status.value
-        rolled_status = ConnectionStatus.rollup(capability_statuses.values())
+        rolled_status = IntegrationStatus.rollup(capability_statuses.values())
 
         self.capability_statuses = capability_statuses
         self.status = rolled_status
@@ -213,7 +214,7 @@ class Connection(SqidMixin, AuditMixin, AngeeModel):
         if self.pk is None:
             return
 
-        with system_context(reason="integrate.connection.rollup"), transaction.atomic():
+        with system_context(reason="integrate.integration.rollup"), transaction.atomic():
             self.save(
                 update_fields=[
                     "capability_statuses",
@@ -233,7 +234,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
     stays out of runtime emission by leaving ``runtime`` unset.
     """
 
-    connection = models.ForeignKey("integrate.Connection", on_delete=models.PROTECT, related_name="capabilities")
+    integration = models.ForeignKey("integrate.Integration", on_delete=models.PROTECT, related_name="capabilities")
     config = models.JSONField(default=dict)
     status = StateField(choices_enum=CapabilityStatus, default=CapabilityStatus.ACTIVE)
     last_used_at = models.DateTimeField(null=True, blank=True)
@@ -249,9 +250,9 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         abstract = True
 
     def report_status(self, *, status: CapabilityStatus | str, error: str = "") -> None:
-        """Record local status telemetry and push this capability's connection contribution.
+        """Record local status telemetry and push this capability's integration contribution.
 
-        The caller owns persistence for this capability row. ``Connection`` owns
+        The caller owns persistence for this capability row. ``Integration`` owns
         its rollup write and tracks each capability by the reporting capability
         primary key.
         """
@@ -263,7 +264,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         self.last_error = error
         self.last_error_at = reported_at if error else None
 
-        self.connection.note_capability_status(capability_key=str(self.pk), status=status, error=error)
+        self.integration.note_capability_status(capability_key=str(self.pk), status=status, error=error)
 
 
 class Bridge(Capability):
@@ -389,7 +390,7 @@ class WebhookSubscriptionManager(RebacManager):
         kind: EventKind,
         payload: Any,
         impl_app: str = "",
-        connection: Any | None = None,
+        integration: Any | None = None,
     ) -> dict[str, int]:
         """Deliver one integration event to every matching enabled subscription.
 
@@ -403,7 +404,7 @@ class WebhookSubscriptionManager(RebacManager):
         errors = 0
         with system_context(reason="integrate.webhooks.deliver"):
             for subscription in self.filter(enabled=True).order_by("pk"):
-                if not subscription.matches(kind=kind, impl_app=impl_app, connection=connection):
+                if not subscription.matches(kind=kind, impl_app=impl_app, integration=integration):
                     continue
                 try:
                     status = subscription.deliver(body)
@@ -449,10 +450,10 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
     )
     target_url = models.URLField(max_length=2048, validators=(validate_public_url,))
     secret = EncryptedField()
-    event_kinds = models.JSONField(default=list)
-    impl_app_filter = models.JSONField(default=list)
-    connection_filter = models.ForeignKey(
-        "integrate.Connection",
+    event_kinds = models.JSONField(default=list, blank=True)
+    impl_app_filter = models.JSONField(default=list, blank=True)
+    integration_filter = models.ForeignKey(
+        "integrate.Integration",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -480,7 +481,7 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
         "updated_at",
     )
 
-    def matches(self, *, kind: str, impl_app: str, connection: Any | None) -> bool:
+    def matches(self, *, kind: str, impl_app: str, integration: Any | None) -> bool:
         """Return whether this subscription should receive one event."""
 
         if kind not in {str(value) for value in self.event_kinds or ()}:
@@ -488,14 +489,27 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
         impl_app_filter = tuple(str(value) for value in self.impl_app_filter or ())
         if impl_app_filter and impl_app not in impl_app_filter:
             return False
-        if self.connection_filter_id is None:
+        if self.integration_filter_id is None:
             return True
-        return connection is not None and self.connection_filter_id == getattr(connection, "pk", None)
+        return integration is not None and self.integration_filter_id == getattr(integration, "pk", None)
 
     def deliver(self, body: bytes) -> str:
         """POST one signed event body to this subscription's pinned target; raise on non-2xx."""
 
         return PinnedWebhookClient(str(self.target_url)).post(secret=str(self.secret), body=body)
+
+    def rotate_secret(self) -> str:
+        """Generate a new signing secret, persist it, and return the plaintext once.
+
+        The subscription owns its signing material: a console action calls this to
+        roll the secret. The plaintext is returned only here (for one-time display);
+        reads never expose it.
+        """
+
+        new_secret = secrets.token_urlsafe(32)
+        self.secret = new_secret  # type: ignore[assignment]  # EncryptedField descriptor unmodeled by django-stubs
+        self.save(update_fields=["secret", "updated_at"])
+        return new_secret
 
     def record_delivery(self, status: str) -> None:
         """Persist success telemetry for one delivery attempt (mirrors ``Bridge.record_sync``)."""

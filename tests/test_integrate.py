@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from django.db import models
 
-from angee.integrate.models import Bridge, Capability, CapabilityStatus, ConnectionStatus
-from tests.conftest import Connection
+from angee.integrate.models import Bridge, Capability, CapabilityStatus, IntegrationStatus
+from tests.conftest import Integration
 
 
 class ConcreteBridge(Bridge):
@@ -45,17 +45,17 @@ def test_concrete_bridge_inherits_scheduler_field() -> None:
 
 
 def test_report_status_records_telemetry_and_pushes_rollup() -> None:
-    """report_status writes local telemetry and calls the connection rollup when present."""
+    """report_status writes local telemetry and calls the integration rollup when present."""
 
     calls: list[tuple[object, object, str]] = []
-    connection = Connection()
+    integration = Integration()
 
     def note_capability_status(*, capability_key: object, status: object, error: str) -> None:
         calls.append((capability_key, status, error))
 
-    connection.note_capability_status = note_capability_status  # type: ignore[method-assign]
+    integration.note_capability_status = note_capability_status  # type: ignore[method-assign]
     bridge = ConcreteBridge()
-    bridge.connection = connection
+    bridge.integration = integration
 
     bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
 
@@ -74,15 +74,15 @@ def test_report_status_records_telemetry_and_pushes_rollup() -> None:
     assert bridge.last_error_at is None
 
 
-def test_report_status_updates_unsaved_connection_rollup_in_memory() -> None:
-    """report_status updates an unsaved connection without trying to persist it."""
+def test_report_status_updates_unsaved_integration_rollup_in_memory() -> None:
+    """report_status updates an unsaved integration without trying to persist it."""
 
     bridge = ConcreteBridge()
-    bridge.connection = Connection()
+    bridge.integration = Integration()
 
     bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
 
     assert bridge.status == CapabilityStatus.ERROR
-    assert bridge.connection.status == ConnectionStatus.ERROR
-    assert bridge.connection.capability_statuses == {"None": ConnectionStatus.ERROR.value}
-    assert bridge.connection.last_error == "boom"
+    assert bridge.integration.status == IntegrationStatus.ERROR
+    assert bridge.integration.capability_statuses == {"None": IntegrationStatus.ERROR.value}
+    assert bridge.integration.last_error == "boom"

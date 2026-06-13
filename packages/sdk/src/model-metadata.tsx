@@ -3,6 +3,7 @@ import {
   buildSchema,
   getNamedType,
   isEnumType,
+  isInputObjectType,
   isInterfaceType,
   isListType,
   isNonNullType,
@@ -56,6 +57,8 @@ export interface ModelRootFieldMetadata {
   revisionFields?: readonly string[];
   /** Mutation field creating one record. */
   create?: string;
+  /** Required (non-null, no default) fields of the create input — for client-side validation. */
+  requiredCreateFields?: readonly string[];
   /** Mutation field updating one record. */
   update?: string;
   /** Mutation field deleting one record. */
@@ -232,6 +235,7 @@ function rootFieldsForType(
       if (returnsDirectObject(field.type, type.name)) {
         if (rootFields.create === undefined && hasModelInputArg(field, type, "Input")) {
           rootFields.create = name;
+          rootFields.requiredCreateFields = requiredInputFields(field, type, "Input");
         }
         if (rootFields.update === undefined && hasModelInputArg(field, type, "Patch")) {
           rootFields.update = name;
@@ -340,6 +344,25 @@ function hasModelInputArg(
 
 function inputBaseName(type: GraphQLObjectType): string {
   return type.name.endsWith("Type") ? type.name.slice(0, -4) : type.name;
+}
+
+/**
+ * Names of the create input's required fields — non-null with no server default.
+ * A field with a default (or a nullable one) is optional, so the client must not
+ * block submit on it. Used for client-side required validation.
+ */
+function requiredInputFields(
+  field: GraphQLField<unknown, unknown>,
+  type: GraphQLObjectType,
+  suffix: string,
+): readonly string[] {
+  const inputName = `${inputBaseName(type)}${suffix}`;
+  const arg = field.args.find((candidate) => getNamedType(candidate.type).name === inputName);
+  const inputType = arg ? getNamedType(arg.type) : null;
+  if (!inputType || !isInputObjectType(inputType)) return [];
+  return Object.values(inputType.getFields())
+    .filter((inputField) => isNonNullType(inputField.type) && inputField.defaultValue === undefined)
+    .map((inputField) => inputField.name);
 }
 
 function deleteFieldFor(

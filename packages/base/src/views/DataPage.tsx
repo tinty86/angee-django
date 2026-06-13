@@ -43,12 +43,14 @@ import {
   type DataViewKind,
 } from "./data-view-model";
 import {
+  parsePageActions,
   parsePageColumns,
   parsePageFields,
   parsePageGroups,
   pageChildren,
   pageElementProps,
   requirePageColumns,
+  type ActionDescriptor,
   type GroupDescriptor,
 } from "./page";
 
@@ -143,6 +145,7 @@ interface DataPageFormDeclaration {
   props: FormProps;
   fields: readonly FormField[];
   groups: readonly GroupDescriptor[];
+  actions: readonly ActionDescriptor[];
 }
 
 /** Internal record-open state and commands resolved before `DataPageBody`. */
@@ -266,6 +269,7 @@ function DataPageBody<TRow extends Row = Row>({
   const resolvedFormFields =
     declarations.form?.fields ?? requiredFormFields(formFields);
   const resolvedFormGroups = declarations.form?.groups ?? formGroups;
+  const resolvedFormActions = declarations.form?.actions ?? EMPTY_ACTIONS;
   const ResolvedListComponent = declarations.list?.props.list ?? ListRenderer;
   const listRenderProps = {
     fields,
@@ -434,6 +438,7 @@ function DataPageBody<TRow extends Row = Row>({
       id={editId}
       fields={resolvedFormFields}
       groups={resolvedFormGroups}
+      actions={resolvedFormActions}
       {...formRenderProps}
       onSaved={handleSaved}
       toolbarStart={composeNodes(formRenderProps.toolbarStart, recordHeaderStart)}
@@ -532,11 +537,11 @@ function dataPageListDeclaration<TRow extends Row>(
 function dataPageFormDeclaration(props: FormProps): DataPageFormDeclaration {
   const cached = formDeclarationCache.get(props);
   if (cached) return cached;
-  assertFormActionsNotRendered(props.children);
   const declaration = {
     props,
     fields: parsePageFields(props.children),
     groups: parsePageGroups(props.children),
+    actions: parsePageActions(props.children),
   };
   formDeclarationCache.set(props, declaration);
   return declaration;
@@ -678,16 +683,6 @@ function formElementRenderProps(props: FormProps): Partial<FormViewProps> {
   return forwarded;
 }
 
-function assertFormActionsNotRendered(children: React.ReactNode): void {
-  if (
-    pageChildren(children).some((child) =>
-      Boolean(pageElementProps<unknown>(child, "action")),
-    )
-  ) {
-    throw new Error("Form actions are not rendered yet.");
-  }
-}
-
 function hasOwnDefined(object: object, key: string): boolean {
   return (
     Object.prototype.hasOwnProperty.call(object, key) &&
@@ -824,6 +819,7 @@ interface RecordNavigation {
 }
 
 const EMPTY_RECORD_ID_SET: ReadonlySet<string> = new Set();
+const EMPTY_ACTIONS: readonly ActionDescriptor[] = [];
 
 function RecordActions({
   canDelete,

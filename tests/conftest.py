@@ -21,7 +21,7 @@ from angee.iam.credentials import CredentialKind
 from angee.iam.models import Credential as AbstractCredential
 from angee.iam.models import ExternalAccount as AbstractExternalAccount
 from angee.iam.models import OAuthClient as AbstractOAuthClient
-from angee.integrate.models import Connection as AbstractConnection
+from angee.integrate.models import Integration as AbstractIntegration
 from angee.integrate.models import Vendor as AbstractVendor
 from angee.integrate.models import WebhookSubscription as AbstractWebhookSubscription
 from angee.knowledge.models import Link as AbstractLink
@@ -87,16 +87,16 @@ class Vendor(AbstractVendor):
         rebac_id_attr = "sqid"
 
 
-class Connection(AbstractConnection):
-    """Concrete integration connection used by source-addon tests."""
+class Integration(AbstractIntegration):
+    """Concrete integration used by source-addon tests."""
 
-    class Meta(AbstractConnection.Meta):
-        """Django model options for the canonical test connection."""
+    class Meta(AbstractIntegration.Meta):
+        """Django model options for the canonical test integration."""
 
         abstract = False
         app_label = "integrate"
-        db_table = "test_integrate_connection"
-        rebac_resource_type = "integrate/connection"
+        db_table = "test_integrate_integration"
+        rebac_resource_type = "integrate/integration"
         rebac_id_attr = "sqid"
 
 
@@ -160,20 +160,20 @@ class MarkdownPage(AbstractMarkdownPage):
 IAM_CONNECTION_TEST_MODELS = (OAuthClient, ExternalAccount, Credential)
 """Concrete IAM connection models created on demand by IAM test fixtures."""
 
-INTEGRATE_TEST_MODELS = (Vendor, Connection)
-"""Concrete integration catalogue/connection models created on demand by integrate fixtures."""
+INTEGRATE_TEST_MODELS = (Vendor, Integration)
+"""Concrete integration catalogue/integration models created on demand by integrate fixtures."""
 
 
-def make_connection(slug: str) -> Any:
-    """Create the iam credential chain and an integrate ``Connection`` for tests.
+def make_integration(slug: str) -> Any:
+    """Create the iam credential chain and an integrate ``Integration`` for tests.
 
-    Builds owner → OAuth client → credential → vendor → connection so a
-    capability/bridge fixture has a connection to run over. Requires the iam +
+    Builds owner → OAuth client → credential → vendor → integration so a
+    capability/bridge fixture has an integration to run over. Requires the iam +
     integrate test tables (see ``INTEGRATE_TEST_MODELS``).
     """
 
     user_model = get_user_model()
-    with system_context(reason="test integrate connection setup"):
+    with system_context(reason="test integrate integration setup"):
         user = user_model.objects.create_user(username=f"{slug}-owner", email=f"{slug}@example.com")
         oauth_client = OAuthClient.objects.create(
             slug=slug,
@@ -187,7 +187,7 @@ def make_connection(slug: str) -> Any:
             {"api_key": "x"},
         )
         vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
-        return Connection.objects.create(vendor=vendor, credential=credential, owner=user)
+        return Integration.objects.create(vendor=vendor, credential=credential, owner=user)
 
 class Link(AbstractLink):
     """Concrete knowledge wikilink edge used by source-addon tests."""

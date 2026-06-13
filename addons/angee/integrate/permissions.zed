@@ -1,7 +1,7 @@
 // Authorization schema for the integrate addon.
 // @rebac_package: integrate
 // @rebac_package_version: 0.1.0
-// @rebac_schema_revision: 3
+// @rebac_schema_revision: 4
 
 definition integrate/vendor {
     relation admin: angee/role // rebac:const=admin
@@ -15,7 +15,7 @@ definition integrate/vendor {
     permission delete = admin->member
 }
 
-definition integrate/connection {
+definition integrate/integration {
     relation owner: auth/user // rebac:field=owner
     relation admin: angee/role // rebac:const=admin
 

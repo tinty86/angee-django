@@ -121,8 +121,10 @@ export {
 } from "./page";
 export type {
   ActionConfirm,
+  ActionContext,
   ActionDescriptor,
   ActionProps,
+  ActionResult,
   ColumnAggregate,
   ColumnDescriptor,
   ColumnProps,

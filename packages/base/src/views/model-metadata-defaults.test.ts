@@ -87,6 +87,42 @@ describe("SDL metadata defaults", () => {
     ]);
   });
 
+  test("resolves the default widget for a bare field from its SDL kind/scalar", () => {
+    const policyMetadata: ModelMetadata = {
+      typeName: "OAuthClientType",
+      fields: {
+        isEnabled: { name: "isEnabled", kind: "scalar", scalar: "Boolean" },
+        environment: { name: "environment", kind: "scalar", scalar: "String" },
+        status: {
+          name: "status",
+          kind: "enum",
+          enumName: "ConfigState",
+          values: [{ value: "READY", label: "Ready" }],
+        },
+        defaultScopes: { name: "defaultScopes", kind: "list", scalar: "String" },
+        vendor: { name: "vendor", kind: "relation", relationTarget: "VendorType" },
+      },
+    };
+    const resolved = fieldsWithMetadataDefaults(
+      [
+        { name: "isEnabled" },
+        { name: "environment" },
+        { name: "status" },
+        { name: "defaultScopes" },
+        { name: "vendor" },
+        { name: "isEnabled", widget: "booleanBadge" },
+      ],
+      policyMetadata,
+    );
+    expect(resolved[0]?.widget).toBe("switch"); // Boolean → switch (was text → submitted "")
+    expect(resolved[1]?.widget).toBeUndefined(); // plain String → FormView text fallback
+    expect(resolved[2]?.widget).toBe("select"); // enum → select, with options
+    expect(resolved[2]?.options).toHaveLength(1);
+    expect(resolved[3]?.widget).toBe("tagInput"); // string list → tag input
+    expect(resolved[4]?.widget).toBe("many2one"); // relation → picker
+    expect(resolved[5]?.widget).toBe("booleanBadge"); // explicit widget is preserved
+  });
+
   test("derives list filter fields, enum filter chips, and group options", () => {
     const resolvedColumns = columnsWithMetadataDefaults(columns, NOTE_METADATA);
     const filterFields = buildFilterFields(resolvedColumns, [], NOTE_METADATA);

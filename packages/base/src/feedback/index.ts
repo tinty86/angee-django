@@ -1,7 +1,10 @@
 export {
   ModalsHost,
   useConfirm,
+  usePrompt,
   type ConfirmOptions,
+  type PromptField,
+  type PromptOptions,
 } from "./ModalsHost";
 export {
   ToastProvider,

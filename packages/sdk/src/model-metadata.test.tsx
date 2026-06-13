@@ -104,6 +104,18 @@ describe("fieldMetadataFromSDL", () => {
       revisionFields: ["createdAt", "comment", "body"],
     });
   });
+
+  test("captures the create input's required (non-null, no-default) fields", () => {
+    const writeMetadata = fieldMetadataFromSDL(/* GraphQL */ `
+      type WidgetType { id: ID! name: String! }
+      input WidgetInput { name: String! count: Int color: String! }
+      type Query { widget(id: ID!): WidgetType! }
+      type Mutation { createWidget(data: WidgetInput!): WidgetType! }
+    `);
+    const root = required(writeMetadata.types.WidgetType).rootFields;
+    expect(root?.create).toBe("createWidget");
+    expect(root?.requiredCreateFields).toEqual(["name", "color"]);
+  });
 });
 
 function required<T>(value: T | undefined): T {

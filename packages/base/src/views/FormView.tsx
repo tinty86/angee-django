@@ -6,6 +6,7 @@ import {
   useResourceRecord,
   useModelMetadata,
   useSchemaFieldMetadata,
+  validationErrorsFromError,
   type ModelMetadata,
   type Row,
 } from "@angee/sdk";
@@ -16,7 +17,6 @@ import { ErrorBanner } from "../fragments/ErrorBanner";
 import { useConfirm } from "../feedback";
 import {
   FieldDescription,
-  FieldError,
   FieldLabel,
   FieldRoot,
 } from "../ui/field";
@@ -36,8 +36,10 @@ import {
 import {
   pageChildren,
   pageElementProps,
+  parsePageActions,
   parsePageFields,
   parsePageGroups,
+  type ActionDescriptor,
   type FieldDescriptor,
   type FieldProps,
   type GroupDescriptor,
@@ -49,6 +51,7 @@ import {
   relationFieldInfo,
   type RelationFieldInfo,
 } from "./model-metadata-defaults";
+import { RecordActionBar } from "./RecordActionBar";
 import { RelationFieldWidget } from "./RelationFieldWidget";
 
 export type FieldKind = PageFieldKind;
@@ -65,6 +68,8 @@ export interface FormViewProps {
   groups?: readonly GroupDescriptor[];
   /** Field and group element declarations parsed when `fields`/`groups` are omitted. */
   children?: React.ReactNode;
+  /** Record actions rendered in the toolbar; parsed from children when omitted. */
+  actions?: readonly ActionDescriptor[];
   /** Extra fields returned after save and selected while editing. */
   returning?: readonly string[];
   /** Initial values merged into create forms after widget empty defaults. */
@@ -73,8 +78,6 @@ export interface FormViewProps {
   onSaved?: (row: Row) => void;
   /** Label used for the submit button. */
   submitLabel?: React.ReactNode;
-  /** Header actions rendered in the record header. */
-  headerActions?: React.ReactNode;
   /** Left-side record commands the host renders before dirty Save/Discard actions. */
   toolbarStart?: React.ReactNode;
   /** Right-side record chrome the host renders after the toolbar spacer. */
@@ -117,18 +120,15 @@ export function FormView({
   fields,
   groups,
   children,
+  actions,
   returning,
   defaultValues,
   onSaved,
   submitLabel,
-  headerActions,
   toolbarStart,
   toolbar,
   className,
 }: FormViewProps): React.ReactElement {
-  if (hasDirectPageElement(children, "action")) {
-    throw new Error("Form actions are not rendered yet.");
-  }
   const hasFieldChildren = hasPageField(children);
   const hasGroupChildren = hasDirectPageElement(children, "group");
   if (
@@ -141,10 +141,12 @@ export function FormView({
   }
   const childFields = parsePageFields(children);
   const childGroups = parsePageGroups(children);
+  const childActions = parsePageActions(children);
   const modelMetadata = useModelMetadata(model);
   const schemaMetadata = useSchemaFieldMetadata();
   const declaredFields = fields ?? childFields;
   const declaredGroups = groups ?? childGroups;
+  const declaredActions = actions ?? childActions;
   const isCreate = id == null;
   const resolvedFields = React.useMemo(
     () =>
@@ -183,15 +185,27 @@ export function FormView({
   }, [formFields, modelMetadata, schemaMetadata]);
   const selection = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
-    for (const field of formFields) addFieldSelection(paths, field);
+    for (const field of formFields) {
+      // Project only fields the result type exposes. A write-only input
+      // (password, apiKey, secret) is declared on the form but absent from the
+      // SDL read type; selecting it makes the whole detail/return query invalid
+      // and the record loads as null. The SDL metadata owns which fields are
+      // readable — skip a declared field once metadata is loaded and lacks it.
+      if (modelMetadata && !modelMetadata.fields[field.name]) continue;
+      addFieldSelection(paths, field);
+    }
     for (const extra of returning ?? []) paths.add(extra);
     return [...paths];
-  }, [formFields, returning]);
+  }, [formFields, modelMetadata, returning]);
 
-  const { record, fetching: loading } = useResourceRecord(model, id ?? null, {
-    fields: selection,
-    enabled: !isCreate,
-  });
+  const { record, fetching: loading, refetch } = useResourceRecord(
+    model,
+    id ?? null,
+    {
+      fields: selection,
+      enabled: !isCreate,
+    },
+  );
   const [mutate, mutation] = useResourceMutation(
     model,
     isCreate ? "create" : "update",
@@ -211,10 +225,44 @@ export function FormView({
   // field-descriptor identities can't re-seed and blank the just-saved values.
   const baselineValuesRef = React.useRef<Values>(emptyValues);
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [serverFieldErrors, setServerFieldErrors] = React.useState<
+    Record<string, readonly string[]>
+  >({});
+  const clearServerFieldError = React.useCallback((name: string) => {
+    setServerFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const { [name]: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+  // Fields the create input requires (non-null, no default) that this form
+  // renders editably — validated client-side so a missing one is flagged inline
+  // instead of failing as a GraphQL "required type was not provided" coercion error.
+  const requiredFieldNames = React.useMemo(() => {
+    const required = new Set(modelMetadata?.rootFields?.requiredCreateFields ?? []);
+    return formFields
+      .filter((field) => required.has(field.name) && !field.readOnly)
+      .map((field) => field.name);
+  }, [formFields, modelMetadata]);
   const form = useForm({
     defaultValues: baselineValuesRef.current,
     onSubmit: async ({ value }) => {
       setSaveError(null);
+      setServerFieldErrors({});
+      if (isCreate) {
+        const missing = requiredFieldNames.filter((name) =>
+          isEmptyFieldValue(value[name]),
+        );
+        if (missing.length > 0) {
+          setServerFieldErrors(
+            Object.fromEntries(
+              missing.map((name) => [name, ["This field is required."]]),
+            ),
+          );
+          setSaveError("Please fill in the required fields.");
+          return;
+        }
+      }
       const data = mutationData(value, formFields, {
         baseline: baselineValuesRef.current,
         id,
@@ -229,8 +277,16 @@ export function FormView({
           onSaved?.(saved);
         }
       } catch (error) {
+        // Distribute Django field validation under each field; keep the banner
+        // for form-level (non-field) messages, or a prompt to fix the fields.
+        const { fieldErrors, formErrors } = validationErrorsFromError(error);
+        setServerFieldErrors(fieldErrors);
         setSaveError(
-          error instanceof Error ? error.message : "Could not save record.",
+          formErrors.length > 0
+            ? formErrors.join(" ")
+            : Object.keys(fieldErrors).length > 0
+              ? "Please fix the highlighted fields."
+              : "Could not save record.",
         );
       }
     },
@@ -241,15 +297,46 @@ export function FormView({
     readOnly: formReadOnly,
   });
 
+  // Apply a record action's field patch through the form's own update mutation
+  // and re-seed from the result — the same path as a save, so the form shows the
+  // new values without a refetch. Reused by `set` actions and the action context.
+  const applyPatch = React.useCallback(
+    async (patch: Record<string, unknown>): Promise<Row | null> => {
+      if (id == null) {
+        throw new Error("No open record to update.");
+      }
+      const saved = await mutate({ data: { id, ...patch } });
+      if (saved) {
+        const savedValues = recordToValues(saved, formFields);
+        baselineValuesRef.current = savedValues;
+        form.reset(savedValues);
+        setSaveError(null);
+        setServerFieldErrors({});
+      }
+      return saved;
+    },
+    [form, formFields, id, mutate],
+  );
+
+  // A custom `run` action mutates server state we can't predict; re-pull the
+  // record (network-only, so a fresh object always lands) and let the seed
+  // effect re-seed off the new reference.
+  const reload = React.useCallback(() => {
+    refetch();
+  }, [refetch]);
+
   const seededIdRef = React.useRef<string | null>(null);
+  const seededRecordRef = React.useRef<Row | null>(null);
   React.useEffect(() => {
     setSaveError(null);
+    setServerFieldErrors({});
   }, [model, id]);
 
   React.useEffect(() => {
     if (isCreate) {
       if (seededIdRef.current !== null) {
         seededIdRef.current = null;
+        seededRecordRef.current = null;
         baselineValuesRef.current = emptyValues;
         form.reset(emptyValues);
         setSaveError(null);
@@ -257,8 +344,17 @@ export function FormView({
       return;
     }
     const recordId = typeof record?.id === "string" ? record.id : null;
-    if (record && recordId && seededIdRef.current !== recordId) {
+    // Re-seed on a new record id, or when the record *object reference* changes
+    // for the same id — a refetch landed with fresh server state (e.g. after a
+    // record action). Keying off the reference (not a manual flag) means a stale
+    // intervening render carrying the same record can't consume the re-seed.
+    if (
+      record &&
+      recordId &&
+      (seededIdRef.current !== recordId || seededRecordRef.current !== record)
+    ) {
       seededIdRef.current = recordId;
+      seededRecordRef.current = record;
       const recordValues = recordToValues(record, formFields);
       baselineValuesRef.current = recordValues;
       form.reset(recordValues);
@@ -320,48 +416,57 @@ export function FormView({
       >
         {(state) => {
           const showActions = isCreate || state.isDirty;
-          if (!toolbarStart && !toolbar && !showActions) return null;
           const isSaving = mutation.fetching || state.isSubmitting;
-          // Under a shell the band portals out of the <form>, so Save must
-          // submit via handleSubmit() rather than relying on native type="submit".
+          // The toolbar is the single home for record commands: host-provided
+          // left commands (delete) and Save/Discard, the record's domain actions,
+          // then record chrome (star/share) and host-provided right chrome
+          // (pager/view-switcher). Under a shell the band portals out of the
+          // <form>, so Save submits via handleSubmit(), not native type="submit".
           return (
             <ControlBand className={state.isDirty ? "bg-brand-soft" : undefined}>
-              {toolbarStart ? (
-                <div className="flex min-w-0 items-center gap-2">
-                  {toolbarStart}
-                </div>
-              ) : null}
-              {showActions ? (
-                <div className="flex items-center gap-2">
-                  {state.isDirty ? (
+              <div className="flex min-w-0 items-center gap-2">
+                {toolbarStart}
+                {showActions ? (
+                  <div className="flex items-center gap-2">
+                    {state.isDirty ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isSaving}
+                        onClick={() => form.reset()}
+                      >
+                        Discard
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="primary"
                       size="sm"
-                      disabled={isSaving}
-                      onClick={() => form.reset()}
+                      loading={isSaving}
+                      disabled={!state.canSubmit}
+                      onClick={() => {
+                        void form.handleSubmit();
+                      }}
                     >
-                      Discard
+                      {submitLabel ?? (isCreate ? "Create" : "Save")}
                     </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    loading={isSaving}
-                    disabled={!state.canSubmit}
-                    onClick={() => {
-                      void form.handleSubmit();
-                    }}
-                  >
-                    {submitLabel ?? (isCreate ? "Create" : "Save")}
-                  </Button>
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
+                {declaredActions.length > 0 ? (
+                  <RecordActionBar
+                    record={record ?? null}
+                    actions={declaredActions}
+                    applyPatch={applyPatch}
+                    reload={reload}
+                  />
+                ) : null}
+              </div>
               <div className="min-w-2 flex-1" />
-              {toolbar ? (
-                <div className="flex min-w-0 items-center gap-2">{toolbar}</div>
-              ) : null}
+              <div className="flex min-w-0 items-center gap-2">
+                {!isCreate ? <RecordChromeButtons /> : null}
+                {toolbar}
+              </div>
             </ControlBand>
           );
         }}
@@ -383,9 +488,10 @@ export function FormView({
                         placeholder={titleField.placeholder ?? "Untitled"}
                         aria-label={fieldAriaLabel(titleField)}
                         className={cn(TITLE_TEXT_CLASS, TITLE_INPUT_CLASS)}
-                        onChange={(event) =>
-                          api.handleChange(event.currentTarget.value)
-                        }
+                        onChange={(event) => {
+                          clearServerFieldError(titleField.name);
+                          api.handleChange(event.currentTarget.value);
+                        }}
                       />
                     )
                   )}
@@ -395,10 +501,17 @@ export function FormView({
                   Record
                 </h1>
               )}
+              {/* The title field renders in the header (no FieldRoot), so its
+                  server validation error is surfaced here rather than inline. */}
+              {titleField && serverFieldErrors[titleField.name] ? (
+                <p className="mt-1 text-xs leading-5 text-danger-text">
+                  {serverFieldErrors[titleField.name]?.join(", ")}
+                </p>
+              ) : null}
               <RecordSubtitle loading={loading} parts={subtitleParts} />
             </div>
-            <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[900px]:w-full">
-              {statusField ? (
+            {statusField ? (
+              <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[900px]:w-full">
                 <form.Field name={statusField.name}>
                   {(api) => (
                     <FieldWidget
@@ -409,33 +522,8 @@ export function FormView({
                     />
                   )}
                 </form.Field>
-              ) : null}
-              {/* Presentational pending record action wiring. */}
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="icon"
-                  size="iconMd"
-                  aria-label="Star"
-                  className="text-amber-500 hover:text-amber-500"
-                >
-                  <Glyph name="star" className="fill-current" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="icon"
-                  size="iconMd"
-                  aria-label="Share"
-                >
-                  <Glyph name="share" />
-                </Button>
               </div>
-              {headerActions ? (
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  {headerActions}
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </div>
 
         </header>
@@ -455,7 +543,11 @@ export function FormView({
                       relation={relationByField.get(field.name)}
                       value={api.state.value}
                       errors={api.state.meta.errors}
-                      onChange={(next) => api.handleChange(next)}
+                      serverMessages={serverFieldErrors[field.name]}
+                      onChange={(next) => {
+                        clearServerFieldError(field.name);
+                        api.handleChange(next);
+                      }}
                     />
                   )}
                 </form.Field>
@@ -475,7 +567,11 @@ export function FormView({
                   field={bodyField}
                   value={api.state.value}
                   errors={api.state.meta.errors}
-                  onChange={(next) => api.handleChange(next)}
+                  serverMessages={serverFieldErrors[bodyField.name]}
+                  onChange={(next) => {
+                    clearServerFieldError(bodyField.name);
+                    api.handleChange(next);
+                  }}
                 />
               )}
             </form.Field>
@@ -483,6 +579,26 @@ export function FormView({
         ) : null}
       </div>
     </form>
+  );
+}
+
+/** Presentational record chrome (star/share) rendered in the toolbar; wiring pending. */
+function RecordChromeButtons(): React.ReactElement {
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="icon"
+        size="iconMd"
+        aria-label="Star"
+        className="text-amber-500 hover:text-amber-500"
+      >
+        <Glyph name="star" className="fill-current" />
+      </Button>
+      <Button type="button" variant="icon" size="iconMd" aria-label="Share">
+        <Glyph name="share" />
+      </Button>
+    </div>
   );
 }
 
@@ -631,16 +747,18 @@ function BoundFieldRow({
   relation,
   value,
   errors,
+  serverMessages,
   onChange,
 }: {
   field: FieldDescriptor;
   relation?: RelationFieldInfo;
   value: unknown;
   errors: readonly unknown[];
+  serverMessages?: readonly string[];
   onChange: (value: unknown) => void;
 }): React.ReactElement {
   const readOnly = Boolean(field.readOnly);
-  const messages = fieldErrorMessages(errors);
+  const messages = [...fieldErrorMessages(errors), ...(serverMessages ?? [])];
   return (
     <FieldRoot
       invalid={messages.length > 0}
@@ -681,14 +799,16 @@ function BodyFieldControl({
   field,
   value,
   errors,
+  serverMessages,
   onChange,
 }: {
   field: FieldDescriptor;
   value: unknown;
   errors: readonly unknown[];
+  serverMessages?: readonly string[];
   onChange: (value: unknown) => void;
 }): React.ReactElement {
-  const messages = fieldErrorMessages(errors);
+  const messages = [...fieldErrorMessages(errors), ...(serverMessages ?? [])];
   return (
     <FieldRoot invalid={messages.length > 0} className="grid gap-2">
       <FieldWidget
@@ -710,10 +830,15 @@ function FieldFooter({
   errors: readonly string[];
 }): React.ReactElement | null {
   if (!description && errors.length === 0) return null;
+  // Render messages directly rather than base-ui's `Field.Error`: that only
+  // shows when the control's own validity is invalid, which custom widgets never
+  // set — FormView owns the messages (server validation + form state) here.
   return (
     <>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
-      {errors.length > 0 ? <FieldError>{errors.join(", ")}</FieldError> : null}
+      {errors.length > 0 ? (
+        <p className="text-xs leading-5 text-danger-text">{errors.join(", ")}</p>
+      ) : null}
     </>
   );
 }
@@ -892,6 +1017,14 @@ function emptyValue(field: FieldDescriptor): unknown {
   if (field.widget === "tagInput") return [];
   if (field.kind === "switch" || field.widget === "switch") return false;
   return "";
+}
+
+/** A value counts as unfilled for required validation: null, empty string, or empty list. */
+function isEmptyFieldValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
 }
 
 function isNullableScalarWidget(field: FieldDescriptor): boolean {

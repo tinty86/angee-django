@@ -52,27 +52,30 @@ describe("addon route chrome", () => {
 
   test("derives iam chrome with linked ancestors", async () => {
     await expect(chromeFor("/iam")).resolves.toEqual({
-      title: "Identity",
+      title: "IAM",
       icon: "auth",
       breadcrumbs: [
-        { label: "Identity", to: "/iam" },
+        { label: "IAM", to: "/iam" },
         { label: "Overview" },
       ],
     });
     await expect(chromeFor("/iam/users")).resolves.toEqual({
-      title: "Identity",
+      title: "IAM",
       icon: "auth",
       breadcrumbs: [
-        { label: "Identity", to: "/iam" },
+        { label: "IAM", to: "/iam" },
         { label: "Users" },
       ],
     });
-    await expect(chromeFor("/iam/connections")).resolves.toEqual({
-      title: "Identity",
+    // A federation page sits under the route-less "Federation" dropdown, which
+    // inherits its target from its first child (Providers).
+    await expect(chromeFor("/iam/providers")).resolves.toEqual({
+      title: "IAM",
       icon: "auth",
       breadcrumbs: [
-        { label: "Identity", to: "/iam" },
-        { label: "Connections" },
+        { label: "IAM", to: "/iam" },
+        { label: "Federation", to: "/iam/providers" },
+        { label: "Providers" },
       ],
     });
   });
