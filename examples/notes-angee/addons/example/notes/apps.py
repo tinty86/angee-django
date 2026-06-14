@@ -25,5 +25,14 @@ class NotesConfig(AppConfig):
             "resources/demo/050_knowledge.vault.yaml",
             "resources/demo/060_knowledge.page.yaml",
             "resources/demo/070_knowledge.markdown_page.yaml",
+            # Local template source: discover the repo's templates/ as integrate.Template
+            # rows via the `local` VCS backend, ordered so each FK resolves before its use.
+            "resources/demo/080_iam.credential.yaml",
+            # Adopt a pre-existing `local` vendor by slug rather than colliding on it.
+            {"path": "resources/demo/081_integrate.vendor.yaml", "adopt": "slug"},
+            "resources/demo/082_integrate.integration.yaml",
+            "resources/demo/083_integrate.vcsintegration.yaml",
+            "resources/demo/084_integrate.repository.yaml",
+            "resources/demo/085_integrate.source.yaml",
         ),
     }
