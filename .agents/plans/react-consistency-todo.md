@@ -67,16 +67,25 @@ now guards `ok` too. `runActionResult` exports only the function (the
 - [ ] One exported `INTENT_GLYPHS` next to `tones`; consume in Toast/alert/
       status-icon. Reconcile `info` glyph (`info` vs `help`).
 
-### T5 — Icon registry: kill raw lucide imports
-- [ ] Register missing names in `chrome/icon-registry.ts`: `filter`,
-      `sliders-horizontal`, `grid-2x2`, plus confirm `chevron-left/right`, `check`,
-      `minus`, `search`, `x`, sort/layout glyphs.
-- [ ] Give `Glyph` an optional `fallbackName` (default `help`); let `Glyph` accept
-      `string | ReactNode` (folds T8 icon-adapter).
-- [ ] Replace raw lucide with `<Glyph>` in: `toolbars/DataToolbar`; `ui/`
-      (`dialog`, `input`, `select`, `checkbox`, `pager`); `widgets/`
-      (`markdown`, `tagInput`); `views/` (`ListInternals`, `RowsListView`,
-      `GroupedList`, `DataPage` chevrons); `chrome/AppRail.RailGlyph`.
+### T5 — Icon registry: kill raw lucide imports (app surfaces ✅ done; rest deferred)
+- [x] Register missing generic names in `chrome/icon-registry.ts`: arrow-down,
+      arrow-up, arrow-up-down, filter, grid-2x2, layout-grid, sliders-horizontal.
+- [x] Give `Glyph` an optional `fallbackName` (used by `AppRail`, default `help`).
+      (The `string | ReactNode` union is the separate T8 icon-adapter — Phase 3.)
+- [x] Replace raw lucide with `<Glyph>` in the always-under-runtime surfaces:
+      `chrome/AppRail`, `toolbars/DataToolbar`, `views/ListInternals`,
+      `views/GroupedList`, `views/RowsListView`, `views/DataPage`,
+      `widgets/tagInput`.
+- [ ] DEFERRED — low-level `ui/` primitives (`dialog`, `input`, `select`,
+      `checkbox`, `pager`): `Glyph`→`useIcon`→`useAppRuntime` returns the EMPTY
+      runtime (renders null) when no provider is mounted, so routing a primitive's
+      intrinsic check/chevron/X through `Glyph` makes it vanish in any
+      provider-less embedding. Needs a design call (do `@angee/base` primitives
+      depend on the runtime, or does `Glyph` take a fallback icon component?).
+- [ ] DEFERRED — `widgets/markdown` editor toolbar: passes lucide *components*
+      into a command/toolbar config (not inline JSX), so it needs its toolbar
+      glyphs registered (bold, italic, code-xml, link, list-ordered, quote, eye)
+      and the config reshaped to glyph names — a larger, careful change.
 
 ## Phase 2 — State surfaces (T4)
 
