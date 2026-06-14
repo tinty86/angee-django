@@ -4,7 +4,7 @@ import { Column, DataPage, Field, Form, List } from "@angee/base";
 const MODEL = "integrate.Vendor";
 
 const vendorList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="slug" />
     <Column field="displayName" />
     <Column field="websiteUrl" />

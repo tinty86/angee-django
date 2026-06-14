@@ -20,7 +20,7 @@ import {
 const MODEL = "integrate.Source";
 
 const sourceList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="kind" />
     <Column field="ref" />
     <Column field="path" />

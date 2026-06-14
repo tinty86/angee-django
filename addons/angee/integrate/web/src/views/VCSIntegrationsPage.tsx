@@ -23,7 +23,7 @@ import {
 const MODEL = "integrate.VCSIntegration";
 
 const integrationList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="displayName" />
     <Column field="backendClass" />
     <Column field="status" widget="statusBadge" />

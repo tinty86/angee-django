@@ -22,7 +22,7 @@ import {
 const MODEL = "integrate.Integration";
 
 const integrationList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="displayName" />
     <Column field="status" widget="statusBadge" />
     <Column field="lastUsedAt" />

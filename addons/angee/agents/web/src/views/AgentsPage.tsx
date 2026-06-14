@@ -8,7 +8,7 @@ const MODEL = "agents.Agent";
 function agentDataPage(isTemplate: boolean): React.ReactElement {
   return (
     <DataPage model={MODEL} placement="inline" routed filter={{ isTemplate: { exact: isTemplate } }}>
-      <List model={MODEL} pageSize={50}>
+      <List model={MODEL}>
         <Column field="name" />
         <Column field="status" widget="statusBadge" />
         <Column field="updatedAt" />

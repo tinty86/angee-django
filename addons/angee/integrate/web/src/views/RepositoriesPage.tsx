@@ -6,7 +6,7 @@ import { AddRepositoryControl } from "./AddRepositoryControl";
 const MODEL = "integrate.Repository";
 
 const repositoryList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="org" />
     <Column field="name" />
     <Column field="visibility" widget="statusBadge" />

@@ -4,7 +4,7 @@ import { Action, Column, DataPage, Field, Form, Group, List } from "@angee/base"
 const MODEL = "ExternalAccount";
 
 const accountList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="providerLabel" />
     <Column field="externalId" />
     <Column field="email" />

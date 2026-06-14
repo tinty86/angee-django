@@ -4,7 +4,7 @@ import { Action, Column, DataPage, Field, Form, Group, List } from "@angee/base"
 const MODEL = "Credential";
 
 const credentialList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="displayName" />
     <Column field="kind" />
     <Column field="status" widget="statusBadge" />

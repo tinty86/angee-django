@@ -22,7 +22,7 @@ import {
 const MODEL = "integrate.WebhookSubscription";
 
 const webhookList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="targetUrl" />
     <Column field="enabled" />
     <Column field="lastDeliveryStatus" />

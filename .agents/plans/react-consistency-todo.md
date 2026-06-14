@@ -160,10 +160,15 @@ visual-parity spot-check across both themes still recommended before release.
 - [x] `ActionResultData`/`IdVariables` per addon → SDK `ActionOutcome`/
       `ByIdVariables`; integrate + agents `documents.ts` alias them (named
       `ActionOutcome` to avoid colliding with base's `ActionResult` = Action.run).
-- [ ] `titleLabel` (iam `identity-labels.ts`, used in Overview/SchemaPage) →
-      reuse base `titleCase` (mind the extra `/`,`:` separators). NOTE: `stateLabel`
-      already gone — T1 reworked operator `StateTag`.
-- [ ] `pageSize={50}` (×20, verified) → drop, or import `DEFAULT_PAGE_SIZE`.
+- [~] `titleLabel` → base `titleCase` — LEAVE SEPARATE (different intent, per DRY):
+      `titleLabel` splits on `/` and `:` and does NOT camelCase-split; `titleCase`
+      camelCase-splits and ignores `/`,`:`. Routing iam onto `titleCase` would change
+      rendered labels AND alter a shared base primitive. (`stateLabel` already gone —
+      T1 reworked operator `StateTag`.)
+- [x] `pageSize={50}` → dropped from 18 `<List>`/`<ListView>` sites (resolves to
+      `DEFAULT_PAGE_SIZE`=50 via the data-view default chain). The 4
+      `<RowsListView pageSize={50}>` sites left explicit (different component) —
+      harmless (equal to default); a later sweep could drop them too.
 - [ ] ⌘K handler + `isTextEntryTarget` (×2) → one `useCommandShortcut` (folds T9
       palette work).
 - [ ] confirm/prompt promise-queue → one `useQueuedDialog<TOptions,TResult>` in

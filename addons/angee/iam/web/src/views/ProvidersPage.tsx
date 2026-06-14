@@ -20,7 +20,7 @@ import {
 const MODEL = "OAuthClient";
 
 const providerList = (
-  <List model={MODEL} pageSize={50}>
+  <List model={MODEL}>
     <Column field="slug" />
     <Column field="displayName" />
     <Column field="environment" />

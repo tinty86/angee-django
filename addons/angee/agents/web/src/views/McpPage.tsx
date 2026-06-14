@@ -7,7 +7,7 @@ const TOOL_MODEL = "agents.MCPTool";
 export function McpServersPage(): React.ReactElement {
   return (
     <DataPage model={SERVER_MODEL} placement="inline" routed>
-      <List model={SERVER_MODEL} pageSize={50}>
+      <List model={SERVER_MODEL}>
         <Column field="name" />
         <Column field="placement" />
         <Column field="transport" />
@@ -31,7 +31,7 @@ export function McpServersPage(): React.ReactElement {
 export function McpToolsPage(): React.ReactElement {
   return (
     <DataPage model={TOOL_MODEL} placement="inline" routed>
-      <List model={TOOL_MODEL} pageSize={50}>
+      <List model={TOOL_MODEL}>
         <Column field="name" />
         <Column field="enabled" />
         <Column field="updatedAt" />

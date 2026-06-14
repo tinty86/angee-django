@@ -28,7 +28,7 @@ export function InferenceProvidersPage(): React.ReactElement {
 
   return (
     <DataPage model={PROVIDER_MODEL} placement="inline" routed>
-      <List model={PROVIDER_MODEL} pageSize={50}>
+      <List model={PROVIDER_MODEL}>
         <Column field="name" />
         <Column field="backendClass" />
         <Column field="status" widget="statusBadge" />
@@ -51,7 +51,7 @@ export function InferenceProvidersPage(): React.ReactElement {
 export function InferenceModelsPage(): React.ReactElement {
   return (
     <DataPage model={MODEL_MODEL} placement="inline" routed>
-      <List model={MODEL_MODEL} pageSize={50}>
+      <List model={MODEL_MODEL}>
         <Column field="name" />
         <Column field="displayName" />
         <Column field="modelUse" />

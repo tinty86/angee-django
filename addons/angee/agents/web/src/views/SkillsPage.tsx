@@ -9,7 +9,7 @@ const MODEL = "agents.Skill";
 export function SkillsPage(): React.ReactElement {
   return (
     <DataPage model={MODEL} placement="inline" hideCreate>
-      <List model={MODEL} pageSize={50}>
+      <List model={MODEL}>
         <Column field="name" />
         <Column field="description" />
         <Column field="path" />

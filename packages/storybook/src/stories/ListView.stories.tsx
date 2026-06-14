@@ -111,7 +111,6 @@ function ListFixture() {
               columns={columns}
               createLabel="New note"
               onCreate={() => undefined}
-              pageSize={50}
             />
           </div>
         </AppRuntimeProvider>
