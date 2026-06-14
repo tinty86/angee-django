@@ -78,6 +78,14 @@ export const CONNECT_ACCOUNT_COMPLETE_MUTATION = `
   }
 `;
 
+export const REVEAL_CREDENTIAL_MUTATION = `
+  mutation IamRevealCredential($id: ID!) {
+    revealCredential(id: $id) {
+      secret
+    }
+  }
+`;
+
 export const IAM_ROLES_QUERY = `
   query IamRoles {
     roles {
@@ -298,6 +306,15 @@ export type ConnectAccountCompleteVariables = Record<string, unknown> & {
   code: string;
   state: string;
   redirectUri: string;
+};
+
+/** Selection result for `IamRevealCredential`. */
+export interface RevealCredentialData {
+  revealCredential: { secret: string };
+}
+
+export type RevealCredentialVariables = Record<string, unknown> & {
+  id: string;
 };
 
 export interface IAMPaginationVariables extends Record<string, unknown> {

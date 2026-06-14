@@ -1549,8 +1549,37 @@ def _credential_material(data: CredentialInput) -> dict[str, str]:
 
 
 @strawberry.type
+class RevealedCredentialSecret:
+    """One credential's decrypted secret, returned only on explicit admin request.
+
+    The secret is never part of :class:`CredentialType` (the normal read projection);
+    it is disclosed solely by the audited ``reveal_credential`` mutation.
+    """
+
+    secret: str = ""
+
+
+@strawberry.type
 class IAMCredentialMutation:
     """Admin CRUD for credentials; create mints provider-less kinds (OAuth arrives via login)."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def reveal_credential(self, id: relay.GlobalID) -> RevealedCredentialSecret:
+        """Return one credential's decrypted secret for an admin to copy.
+
+        Admin-gated. The disclosure is recorded under a ``system_context`` reason that
+        names the target credential; the acting admin is captured by the request actor
+        layer. The owning :class:`Credential` decrypts its own material via
+        ``secret_value()`` — this never decodes the stored shape from outside.
+        """
+
+        with system_context(reason=f"iam.graphql.credential.reveal:{id.node_id}"):
+            credential = instance_from_public_id(
+                Credential, id.node_id, queryset=Credential._default_manager.all()
+            )
+            if credential is None:
+                raise ValueError(f"Credential {id!s} was not found")
+            return RevealedCredentialSecret(secret=str(credential.secret_value() or ""))
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def create_credential(self, info: strawberry.Info, data: CredentialInput) -> CredentialType:
