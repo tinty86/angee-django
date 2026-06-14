@@ -94,6 +94,15 @@ visual-parity spot-check across both themes still recommended before release.
       `BoardView.laneDotTone`) — a one-owner `columnTone(value, map)` helper could
       converge them, but the widget can't import `views/page` (dep direction), so a
       cross-layer move is its own slice.
+      DONE (Phase 7): added `columnTone(column, value): Tone | undefined` beside
+      `ColumnDescriptor` (`views/page/Column.tsx`) — the descriptor answers about
+      its own value→tone vocabulary (nullish value → empty label, else
+      `?? "neutral"`, `undefined` when no tone map). Both readers are in `views/*`
+      (not `widgets/*`), so the dep direction is fine; `cellContent` and
+      `laneDotTone` route through it (laneDotTone's redundant `!column?.tone` guard
+      collapses into the helper's `undefined` return). +4 unit tests. The
+      `list-view-utils` `Object.keys(column.tone)` filter-option enumeration stays
+      separate (different intent — listing keys, not a value lookup).
 
 ### T3 — Intent→glyph duplication ✅ done (commit)
 - [x] One exported `INTENT_GLYPHS` + `FeedbackIntent` in `lib/tones.ts`; consumed

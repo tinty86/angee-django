@@ -50,6 +50,7 @@ import {
 import { useResolvedWidget } from "../widgets";
 import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
+import { columnTone } from "./page";
 import type {
   ColumnAggregate,
   ColumnDescriptor,
@@ -905,9 +906,9 @@ export function cellContent<TRow extends Row>(
 ): React.ReactNode {
   if (column.render) return column.render(row);
   const value = readPath(row, column.field);
-  if (column.tone) {
+  const tone = columnTone(column, value);
+  if (tone) {
     const label = value == null ? "" : String(value);
-    const tone = column.tone[label] ?? "neutral";
     return <Badge tone={tone}>{label ? statusLabel(label) : "-"}</Badge>;
   }
   if (Array.isArray(value)) {

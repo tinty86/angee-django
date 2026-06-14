@@ -19,6 +19,7 @@ import {
 export { Action, type ActionConfirm } from "./Action";
 export {
   Column,
+  columnTone,
   type ColumnAggregate,
   type PageColumnAlign,
 } from "./Column";

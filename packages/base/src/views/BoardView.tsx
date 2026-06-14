@@ -16,6 +16,7 @@ import {
   readPath,
   type RowGroup,
 } from "./ListInternals";
+import { columnTone } from "./page";
 import type { ColumnDescriptor } from "./page";
 
 const BOARD_SCROLL_STYLE: React.CSSProperties = {
@@ -234,11 +235,10 @@ function laneDotTone<TRow extends Row>(
   const column = groupField
     ? columns.find((candidate) => candidate.field === groupField)
     : undefined;
-  if (!groupField || !column?.tone) return undefined;
+  if (!groupField || !column) return undefined;
   const row = group.rows[0]?.original;
   const value = row ? readPath(row, groupField) : undefined;
-  const label = value == null ? "" : String(value);
-  return column.tone[label] ?? "neutral";
+  return columnTone(column, value);
 }
 
 function flattenLeaves<TRow extends Row>(group: RowGroup<TRow>): RowGroup<TRow>[] {

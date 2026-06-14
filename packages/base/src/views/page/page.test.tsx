@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   Action,
   Column,
+  columnTone,
   Field,
   fieldWidgetId,
   Group,
@@ -12,11 +13,34 @@ import {
   parsePageFields,
   parsePageGroups,
 } from "./index";
+import type { ColumnDescriptor } from "./Column";
 
 interface TestRow {
   title: string;
   updatedAt: string;
 }
+
+describe("columnTone", () => {
+  const toned: ColumnDescriptor = {
+    field: "status",
+    tone: { active: "success", blocked: "danger" },
+  };
+
+  test("resolves a value against the column's tone map", () => {
+    expect(columnTone(toned, "active")).toBe("success");
+    expect(columnTone(toned, "blocked")).toBe("danger");
+  });
+
+  test("falls back to neutral for an unmapped or nullish value", () => {
+    expect(columnTone(toned, "unknown")).toBe("neutral");
+    expect(columnTone(toned, null)).toBe("neutral");
+    expect(columnTone(toned, undefined)).toBe("neutral");
+  });
+
+  test("returns undefined when the column declares no tone map", () => {
+    expect(columnTone({ field: "title" }, "anything")).toBeUndefined();
+  });
+});
 
 describe("page element markers", () => {
   test("render null because parent views own rendering", () => {
