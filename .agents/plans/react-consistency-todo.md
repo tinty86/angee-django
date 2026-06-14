@@ -150,9 +150,12 @@ visual-parity spot-check across both themes still recommended before release.
       themePicker (local list + "System" fallback), booleanBadge (boolean match).
 - [ ] `matchesClientLookup`/`isLookupOperator` → export operator guards from
       `data-view-model`; `Filter` owns text-filter target/predicate.
-- [ ] `AppChooser.itemMatchesPath` / `TopMenu` active logic → add
-      `isActive(pathname)`/`hasActiveDescendant(pathname)` to `ChromeMenuNode`/
-      `MenuTree`.
+- [x] `AppChooser.itemMatchesPath` / `TopMenu` active logic → DONE: extracted
+      `pathMatchesTarget(pathname, target)` (the one path-match predicate, was
+      duplicated in `ChromeMenuNode.matchesPath` + `AppChooser.itemMatchesPath`)
+      and added `isActive(pathname)`/`hasActiveDescendant(pathname)` to
+      `ChromeMenuNode` (the owner); routed `TopMenu` (dropped `menuItemIsActive`)
+      and `AppChooser` through them. Behavior-preserving; +2 menu-tree tests.
 - [ ] SDK `model-metadata` display heuristics (`enumValueLabel` casing,
       `recordRepresentationFor` order) → keep SDK structural; humanization moves to
       the rendered binding.
