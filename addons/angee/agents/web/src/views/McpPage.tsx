@@ -37,7 +37,7 @@ export function McpToolsPage(): React.ReactElement {
         <Column field="updatedAt" />
       </List>
       <Form model={TOOL_MODEL}>
-        <Field name="server" />
+        <Field name="server" createOnly />
         <Field name="name" title />
         <Field name="description" />
         <Field name="inputSchema" widget="json" />

@@ -1,10 +1,11 @@
 import * as React from "react";
-import { Column, DataPage, List } from "@angee/base";
+import { Column, DataPage, Field, Form, List } from "@angee/base";
 
 const MODEL = "agents.Skill";
 
-// Skills are discovered from a source, not authored here: a read-only list, no
-// create and no editable detail.
+// Skills are discovered from a source, not authored here: a read-only list with no
+// create. The Form is read-only (the model has no create/update mutation) but must be
+// present — `DataPage` resolves its form fields eagerly on mount.
 export function SkillsPage(): React.ReactElement {
   return (
     <DataPage model={MODEL} placement="inline" hideCreate>
@@ -14,6 +15,13 @@ export function SkillsPage(): React.ReactElement {
         <Column field="path" />
         <Column field="updatedAt" />
       </List>
+      <Form model={MODEL}>
+        <Field name="name" title readOnly />
+        <Field name="description" readOnly />
+        <Field name="source" readOnly />
+        <Field name="path" readOnly />
+        <Field name="metadata" widget="json" readOnly />
+      </Form>
     </DataPage>
   );
 }

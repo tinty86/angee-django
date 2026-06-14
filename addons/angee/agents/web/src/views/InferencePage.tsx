@@ -21,7 +21,11 @@ export function InferenceProvidersPage(): React.ReactElement {
       if (typeof ctx.record?.id !== "string") return;
       const result = await refreshProviderModels({ id: ctx.record.id });
       ctx.refresh();
-      return result?.refreshProviderModels.message;
+      const outcome = result?.refreshProviderModels;
+      // A business failure returns ok:false (not a thrown error); surface it as an
+      // error toast rather than a green success.
+      if (outcome && !outcome.ok) throw new Error(outcome.message);
+      return outcome?.message;
     },
     [refreshProviderModels],
   );
@@ -35,7 +39,7 @@ export function InferenceProvidersPage(): React.ReactElement {
       </List>
       <Form model={PROVIDER_MODEL}>
         <Field name="name" title />
-        <Field name="integration" />
+        <Field name="integration" createOnly />
         <Group label="Backend" columns={2}>
           <Field name="backendClass" />
           <Field name="baseUrl" />
@@ -61,7 +65,7 @@ export function InferenceModelsPage(): React.ReactElement {
         <Field name="name" title />
         <Field name="displayName" />
         <Group label="Catalogue" columns={2}>
-          <Field name="provider" />
+          <Field name="provider" createOnly />
           <Field name="publisher" />
           <Field name="modelUse" />
           <Field name="status" widget="statusbar" />
