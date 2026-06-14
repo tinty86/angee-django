@@ -13,8 +13,9 @@ const credentialList = (
   </List>
 );
 
-// Credentials are minted by the OAuth login flow (or static-token API); the
-// console manages their lifecycle (status / revoke), so Create is hidden.
+// Create uses the addon-registered `Credential` form override (a kind dropdown
+// that swaps the material field); this declared form is the lifecycle editor
+// (status / revoke / health) the detail shows on edit.
 const credentialForm = (
   <Form model={MODEL}>
     <Field name="displayName" title readOnly />
@@ -42,10 +43,10 @@ const credentialForm = (
   </Form>
 );
 
-/** Per-user credential health (list / status / revoke; minted via login). */
+/** Per-user credential health (list / status / revoke); create via the form override. */
 export function CredentialsPage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed hideCreate>
+    <DataPage model={MODEL} placement="inline" routed>
       {credentialList}
       {credentialForm}
     </DataPage>

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type {
   ChatterContribution,
   ComposedMenuItem,
+  FormOverrideMap,
   SlotContribution,
   WidgetMap,
 } from "./define-addon";
@@ -20,6 +21,7 @@ export interface AppRuntime {
   menus: readonly ComposedMenuItem[];
   i18n: I18nResources;
   icons: Readonly<Record<string, unknown>>;
+  forms: FormOverrideMap;
   chatter: readonly ChatterContribution[];
   slots: readonly SlotContribution[];
 }
@@ -29,6 +31,7 @@ const EMPTY_RUNTIME: AppRuntime = {
   menus: [],
   i18n: {},
   icons: {},
+  forms: {},
   chatter: [],
   slots: [],
 };
@@ -56,6 +59,12 @@ export function useAppRuntime(): AppRuntime {
 /** Look up a contributed widget by id. */
 export function useWidget(id: string): unknown {
   return useAppRuntime().widgets[id];
+}
+
+/** Look up an addon-registered create-form override for a model (or undefined). */
+export function useFormOverride(model: string): unknown {
+  // `?.` guards a `Partial<AppRuntime>` provider that spread `forms: undefined`.
+  return useAppRuntime().forms?.[model];
 }
 
 /** The merged menu list. */

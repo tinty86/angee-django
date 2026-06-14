@@ -1,0 +1,105 @@
+import * as React from "react";
+import {
+  Action,
+  Column,
+  DataPage,
+  Field,
+  Form,
+  List,
+  type ActionContext,
+  type WidgetOption,
+} from "@angee/base";
+import { useAuthoredMutation, useModelMetadata } from "@angee/sdk";
+
+import {
+  DISCOVER_REPOSITORIES_MUTATION,
+  SYNC_VCS_INTEGRATION_MUTATION,
+  type DiscoverRepositoriesData,
+  type DiscoverRepositoriesVariables,
+  type IdVariables,
+  type SyncVcsIntegrationData,
+} from "../documents";
+
+const MODEL = "integrate.VCSIntegration";
+
+const integrationList = (
+  <List model={MODEL} pageSize={50}>
+    <Column field="displayName" />
+    <Column field="backendClass" />
+    <Column field="status" widget="statusBadge" />
+    <Column field="lastSyncCompletedAt" />
+  </List>
+);
+
+/**
+ * VCS integrations: the git-host capabilities, their backend impl, and sync
+ * health. The form binds an existing `Integration` (vendor=github) to a backend
+ * class, then `discover`/`sync` populate and refresh the repository inventory.
+ */
+export function VCSIntegrationsPage(): React.ReactElement {
+  const [syncVcs] = useAuthoredMutation<SyncVcsIntegrationData, IdVariables>(
+    SYNC_VCS_INTEGRATION_MUTATION,
+  );
+  const [discover] = useAuthoredMutation<
+    DiscoverRepositoriesData,
+    DiscoverRepositoriesVariables
+  >(DISCOVER_REPOSITORIES_MUTATION);
+
+  // `backendClass` is an SDL enum, but its create input is a plain String keyed by
+  // the lowercase registry key (`github`/`none`) while a read serializes the
+  // UPPERCASE enum member name (`GITHUB`) — the same asymmetry as `status`. The
+  // member name is exactly `key.upper()`, so lower-casing the metadata option
+  // value yields the write key. `createOnly` keeps it off the edit patch, so the
+  // read-side casing never has to round-trip back through the select.
+  const metadata = useModelMetadata(MODEL);
+  const backendClassOptions = React.useMemo<readonly WidgetOption[]>(
+    () =>
+      (metadata?.fields.backendClass?.values ?? []).map((value) => ({
+        value: value.value.toLowerCase(),
+        label: value.label,
+      })),
+    [metadata],
+  );
+
+  const sync = React.useCallback(
+    async (ctx: ActionContext) => {
+      if (typeof ctx.record?.id !== "string") return;
+      const result = await syncVcs({ id: ctx.record.id });
+      ctx.refresh();
+      return result?.syncVcsIntegration.message;
+    },
+    [syncVcs],
+  );
+  const discoverAll = React.useCallback(
+    async (ctx: ActionContext) => {
+      if (typeof ctx.record?.id !== "string") return;
+      const result = await discover({ vcsIntegrationId: ctx.record.id, org: "" });
+      ctx.refresh();
+      return result?.discoverRepositories.message;
+    },
+    [discover],
+  );
+
+  return (
+    <DataPage model={MODEL} placement="inline" routed>
+      {integrationList}
+      <Form model={MODEL}>
+        {/* The integration and its backend class are fixed at create; the patch
+            input carries neither, so both are create-only. */}
+        <Field name="integration" createOnly />
+        <Field
+          name="backendClass"
+          widget="select"
+          options={backendClassOptions}
+          createOnly
+        />
+        <Field name="status" widget="statusbar" />
+        <Field name="config" widget="json" />
+        {/* Write-only signing secret — set on create, never read back. */}
+        <Field name="webhookSecret" widget="text" kind="string" createOnly />
+        <Action id="sync" label="Sync now" icon="refresh" run={sync} />
+        <Action id="discover" label="Discover repositories" run={discoverAll} />
+      </Form>
+    </DataPage>
+  );
+}

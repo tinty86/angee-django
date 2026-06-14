@@ -141,6 +141,7 @@ function fieldDescriptor(props: FieldProps): FieldDescriptor {
     ...(props.readOnly !== undefined ? { readOnly: props.readOnly } : {}),
     ...(props.createOnly !== undefined ? { createOnly: props.createOnly } : {}),
     ...(props.editOnly !== undefined ? { editOnly: props.editOnly } : {}),
+    ...(props.showWhen !== undefined ? { showWhen: props.showWhen } : {}),
     ...(props.title !== undefined ? { title: props.title } : {}),
     ...(props.body !== undefined ? { body: props.body } : {}),
     ...(props.kind !== undefined ? { kind: props.kind } : {}),

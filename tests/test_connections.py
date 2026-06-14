@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.test.utils import override_settings
 from django.utils import timezone
 from rebac import system_context, to_object_ref, to_subject_ref
@@ -96,7 +96,7 @@ def test_connection_managers_are_idempotent_and_delegate_static_token_material()
             assert isinstance(second_credential.handler, StaticTokenCredentialHandler)
             assert second_credential.auth_headers() == {"Authorization": "Bearer second-key"}
 
-            with pytest.raises(ValueError, match="owned by upsert_for_user: kind"):
+            with pytest.raises(ValueError, match="owned by the manager: kind"):
                 Credential.objects.upsert_for_user(
                     user,
                     oauth_client,
@@ -104,7 +104,7 @@ def test_connection_managers_are_idempotent_and_delegate_static_token_material()
                     {"api_key": "third-key"},
                     **{"kind": CredentialKind.OAUTH},
                 )
-            with pytest.raises(ValueError, match="owned by upsert_for_user: material"):
+            with pytest.raises(ValueError, match="owned by the manager: material"):
                 Credential.objects.upsert_for_user(
                     user,
                     oauth_client,
@@ -155,6 +155,77 @@ def test_connection_managers_authorize_their_own_writes() -> None:
         assert _owner_tuple_exists(user, account)
         assert not _owner_tuple_exists(user, credential)
         assert Credential.objects.with_actor(user).filter(pk=credential.pk).exists()
+    finally:
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_create_local_credential_needs_no_provider_and_keys_by_name() -> None:
+    """A static-token credential is minted with no provider, identified by ``name``."""
+
+    created_models = _create_missing_tables()
+    try:
+        user = get_user_model().objects.create_user(username="local-alice", email="a@example.com")
+        call_command("rebac", "sync", verbosity=0)
+
+        # `create_local_credential` self-authorizes its own write (no ambient context).
+        credential = Credential.objects.create_local_credential(
+            user,
+            kind=CredentialKind.STATIC_TOKEN,
+            name="github-pat",
+            material={"api_key": "ghp_one"},
+        )
+        assert credential.oauth_client_id is None
+        assert credential.name == "github-pat"
+        assert isinstance(credential.handler, StaticTokenCredentialHandler)
+        assert credential.auth_headers() == {"Authorization": "Bearer ghp_one"}
+
+        # Idempotent by (user, name): a second mint updates the row in place.
+        again = Credential.objects.create_local_credential(
+            user,
+            kind=CredentialKind.STATIC_TOKEN,
+            name="github-pat",
+            material={"api_key": "ghp_two"},
+        )
+        assert again.pk == credential.pk
+        assert again.auth_headers() == {"Authorization": "Bearer ghp_two"}
+        with system_context(reason="test local credential read"):
+            assert Credential.objects.filter(user=user).count() == 1
+
+        # OAuth credentials are minted by the login flow, not here.
+        with pytest.raises(ValueError, match="login flow"):
+            Credential.objects.create_local_credential(
+                user,
+                kind=CredentialKind.OAUTH,
+                name="oauth-x",
+                material={"access_token": "tok"},
+            )
+    finally:
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_oauth_credential_requires_a_provider_at_the_database() -> None:
+    """The check constraint rejects an ``oauth`` credential with no provider."""
+
+    created_models = _create_missing_tables()
+    try:
+        user = get_user_model().objects.create_user(username="inv-alice", email="i@example.com")
+        with system_context(reason="test invariant"), pytest.raises(IntegrityError):
+            with transaction.atomic():
+                Credential.objects.create(
+                    user=user,
+                    oauth_client=None,
+                    kind=CredentialKind.OAUTH,
+                    material="{}",
+                    name="",
+                )
     finally:
         if created_models:
             with connection.schema_editor() as schema_editor:

@@ -148,6 +148,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
     // Seed the base namespace under the merged addon bundles; an addon key wins.
     i18n: mergeI18n(enBaseBundle, composed.i18n),
     icons: composed.icons,
+    forms: composed.forms,
     chatter: composed.chatter,
     slots: mergeSlotContributions(composed.slots, input.slots ?? []),
   };

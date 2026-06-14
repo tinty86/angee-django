@@ -24,7 +24,7 @@ from angee.iam.models import OAuthClient as AbstractOAuthClient
 from angee.integrate.models import Integration as AbstractIntegration
 from angee.integrate.models import Vendor as AbstractVendor
 from angee.integrate.models import WebhookSubscription as AbstractWebhookSubscription
-from angee.integrate.vcs.client import RepoDescriptor, TreeEntry, VCSClient
+from angee.integrate.vcs.backend import RepoDescriptor, TreeEntry, VCSBackend
 from angee.knowledge.models import Link as AbstractLink
 from angee.knowledge.models import MarkdownPage as AbstractMarkdownPage
 from angee.knowledge.models import Page as AbstractPage
@@ -191,11 +191,11 @@ def make_integration(slug: str) -> Any:
         return Integration.objects.create(vendor=vendor, credential=credential, owner=user)
 
 
-class StubVCSClient(VCSClient):
-    """In-memory VCS client for tests; canned data rides on ``integration.config``.
+class StubVCSBackend(VCSBackend):
+    """In-memory VCS backend for tests; canned data rides on ``integration.config``.
 
-    Registered as the ``stub`` key in the test ``ANGEE_VCS_CLIENT_CLASSES`` so a
-    ``VCSIntegration(client_class="stub")`` resolves to it. Each test injects
+    Registered as the ``stub`` key in the test ``ANGEE_VCS_BACKEND_CLASSES`` so a
+    ``VCSIntegration(backend_class="stub")`` resolves to it. Each test injects
     ``stub_repos``/``stub_tree``/``stub_blobs`` through the integration config.
     """
 

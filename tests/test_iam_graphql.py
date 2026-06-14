@@ -724,37 +724,38 @@ def test_credential_crud_create_delete_are_admin_only(
     plain = User.objects.create_user(username="cred-crud-plain", email="plain@example.com")
     admin = _platform_admin("cred-crud-admin")
     owner = User.objects.create_user(username="cred-crud-owner", email="owner@example.com")
-    oauth_client = _oauth_client("cred-crud")
     console_schema = _schema("console")
     create_credential = """
-        mutation CreateCredential($user: ID!, $oauthClient: ID!) {
+        mutation CreateCredential($user: ID!) {
           createCredential(data: {
             user: $user,
-            oauthClient: $oauthClient,
+            name: "ci-token",
+            kind: "static_token",
             apiKey: "static-token-value"
           }) {
             kind
+            name
             status
             displayName
           }
         }
     """
-    variables = {
-        "user": _user_global_id(owner),
-        "oauthClient": relay.to_base64("OAuthClientType", oauth_client.sqid),
-    }
+    variables = {"user": _user_global_id(owner)}
 
     assert _execute(console_schema, create_credential, variables, user=plain).errors is not None
 
     created = _data(
         _execute(console_schema, create_credential, variables, user=admin)
     )["createCredential"]
-    assert created["displayName"] == "cred-crud"
+    assert created["name"] == "ci-token"
+    # A provider-less static token reads its own name as the label.
+    assert created["displayName"] == "ci-token"
     # ``api_key`` is write-only: it never surfaces on ``CredentialType``.
     assert "apiKey" not in _sdl_block(console_schema.as_str(), "type CredentialType")
     with system_context(reason="test.iam.credential_crud.create"):
-        credential = Credential.objects.get(user=owner, oauth_client=oauth_client)
+        credential = Credential.objects.get(user=owner, name="ci-token")
         assert credential.kind == CredentialKind.STATIC_TOKEN
+        assert credential.oauth_client_id is None
     credential_id = relay.to_base64("CredentialType", credential.sqid)
 
     delete_credential = """

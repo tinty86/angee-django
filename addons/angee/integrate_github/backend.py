@@ -1,4 +1,4 @@
-"""GitHub REST implementation of the host-agnostic :class:`VCSClient`.
+"""GitHub REST implementation of the host-agnostic :class:`VCSBackend`.
 
 Reads a GitHub remote over the REST API to populate the ``integrate`` inventory —
 listing repositories (by org), walking trees, reading blobs, resolving refs — and
@@ -23,7 +23,7 @@ from urllib.parse import quote, urlunsplit
 from django.core.exceptions import ValidationError
 
 from angee.integrate.net import is_unsafe_address, parse_http_url, resolved_addresses
-from angee.integrate.vcs.client import RepoDescriptor, TreeEntry, VCSClient
+from angee.integrate.vcs.backend import RepoDescriptor, TreeEntry, VCSBackend
 
 HTTP_TIMEOUT_SECONDS = 15
 DEFAULT_API_BASE = "https://api.github.com"
@@ -45,8 +45,8 @@ class GitHubApiError(Exception):
         self.status = status
 
 
-class GitHubClient(VCSClient):
-    """A :class:`VCSClient` that reads a GitHub remote over the REST API."""
+class GitHubBackend(VCSBackend):
+    """A :class:`VCSBackend` that reads a GitHub remote over the REST API."""
 
     @property
     def api_base(self) -> str:

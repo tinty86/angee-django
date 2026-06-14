@@ -27,6 +27,7 @@
     "@angee/sdk": "workspace:*",
     "@base-ui/react": "^1.5.0",
     "@codemirror/commands": "^6.0.0",
+    "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.0.0",
     "@codemirror/state": "^6.0.0",
     "@codemirror/view": "^6.0.0",
@@ -44,6 +45,7 @@
     "lucide-react": "^1.17.0",
     "nuqs": "^2.5.0",
     "react-day-picker": "^10.0.1",
+    "react-json-view-lite": "^2.5.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.11.1",
     "remark-gfm": "^4.0.1",
@@ -54,8 +56,8 @@
     "valibot": "^1.4.0"
   },
   "peerDependencies": {
-    "@testing-library/react": "^16.1.0",
     "@tanstack/react-router": "^1",
+    "@testing-library/react": "^16.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

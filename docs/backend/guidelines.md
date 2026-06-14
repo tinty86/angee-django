@@ -240,6 +240,15 @@ data through REBAC, never a queryset bypass.
 
 Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 
+- **`crud()` create `full_clean`s the input, so model + input defaults must agree.**
+  `strawberry-django`'s create builds a dummy instance from the input and calls
+  `full_clean()` before saving — two traps follow. (1) A `JSONField(default=dict)`
+  (or `default=list`) needs `blank=True`: Django counts `{}`/`[]` as blank, so a
+  `blank=False` container default fails `full_clean` ("cannot be blank") on every
+  create. (2) An optional create-input field over a **non-null** column must
+  default to `strawberry.UNSET`, never `None` — `None` is submitted as an explicit
+  null that overwrites the model default (e.g. `status`/`config`), and
+  `full_clean` then rejects the null. Mirror this for any new `crud()` input.
 - **`uv run` tool shebangs are stale** — run Python tools by module:
   `uv run python -m pytest`, `uv run python -m mypy angee addons`,
   `uv run python -m ruff check .`. Bare `uv run pytest`/`mypy` fail to spawn.

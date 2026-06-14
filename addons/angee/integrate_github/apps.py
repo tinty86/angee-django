@@ -1,4 +1,4 @@
-"""Django config for Angee's GitHub VCS-client addon."""
+"""Django config for Angee's GitHub VCS-backend addon."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ from django.apps import AppConfig
 
 
 class IntegrateGithubConfig(AppConfig):
-    """Source app manifest for the GitHub VCS client.
+    """Source app manifest for the GitHub VCS backend.
 
     Carries no models, schema, or permissions of its own: it contributes the
-    :class:`~angee.integrate_github.client.GitHubClient` into
-    ``ANGEE_VCS_CLIENT_CLASSES`` (via ``autoconfig``), named per
+    :class:`~angee.integrate_github.backend.GitHubBackend` into
+    ``ANGEE_VCS_BACKEND_CLASSES`` (via ``autoconfig``), named per
     ``VCSIntegration`` row.
     """
 

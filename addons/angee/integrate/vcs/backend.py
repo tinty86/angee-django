@@ -1,9 +1,9 @@
-"""The host-agnostic git-client contract.
+"""The host-agnostic git-backend contract.
 
-A :class:`VCSClient` is bound to one ``Integration`` and reads its remote over the
+A :class:`VCSBackend` is bound to one ``Integration`` and reads its remote over the
 host's REST API — listing repositories, walking trees, reading blobs, resolving
 refs, and verifying inbound webhooks. It never clones: git transport belongs to
-the operator. Concrete hosts (``integrate_github.GitHubClient``) implement the
+the operator. Concrete hosts (``integrate_github.GitHubBackend``) implement the
 primitives; ``VCSIntegration`` owns the shared enumeration walk over them. This
 module imports no models, so it breaks no import cycle.
 """
@@ -35,7 +35,7 @@ class TreeEntry:
 class RepoDescriptor:
     """A repository as reported by a host's repo listing.
 
-    The shape :meth:`VCSClient.ls_repos` returns and ``Repository`` reconcile
+    The shape :meth:`VCSBackend.ls_repos` returns and ``Repository`` reconcile
     upserts into rows.
     """
 
@@ -54,63 +54,63 @@ class RepoDescriptor:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-class VCSClient:
-    """Abstract REST client for a git host, bound to one ``Integration``.
+class VCSBackend:
+    """Abstract REST backend for a git host, bound to one ``Integration``.
 
     Concrete hosts implement the primitives below; ``VCSIntegration`` calls into
-    them. The constructor receives the integration so the client can read its
+    them. The constructor receives the integration so the backend can read its
     credential (``integration.credential.auth_headers()``) and config.
     """
 
     def __init__(self, integration: Any) -> None:
-        """Bind this client to the integration whose credential it authenticates with."""
+        """Bind this backend to the integration whose credential it authenticates with."""
 
         self.integration = integration
 
     def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
         """List repositories visible to this integration, optionally within ``org``."""
 
-        raise NotImplementedError("VCSClient subclasses must implement ls_repos().")
+        raise NotImplementedError("VCSBackend subclasses must implement ls_repos().")
 
     def ls_tree(self, repository: Any, *, ref: str, path: str, recursive: bool = False) -> list[TreeEntry]:
         """List the tree under ``path`` at ``ref`` (recursively when asked)."""
 
-        raise NotImplementedError("VCSClient subclasses must implement ls_tree().")
+        raise NotImplementedError("VCSBackend subclasses must implement ls_tree().")
 
     def cat_file(self, repository: Any, *, ref: str, path: str) -> bytes:
         """Return the bytes of one blob at ``ref``; raise ``FileNotFoundError`` if absent."""
 
-        raise NotImplementedError("VCSClient subclasses must implement cat_file().")
+        raise NotImplementedError("VCSBackend subclasses must implement cat_file().")
 
     def rev_parse(self, repository: Any, ref: str) -> str:
         """Resolve ``ref`` to a commit oid."""
 
-        raise NotImplementedError("VCSClient subclasses must implement rev_parse().")
+        raise NotImplementedError("VCSBackend subclasses must implement rev_parse().")
 
     def verify_webhook(self, vcs_integration: Any, request: Any) -> bool:
         """Return whether an inbound webhook request is authentic for this integration."""
 
-        raise NotImplementedError("VCSClient subclasses must implement verify_webhook().")
+        raise NotImplementedError("VCSBackend subclasses must implement verify_webhook().")
 
     def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
         """Return repositories whose name matches ``query`` — the typeahead source."""
 
-        raise NotImplementedError("VCSClient subclasses must implement search_repos().")
+        raise NotImplementedError("VCSBackend subclasses must implement search_repos().")
 
     def get_repo(self, name: str) -> RepoDescriptor:
         """Return one repository by its ``owner/repo`` name; raise ``FileNotFoundError`` if absent."""
 
-        raise NotImplementedError("VCSClient subclasses must implement get_repo().")
+        raise NotImplementedError("VCSBackend subclasses must implement get_repo().")
 
 
-class NoopVCSClient(VCSClient):
-    """Null-object client for a VCS integration with no real host provider.
+class NoopVCSBackend(VCSBackend):
+    """Null-object backend for a VCS integration with no real host provider.
 
-    ``integrate`` is host-agnostic and ships no host client, but
+    ``integrate`` is host-agnostic and ships no host backend, but
     ``ImplClassField`` requires a non-empty registry, so this is the ``none``
-    default in ``ANGEE_VCS_CLIENT_CLASSES``: it enumerates nothing and
+    default in ``ANGEE_VCS_BACKEND_CLASSES``: it enumerates nothing and
     authenticates no webhook. Installing a host provider addon (e.g.
-    ``integrate_github``) adds a real client that a ``VCSIntegration`` row selects
+    ``integrate_github``) adds a real backend that a ``VCSIntegration`` row selects
     instead.
     """
 
@@ -127,7 +127,7 @@ class NoopVCSClient(VCSClient):
         return []
 
     def cat_file(self, repository: Any, *, ref: str, path: str) -> bytes:
-        """Raise: a noop client has no blobs to read."""
+        """Raise: a noop backend has no blobs to read."""
 
         del repository, ref
         raise FileNotFoundError(path)
@@ -139,7 +139,7 @@ class NoopVCSClient(VCSClient):
         return ""
 
     def verify_webhook(self, vcs_integration: Any, request: Any) -> bool:
-        """Reject every inbound webhook: a noop client trusts nothing."""
+        """Reject every inbound webhook: a noop backend trusts nothing."""
 
         del vcs_integration, request
         return False
@@ -151,6 +151,6 @@ class NoopVCSClient(VCSClient):
         return []
 
     def get_repo(self, name: str) -> RepoDescriptor:
-        """Raise: a noop client resolves no repository."""
+        """Raise: a noop backend resolves no repository."""
 
         raise FileNotFoundError(name)

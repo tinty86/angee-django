@@ -2,6 +2,7 @@ import * as React from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useBlocker } from "@tanstack/react-router";
 import {
+  useFormOverride,
   useResourceMutation,
   useResourceRecord,
   useModelMetadata,
@@ -144,10 +145,20 @@ export function FormView({
   const childActions = parsePageActions(children);
   const modelMetadata = useModelMetadata(model);
   const schemaMetadata = useSchemaFieldMetadata();
-  const declaredFields = fields ?? childFields;
-  const declaredGroups = groups ?? childGroups;
-  const declaredActions = actions ?? childActions;
+  const formOverride = useFormOverride(model);
   const isCreate = id == null;
+  // An addon may register a declarative create form for a model (composed into the
+  // runtime). On create it replaces the declared/metadata fields, so DataPage "New"
+  // and the relation-picker inline create render the same form for that model. A
+  // malformed registration (not an element) reads as no override, not a blank form.
+  const overrideNode =
+    isCreate && React.isValidElement(formOverride) ? formOverride : null;
+  const declaredFields =
+    overrideNode != null ? parsePageFields(overrideNode) : fields ?? childFields;
+  const declaredGroups =
+    overrideNode != null ? parsePageGroups(overrideNode) : groups ?? childGroups;
+  const declaredActions =
+    overrideNode != null ? parsePageActions(overrideNode) : actions ?? childActions;
   const resolvedFields = React.useMemo(
     () =>
       withModeLockedFields(
@@ -170,6 +181,16 @@ export function FormView({
   const formFields = React.useMemo(
     () => flattenedFormFields(resolvedFields, resolvedGroups),
     [resolvedFields, resolvedGroups],
+  );
+  const fieldByName = React.useMemo(
+    () => new Map(formFields.map((field) => [field.name, field])),
+    [formFields],
+  );
+  // When any field is conditional, the body subscribes to live form values so a
+  // discriminator change (e.g. a `kind` select) re-evaluates `showWhen`.
+  const hasConditionalFields = React.useMemo(
+    () => formFields.some((field) => field.showWhen),
+    [formFields],
   );
   // Object-relation fields with no explicit options auto-wire to the searchable
   // creatable picker; the SDL resolves each one's model, display field, and
@@ -250,8 +271,10 @@ export function FormView({
       setSaveError(null);
       setServerFieldErrors({});
       if (isCreate) {
-        const missing = requiredFieldNames.filter((name) =>
-          isEmptyFieldValue(value[name]),
+        const missing = requiredFieldNames.filter(
+          (name) =>
+            isEmptyFieldValue(value[name]) &&
+            isFieldVisible(fieldByName.get(name) ?? { name }, value),
         );
         if (missing.length > 0) {
           setServerFieldErrors(
@@ -399,6 +422,24 @@ export function FormView({
     [id, record],
   );
 
+  const renderField = (field: FieldDescriptor): React.ReactNode => (
+    <form.Field key={field.name} name={field.name}>
+      {(api) => (
+        <BoundFieldRow
+          field={field}
+          relation={relationByField.get(field.name)}
+          value={api.state.value}
+          errors={api.state.meta.errors}
+          serverMessages={serverFieldErrors[field.name]}
+          onChange={(next) => {
+            clearServerFieldError(field.name);
+            api.handleChange(next);
+          }}
+        />
+      )}
+    </form.Field>
+  );
+
   return (
     <form
       className={cn("min-h-full bg-sheet", className)}
@@ -531,29 +572,27 @@ export function FormView({
         <ErrorBanner message={saveError} title="Save failed" />
 
         <div className="grid gap-6">
-          {sections.map((section) => (
-            <FormSection
-              key={section.key}
-              section={section}
-              renderField={(field) => (
-                <form.Field key={field.name} name={field.name}>
-                  {(api) => (
-                    <BoundFieldRow
-                      field={field}
-                      relation={relationByField.get(field.name)}
-                      value={api.state.value}
-                      errors={api.state.meta.errors}
-                      serverMessages={serverFieldErrors[field.name]}
-                      onChange={(next) => {
-                        clearServerFieldError(field.name);
-                        api.handleChange(next);
-                      }}
-                    />
-                  )}
-                </form.Field>
-              )}
-            />
-          ))}
+          {hasConditionalFields ? (
+            <form.Subscribe selector={(state) => state.values}>
+              {(values) =>
+                visibleSections(sections, values as Values).map((section) => (
+                  <FormSection
+                    key={section.key}
+                    section={section}
+                    renderField={renderField}
+                  />
+                ))
+              }
+            </form.Subscribe>
+          ) : (
+            sections.map((section) => (
+              <FormSection
+                key={section.key}
+                section={section}
+                renderField={renderField}
+              />
+            ))
+          )}
         </div>
 
         {bodyField ? (
@@ -989,6 +1028,22 @@ function recordFieldValue(record: Row, field: FieldDescriptor): unknown {
   return value;
 }
 
+/** Whether a field is shown for the current values — false hides and never submits it. */
+function isFieldVisible(field: FieldDescriptor, values: Values): boolean {
+  return !field.showWhen || field.showWhen(values);
+}
+
+/** Drop fields whose `showWhen` predicate fails; an emptied section renders nothing. */
+function visibleSections(
+  sections: readonly FormSectionModel[],
+  values: Values,
+): readonly FormSectionModel[] {
+  return sections.map((section) => ({
+    ...section,
+    fields: section.fields.filter((field) => isFieldVisible(field, values)),
+  }));
+}
+
 function mutationData(
   values: Values,
   fields: readonly FieldDescriptor[],
@@ -1001,6 +1056,8 @@ function mutationData(
   const data: Values = {};
   for (const field of fields) {
     if (field.readOnly) continue;
+    // A field hidden by its `showWhen` predicate is not part of the record.
+    if (!isFieldVisible(field, values)) continue;
     const next = values[field.name];
     if (isUnselectedOption(field, next)) continue;
     if (!options.isCreate && valuesEqual(next, options.baseline[field.name])) {
@@ -1016,6 +1073,9 @@ function emptyValue(field: FieldDescriptor): unknown {
   if (isNullableScalarWidget(field)) return null;
   if (field.widget === "tagInput") return [];
   if (field.kind === "switch" || field.widget === "switch") return false;
+  // An empty JSON field is an empty object, not the JSON string "" — the latter
+  // is stored verbatim and breaks downstream `config.get(...)` reads.
+  if (widgetId(field) === "json") return {};
   return "";
 }
 

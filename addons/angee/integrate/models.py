@@ -6,8 +6,8 @@ first-class ``Integration`` an integration runs over, the abstract
 (``VCSIntegration`` + ``Repository``/``Source``/``Template``), and outbound
 ``WebhookSubscription``. It draws a ``Credential`` (and optionally an
 ``ExternalAccount``) from ``iam`` to authenticate; it never owns identity.
-Host-specific VCS clients live in their own addons (``integrate_github``) and are
-named per ``VCSIntegration`` row by ``client_class``; this addon never imports them.
+Host-specific VCS backends live in their own addons (``integrate_github``) and are
+named per ``VCSIntegration`` row by ``backend_class``; this addon never imports them.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
 from angee.integrate.events import EventKind
 from angee.integrate.net import validate_public_url
-from angee.integrate.vcs.client import VCSClient
+from angee.integrate.vcs.backend import VCSBackend
 from angee.integrate.vcs.templates import parse_template_meta
 from angee.integrate.webhooks import PinnedWebhookClient, WebhookDeliveryError
 
@@ -253,7 +253,7 @@ class Capability(SqidMixin, AuditMixin, AngeeModel):
         on_delete=models.PROTECT,
         related_name="%(app_label)s_%(class)s",
     )
-    config = models.JSONField(default=dict)
+    config = models.JSONField(default=dict, blank=True)
     status = StateField(choices_enum=CapabilityStatus, default=CapabilityStatus.ACTIVE)
     last_used_at = models.DateTimeField(null=True, blank=True)
     last_used_status = models.CharField(max_length=64, blank=True)
@@ -299,9 +299,9 @@ class Bridge(Capability):
     ``runtime = True`` on that class.
     """
 
-    cursor = models.JSONField(default=dict)
+    cursor = models.JSONField(default=dict, blank=True)
     poll_interval = models.PositiveIntegerField(default=300)
-    subscription_state = models.JSONField(default=dict)
+    subscription_state = models.JSONField(default=dict, blank=True)
     next_subscription_refresh_at = models.DateTimeField(null=True, blank=True)
     last_sync_started_at = models.DateTimeField(null=True, blank=True)
     last_sync_completed_at = models.DateTimeField(null=True, blank=True)
@@ -419,8 +419,8 @@ class VCSIntegration(Bridge):
 
     A :class:`Bridge`: the scheduler refreshes its repositories' sources over the
     host REST API and an inbound push webhook triggers the same refresh. The
-    host-specific wire format is a non-model :class:`~angee.integrate.vcs.client.
-    VCSClient` named per row by ``client_class`` (e.g. a GitHub client) — so
+    host-specific wire format is a non-model :class:`~angee.integrate.vcs.backend.
+    VCSBackend` named per row by ``backend_class`` (e.g. a GitHub backend) — so
     github/gitlab/bitbucket share this one table, differing only in behaviour.
     Django keeps the inventory only; the operator performs every git operation,
     consuming :meth:`Source.materialize_spec`.
@@ -429,14 +429,14 @@ class VCSIntegration(Bridge):
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="vcs", min_length=8)
-    client_class = ImplClassField(
-        base_class=VCSClient,
-        registry_setting="ANGEE_VCS_CLIENT_CLASSES",
+    backend_class = ImplClassField(
+        base_class=VCSBackend,
+        registry_setting="ANGEE_VCS_BACKEND_CLASSES",
         default="none",
     )
-    """The host client this integration resolves to — an explicit per-row key into
-    ``ANGEE_VCS_CLIENT_CLASSES`` (never derived from the vendor: one vendor can have
-    several accounts/clients). Defaults to the ``none`` null-object client."""
+    """The host backend this integration resolves to — an explicit per-row key into
+    ``ANGEE_VCS_BACKEND_CLASSES`` (never derived from the vendor: one vendor can have
+    several accounts/backends). Defaults to the ``none`` null-object backend."""
     webhook_secret = EncryptedField(blank=True)
     """Shared secret for verifying inbound push webhooks (per account, not per repo)."""
 
@@ -455,17 +455,17 @@ class VCSIntegration(Bridge):
         return f"vcs:{self.public_id}"
 
     @property
-    def client(self) -> VCSClient:
-        """Return the host client bound to this integration's credential/config."""
+    def backend(self) -> VCSBackend:
+        """Return the host backend bound to this integration's credential/config."""
 
-        field = cast(ImplClassField, type(self)._meta.get_field("client_class"))
-        return cast(VCSClient, field.resolve_class(self.client_class)(self.integration))
+        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
+        return cast(VCSBackend, field.resolve_class(self.backend_class)(self.integration))
 
     def repositories_by_org(self) -> dict[str, list[Any]]:
         """Return every visible repository grouped and sorted by owning org."""
 
         groups: dict[str, list[Any]] = {}
-        for descriptor in self.client.ls_repos():
+        for descriptor in self.backend.ls_repos():
             groups.setdefault(descriptor.org, []).append(descriptor)
         return {org: sorted(repos, key=lambda item: item.name) for org, repos in sorted(groups.items())}
 
@@ -478,14 +478,14 @@ class VCSIntegration(Bridge):
         manager supplies only its ``marker`` filename and ``parse`` function.
         """
 
-        client = self.client
+        backend = self.backend
         repository = source.repository
         ref = source.ref or repository.default_branch
         descriptors: list[dict[str, Any]] = []
-        for entry in client.ls_tree(repository, ref=ref, path=source.path, recursive=True):
+        for entry in backend.ls_tree(repository, ref=ref, path=source.path, recursive=True):
             if entry.type != "blob" or entry.name != marker:
                 continue
-            descriptor = dict(parse(client.cat_file(repository, ref=ref, path=entry.path)))
+            descriptor = dict(parse(backend.cat_file(repository, ref=ref, path=entry.path)))
             descriptor.setdefault("path", _parent_path(entry.path))
             descriptors.append(descriptor)
         return sorted(descriptors, key=_descriptor_key)
@@ -509,24 +509,24 @@ class VCSIntegration(Bridge):
     def verify_webhook(self, request: Any) -> bool:
         """Return whether an inbound push webhook is authentic for this integration."""
 
-        return self.client.verify_webhook(self, request)
+        return self.backend.verify_webhook(self, request)
 
     def search_repositories(self, query: str) -> list[Any]:
         """Return host repositories whose name matches ``query`` (the add typeahead)."""
 
-        return self.client.search_repos(query, org=self._search_scope())
+        return self.backend.search_repos(query, org=self._search_scope())
 
     def import_repository(self, name: str) -> Any:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.add(self, self.client.get_repo(name))
+        return repository_model.objects.add(self, self.backend.get_repo(name))
 
     def discover_repositories(self, *, org: str = "") -> int:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.reconcile(self, self.client.ls_repos(org=org))
+        return repository_model.objects.reconcile(self, self.backend.ls_repos(org=org))
 
     def _search_scope(self) -> str:
         """Return the org/user the typeahead search scopes to (from ``config.github_org``)."""
@@ -541,7 +541,7 @@ class RepositoryManager(RebacManager):
         """Upsert one repository row per descriptor and prune rows that vanished.
 
         Bulk import for ``discoverRepositories``: prunes against the full listing,
-        so the caller must pass every repository (see ``GitHubClient.ls_repos``
+        so the caller must pass every repository (see ``GitHubBackend.ls_repos``
         pagination), never a partial page.
         """
 

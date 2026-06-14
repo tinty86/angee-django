@@ -260,6 +260,7 @@ class CredentialType(AngeeNode):
     """GraphQL projection of credential health without secret values."""
 
     kind: auto
+    name: auto
     status: auto
     expires_at: auto
     last_refresh_at: auto
@@ -269,24 +270,26 @@ class CredentialType(AngeeNode):
     updated_at: auto
 
     @strawberry_django.field(only=["oauth_client"])
-    def oauth_client(self) -> CredentialOAuthClientType:
-        """Return a public-safe projection of the OAuth client."""
+    def oauth_client(self) -> CredentialOAuthClientType | None:
+        """Return a public-safe projection of the OAuth client (``None`` for local kinds)."""
 
-        return cast(CredentialOAuthClientType, cast(Any, self).oauth_client)
+        return cast("CredentialOAuthClientType | None", cast(Any, self).oauth_client)
 
-    @strawberry_django.field(only=["oauth_client", "external_account"])
+    @strawberry_django.field(only=["oauth_client", "external_account", "name"])
     def display_name(self) -> str:
-        """Return a human label (provider + subject) for relation pickers.
+        """Return a human label for relation pickers.
 
-        Credential has no natural string column; this gives ``recordRepresentation``
-        something to show when a credential is picked (e.g. on a Connection form).
+        Credential has no natural string column; OAuth credentials read as
+        ``provider: subject``, while provider-less ones read as their ``name``.
         """
 
         client = getattr(cast(Any, self), "oauth_client", None)
-        provider = str(getattr(client, "slug", "") or getattr(client, "display_name", "") or "credential")
-        account = getattr(cast(Any, self), "external_account", None)
-        subject = str(getattr(account, "external_id", "") or "") if account else ""
-        return f"{provider}: {subject}" if subject else provider
+        if client is not None:
+            provider = str(getattr(client, "slug", "") or getattr(client, "display_name", "") or "credential")
+            account = getattr(cast(Any, self), "external_account", None)
+            subject = str(getattr(account, "external_id", "") or "") if account else ""
+            return f"{provider}: {subject}" if subject else provider
+        return str(cast(Any, self).name or "credential")
 
 
 @strawberry.type
@@ -615,11 +618,17 @@ class UserPatch:
 
 @strawberry.input
 class CredentialInput:
-    """Admin-write fields for a static-token credential (OAuth credentials arrive via login)."""
+    """Admin-write fields for a provider-less credential (OAuth ones arrive via login).
 
-    user: relay.GlobalID
-    oauth_client: relay.GlobalID
-    api_key: str
+    ``kind`` discriminates the material: ``static_token`` reads ``api_key``,
+    ``ssh_key`` reads ``private_key``. ``user`` defaults to the calling admin.
+    """
+
+    name: str
+    kind: str
+    user: relay.GlobalID | None = None
+    api_key: str = ""
+    private_key: str = ""
 
 
 @strawberry.input
@@ -1250,7 +1259,8 @@ def _revoke_remote_oauth_token(credential: Any) -> None:
 
     try:
         oauth_client = credential.oauth_client
-        if not getattr(oauth_client, "revoke_endpoint", ""):
+        # Provider-less (static/ssh) credentials have nothing to revoke remotely.
+        if oauth_client is None or not getattr(oauth_client, "revoke_endpoint", ""):
             return
         token = str(credential.reveal().get("access_token") or "")
         if token:
@@ -1403,21 +1413,30 @@ class IAMUserMutation:
         return _admin_delete(User, id.node_id, reason="iam.graphql.user.delete", confirm=confirm)
 
 
+def _credential_material(data: CredentialInput) -> dict[str, str]:
+    """Assemble per-kind credential material from the discriminated input."""
+
+    if data.kind == CredentialKind.STATIC_TOKEN:
+        return {"api_key": data.api_key}
+    if data.kind == CredentialKind.SSH_KEY:
+        return {"private_key": data.private_key}
+    raise ValueError(f"Cannot create a credential of kind {data.kind!r}.")
+
+
 @strawberry.type
 class IAMCredentialMutation:
-    """Admin CRUD for credentials; create is static-token only (OAuth ones arrive via login)."""
+    """Admin CRUD for credentials; create mints provider-less kinds (OAuth arrives via login)."""
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def create_credential(self, data: CredentialInput) -> CredentialType:
-        """Create one static-token credential for a user through the kind handler."""
+    def create_credential(self, info: strawberry.Info, data: CredentialInput) -> CredentialType:
+        """Create one provider-less credential, dispatching material by ``kind``."""
 
-        user = _user_from_global_id(data.user)
-        oauth_client = _oauth_client_from_id(data.oauth_client)
-        credential = Credential.objects.upsert_for_user(
+        user = _session_user(info) if data.user is None else _user_from_global_id(data.user)
+        credential = Credential.objects.create_local_credential(
             user,
-            oauth_client,
-            CredentialKind.STATIC_TOKEN,
-            {"api_key": data.api_key},
+            kind=data.kind,
+            name=data.name,
+            material=_credential_material(data),
         )
         return cast(CredentialType, credential)
 
