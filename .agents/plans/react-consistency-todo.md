@@ -754,16 +754,25 @@ visual-parity spot-check across both themes still recommended before release.
       — NO addon/base/example routes menu labels through `t()` (chrome-resolved
       manifest data, not in-component copy); (c) DataLens/RailPanel/SurfaceHeader/
       MetadataPanel copy = T19 storybook-only fragments. react-review clean.
-- [~] Encode the new rules in `docs/frontend/guidelines.md` — DONE for the landed
+- [x] Encode the new rules in `docs/frontend/guidelines.md` — DONE for all landed
       owners: two-axis color (`tone`×`variant`), i18n-commit (`useBaseT`/`use<Addon>T`
       on `useNamespaceT`, prop-default coalesce), `defineBaseAddon`, build-time
-      composition incl. previews, icon-registry-only (`<Glyph>`, no raw lucide),
-      and **forms-DSL specifics (T17)**: `forms:` makes `RelationPicker.create`
-      `{model}`-only; `FieldRoot`/`FieldLabel` is the labeled-control owner (native
-      `htmlFor`/`id` vs button-trigger `nativeLabel={false}`+`aria-labelledby`);
-      base exposes `FORM_VIEW_RECORD_CHROME_SLOT` for host-provided record chrome.
-      Still to add when it lands: one state-surface API (T4). `docs/stack.md`
-      unchanged (no new libraries — these are Angee patterns).
+      composition incl. previews, icon-registry (`<Glyph>`), state-surface vocab
+      (T4, the titled-vs-single-line surfaces + `EmptyState fill` + renderer-owns-
+      loading/error), and **forms-DSL specifics (T17)**: `forms:` makes
+      `RelationPicker.create` `{model}`-only; `FieldRoot`/`FieldLabel` is the
+      labeled-control owner; base exposes `FORM_VIEW_RECORD_CHROME_SLOT`.
+      FINAL-PASS additions: (a) the i18n rule now records the two plain-English
+      boundaries (declarative manifest menu/route `label:`; the statically-parsed
+      `forms:` override); (b) the icon rule made precise (a component never imports
+      lucide; an addon contributes via the manifest `icons:` field, the registry
+      seam); (c) new rules for the icon-size key spelling (`iconSm/iconMd/iconLg`) +
+      size-default-is-a-contract, and the primitive export/namespace convention
+      (flat per-part consts; bare-name parts-namespace for compounds; `*Primitive`
+      suffix only where compounded); (d) a Pitfalls entry on storybook dead-args
+      (`StoryObj<typeof meta>` vs bare `StoryObj`) + the `runtime-fixtures` owner +
+      preview-decorator providers. `docs/stack.md` unchanged (no new libraries —
+      all Angee patterns).
 
 ## Infra note (out of band — flagged 2026-06-14)
 

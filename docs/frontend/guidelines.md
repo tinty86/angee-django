@@ -38,12 +38,28 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   `use<Addon>T()` in an addon (both built on the SDK's `useNamespaceT(ns,
   fallback)`), with the English in the namespace bundle. A prop whose default is a
   label defaults to `undefined` and resolves `?? t("key")` in the body — never call
-  `t()` in a default parameter. No hardcoded copy in a component.
+  `t()` in a default parameter. No hardcoded copy in a component. Two boundaries
+  stay plain English: an addon's declarative manifest menu/route `label:` (chrome
+  data, not in-component copy — none are routed), and a form registered via
+  `forms:` (a statically parsed element, never rendered as a component, so a hook
+  cannot reach its `<Field label>`).
 - Every icon is a registered glyph rendered via `<Glyph name="…">` (or the
-  `renderGlyph(icon)` slot adapter). No raw `lucide-react` import outside
-  `chrome/icon-registry.ts`.
+  `renderGlyph(icon)` slot adapter). A component never imports `lucide-react`
+  directly: base glyphs live in `chrome/icon-registry.ts`; an addon contributes its
+  own lucide components through the manifest `icons:` field (the registry seam), not
+  by rendering them.
 - Use shared page, view, form, table, widget, and shell primitives before adding
   new local state.
+- A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
+  across recipes). A default `size` is a visual contract — do not flip it without a
+  requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`
+  are intentional, not drift).
+- Primitive export convention: a primitive exports flat per-part consts; a compound
+  primitive exposes a bare-name parts-namespace object (`Dialog.Root`, …); a
+  primitive that ships a composed convenience component takes the bare name for it
+  (`Select`, `Tooltip`) and exposes its parts under a `*Primitive` suffix only where
+  a consumer compounds them (`SelectPrimitive`). Don't add a `*Primitive` namespace
+  nobody compounds.
 - State surfaces are shared fragments — never hand-roll an empty/loading/error
   block. The titled surfaces (`EmptyState`, `ErrorBanner`) take the one
   `{title, description, icon?, actions?}` vocabulary; the single-line ones keep
@@ -150,6 +166,16 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   is silently *not* sent, failing a required create input. Use `createOnly` (editable
   on create carrying the seed, locked on edit) or a plain field; reserve `readOnly`
   for values the create input does not accept.
+- **A storybook `meta.args`/`argTypes` is dead only if no story consumes it.** A
+  bare `export const X: Story = {}` (or a `render: (args) => …`) AUTO-RENDERS from
+  `meta.args` — those args are live; only a file whose every story is a zero-param
+  `render: () => …` has dead meta args. Removing them when `meta.component` has a
+  required prop breaks `StoryObj<typeof meta>` (it still demands the arg) — type the
+  self-rendering stories as bare `StoryObj` (keep `component:` for autodocs). A
+  data-bound view story uses the shared `runtime-fixtures` owner (`RuntimeFixture` +
+  `storySchema(fetch)` + `jsonResponse`), not a hand-rolled provider stack; global
+  providers (`ToastProvider`, router, runtime, client) come from the preview
+  decorator — don't nest a second one.
 
 ## Checks
 
