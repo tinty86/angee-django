@@ -116,16 +116,27 @@ value via a shared `useEnumOptions` hook (SDL metadata → `value.toLowerCase()`
 `createOnly`. **Skills → Sources tab — DONE** (DataPage over `integrate.Source`
 filtered to `kind=skill` + a `SourceFilter` added to the integrate console).
 
+### Console-polish outcomes
+
+- **Per-tab create defaults — DONE.** Added `DataPage.createDefaults` (wired to
+  `FormView.defaultValues`, create-only) in `@angee/base`; the Templates tab seeds
+  `is_template=true` and the skill-sources tab seeds `kind="skill"`.
+- **Agent M2M membership (skills/MCP) — backend DONE.** `skills`/`mcpServers`/
+  `mcpTools` are now `[ID!]` on `AgentPatch`; strawberry-django's update resolver
+  `.set()`s them (verified by `tests/test_agents_graphql.py`), so the explicit
+  `setAgent*` actions were dropped. The agent is fully configurable via `updateAgent`.
+- **GraphQL console test — DONE.** `tests/test_agents_graphql.py` (3 tests): M2M
+  attach/clear via `updateAgent`, agent-update admin gating, `refreshProviderModels`
+  gating. (20 backend tests pass together with integrate VCS + scheduler.)
+
 ### Frontend follow-ups (deferred)
 
-- **Agent skill/MCP membership editor** — backend `setAgentSkills`/`setAgentMcpServers`/
-  `setAgentMcpTools` exist; the console needs a multi-select relation widget to drive
-  them (none in `@angee/base` yet).
-- **Per-tab create defaults** — neither the Templates tab (`is_template=true`) nor a
-  skill source (`kind="skill"`) is pre-filled on create, because `DataPage` has no
-  create-default prop. Today both are visible fields (a switch / a single-option
-  select). A small `DataPage` `createDefaults` prop wired to `FormView.initialValues`
-  (which already exists) would close both.
+- **Agent skill/MCP membership editor (UI widget).** The backend is clean
+  (`updateAgent` sets the M2M), but the `@angee/base` `many2many` widget reads a list
+  of *ids* while `AgentType.skills` reads as nested `SkillType` objects — a read-shape
+  impedance with no repo precedent. A clean editor needs either an ids projection on
+  `AgentType` or a framework M2M-form convention; best designed alongside Milestone 2
+  (when the selections actually render into a workspace).
 
 ## Review follow-ups (deferred, not yet actioned)
 
