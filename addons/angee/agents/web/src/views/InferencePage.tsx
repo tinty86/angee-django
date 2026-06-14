@@ -7,6 +7,7 @@ import {
   type IdVariables,
   type RefreshProviderModelsData,
 } from "../documents";
+import { useEnumOptions } from "../enum-options";
 
 const PROVIDER_MODEL = "agents.InferenceProvider";
 const MODEL_MODEL = "agents.InferenceModel";
@@ -30,6 +31,8 @@ export function InferenceProvidersPage(): React.ReactElement {
     [refreshProviderModels],
   );
 
+  const backendClassOptions = useEnumOptions(PROVIDER_MODEL, "backendClass");
+
   return (
     <DataPage model={PROVIDER_MODEL} placement="inline" routed>
       <List model={PROVIDER_MODEL} pageSize={50}>
@@ -41,7 +44,7 @@ export function InferenceProvidersPage(): React.ReactElement {
         <Field name="name" title />
         <Field name="integration" createOnly />
         <Group label="Backend" columns={2}>
-          <Field name="backendClass" />
+          <Field name="backendClass" widget="select" options={backendClassOptions} createOnly />
           <Field name="baseUrl" />
         </Group>
         <Field name="status" widget="statusbar" />
@@ -53,6 +56,8 @@ export function InferenceProvidersPage(): React.ReactElement {
 }
 
 export function InferenceModelsPage(): React.ReactElement {
+  const modelUseOptions = useEnumOptions(MODEL_MODEL, "modelUse");
+
   return (
     <DataPage model={MODEL_MODEL} placement="inline" routed>
       <List model={MODEL_MODEL} pageSize={50}>
@@ -67,7 +72,7 @@ export function InferenceModelsPage(): React.ReactElement {
         <Group label="Catalogue" columns={2}>
           <Field name="provider" createOnly />
           <Field name="publisher" />
-          <Field name="modelUse" />
+          <Field name="modelUse" widget="select" options={modelUseOptions} createOnly />
           <Field name="status" widget="statusbar" />
           <Field name="isDefault" />
           <Field name="contextWindow" />

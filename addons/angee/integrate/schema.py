@@ -409,6 +409,19 @@ class SourceType(AngeeNode):
     updated_at: auto
 
 
+@strawberry_django.filter_type(Source, lookups=True)
+class SourceFilter:
+    """Field lookups accepted when filtering the sources list.
+
+    ``kind`` lets a consumer surface scope a list to its own source kind (e.g. the
+    agents console filtering to ``skill`` sources).
+    """
+
+    kind: auto
+    ref: auto
+    repository: auto
+
+
 @strawberry_django.type(Template)
 class TemplateType(AngeeNode):
     """Admin projection of one discovered template."""
@@ -515,6 +528,7 @@ class VCSConsoleQuery:
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
     sources: OffsetPaginated[SourceType] = strawberry_django.offset_paginated(
+        filters=SourceFilter,
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
     source: SourceType | None = strawberry_django.node(

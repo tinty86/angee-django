@@ -19,6 +19,21 @@ export interface RefreshProviderModelsData {
   refreshProviderModels: ActionResultData;
 }
 
+// Re-discover a skill source's skills — the integrate `refreshSource` action,
+// invoked from the agents Skills → Sources tab.
+export const REFRESH_SOURCE_MUTATION = `
+  mutation AgentsRefreshSource($id: ID!) {
+    refreshSource(id: $id) {
+      ok
+      message
+    }
+  }
+`;
+
+export interface RefreshSourceData {
+  refreshSource: ActionResultData;
+}
+
 export interface IdVariables extends Record<string, unknown> {
   id: string;
 }
