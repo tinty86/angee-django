@@ -18,8 +18,7 @@ import type {
   SelectTriggerProps as BaseSelectTriggerProps,
   SelectValueProps as BaseSelectValueProps,
 } from "@base-ui/react/select";
-import { Check, ChevronDown } from "lucide-react";
-
+import { Glyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
 import { POPUP_BASE } from "./popover";
 import { WIDGET_CONTROL_READONLY_CLASS } from "./widget-control";
@@ -154,7 +153,7 @@ export const SelectIcon = React.forwardRef<
   HTMLSpanElement,
   SelectIconProps
 >(function SelectIcon(
-  { className, children = <ChevronDown aria-hidden="true" />, ...props },
+  { className, children = <Glyph name="chevron-down" />, ...props },
   ref,
 ) {
   const styles = selectVariants();
@@ -265,7 +264,7 @@ export const SelectItemIndicator = React.forwardRef<
   HTMLSpanElement,
   SelectItemIndicatorProps
 >(function SelectItemIndicator(
-  { className, children = <Check aria-hidden="true" />, ...props },
+  { className, children = <Glyph name="check" />, ...props },
   ref,
 ) {
   const styles = selectVariants();

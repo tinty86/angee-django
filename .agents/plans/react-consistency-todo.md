@@ -95,12 +95,10 @@ visual-parity spot-check across both themes still recommended before release.
       `chrome/AppRail`, `toolbars/DataToolbar`, `views/ListInternals`,
       `views/GroupedList`, `views/RowsListView`, `views/DataPage`,
       `widgets/tagInput`.
-- [ ] DEFERRED — low-level `ui/` primitives (`dialog`, `input`, `select`,
-      `checkbox`, `pager`): `Glyph`→`useIcon`→`useAppRuntime` returns the EMPTY
-      runtime (renders null) when no provider is mounted, so routing a primitive's
-      intrinsic check/chevron/X through `Glyph` makes it vanish in any
-      provider-less embedding. Needs a design call (do `@angee/base` primitives
-      depend on the runtime, or does `Glyph` take a fallback icon component?).
+- [ ] DECIDED (Glyph fallback, then route): make `useIcon` fall back to the static
+      `baseIcons` map when the runtime registry lacks the name (so registry glyphs
+      resolve even provider-less), then route the 5 primitives (`dialog`/`input`/
+      `select`/`checkbox`/`pager`) through `<Glyph>` and drop their raw lucide.
 - [ ] DEFERRED — `widgets/markdown` editor toolbar: passes lucide *components*
       into a command/toolbar config (not inline JSX), so it needs its toolbar
       glyphs registered (bold, italic, code-xml, link, list-ordered, quote, eye)
@@ -241,8 +239,9 @@ visual-parity spot-check across both themes still recommended before release.
 - [ ] `ScopedTreeExplorer` primitive → storage + knowledge browsers.
 - [ ] Shared date popover helper (date/datetime); `ChipList`/`TokenList` primitive
       (tagInput/many2many).
-- [ ] One command palette: make `Spotlight`/`ui/command` the owner; delete/retire
-      `GlobalSearch` (wire the real palette into `TopBar`).
+- [ ] DECIDED (wire live + delete): make `Spotlight`/`ui/command` the live ⌘K
+      palette (surface nav/menu commands to start), wire it into `TopBar`, and
+      delete the dead `GlobalSearch` (its `onSearch` was wired nowhere).
 - [x] `createVariantContext` (`lib/variant-context.tsx`) → tabs/accordion/
       collapsible consume it (replaced 3 local `createContext + useXVariant`).
 - [ ] `FormSectionKicker` composes `SectionEyebrow`; shared `ControlRow`

@@ -8,6 +8,9 @@ export interface GlyphProps {
   /** Rendered when `name` resolves to no registered icon (e.g. `"help"`). */
   fallbackName?: string;
   size?: number | string;
+  /** Stroke weight passthrough — lift over lucide's default 2 where a glyph
+   * reads thin at small sizes (a checkmark at 12px). */
+  strokeWidth?: number | string;
   className?: string;
   decorative?: boolean;
   label?: string;
@@ -17,6 +20,7 @@ export function Glyph({
   name,
   fallbackName,
   size,
+  strokeWidth,
   className,
   decorative = true,
   label,
@@ -35,6 +39,7 @@ export function Glyph({
       focusable="false"
       role={decorative ? undefined : "img"}
       size={size}
+      strokeWidth={strokeWidth}
       style={sizeStyle}
     />
   );

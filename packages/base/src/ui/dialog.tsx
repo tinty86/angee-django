@@ -10,8 +10,7 @@ import type {
   DialogTitleProps as BaseDialogTitleProps,
   DialogTriggerProps as BaseDialogTriggerProps,
 } from "@base-ui/react/dialog";
-import { X } from "lucide-react";
-
+import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
 import { tv, type VariantProps } from "../lib/variants";
 
@@ -197,7 +196,7 @@ export const DialogClose = React.forwardRef<
       className={styles.close({ className })}
       {...props}
     >
-      {children ?? <X aria-hidden="true" strokeWidth={2.25} />}
+      {children ?? <Glyph name="x" strokeWidth={2.25} />}
     </BaseDialog.Close>
   );
 });

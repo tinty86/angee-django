@@ -1,6 +1,6 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { Button } from "./button";
@@ -140,7 +140,7 @@ export function Pager({
         disabled={!canPrev}
         onClick={() => onPageChange?.(Math.max(1, page - 1))}
       >
-        <ChevronLeft className="glyph" aria-hidden />
+        <Glyph name="chevron-left" />
       </Button>
       <Button
         type="button"
@@ -150,7 +150,7 @@ export function Pager({
         disabled={!canNext}
         onClick={() => onPageChange?.(page + 1)}
       >
-        <ChevronRight className="glyph" aria-hidden />
+        <Glyph name="chevron-right" />
       </Button>
     </>
   );

@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Search, X } from "lucide-react";
 
+import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
@@ -204,7 +204,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
         data-disabled={disabled ? "" : undefined}
         data-readonly={readOnly ? "" : undefined}
       >
-        <Search aria-hidden className={styles.icon()} />
+        <Glyph name="search" className={styles.icon()} />
         <input
           ref={ref}
           type="search"
@@ -224,7 +224,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
             onClick={onClear}
             className={styles.clear()}
           >
-            <X aria-hidden className={styles.clearIcon()} />
+            <Glyph name="x" className={styles.clearIcon()} />
           </button>
         ) : null}
       </div>

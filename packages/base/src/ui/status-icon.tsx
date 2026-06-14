@@ -97,12 +97,7 @@ export const StatusIcon = React.forwardRef<HTMLSpanElement, StatusIconProps>(
         {Icon ? (
           <Icon aria-hidden="true" focusable="false" strokeWidth={2.25} />
         ) : (
-          <Glyph
-            decorative
-            name={iconName}
-            size="1em"
-            className="[&_*]:stroke-[2.25]"
-          />
+          <Glyph decorative name={iconName} size="1em" strokeWidth={2.25} />
         )}
       </span>
     );

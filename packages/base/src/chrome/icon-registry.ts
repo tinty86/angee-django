@@ -118,7 +118,12 @@ export const baseIcons = {
 
 export function useIcon(name: string): IconComponent | null {
   const { icons } = useAppRuntime();
-  return getIcon(icons, name);
+  // Fall back to the static base set when the runtime registry lacks the name, so
+  // a base glyph (check, chevrons, x, …) still resolves when no AppRuntime is
+  // mounted (unit tests, storybook, provider-less embeds). The runtime normally
+  // already includes baseIcons (createApp seeds them), so this only matters
+  // provider-less; addon-contributed glyphs still require the runtime.
+  return getIcon(icons, name) ?? getIcon(baseIcons, name);
 }
 
 export function getIcon(
