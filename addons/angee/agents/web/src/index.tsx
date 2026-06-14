@@ -1,5 +1,5 @@
 import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
-import { Bot, Box, Cpu, LayoutTemplate, Server, Sparkles, Wrench } from "lucide-react";
+import { Box, Cpu, LayoutTemplate, Server, Sparkles, Wrench } from "lucide-react";
 
 import { AgentsPage, TemplatesPage } from "./views/AgentsPage";
 import { InferenceModelsPage, InferenceProvidersPage } from "./views/InferencePage";
@@ -71,7 +71,8 @@ const agents: BaseAddon = {
   routes: agentsRoutes,
   menus: agentsMenu,
   icons: {
-    agent: Bot,
+    // `agent` is a shared glyph owned by the base icon registry — reference it, don't
+    // redefine it (the registry is fail-fast on re-registration).
     agentTemplate: LayoutTemplate,
     skill: Sparkles,
     mcpServer: Server,
