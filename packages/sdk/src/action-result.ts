@@ -3,9 +3,14 @@
 // success toast, a thrown error is an error toast.
 
 /** The shape every `{ ok, message }` action mutation returns. */
-interface ActionOutcome {
+export interface ActionOutcome {
   ok: boolean;
   message: string;
+}
+
+/** Variables for an action mutation keyed by a single record id. */
+export interface ByIdVariables extends Record<string, unknown> {
+  id: string;
 }
 
 /**

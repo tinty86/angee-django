@@ -122,7 +122,11 @@ export {
 } from "./authored-hooks";
 
 // Action-mutation result handling.
-export { runActionResult } from "./action-result";
+export {
+  runActionResult,
+  type ActionOutcome,
+  type ByIdVariables,
+} from "./action-result";
 export { errorMessage } from "./error-message";
 export { useBusyRun, type BusyRun } from "./use-busy-run";
 

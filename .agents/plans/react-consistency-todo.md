@@ -136,8 +136,9 @@ now guards `ok` too. `runActionResult` exports only the function (the
       (+ unit test for the busy/onChanged/throw contract).
 - [x] relay `global-id` codec (×2) → `@angee/sdk` (`toRelayGlobalId`,
       `relationRelayGlobalId`); storage/knowledge re-export + keep `*_TYPE` consts.
-- [ ] `ActionResultData`/`IdVariables` per addon → export from `@angee/sdk` (pairs
-      with T12 `runActionResult`).
+- [x] `ActionResultData`/`IdVariables` per addon → SDK `ActionOutcome`/
+      `ByIdVariables`; integrate + agents `documents.ts` alias them (named
+      `ActionOutcome` to avoid colliding with base's `ActionResult` = Action.run).
 - [ ] `titleLabel`/`stateLabel` → reuse base `titleCase`.
 - [ ] `pageSize={50}` (×14) → drop, or import `DEFAULT_PAGE_SIZE`.
 - [ ] ⌘K handler + `isTextEntryTarget` (×2) → one `useCommandShortcut` (folds T9
