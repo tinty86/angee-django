@@ -165,7 +165,7 @@ services:
   storybook:
     runtime: local
     workdir: source://framework
-    command: ["pnpm", "--filter", "@angee/storybook", "dev"]
+    command: ["pnpm", "--filter", "@angee/storybook", "dev", "--no-open"]
     env:
       STORYBOOK_PORT: "{{ storybook_port }}"
     after: [deps]

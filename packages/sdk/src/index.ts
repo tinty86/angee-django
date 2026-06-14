@@ -12,6 +12,8 @@ export {
   assembleAggregateDocument,
   assembleGroupByDocument,
   typeNameForModel,
+  toRelayGlobalId,
+  relationRelayGlobalId,
   clampPageSize,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,

@@ -130,8 +130,8 @@ now guards `ok` too. `runActionResult` exports only the function (the
 ### T10 — lift no-owner plumbing to SDK/base lib
 - [ ] `unknown→message` error helper (×5) → `@angee/sdk`.
 - [ ] `run()` busy-wrapper hook (×3) → `useBusyAction`/`useAsyncAction`.
-- [ ] relay `global-id` codec (×2) → `@angee/sdk` (`toRelayGlobalId`,
-      `relationRelayGlobalId`).
+- [x] relay `global-id` codec (×2) → `@angee/sdk` (`toRelayGlobalId`,
+      `relationRelayGlobalId`); storage/knowledge re-export + keep `*_TYPE` consts.
 - [ ] `ActionResultData`/`IdVariables` per addon → export from `@angee/sdk` (pairs
       with T12 `runActionResult`).
 - [ ] `titleLabel`/`stateLabel` → reuse base `titleCase`.
