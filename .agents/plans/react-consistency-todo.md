@@ -289,8 +289,11 @@ visual-parity spot-check across both themes still recommended before release.
       `AddonManifest`, folded fail-fast by `composeAddons`, resolved through
       `AppRuntimeProvider`. Remove the module-global `Map`, the import side-effect,
       and `clearPreviewProvidersForTest`.
-- [ ] **T15 (yes)** Export `defineBaseAddon()` from `@angee/base`; migrate iam,
-      operator, storage, knowledge, integrate, agents, notes `BaseAddon` literals.
+- [x] **T15 (yes)** DONE — `defineBaseAddon(addon): BaseAddon` exported from
+      `@angee/base` (the rendered analog of the SDK's `defineAddon`, type-checks the
+      literal). Migrated all 8 manifests off `const x: BaseAddon = {…}` →
+      `defineBaseAddon({…})`: iam, operator, storage, knowledge, integrate, agents,
+      the notes example addon, and the example `authAddon`. Gate green.
 - [x] **T16** DONE — `TopMenu` is now a generic presentational tablist:
       dropped note-specific `DEFAULT_TABS`, the `TOP_TAB_IDS`/`TopMenuTabId`
       literal, and the `DataViewFilter` import (the coupling); `TopMenuTab` is

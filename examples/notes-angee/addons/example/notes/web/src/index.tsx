@@ -1,11 +1,11 @@
-import type { BaseAddon } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 
 import { NoteCrumb, NotePage } from "./NotePage";
 
 /** The notes addon: one console surface and a menu entry pointing at it. The
  * record route nests under the list route — `NotePage` reads its `$id` param
  * and the route's crumb resolves the note title. */
-const notes: BaseAddon = {
+const notes = defineBaseAddon({
   id: "notes",
   routes: [
     {
@@ -25,6 +25,6 @@ const notes: BaseAddon = {
     },
   ],
   menus: [{ id: "notes", label: "Notes", route: "notes.home", icon: "notes" }],
-};
+});
 
 export default notes;

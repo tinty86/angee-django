@@ -1,4 +1,5 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { BookOpen, FileStack, FileText, Library, Link2 } from "lucide-react";
 
 import { enKnowledgeMessages } from "./i18n";
@@ -51,7 +52,7 @@ const knowledgeMenu: readonly BaseMenuItem[] = [
 ];
 
 // Glyphs the wiki reaches for that the base registry doesn't carry.
-const knowledge: BaseAddon = {
+const knowledge = defineBaseAddon({
   id: KNOWLEDGE_ID,
   routes: knowledgeRoutes,
   menus: knowledgeMenu,
@@ -63,6 +64,6 @@ const knowledge: BaseAddon = {
     template: FileStack,
     link: Link2,
   },
-};
+});
 
 export default knowledge;

@@ -1,4 +1,5 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { Box, Cpu, LayoutTemplate, Server, Sparkles, Wrench } from "lucide-react";
 
 import { enAgentsMessages } from "./i18n";
@@ -70,7 +71,7 @@ const agentsMenu: readonly BaseMenuItem[] = [
   },
 ];
 
-const agents: BaseAddon = {
+const agents = defineBaseAddon({
   id: AGENTS_ID,
   routes: agentsRoutes,
   menus: agentsMenu,
@@ -85,6 +86,6 @@ const agents: BaseAddon = {
     inferenceProvider: Cpu,
     inferenceModel: Box,
   },
-};
+});
 
 export default agents;

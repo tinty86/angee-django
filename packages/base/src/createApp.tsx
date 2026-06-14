@@ -76,6 +76,17 @@ export interface BaseAddon extends Omit<AddonManifest, "routes" | "menus"> {
   menus?: readonly BaseMenuItem[];
 }
 
+/**
+ * Declare a rendered (base-binding) addon — the one seam every addon's manifest
+ * goes through. The rendered analog of the SDK's headless `defineAddon`: it
+ * type-checks the literal against {@link BaseAddon} (routes carrying React
+ * components) and returns it unchanged, so addons `defineBaseAddon({...})`
+ * instead of annotating `const x: BaseAddon = {...}`.
+ */
+export function defineBaseAddon(addon: BaseAddon): BaseAddon {
+  return addon;
+}
+
 /** Props passed from the active route into a shell chrome component. */
 export interface ShellChromeProps
   extends Pick<RouteChromeStaticData, "icon" | "title"> {

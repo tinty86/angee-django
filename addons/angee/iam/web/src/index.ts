@@ -1,6 +1,6 @@
 import {
   AUTH_LOGIN_METHOD_SLOT,
-  type BaseAddon,
+  defineBaseAddon,
   type BaseAddonRoute,
   type BaseMenuItem,
 } from "@angee/base";
@@ -67,7 +67,7 @@ const consolePage = (name: string, path: string, component: BaseAddonRoute["comp
   { name: `${name}.record`, path: `${path}/$id`, shell: "console", parent: name },
 ];
 
-const iam: BaseAddon = {
+const iam = defineBaseAddon({
   id: "iam",
   routes: [
     {
@@ -106,6 +106,6 @@ const iam: BaseAddon = {
       content: createElement(OAuthLoginMethods),
     },
   ],
-};
+});
 
 export default iam;

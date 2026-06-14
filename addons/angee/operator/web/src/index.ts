@@ -1,8 +1,8 @@
 import type {
   BaseMenuItem,
-  BaseAddon,
   BaseAddonRoute,
 } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { Boxes } from "lucide-react";
 import { createElement, type ComponentType, type ReactNode } from "react";
 
@@ -155,7 +155,7 @@ const operatorRootMenu: BaseMenuItem = {
 
 const operatorMenu: readonly BaseMenuItem[] = [operatorRootMenu];
 
-const operator: BaseAddon = {
+const operator = defineBaseAddon({
   id: OPERATOR_ID,
   routes: operatorRoutes,
   menus: operatorMenu,
@@ -166,6 +166,6 @@ const operator: BaseAddon = {
     },
   },
   icons: { operator: Boxes },
-};
+});
 
 export default operator;

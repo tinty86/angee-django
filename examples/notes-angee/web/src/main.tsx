@@ -3,7 +3,7 @@ import {
   ConsoleShell,
   LoginPage,
   createApp,
-  type BaseAddon,
+  defineBaseAddon,
 } from "@angee/base";
 import notes from "@angee-example/notes-web";
 import agents from "@angee/agents";
@@ -18,7 +18,7 @@ import consoleSDL from "../../runtime/schemas/console.graphql?raw";
 import { DemoCredentials } from "./demo-auth";
 import "./index.css";
 
-const authAddon: BaseAddon = {
+const authAddon = defineBaseAddon({
   id: "auth",
   routes: [
     {
@@ -28,7 +28,7 @@ const authAddon: BaseAddon = {
       component: () => <LoginPage redirectTo="/notes" />,
     },
   ],
-};
+});
 
 createApp({
   addons: [notes, authAddon, iam, integrate, agents, operator, storage, knowledge],
