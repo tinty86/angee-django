@@ -258,9 +258,11 @@ visual-parity spot-check across both themes still recommended before release.
       - [x] base `auth` (UsernamePasswordForm/LoginPage) + `communication`
         (Chatter/RevisionsTab) → `useBaseT()` + `enBaseMessages` (auth.*/revisions.*
         /chatter.*). LoginHero marketing copy left (one-off; key later if wanted).
-      - [ ] base remainder: chrome copy (AppChooser/Spotlight/GlobalSearch/UserMenu/
-        Systray/TopMenu/DataToolbar), `ListInternals` `SelectionBar` wrapper +
-        aria-labels, pager `subject`.
+      - [x] base chrome (AppChooser/Spotlight/GlobalSearch/UserMenu/Systray/TopBar/
+        AppRail/Breadcrumb) → `useBaseT()` + `chrome.*` keys (also stabilized
+        `useBaseT` with `useCallback`). `TopMenu` `DEFAULT_TABS` left for T16.
+      - [ ] base minor remainder: `toolbars/DataToolbar` copy, `ListInternals`
+        `SelectionBar` wrapper (Clear/Delete) + row aria-labels, pager `subject`.
       - [ ] per-addon namespace + bundle, route all copy through `t`: iam, operator
         (expand beyond section titles), storage, knowledge, integrate, agents.
 - [ ] **T13** Previews via build-time composition: a `previews`/`widgets` map on

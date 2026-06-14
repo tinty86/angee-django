@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+
 import {
   translateWithFallback,
   useT,
@@ -17,6 +19,11 @@ export function useBaseT(): (
   vars?: BaseMessageVars,
 ) => string {
   const t = useT("base");
-  return (key: string, vars?: BaseMessageVars) =>
-    translateWithFallback(t, enBaseMessages, key, vars);
+  // Stable identity (t is memoized by useT) so consumers can list the translator
+  // in a useMemo/useEffect dep array without re-running every render.
+  return useCallback(
+    (key: string, vars?: BaseMessageVars) =>
+      translateWithFallback(t, enBaseMessages, key, vars),
+    [t],
+  );
 }

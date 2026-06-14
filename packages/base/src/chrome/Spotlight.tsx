@@ -5,6 +5,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useBaseT } from "../i18n";
 import { Command } from "../ui/command";
 import {
   DialogBackdrop,
@@ -55,9 +56,15 @@ export function Spotlight({
   commands,
   onOpenChange,
   open,
-  placeholder = "Search commands...",
+  placeholder,
 }: SpotlightProps): ReactElement {
-  const groups = useMemo(() => groupCommands(commands), [commands]);
+  const t = useBaseT();
+  const resolvedPlaceholder = placeholder ?? t("chrome.searchCommands");
+  const commandPalette = t("chrome.commandPalette");
+  const groups = useMemo(
+    () => groupCommands(commands, t("chrome.commands")),
+    [commands, t],
+  );
 
   function runCommand(command: SpotlightCommand): void {
     void Promise.resolve(command.run()).finally(() => onOpenChange(false));
@@ -67,20 +74,20 @@ export function Spotlight({
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogBackdrop />
-        <DialogContent aria-label="Command palette" placement="default">
-          <Command label="Command palette" loop>
-            <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogContent aria-label={commandPalette} placement="default">
+          <Command label={commandPalette} loop>
+            <DialogTitle className="sr-only">{commandPalette}</DialogTitle>
             <Command.Search className="h-12 px-4">
               <Command.Input
                 autoFocus
-                placeholder={placeholder}
-                aria-label={placeholder}
+                placeholder={resolvedPlaceholder}
+                aria-label={resolvedPlaceholder}
               />
               <Kbd>Esc</Kbd>
             </Command.Search>
             <DialogBody className="p-0">
               <Command.List className="max-h-modal-list-max-h">
-                <Command.Empty>No matching commands.</Command.Empty>
+                <Command.Empty>{t("chrome.noCommands")}</Command.Empty>
                 {groups.map((group) => (
                   <Command.Group key={group.name} heading={group.name}>
                     {group.commands.map((command) => (
@@ -109,14 +116,17 @@ export function Spotlight({
   );
 }
 
-function groupCommands(commands: readonly SpotlightCommand[]): readonly {
+function groupCommands(
+  commands: readonly SpotlightCommand[],
+  defaultGroup: string,
+): readonly {
   name: string;
   commands: readonly SpotlightCommand[];
 }[] {
   const order: string[] = [];
   const byGroup = new Map<string, SpotlightCommand[]>();
   for (const command of commands) {
-    const group = command.group ?? "Commands";
+    const group = command.group ?? defaultGroup;
     const existing = byGroup.get(group);
     if (existing) {
       existing.push(command);

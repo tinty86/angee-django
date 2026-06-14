@@ -2,6 +2,7 @@ import { useState, type ReactElement } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth, useLogout } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import {
   PopoverContent,
@@ -26,11 +27,13 @@ export function UserMenu({
   align = "end",
   sideOffset = 8,
 }: UserMenuProps): ReactElement {
+  const t = useBaseT();
   const { user } = useAuth();
   const { logout, fetching } = useLogout();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const displayName = user?.name || user?.username || "User";
+  const userMenu = t("chrome.userMenu");
+  const displayName = user?.name || user?.username || t("chrome.userFallback");
   const email = user?.email;
 
   async function signOut(): Promise<void> {
@@ -43,7 +46,7 @@ export function UserMenu({
   return (
     <PopoverRoot open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        aria-label="User menu"
+        aria-label={userMenu}
         className={cn(
           "grid size-8 place-content-center rounded-6 border border-border-on-rail bg-avatar-default-bg text-2xs font-semibold uppercase text-on-brand outline-none transition-colors hover:bg-rail-hi focus-visible:focus-ring",
           className,
@@ -54,7 +57,7 @@ export function UserMenu({
       <PopoverPortal>
         <PopoverPositioner side={side} align={align} sideOffset={sideOffset}>
           <PopoverContent
-            aria-label="User menu"
+            aria-label={userMenu}
             className="w-60 p-1 text-13"
             role="menu"
             surface="sheet"
@@ -75,7 +78,7 @@ export function UserMenu({
               className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-fg-2 outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Glyph name="log-out" />
-              <span className="flex-1 truncate">Sign out</span>
+              <span className="flex-1 truncate">{t("chrome.signOut")}</span>
             </button>
           </PopoverContent>
         </PopoverPositioner>

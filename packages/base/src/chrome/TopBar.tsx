@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { useChatter } from "../communication/chatter-context";
 import { Button } from "../ui/button";
@@ -44,9 +45,10 @@ export function TopBar({
   className,
   children,
 }: TopBarProps): ReactElement {
+  const t = useBaseT();
   return (
     <header
-      aria-label="Workspace top bar"
+      aria-label={t("chrome.topBar")}
       className={cn(
         "area-topbar z-topbar flex h-topbar-h min-w-0 items-center gap-3 border-b border-border-on-rail bg-rail px-3 pl-4 text-on-rail",
         className,
@@ -79,16 +81,18 @@ export function TopBar({
 }
 
 function ChatterToggleButton(): ReactElement {
+  const t = useBaseT();
   const { collapsed, toggleCollapsed } = useChatter();
   const open = !collapsed;
+  const label = open ? t("chrome.collapseChatter") : t("chrome.openChatter");
   return (
-    <Tooltip label={open ? "Collapse chatter" : "Open chatter"}>
+    <Tooltip label={label}>
       <Button
         type="button"
         variant="icon"
         size="iconSm"
         active={open}
-        aria-label={open ? "Collapse chatter" : "Open chatter"}
+        aria-label={label}
         aria-pressed={open}
         onClick={toggleCollapsed}
         className="text-on-rail-mut hover:bg-rail-hi hover:text-on-rail-hi"

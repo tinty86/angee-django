@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import {
   useRouteBreadcrumbItems,
@@ -39,9 +40,10 @@ function BreadcrumbTrail({
   className?: string;
   items: readonly BreadcrumbItem[];
 }): ReactElement {
+  const t = useBaseT();
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={t("chrome.breadcrumb")}
       className={cn(
         "area-crumbs z-breadcrumb flex h-crumbs-h min-w-0 items-center gap-1 border-b border-border-subtle bg-sheet px-4 text-13 text-fg-muted",
         className,
