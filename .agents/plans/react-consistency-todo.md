@@ -616,13 +616,31 @@ visual-parity spot-check across both themes still recommended before release.
       namespace object is now one real consumers use. NOTE for the docs agent:
       encode this convention in `docs/frontend/guidelines.md` (this slice avoided
       docs per the handoff split).
-- [ ] Route the remaining raw widget-shape reads in FormView through the
-      `fieldWidgetId` owner: `isLongTextField`'s `field.kind === "textarea"` fallback
-      and `gridFieldClass` + the statusbar filter (`field.widget === "statusbar"`)
-      read `field.widget` directly. Converge `hasOptionValue` (FormView) and
-      `ENUM_OPTION_WIDGETS` (`model-metadata-defaults`) — two divergent
-      option-bearing-widget inventories — onto a single `Field.tsx` predicate.
-      (Surfaced during the T8 `fieldWidgetId`/`isRelationIdField` owner move.)
+- [x] Route the remaining raw widget-shape reads in FormView through the
+      `fieldWidgetId` owner. DONE (the genuine folds):
+      - `gridFieldClass`: `field.widget === "tagInput"` → `fieldWidgetId(field) ===
+        "tagInput"`.
+      - statusbar filter: `field.widget === "statusbar"` → `fieldWidgetId(field) ===
+        "statusbar"` ("statusbar" is a widget, never an SDL kind, so identical
+        behavior + the correct widget-overrides-kind resolution).
+      - `isLongTextField`: deleted the redundant `field.kind === "textarea"` tail —
+        `fieldWidgetId` already returns `kind` when no `widget` is set, so
+        `id === "textarea"` subsumes it; the separate read would only (wrongly) fire
+        when an explicit widget overrides the kind, against `fieldWidgetId`'s
+        widget-wins contract.
+      LEAVE-SEPARATE: **`hasOptionValue` (FormView) vs `ENUM_OPTION_WIDGETS`
+      (`model-metadata-defaults`)** — different SETS and different INTENT, not one
+      predicate. `hasOptionValue` = {select, many2one, statusbar} ∪ kind {select,
+      selection}, gated on inline `options`; its job is submit-emptiness ("would `""`
+      mean an unselected option?") and it deliberately includes the `many2one`
+      relation and checks widget OR kind independently (a widget=text,kind=select
+      field still counts). `ENUM_OPTION_WIDGETS` = {select, selection, statusbar,
+      statusBadge, ribbon}; its job is METADATA-DEFAULTING ("auto-attach SDL enum
+      options"), so it includes the display widgets `statusBadge`/`ribbon` and
+      excludes `many2one`. Folding them would be wrong (DRY: different intent →
+      separate). `hasOptionValue`'s widget-OR-kind independence is also load-bearing
+      (routing through `fieldWidgetId`'s widget-XOR-kind would change the
+      widget=text,kind=select case), so it keeps its explicit reads.
 - [x] Delete the write-only page-element `*_SLOT` symbols
       (`FIELD_SLOT`/`GROUP_SLOT`/`ACTION_SLOT`/`COLUMN_SLOT`/`TAB_SLOT`). DONE:
       grep-confirmed each was assigned `[X_SLOT]: true` on its marker + exported
@@ -636,9 +654,10 @@ visual-parity spot-check across both themes still recommended before release.
       reusing `@angee/base/testing`); drop redundant nested `ToastProvider`; fix
       group taxonomy (`Feedback` 1-member; `Page` vs `Layouts`); replace
       hex/`white` hero literals with inverse tokens.
-- [~] `useOperatorSnapshot` `want*` flags → one `SECTION_KEYS` table; principled
+- [x] `useOperatorSnapshot` `want*` flags → one `SECTION_KEYS` table; principled
       List/Form declaration placement in agents; collapse two translators
-      (`useT`/`translateWithFallback`).
+      (`useT`/`translateWithFallback`). (All three sub-items resolved below:
+      SECTION_KEYS DONE; the two translators + agents List/Form = LEAVE.)
       - [x] **`SECTION_KEYS` table** DONE: the `want*` mapping was spelled three
         times (8 `const want* = sections.X ?? false`, the 8-key variables object,
         the 8-entry memo deps). Collapsed onto one `SNAPSHOT_SECTIONS` table (the
@@ -659,8 +678,16 @@ visual-parity spot-check across both themes still recommended before release.
         `runtime.ts`) is a thinner React hook that reads only the runtime bundle for
         a namespace (no static fallback) — a different contract. Not redundant;
         `useNamespaceT` already unified the fallback-bearing path.
-      - [ ] **principled List/Form declaration placement in agents** — not yet
-        scoped; deferred (see report).
+      - [x] **principled List/Form declaration placement in agents** —
+        ALREADY-PRINCIPLED / LEAVE (scoped): each agents page (`AgentsPage`,
+        `McpServersPage`/`McpToolsPage`, `SkillsPage`) declares its own
+        `<DataPage><List/><Form/></DataPage>` inline — the idiomatic, established
+        `DataPage` pattern across every addon, where the page IS the declaration
+        owner. The only shared shape (`AgentsPage`/`TemplatesPage`, one model, two
+        `isTemplate` tabs) is already factored into a shared `agentDataPage(...)`
+        helper. Nothing is duplicated or misplaced: these are full page VIEWS, not
+        the relation-picker create-form OVERRIDES that the `forms:` registry owns
+        (T17), so there's no registry move to make. No change.
 
 ## Exhaustive fixes (deferred — track, don't do yet)
 

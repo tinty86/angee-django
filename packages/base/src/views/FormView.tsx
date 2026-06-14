@@ -400,7 +400,7 @@ export function FormView({
 
   const titleField = titleFieldFor(formFields, modelMetadata);
   const statusField = formFields.find(
-    (field) => field.widget === "statusbar" && !field.showWhen,
+    (field) => fieldWidgetId(field) === "statusbar" && !field.showWhen,
   );
   const bodyField = React.useMemo(
     () => bodyFieldFor(formFields, titleField, statusField),
@@ -934,13 +934,15 @@ function isNamedBodyField(field: FieldDescriptor): boolean {
 }
 
 function isLongTextField(field: FieldDescriptor): boolean {
+  // `fieldWidgetId` already returns `kind` when no `widget` is set, so a bare
+  // `kind:"textarea"` resolves to the `textarea` id — a separate `field.kind`
+  // read would only (wrongly) fire when an explicit widget overrides the kind.
   const id = fieldWidgetId(field);
   return (
     id === "textarea" ||
     id === "markdown" ||
     id === "markdown.editor" ||
-    id === "markdown.preview" ||
-    field.kind === "textarea"
+    id === "markdown.preview"
   );
 }
 
@@ -1128,7 +1130,7 @@ function fieldAriaLabel(field: FieldDescriptor): string {
 }
 
 function gridFieldClass(field: FieldDescriptor): string | undefined {
-  return field.widget === "tagInput" ? FULL_FIELD_CLASS : undefined;
+  return fieldWidgetId(field) === "tagInput" ? FULL_FIELD_CLASS : undefined;
 }
 
 function fieldErrorMessages(errors: readonly unknown[]): string[] {
