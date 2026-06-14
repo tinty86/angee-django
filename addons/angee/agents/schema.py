@@ -147,8 +147,10 @@ class InferenceProviderInput:
     name: str
     base_url: str = ""
     backend_class: str = "manual"
-    config: JSON | None = None
-    status: str | None = None
+    # UNSET (not None): an omitted field must fall back to the model default, not
+    # overwrite a non-null column with null (see docs/backend/guidelines.md Pitfalls).
+    config: JSON | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -174,11 +176,13 @@ class InferenceModelInput:
     description: str = ""
     model_use: str = "chat"
     is_default: bool = False
-    status: str | None = None
     context_window: int = 0
     max_output_tokens: int | None = None
-    capabilities: JSON | None = None
-    config: JSON | None = None
+    # UNSET over non-null columns (see InferenceProviderInput); the nullable
+    # ``publisher``/``max_output_tokens`` FKs/ints keep ``None``.
+    status: str | None = strawberry.UNSET
+    capabilities: JSON | None = strawberry.UNSET
+    config: JSON | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -209,7 +213,7 @@ class MCPServerInput:
     transport: str = "http"
     url: str = ""
     credential: relay.GlobalID | None = None
-    config: JSON | None = None
+    config: JSON | None = strawberry.UNSET  # UNSET over the non-null column (see InferenceProviderInput).
 
 
 @strawberry.input
@@ -233,7 +237,7 @@ class MCPToolInput:
     server: relay.GlobalID
     name: str
     description: str = ""
-    input_schema: JSON | None = None
+    input_schema: JSON | None = strawberry.UNSET  # UNSET over the non-null column.
     enabled: bool = True
 
 
@@ -265,9 +269,10 @@ class AgentInput:
     model: relay.GlobalID | None = None
     service_template: relay.GlobalID | None = None
     workspace_template: relay.GlobalID | None = None
-    service_inputs: JSON | None = None
-    workspace_inputs: JSON | None = None
-    status: str | None = None
+    # UNSET over non-null columns (see InferenceProviderInput); the nullable FKs above keep None.
+    service_inputs: JSON | None = strawberry.UNSET
+    workspace_inputs: JSON | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
 
 
 @strawberry.input

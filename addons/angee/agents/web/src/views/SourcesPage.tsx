@@ -8,6 +8,7 @@ import { REFRESH_SOURCE_MUTATION, type IdVariables, type RefreshSourceData } fro
 // VCS integration are set up in the integrate console; here a source points at a
 // repo path, and Refresh (re-)discovers its skills.
 const MODEL = "integrate.Source";
+const SKILL_DEFAULTS = { kind: "skill" };
 
 export function SourcesPage(): React.ReactElement {
   const [refreshSource] = useAuthoredMutation<RefreshSourceData, IdVariables>(REFRESH_SOURCE_MUTATION);
@@ -16,7 +17,10 @@ export function SourcesPage(): React.ReactElement {
       if (typeof ctx.record?.id !== "string") return;
       const result = await refreshSource({ id: ctx.record.id });
       ctx.refresh();
-      return result?.refreshSource.message;
+      const outcome = result?.refreshSource;
+      // Surface an ok:false business failure as an error toast, not a green success.
+      if (outcome && !outcome.ok) throw new Error(outcome.message);
+      return outcome?.message;
     },
     [refreshSource],
   );
@@ -27,7 +31,7 @@ export function SourcesPage(): React.ReactElement {
       placement="inline"
       routed
       filter={{ kind: { exact: "skill" } }}
-      createDefaults={{ kind: "skill" }}
+      createDefaults={SKILL_DEFAULTS}
     >
       <List model={MODEL} pageSize={50}>
         <Column field="path" />
@@ -35,11 +39,12 @@ export function SourcesPage(): React.ReactElement {
         <Column field="lastSyncedAt" />
       </List>
       <Form model={MODEL}>
-        {/* The repository is fixed at create; the patch input omits it. `kind` is
-            pinned to "skill" (createDefaults) so the source lands in this filtered list. */}
+        {/* repository + kind are fixed at create. `kind` is `createOnly` (not
+            `readOnly`) so the `createDefaults` "skill" seed is actually submitted —
+            `mutationData` drops readOnly fields — then locked read-only on edit. */}
         <Field name="repository" createOnly />
         <Group label="Pointer" columns={2}>
-          <Field name="kind" readOnly />
+          <Field name="kind" createOnly />
           <Field name="ref" />
         </Group>
         <Field name="path" />

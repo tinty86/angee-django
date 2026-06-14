@@ -187,6 +187,25 @@ def test_refresh_provider_models_is_admin_gated(agents_console_tables: None) -> 
     assert result["ok"] is True
 
 
+def test_create_mcp_server_keeps_defaults_for_omitted_optionals(agents_console_tables: None) -> None:
+    """A create omitting optional non-null fields leaves them at the model default.
+
+    Locks the `strawberry.UNSET` input contract: an omitted `config`/`placement` must
+    fall back to the JSONField/StateField default, not be submitted as an explicit null
+    that `full_clean` would reject (see docs/backend/guidelines.md Pitfalls).
+    """
+
+    admin = _platform_admin("agt-mcp-create-admin")
+    created = _data(
+        _execute(
+            _schema(),
+            'mutation { createMcpServer(data: {name: "Local MCP"}) { name placement config } }',
+            user=admin,
+        )
+    )["createMcpServer"]
+    assert created == {"name": "Local MCP", "placement": "EXTERNAL", "config": {}}
+
+
 def _seed_agent_and_skills(owner: Any) -> tuple[Any, Any, Any]:
     """Create a skill source with two skills and an owned agent (all elevated)."""
 

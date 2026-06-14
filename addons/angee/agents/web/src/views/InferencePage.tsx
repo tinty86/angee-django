@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Action, type ActionContext, Column, DataPage, Field, Form, Group, List } from "@angee/base";
+import { Action, type ActionContext, Column, DataPage, Field, Form, Group, List, useEnumOptions } from "@angee/base";
 import { useAuthoredMutation } from "@angee/sdk";
 
 import {
@@ -7,7 +7,6 @@ import {
   type IdVariables,
   type RefreshProviderModelsData,
 } from "../documents";
-import { useEnumOptions } from "../enum-options";
 
 const PROVIDER_MODEL = "agents.InferenceProvider";
 const MODEL_MODEL = "agents.InferenceModel";

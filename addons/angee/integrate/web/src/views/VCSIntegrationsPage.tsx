@@ -7,9 +7,9 @@ import {
   Form,
   List,
   type ActionContext,
-  type WidgetOption,
+  useEnumOptions,
 } from "@angee/base";
-import { useAuthoredMutation, useModelMetadata } from "@angee/sdk";
+import { useAuthoredMutation } from "@angee/sdk";
 
 import {
   DISCOVER_REPOSITORIES_MUTATION,
@@ -45,21 +45,10 @@ export function VCSIntegrationsPage(): React.ReactElement {
     DiscoverRepositoriesVariables
   >(DISCOVER_REPOSITORIES_MUTATION);
 
-  // `backendClass` is an SDL enum, but its create input is a plain String keyed by
-  // the lowercase registry key (`github`/`none`) while a read serializes the
-  // UPPERCASE enum member name (`GITHUB`) — the same asymmetry as `status`. The
-  // member name is exactly `key.upper()`, so lower-casing the metadata option
-  // value yields the write key. `createOnly` keeps it off the edit patch, so the
-  // read-side casing never has to round-trip back through the select.
-  const metadata = useModelMetadata(MODEL);
-  const backendClassOptions = React.useMemo<readonly WidgetOption[]>(
-    () =>
-      (metadata?.fields.backendClass?.values ?? []).map((value) => ({
-        value: value.value.toLowerCase(),
-        label: value.label,
-      })),
-    [metadata],
-  );
+  // `backendClass` reads as the UPPERCASE enum member but its create input is a
+  // lowercase String key; `useEnumOptions` lower-cases the option values, and
+  // `createOnly` keeps the read casing off the edit patch.
+  const backendClassOptions = useEnumOptions(MODEL, "backendClass");
 
   const sync = React.useCallback(
     async (ctx: ActionContext) => {

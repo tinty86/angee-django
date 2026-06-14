@@ -1,7 +1,5 @@
 import * as React from "react";
-import { Column, DataPage, Field, Form, Group, List } from "@angee/base";
-
-import { useEnumOptions } from "../enum-options";
+import { Column, DataPage, Field, Form, Group, List, useEnumOptions } from "@angee/base";
 
 const SERVER_MODEL = "agents.MCPServer";
 const TOOL_MODEL = "agents.MCPTool";
