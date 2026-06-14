@@ -121,15 +121,12 @@ export const appChooserItems: readonly AppChooserItem[] = [
   },
 ];
 
+// Tabs are presentational here; a product route reads `?tab=` to apply its own
+// filter (e.g. starred/archived). The framework owns only the strip.
 export const topMenuTabs: readonly TopMenuTab[] = [
-  { id: "all", label: "All notes", icon: "list", filter: {} },
-  { id: "starred", label: "Starred", icon: "star", filter: { isStarred: true } },
-  {
-    id: "archive",
-    label: "Archive",
-    icon: "archive",
-    filter: { status: { exact: "ARCHIVED" } },
-  },
+  { id: "all", label: "All notes", icon: "list" },
+  { id: "starred", label: "Starred", icon: "star" },
+  { id: "archive", label: "Archive", icon: "archive" },
 ];
 
 export const spotlightCommands: readonly SpotlightCommand[] = [

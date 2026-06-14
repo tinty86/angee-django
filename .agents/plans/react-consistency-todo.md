@@ -175,8 +175,9 @@ visual-parity spot-check across both themes still recommended before release.
       `DEFAULT_PAGE_SIZE`=50 via the data-view default chain). The 4
       `<RowsListView pageSize={50}>` sites left explicit (different component) —
       harmless (equal to default); a later sweep could drop them too.
-- [ ] ⌘K handler + `isTextEntryTarget` (×2) → one `useCommandShortcut` (folds T9
-      palette work).
+- [x] ⌘K handler + `isTextEntryTarget` (×2) → resolved by the command-palette
+      work: `GlobalSearch` (the second copy) is deleted, so the one remaining
+      handler lives on `Spotlight`'s `useSpotlightShortcut` (now ref-stable).
 - [ ] confirm/prompt promise-queue → one `useQueuedDialog<TOptions,TResult>` in
       `ModalsHost`.
 - [ ] SDK mutation hooks → one `useDocumentMutation`; collapse
@@ -290,9 +291,14 @@ visual-parity spot-check across both themes still recommended before release.
       and `clearPreviewProvidersForTest`.
 - [ ] **T15 (yes)** Export `defineBaseAddon()` from `@angee/base`; migrate iam,
       operator, storage, knowledge, integrate, agents, notes `BaseAddon` literals.
-- [ ] **T16** De-leak product specifics from base chrome: move `TopMenu`
-      tab→filter to the data-view/route owner; drop note-specific `DEFAULT_TABS`
-      and the `DataViewFilter` import; keep `TopMenu` presentation-only.
+- [x] **T16** DONE — `TopMenu` is now a generic presentational tablist:
+      dropped note-specific `DEFAULT_TABS`, the `TOP_TAB_IDS`/`TopMenuTabId`
+      literal, and the `DataViewFilter` import (the coupling); `TopMenuTab` is
+      `{ id; label; icon? }`; the active tab derives from the passed tabs (first =
+      default, unknown `?tab=` falls back). The tab→filter mapping is the consumer
+      route's job (reads `?tab=`); **no in-repo consumer wires it yet** — the
+      framework keeps only the strip + query state. Storybook fixture made generic.
+      (Reviewer noted prefer-deletion is a live option if no consumer arrives.)
 - [ ] **T17** Forms onto the DSL/registry: replace inline `<form><label>`
       (iam/operator) with `Field`/`FormView` or a shared `LabeledInput`; register
       drive/vault relation-create via `defineAddon` `forms:`; `Notebook.Tab` onto

@@ -43,6 +43,5 @@ export {
   type TopMenuItem,
   type TopMenuProps,
   type TopMenuTab,
-  type TopMenuTabId,
 } from "./TopMenu";
 export { UserMenu, type UserMenuProps } from "./UserMenu";
