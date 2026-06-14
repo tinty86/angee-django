@@ -34,6 +34,27 @@ def test_oauth_client_blank_client_id_means_needs_client() -> None:
     assert oauth_client.configuration_state == "needs_client"
 
 
+def test_resolve_connect_redirect_picks_auto_or_manual() -> None:
+    """A fixed public client redirects back only on localhost; elsewhere it pastes."""
+
+    plain = OAuthClient(slug="google", client_id="g")
+    assert plain.resolve_connect_redirect("https://app.example/callback") == (
+        "https://app.example/callback",
+        "auto",
+    )
+
+    manual = "https://platform.claude.com/oauth/code/callback"
+    fixed = OAuthClient(slug="anthropic", client_id="a", manual_redirect_uri=manual)
+    assert fixed.resolve_connect_redirect("http://localhost:5177/callback") == (
+        "http://localhost:5177/callback",
+        "auto",
+    )
+    # 127.0.0.1 is not the allow-listed loopback host, and a remote origin can't round-trip
+    # the session — both fall back to the manual paste callback.
+    assert fixed.resolve_connect_redirect("http://127.0.0.1:5177/callback") == (manual, "manual")
+    assert fixed.resolve_connect_redirect("https://console.example/callback") == (manual, "manual")
+
+
 def test_oauth_client_claim_accessors_support_dotted_paths() -> None:
     """Provider profile documents can expose identity claims below nested objects."""
 

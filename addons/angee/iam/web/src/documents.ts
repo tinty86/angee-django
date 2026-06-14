@@ -56,6 +56,9 @@ export const CONNECT_ACCOUNT_START_MUTATION = `
     ) {
       authorizeUrl
       error
+      mode
+      state
+      redirectUri
     }
   }
 `;
@@ -230,6 +233,12 @@ export interface AvailableConnectionsData {
 export interface OidcStartPayload {
   authorizeUrl: string;
   error: string | null;
+  /** Connect-start only: "auto" (redirect back) or "manual" (paste the code). */
+  mode?: string;
+  /** Connect-start only: the state token, resent at manual completion. */
+  state?: string;
+  /** Connect-start only: the effective redirect URI, resent at completion. */
+  redirectUri?: string;
 }
 
 /** Selection result for `IamLoginStart`. */

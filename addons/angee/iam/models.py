@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -457,6 +458,7 @@ class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # ty
             "email_claim",
             "display_name_claim",
             "avatar_url_claim",
+            "manual_redirect_uri",
         }
     )
     setting_fields = seed_fields | frozenset({"slug", "environment", "client_secret"})
@@ -571,6 +573,10 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
     email_claim = models.CharField(max_length=128, default="email", blank=True)
     display_name_claim = models.CharField(max_length=128, blank=True)
     avatar_url_claim = models.CharField(max_length=128, blank=True)
+    # Fixed manual-paste callback for fixed public clients (e.g. Anthropic) whose
+    # allow-list we cannot extend. When set, connect uses a localhost loopback redirect
+    # when the console runs on localhost, else this manual page (see resolve_connect_redirect).
+    manual_redirect_uri = models.URLField(blank=True)
 
     objects = OAuthClientManager()
 
@@ -630,6 +636,24 @@ class OAuthClient(SqidMixin, AuditMixin, AngeeModel):
         """Return configured provider-specific token-exchange parameters."""
 
         return self._string_mapping(self.token_params)
+
+    def resolve_connect_redirect(self, proposed_redirect_uri: str) -> tuple[str, str]:
+        """Return the ``(redirect_uri, mode)`` this client uses to connect from a browser.
+
+        ``mode`` is ``"auto"`` (the provider redirects back to ``proposed_redirect_uri``)
+        or ``"manual"`` (the user copies the code the provider displays and pastes it
+        back). A client with no ``manual_redirect_uri`` always redirects back. A fixed
+        public client (``manual_redirect_uri`` set) can redirect back only to a
+        ``localhost`` loopback — its allow-list rejects other hosts and a cross-origin
+        callback would also drop the session — so off-localhost it falls back to manual.
+        """
+
+        if not self.manual_redirect_uri:
+            return proposed_redirect_uri, "auto"
+        host = (urlsplit(proposed_redirect_uri).hostname or "").lower()
+        if host == "localhost":
+            return proposed_redirect_uri, "auto"
+        return self.manual_redirect_uri, "manual"
 
     @property
     def token_request_format_value(self) -> str:

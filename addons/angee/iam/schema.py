@@ -153,6 +153,7 @@ class OAuthClientType(AngeeNode):
     userinfo_endpoint: auto
     jwks_uri: auto
     discovery_url: auto
+    manual_redirect_uri: auto
     token_request_format: auto
     is_oidc: auto
     is_enabled: auto
@@ -478,6 +479,10 @@ class OidcStartPayload:
     state: str = ""
     error: str | None = None
     error_code: str | None = None
+    mode: str = "auto"
+    """``"auto"`` to redirect the browser back, or ``"manual"`` to paste the code."""
+    redirect_uri: str = ""
+    """The effective redirect URI the flow used (resent verbatim at completion)."""
 
 
 @strawberry.type
@@ -554,6 +559,7 @@ class OAuthClientInput:
     userinfo_endpoint: str = ""
     jwks_uri: str = ""
     discovery_url: str = ""
+    manual_redirect_uri: str = ""
     token_request_format: str = "form"
     is_oidc: bool = False
     is_enabled: bool = True
@@ -592,6 +598,7 @@ class OAuthClientPatch:
     userinfo_endpoint: str | None = strawberry.UNSET
     jwks_uri: str | None = strawberry.UNSET
     discovery_url: str | None = strawberry.UNSET
+    manual_redirect_uri: str | None = strawberry.UNSET
     token_request_format: str | None = strawberry.UNSET
     is_oidc: bool | None = strawberry.UNSET
     is_enabled: bool | None = strawberry.UNSET
@@ -1687,9 +1694,12 @@ def _start_oauth_flow(
     client owns that distinction via ``is_oidc``.
     """
 
+    # The client (e.g. Anthropic) owns whether the browser-proposed redirect works or a
+    # manual paste is needed; the effective redirect is what we issue, sign, and exchange.
+    effective_redirect_uri, mode = oauth_client.resolve_connect_redirect(redirect_uri)
     state_token, record = state.issue(
         oauth_client,
-        redirect_uri,
+        effective_redirect_uri,
         user_id=user_id,
         next_path=next_path,
         flow=flow,
@@ -1699,11 +1709,16 @@ def _start_oauth_flow(
         oauth_client,
         state=state_token,
         nonce=record.nonce if oauth_client.is_oidc else None,
-        redirect_uri=redirect_uri,
+        redirect_uri=effective_redirect_uri,
         scopes=oauth_client.default_scope_values,
         code_challenge=_pkce_challenge(record.code_verifier),
     )
-    return OidcStartPayload(authorize_url=authorize_url, state=state_token)
+    return OidcStartPayload(
+        authorize_url=authorize_url,
+        state=state_token,
+        mode=mode,
+        redirect_uri=effective_redirect_uri,
+    )
 
 
 def _oidc_start_error(error: OidcFlowError) -> OidcStartPayload:
