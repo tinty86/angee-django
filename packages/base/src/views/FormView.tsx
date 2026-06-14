@@ -584,7 +584,7 @@ export function FormView({
 
         </header>
 
-        <ErrorBanner message={saveError} title="Save failed" />
+        <ErrorBanner description={saveError} title="Save failed" />
 
         <div className="grid gap-6">
           {hasConditionalFields ? (

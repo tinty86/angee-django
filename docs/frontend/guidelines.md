@@ -44,6 +44,14 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   `chrome/icon-registry.ts`.
 - Use shared page, view, form, table, widget, and shell primitives before adding
   new local state.
+- State surfaces are shared fragments — never hand-roll an empty/loading/error
+  block. The titled surfaces (`EmptyState`, `ErrorBanner`) take the one
+  `{title, description, icon?, actions?}` vocabulary; the single-line ones keep
+  their own slot (`InlineEmpty` `label`, `LoadingPanel` `message`). For a
+  full-height empty panel pass `EmptyState fill` (it centers an intrinsic-size
+  card) instead of wrapping it in a `grid place-content-center` div; `LoadingPanel`
+  already self-centers. A renderer owns its own loading/error so callers describe
+  only the happy path (cf. `preview/builtins.tsx` `FileText`).
 - Forms are declarative even when they branch: a `<Field showWhen={(values) => …}>`
   predicate (mirroring `Action.visibleWhen`) drives a discriminated form — a `kind`
   select that swaps the body — and a hidden field is never submitted. Reach for a

@@ -9,7 +9,6 @@ export type EmptyStateProps = Omit<
   "className" | "title"
 > & {
   actions?: React.ReactNode;
-  body?: React.ReactNode;
   className?: string;
   description?: React.ReactNode;
   /** Center the panel within a full-height parent (grid or flex) instead of
@@ -38,11 +37,10 @@ export const emptyStateVariants = tv({
 
 export const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
   function EmptyState(
-    { actions, body, className, description, fill, icon, title, ...props },
+    { actions, className, description, fill, icon, title, ...props },
     ref,
   ) {
     const styles = emptyStateVariants();
-    const resolvedDescription = description ?? body;
     const panel = (
       <Card
         ref={ref}
@@ -55,8 +53,8 @@ export const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
         ) : null}
         <div className={styles.copy()}>
           <h2 className={styles.title()}>{title}</h2>
-          {resolvedDescription ? (
-            <p className={styles.description()}>{resolvedDescription}</p>
+          {description ? (
+            <p className={styles.description()}>{description}</p>
           ) : null}
         </div>
         {actions ? <div className={styles.actions()}>{actions}</div> : null}

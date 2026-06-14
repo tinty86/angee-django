@@ -6,7 +6,7 @@ const meta = {
   component: ErrorBanner,
   parameters: { layout: "padded" },
   args: {
-    message: "The import could not be completed.",
+    description: "The import could not be completed.",
   },
 } satisfies Meta<typeof ErrorBanner>;
 
@@ -18,7 +18,7 @@ export const Banner: Story = {
   render: () => (
     <div className="max-w-3xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
       <ErrorBanner
-        message="The import could not be completed because one row failed validation."
+        description="The import could not be completed because one row failed validation."
         onDismiss={() => undefined}
         title="Import failed"
         actions={

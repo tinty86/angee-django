@@ -7,7 +7,9 @@ export type ErrorBannerProps = Omit<
   BannerProps,
   "children" | "tone" | "format" | "title"
 > & {
-  message: React.ReactNode | null;
+  /** The error body. `null` renders nothing — the "no error" state. Shares the
+   *  `{title, description, actions}` vocabulary of the other state surfaces. */
+  description: React.ReactNode | null;
   title?: React.ReactNode;
 };
 
@@ -16,15 +18,15 @@ export const ErrorBanner = React.forwardRef<HTMLDivElement, ErrorBannerProps>(
     {
       actions,
       className,
+      description,
       dismissLabel = "Dismiss",
-      message,
       onDismiss,
       title,
       ...props
     },
     ref,
   ) {
-    if (!message) return null;
+    if (!description) return null;
     const styles = alertVariants({ format: "banner" });
     const dismissAction = onDismiss ? (
       <button
@@ -54,7 +56,7 @@ export const ErrorBanner = React.forwardRef<HTMLDivElement, ErrorBannerProps>(
         title={title}
         {...props}
       >
-        <span className="block truncate">{message}</span>
+        <span className="block truncate">{description}</span>
       </Alert>
     );
   },

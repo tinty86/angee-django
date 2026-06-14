@@ -330,18 +330,15 @@ export function StoragePage(): ReactElement {
             onClose={closeDetail}
             onChanged={() => filesQuery.refetch()}
           />
+        ) : filesQuery.fetching ? (
+          <LoadingPanel message={t("storage.loadingFile")} />
         ) : (
-          <div className="grid h-full place-content-center p-8">
-            {filesQuery.fetching ? (
-              <LoadingPanel message={t("storage.loadingFile")} />
-            ) : (
-              <EmptyState
-                icon="file"
-                title={t("storage.file.notFoundTitle")}
-                description={t("storage.file.notFoundDescription")}
-              />
-            )}
-          </div>
+          <EmptyState
+            fill
+            icon="file"
+            title={t("storage.file.notFoundTitle")}
+            description={t("storage.file.notFoundDescription")}
+          />
         )
       ) : (
         <FileBrowserContent

@@ -124,9 +124,18 @@ visual-parity spot-check across both themes still recommended before release.
 
 ## Phase 2 — State surfaces (T4)
 
-- [ ] Align prop vocab across `EmptyState`/`InlineEmpty`/`LoadingPanel`/
-      `ErrorBanner` (one of `{title,description,icon,actions}`; deprecate
-      `label`/`message` aliases or unify).
+- [x] Align prop vocab across the state surfaces. DONE (scoped): the TITLED
+      surfaces share `{title, description, icon?, actions?}` — `ErrorBanner.message`
+      → `description` (2 consumers + story), and `EmptyState`'s dead `body` alias
+      deleted (no consumers). The SINGLE-LINE surfaces LEAVE-SEPARATE (different
+      intent): `InlineEmpty.label` and `LoadingPanel.message` are title-less
+      one-slot surfaces — `label`/`message` read naturally there, and forcing a
+      title-companion `description` onto a title-less block is semantically worse.
+      Also collapsed the last mixed `LoadingPanel`-OR-`EmptyState` wrapper
+      (StoragePage:334) now that both self-center (`LoadingPanel` `h-full` root,
+      `<EmptyState fill>`). Encoded the rule in `docs/frontend/guidelines.md`.
+      (Pre-existing, out of scope: `FormView`'s `"Save failed"` ErrorBanner title is
+      hardcoded English — FormView has no `useBaseT`; a T6 i18n gap, not this slice.)
 - [x] Gallery/Timeline/Tree now render an empty state (was blank): `emptyMessage`
       prop (default "No records.") + centered empty render on each; `RowsListView`
       threads `emptyMessage` into its grid-mode `GalleryView`.

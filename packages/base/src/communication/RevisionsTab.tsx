@@ -40,7 +40,7 @@ export function RevisionsTab({
     return (
       <ErrorBanner
         title={t("revisions.unavailable")}
-        message={revisions.error.message}
+        description={revisions.error.message}
       />
     );
   }
