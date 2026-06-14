@@ -6,6 +6,19 @@ export interface WidgetOption {
   disabled?: boolean;
 }
 
+/**
+ * The label for an option `value`: the matching option's `label`, else the raw
+ * value, else "". The one owner of the
+ * `options.find(o => o.value === v)?.label ?? v ?? ""` lookup the scalar and
+ * relation widgets each re-spelled.
+ */
+export function optionLabel(
+  options: readonly WidgetOption[] | undefined,
+  value: string | null | undefined,
+): ReactNode {
+  return options?.find((option) => option.value === value)?.label ?? value ?? "";
+}
+
 export interface WidgetField {
   name?: string;
   label?: ReactNode;

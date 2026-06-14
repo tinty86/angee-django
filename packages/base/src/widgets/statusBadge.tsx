@@ -4,7 +4,7 @@ import { stateToneFromValue } from "../lib/tones";
 import { Badge } from "../ui/badge";
 import { Select } from "../ui/select";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetRenderProps } from "./types";
+import { optionLabel, type WidgetDefinition, type WidgetRenderProps } from "./types";
 
 function StatusBadgeEdit({
   value,
@@ -29,10 +29,7 @@ function StatusBadgeRead({
   value,
   field,
 }: WidgetRenderProps<string>): ReactElement {
-  const label =
-    field?.options?.find((option) => option.value === value)?.label ??
-    value ??
-    "";
+  const label = optionLabel(field?.options, value);
   return (
     <Badge
       tone={stateToneFromValue(value ?? undefined)}

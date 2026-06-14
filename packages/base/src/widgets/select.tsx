@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 
 import { Select } from "../ui/select";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetRenderProps } from "./types";
+import { optionLabel, type WidgetDefinition, type WidgetRenderProps } from "./types";
 
 function SelectEdit({
   value,
@@ -27,8 +27,7 @@ function SelectRead({
   value,
   field,
 }: WidgetRenderProps<string>): ReactElement {
-  const label =
-    field?.options?.find((option) => option.value === value)?.label ?? value ?? "";
+  const label = optionLabel(field?.options, value);
   return <span className="text-13 text-fg">{label}</span>;
 }
 

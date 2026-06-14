@@ -2,7 +2,7 @@ import { useMemo, type ReactElement } from "react";
 
 import { RelationField, type RelationOption } from "./RelationField";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetRenderProps } from "./types";
+import { optionLabel, type WidgetDefinition, type WidgetRenderProps } from "./types";
 
 function Many2OneEdit({
   value,
@@ -33,10 +33,7 @@ function Many2OneRead({
   value,
   field,
 }: WidgetRenderProps<string>): ReactElement {
-  const label =
-    field?.options?.find((option) => option.value === value)?.label ??
-    value ??
-    "";
+  const label = optionLabel(field?.options, value);
   return <span className="text-13 text-fg">{label}</span>;
 }
 

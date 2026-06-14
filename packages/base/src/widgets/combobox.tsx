@@ -11,7 +11,12 @@ import {
   SelectValue,
 } from "../ui/select";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetOption, WidgetRenderProps } from "./types";
+import {
+  optionLabel,
+  type WidgetDefinition,
+  type WidgetOption,
+  type WidgetRenderProps,
+} from "./types";
 
 function ComboboxEdit({
   value,
@@ -93,8 +98,7 @@ function ComboboxRead({
   value,
   field,
 }: WidgetRenderProps<string>): ReactElement {
-  const label =
-    field?.options?.find((option) => option.value === value)?.label ?? value ?? "";
+  const label = optionLabel(field?.options, value);
   return <span className="text-13 text-fg">{label}</span>;
 }
 

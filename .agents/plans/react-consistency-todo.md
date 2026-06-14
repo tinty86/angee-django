@@ -143,8 +143,11 @@ visual-parity spot-check across both themes still recommended before release.
 - [ ] `FormView` field-behavior decoders (`widgetId`, `isRelationIdField`,
       `hasOptionValue`, `emptyValue`) → widget/field resolver owns selection path /
       empty value / submit normalization / layout role.
-- [ ] option `value→label` resolver (×7 widgets) → one helper on
-      `WidgetField.options`.
+- [x] option `value→label` resolver → one `optionLabel(options, value)` owner in
+      `widgets/types.ts` (beside `WidgetOption`); routed select, combobox, many2one,
+      statusBadge, many2many (its local copy deleted). Left separate (different
+      intent): ownerCell (object value), RelationField (finds the option object),
+      themePicker (local list + "System" fallback), booleanBadge (boolean match).
 - [ ] `matchesClientLookup`/`isLookupOperator` → export operator guards from
       `data-view-model`; `Filter` owns text-filter target/predicate.
 - [ ] `AppChooser.itemMatchesPath` / `TopMenu` active logic → add
