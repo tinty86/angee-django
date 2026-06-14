@@ -597,9 +597,31 @@ visual-parity spot-check across both themes still recommended before release.
       reusing `@angee/base/testing`); drop redundant nested `ToastProvider`; fix
       group taxonomy (`Feedback` 1-member; `Page` vs `Layouts`); replace
       hex/`white` hero literals with inverse tokens.
-- [ ] `useOperatorSnapshot` `want*` flags → one `SECTION_KEYS` table; principled
+- [~] `useOperatorSnapshot` `want*` flags → one `SECTION_KEYS` table; principled
       List/Form declaration placement in agents; collapse two translators
       (`useT`/`translateWithFallback`).
+      - [x] **`SECTION_KEYS` table** DONE: the `want*` mapping was spelled three
+        times (8 `const want* = sections.X ?? false`, the 8-key variables object,
+        the 8-entry memo deps). Collapsed onto one `SNAPSHOT_SECTIONS` table (the
+        pane keys, `satisfies (keyof OperatorSnapshotSections)[]`) + a
+        `wantVariable(section)` deriving the `$want<Pane>` toggle; `variables` is
+        built from the table and memoized on a one-string `sectionsKey` signature.
+        `SnapshotVariables` is `Record<WantVariable, boolean>` (a template-literal
+        mapped key `want${Capitalize<keyof OperatorSnapshotSections>}`), so the type
+        still asserts all 8 toggles (review fix: don't relax to open `string`). API +
+        behavior preserved (typecheck + 13 operator tests green; memo equivalence
+        review-verified).
+      - [ ] **collapse `useT`/`translateWithFallback`** — LEAVE-SEPARATE (scoped):
+        they have distinct roles. `translateWithFallback(t, fallback, key, vars)`
+        (SDK `i18n.ts`) is the pure function — host `t` first, then the addon's own
+        `fallback` bundle, then the raw key; it is the shared mechanism that
+        `useNamespaceT` (and thus `useBaseT`/every `use<Addon>T`) is built on, and
+        it is independently exported + unit-tested. `useT(namespace)` (SDK
+        `runtime.ts`) is a thinner React hook that reads only the runtime bundle for
+        a namespace (no static fallback) — a different contract. Not redundant;
+        `useNamespaceT` already unified the fallback-bearing path.
+      - [ ] **principled List/Form declaration placement in agents** — not yet
+        scoped; deferred (see report).
 
 ## Exhaustive fixes (deferred — track, don't do yet)
 

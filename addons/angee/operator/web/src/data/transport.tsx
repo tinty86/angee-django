@@ -39,18 +39,30 @@ const CONNECTION_REFRESH_MS = 15 * 60_000;
 
 type EmptyVariables = Record<string, never>;
 
-/** The snapshot query's `@include` toggles — one per pane. */
-interface SnapshotVariables {
-  wantOverview: boolean;
-  wantServices: boolean;
-  wantWorkspaces: boolean;
-  wantSources: boolean;
-  wantGitOps: boolean;
-  wantOperations: boolean;
-  wantTemplates: boolean;
-  wantSecrets: boolean;
-  [key: string]: boolean;
+// The one section→`@include` mapping: each snapshot pane and the matching
+// `$want<Pane>` toggle in `SNAPSHOT_QUERY`. The hook derives its variables from
+// this table so the pane list lives once (vs. an 8-line copy per concern).
+const SNAPSHOT_SECTIONS = [
+  "overview",
+  "services",
+  "workspaces",
+  "sources",
+  "gitOps",
+  "operations",
+  "templates",
+  "secrets",
+] as const satisfies readonly (keyof OperatorSnapshotSections)[];
+
+/** The `$want<Pane>` toggle name for a pane (`gitOps` → `wantGitOps`). */
+type WantVariable = `want${Capitalize<keyof OperatorSnapshotSections>}`;
+
+/** The snapshot query's `@include` toggle name for a pane (`gitOps` → `wantGitOps`). */
+function wantVariable(section: keyof OperatorSnapshotSections): WantVariable {
+  return `want${section.charAt(0).toUpperCase()}${section.slice(1)}` as WantVariable;
 }
+
+/** The snapshot query's `@include` toggles — one per pane (`$wantOverview`…). */
+type SnapshotVariables = Record<WantVariable, boolean>;
 
 interface OperatorConnectionQueryData {
   operatorConnection?: unknown;
@@ -177,36 +189,23 @@ export interface OperatorSnapshotResult {
 export function useOperatorSnapshot(
   sections: OperatorSnapshotSections = { overview: true },
 ): OperatorSnapshotResult {
-  const wantOverview = sections.overview ?? false;
-  const wantServices = sections.services ?? false;
-  const wantWorkspaces = sections.workspaces ?? false;
-  const wantSources = sections.sources ?? false;
-  const wantGitOps = sections.gitOps ?? false;
-  const wantOperations = sections.operations ?? false;
-  const wantTemplates = sections.templates ?? false;
-  const wantSecrets = sections.secrets ?? false;
-
+  // One signature over the requested panes keys the memo, so the variables
+  // object stays referentially stable while the same panes are requested.
+  const sectionsKey = SNAPSHOT_SECTIONS.map((section) =>
+    sections[section] ? "1" : "0",
+  ).join("");
   const variables = useMemo<SnapshotVariables>(
-    () => ({
-      wantOverview,
-      wantServices,
-      wantWorkspaces,
-      wantSources,
-      wantGitOps,
-      wantOperations,
-      wantTemplates,
-      wantSecrets,
-    }),
-    [
-      wantOverview,
-      wantServices,
-      wantWorkspaces,
-      wantSources,
-      wantGitOps,
-      wantOperations,
-      wantTemplates,
-      wantSecrets,
-    ],
+    () =>
+      // Complete by construction — SNAPSHOT_SECTIONS is pinned to every pane key,
+      // so the derived object carries every `WantVariable` the query requires.
+      Object.fromEntries(
+        SNAPSHOT_SECTIONS.map((section) => [
+          wantVariable(section),
+          sections[section] ?? false,
+        ]),
+      ) as SnapshotVariables,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sectionsKey],
   );
 
   const [result, reexecute] = useQuery<OperatorSnapshotQueryData, SnapshotVariables>({
