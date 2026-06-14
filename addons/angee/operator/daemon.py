@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, cast
@@ -183,8 +184,13 @@ class OperatorDaemon:
                 "Authorization": f"Bearer {self.admin_bearer}",
             },
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read().decode()
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read().decode()
+        except urllib.error.HTTPError as error:
+            # Surface the daemon's own error message instead of a bare "HTTP 500":
+            # the body is JSON like ``{"error": "…"}`` (or text); the caller records it.
+            raise RuntimeError(f"operator {method} {url.rsplit('/', 1)[-1]}: {_daemon_error(error)}") from error
         return json.loads(body) if body else None
 
     def _post_json(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -235,3 +241,17 @@ class OperatorDaemon:
         if not path.endswith("/graphql"):
             path = f"{path}/graphql" if path else "/graphql"
         return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+
+def _daemon_error(error: urllib.error.HTTPError) -> str:
+    """Return a human message from a daemon HTTP error: its JSON ``error`` field, or text."""
+
+    raw = error.read().decode(errors="replace").strip()
+    detail = raw
+    try:
+        decoded = json.loads(raw)
+    except ValueError:
+        decoded = None
+    if isinstance(decoded, dict):
+        detail = str(decoded.get("error") or decoded.get("reason") or raw)
+    return f"HTTP {error.code}: {detail}" if detail else f"HTTP {error.code}"
