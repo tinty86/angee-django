@@ -3,6 +3,7 @@ import {
   Action,
   Column,
   DataPage,
+  enumValueLabel,
   Field,
   Form,
   List,
@@ -58,7 +59,7 @@ export function VCSIntegrationsPage(): React.ReactElement {
     () =>
       (metadata?.fields.backendClass?.values ?? []).map((value) => ({
         value: value.value.toLowerCase(),
-        label: value.label,
+        label: enumValueLabel(value),
       })),
     [metadata],
   );

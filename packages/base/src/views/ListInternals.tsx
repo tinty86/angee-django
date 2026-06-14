@@ -19,6 +19,7 @@ import type {
   AggregateMeasureOperator,
   GroupByDimension,
   GroupByOrder,
+  ModelEnumValueMetadata,
   ModelMetadata,
   Row,
 } from "@angee/sdk";
@@ -889,7 +890,7 @@ function enumLabelFromMetadata(
       candidate.value === value
       || normalizeEnumValue(candidate.value) === normalized,
   );
-  return option ? String(option.label) : null;
+  return option ? enumValueLabel(option) : null;
 }
 
 function normalizeEnumValue(value: string): string {
@@ -1151,8 +1152,22 @@ export function groupFieldLabel(field: string): string {
   return label.endsWith(" At") ? label.slice(0, -3) : label;
 }
 
+/**
+ * Humanize a bare enum member name for display (`IN_REVIEW` → `In Review`). The
+ * rendered binding's one owner for enum-string casing; `enumValueLabel` uses it
+ * as the fallback when the SDL authors no description.
+ */
 export function statusLabel(value: string): string {
   return titleCase(value.toLowerCase());
+}
+
+/**
+ * The display label for an enum metadata value: its SDL description where the
+ * schema authored one, otherwise the humanized value. The SDK carries only the
+ * structural `value`/`description`; this rendered binding owns the casing.
+ */
+export function enumValueLabel(value: ModelEnumValueMetadata): string {
+  return value.description ?? statusLabel(value.value);
 }
 
 /** The flush "Loading…" footer shown under a list shell while a page fetches. */

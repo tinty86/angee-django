@@ -102,6 +102,7 @@ export {
   useBulkDelete,
   type UseBulkDeleteResult,
 } from "./useBulkDelete";
+export { enumValueLabel, statusLabel } from "./ListInternals";
 export * from "./data-view-model";
 export * from "./data-view-context";
 export type { StringIdRow } from "./data-view-surface";

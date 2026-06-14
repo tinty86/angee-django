@@ -178,9 +178,30 @@ visual-parity spot-check across both themes still recommended before release.
       and added `isActive(pathname)`/`hasActiveDescendant(pathname)` to
       `ChromeMenuNode` (the owner); routed `TopMenu` (dropped `menuItemIsActive`)
       and `AppChooser` through them. Behavior-preserving; +2 menu-tree tests.
-- [ ] SDK `model-metadata` display heuristics (`enumValueLabel` casing,
-      `recordRepresentationFor` order) → keep SDK structural; humanization moves to
-      the rendered binding.
+- [x] PARTIAL — `enumValueLabel` casing DONE; `recordRepresentationFor`
+      LEAVE-SEPARATE:
+      • `enumValueLabel` humanization (lowercase+title-case) was a duplicate of
+        base's existing `statusLabel(value) = titleCase(value.toLowerCase())`
+        (verified output-identical for all enum inputs). Moved it out of the SDK:
+        `ModelEnumValueMetadata` now carries the STRUCTURAL `{ value, description? }`
+        (the SDL-authored description, no derived label); the SDK no longer
+        humanizes. Base gained ONE `enumValueLabel(meta) = meta.description ??
+        statusLabel(meta.value)` beside `statusLabel` (the humanization owner);
+        the 3 consumers (`enumOptions`, `enumLabelFromMetadata`, integrate
+        `VCSIntegrationsPage`) derive through it. Exported `enumValueLabel` +
+        `statusLabel` from `@angee/base` (review fix: a public enum-label helper
+        whose delegate stayed private was an incoherent seam). Tests updated to the
+        structural shape.
+      • `recordRepresentationFor` LEAVE-SEPARATE: it selects which FIELD NAME
+        represents a record (title/name/.../first String scalar) and returns a
+        field name, not a formatted string — consumed as `labelField`/title-field/
+        representation-field. That is STRUCTURAL (a model-shape inference), so it
+        stays in the SDK.
+      • Follow-up (out of scope, noted): `ModelFieldMetadata.label` still carries
+        the trimmed SDL field description under the name `label` (base's `fieldLabel`
+        already owns the `titleCase(name)` humanization fallback). The split is fine;
+        only the SDK field name (`label` vs `description`) is unaligned with the
+        enum convention — a naming-alignment slice, larger surface, deferred.
 
 ### T10 — lift no-owner plumbing to SDK/base lib
 - [x] `unknown→message` error helper → `@angee/sdk` `errorMessage`; routed 8
