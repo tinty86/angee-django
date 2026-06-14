@@ -100,12 +100,29 @@ Frontend `@angee/agents` (`addons/angee/agents/web/`): menu groups
 - [ ] agents test module (concrete-model pattern of `tests/test_integrate_vcs.py`): skill discovery + provider/model upsert + console CRUD + M2M membership actions
 - [ ] add `ANGEE_INFERENCE_BACKEND_CLASSES` to `tests/settings.py` + concrete agents models to `tests/conftest.py` when the test module lands
 
+### Frontend review outcomes (react-reviewer)
+
+Composition contract verified empirically (one rail root, no multi-referenced route,
+no icon collision). Fixed: SkillsPage list-only `DataPage` crash (added a read-only
+`Form` — `DataPage` resolves form fields eagerly); `refreshModels` now surfaces an
+`ok:false` business failure instead of a green toast; immutable relation pickers
+(`integration`/`provider`/`server`) marked `createOnly`.
+
+**Open must-verify — enum write-casing (save path).** The auto enum→select submits
+the GraphQL enum NAME (`CHAT`, `EXTERNAL`, `HTTP`, `MANUAL`) because the SDL only
+exposes enum names, while the inputs are lowercase `String` (the repo convention —
+see the backend "status read/write-asymmetric" pitfall). `status` avoids it via
+`widget="statusbar"`; agents is the first console to write *non-status* enums
+(`backendClass`, `modelUse`, `placement`, `transport`) through the bare-`<Field>`
+select. Whether this actually fails depends on strawberry-django coercing name→value
+on the `String` input — must be checked live by saving an `InferenceModel`/`MCPServer`.
+If it fails, fix at the backend boundary (enum-typed inputs, or lowercase in the
+resolver) and add a `docs/frontend/guidelines.md` Pitfalls entry.
+
 ### Frontend follow-ups (deferred)
 
-- **Live-render verification** — pages are typecheck+build verified only; bring up
-  `angee dev` and confirm the Agents/Templates filter, the read-only Skills page
-  (no create/update mutations exist for `Skill`), and enum selects (`backendClass`,
-  `modelUse`, `placement`, `transport`) render correctly.
+- **Live-render verification** — bring up `angee dev` and confirm the Agents/Templates
+  filter returns the right rows and the read-only Skills page renders.
 - **Skills → Sources tab** — deferred with the integrate VCS console frontend
   handover; needs a `kind` filter on `integrate.Source` too.
 - **Agent skill/MCP membership editor** — backend `setAgentSkills`/`setAgentMcpServers`/
