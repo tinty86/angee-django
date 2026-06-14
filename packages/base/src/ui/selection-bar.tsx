@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 import { Button, type ButtonProps } from "./button";
@@ -117,7 +118,7 @@ export const SelectionBarRoot = React.forwardRef<
   {
     actions,
     className,
-    clearLabel = "Clear",
+    clearLabel,
     count,
     countLabel,
     onClear,
@@ -128,6 +129,7 @@ export const SelectionBarRoot = React.forwardRef<
   },
   ref,
 ) {
+  const t = useBaseT();
   const styles = selectionBarVariants({ position, surface });
   const hasSummary =
     summary !== null && summary !== undefined && summary !== false;
@@ -149,7 +151,7 @@ export const SelectionBarRoot = React.forwardRef<
                 size="sm"
                 className={cn(styles.countBadge())}
               />
-              <span>selected</span>
+              <span>{t("selection.selected")}</span>
             </>
           )}
         </span>
@@ -163,7 +165,7 @@ export const SelectionBarRoot = React.forwardRef<
       ) : onClear ? (
         <div className={styles.actions()}>
           <SelectionBarAction surface={surface} onClick={onClear}>
-            {clearLabel}
+            {clearLabel ?? t("selection.clear")}
           </SelectionBarAction>
         </div>
       ) : null}

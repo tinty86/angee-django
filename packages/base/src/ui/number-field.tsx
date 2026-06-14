@@ -11,6 +11,7 @@ import type {
 } from "@base-ui/react/number-field";
 
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { tv, type VariantProps } from "../lib/variants";
 import {
   WIDGET_CONTROL_DATA_READONLY_CLASS,
@@ -170,11 +171,12 @@ export const NumberFieldIncrement = React.forwardRef<
   },
   ref,
 ) {
+  const t = useBaseT();
   const styles = numberFieldVariants({ size });
   return (
     <BaseNumberField.Increment
       ref={ref}
-      aria-label="Increase value"
+      aria-label={t("numberField.increment")}
       className={styles.stepper({ className })}
       {...props}
     >
@@ -204,11 +206,12 @@ export const NumberFieldDecrement = React.forwardRef<
   },
   ref,
 ) {
+  const t = useBaseT();
   const styles = numberFieldVariants({ size });
   return (
     <BaseNumberField.Decrement
       ref={ref}
-      aria-label="Decrease value"
+      aria-label={t("numberField.decrement")}
       className={styles.stepper({ className })}
       {...props}
     >
@@ -299,10 +302,10 @@ export const NumberField = React.forwardRef<HTMLDivElement, NumberFieldProps>(
       align = "end",
       className,
       decrementClassName,
-      decrementLabel = "Decrease value",
+      decrementLabel,
       groupClassName,
       incrementClassName,
-      incrementLabel = "Increase value",
+      incrementLabel,
       inputClassName,
       inputProps,
       invalid = false,
@@ -313,6 +316,7 @@ export const NumberField = React.forwardRef<HTMLDivElement, NumberFieldProps>(
     },
     ref,
   ) {
+    const t = useBaseT();
     const { className: inputPropsClassName, ...restInputProps } =
       inputProps ?? {};
 
@@ -341,12 +345,12 @@ export const NumberField = React.forwardRef<HTMLDivElement, NumberFieldProps>(
           {showStepper ? (
             <>
               <NumberFieldDecrement
-                aria-label={decrementLabel}
+                aria-label={decrementLabel ?? t("numberField.decrement")}
                 className={decrementClassName}
                 size={size}
               />
               <NumberFieldIncrement
-                aria-label={incrementLabel}
+                aria-label={incrementLabel ?? t("numberField.increment")}
                 className={incrementClassName}
                 size={size}
               />

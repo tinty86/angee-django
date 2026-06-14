@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useBaseT } from "../i18n";
 import { AlertDialog } from "../ui/alert-dialog";
 import { Input } from "../ui/input";
 
@@ -43,8 +44,10 @@ export interface PromptOptions {
 interface NormalisedConfirmOptions {
   title: ReactNode;
   body?: ReactNode;
-  confirm: ReactNode;
-  cancel: ReactNode;
+  // Left undefined when the caller gave no label; ConfirmDialog applies the
+  // translated default at render (the hook can't run in this helper).
+  confirm?: ReactNode;
+  cancel?: ReactNode;
   danger: boolean;
 }
 
@@ -178,6 +181,7 @@ function ConfirmDialog({
   request: ConfirmRequest | null;
   onResolve: (confirmed: boolean) => void;
 }): ReactElement | null {
+  const t = useBaseT();
   if (!request) return null;
   const { options } = request;
   return (
@@ -198,14 +202,14 @@ function ConfirmDialog({
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <AlertDialog.Cancel type="button" onClick={() => onResolve(false)}>
-              {options.cancel}
+              {options.cancel ?? t("modal.cancel")}
             </AlertDialog.Cancel>
             <AlertDialog.Action
               type="button"
               tone={options.danger ? "danger" : "info"}
               onClick={() => onResolve(true)}
             >
-              {options.confirm}
+              {options.confirm ?? t("modal.confirm")}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -220,8 +224,8 @@ function normaliseConfirmOptions(
   return {
     title: options.title,
     ...(options.body !== undefined ? { body: options.body } : {}),
-    confirm: options.confirm ?? "Confirm",
-    cancel: options.cancel ?? "Cancel",
+    ...(options.confirm !== undefined ? { confirm: options.confirm } : {}),
+    ...(options.cancel !== undefined ? { cancel: options.cancel } : {}),
     danger: options.danger ?? false,
   };
 }
@@ -245,6 +249,7 @@ function PromptDialogForm({
   request: PromptRequest;
   onResolve: (values: Record<string, string> | null) => void;
 }): ReactElement {
+  const t = useBaseT();
   const { options } = request;
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -309,11 +314,11 @@ function PromptDialogForm({
           <AlertDialog.Footer>
             {readOnly ? null : (
               <AlertDialog.Cancel type="button" onClick={() => onResolve(null)}>
-                {options.cancel ?? "Cancel"}
+                {options.cancel ?? t("modal.cancel")}
               </AlertDialog.Cancel>
             )}
             <AlertDialog.Action type="button" tone="info" onClick={submit}>
-              {options.confirm ?? (readOnly ? "Done" : "Confirm")}
+              {options.confirm ?? (readOnly ? t("modal.done") : t("modal.confirm"))}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

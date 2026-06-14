@@ -26,6 +26,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { Spinner } from "../ui/spinner";
 
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { RelativeTime } from "../fragments/RelativeTime";
 import { writeDndPayload, type DndPayload } from "../lib/dnd";
 import { titleCase } from "../lib/titleCase";
@@ -1160,20 +1161,22 @@ export function statusLabel(value: string): string {
 
 /** The flush "Loading…" footer shown under a list shell while a page fetches. */
 export function ListLoadingFooter(): React.ReactElement {
+  const t = useBaseT();
   return (
     <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
       <Spinner size="sm" />
-      Loading...
+      {t("list.loading")}
     </div>
   );
 }
 
 /** Inline "Loading…" content (spinner + label) for a table-cell/status body. */
 export function ListLoadingInline(): React.ReactElement {
+  const t = useBaseT();
   return (
     <span className="inline-flex items-center gap-2">
       <Spinner size="sm" />
-      Loading...
+      {t("list.loading")}
     </span>
   );
 }

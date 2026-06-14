@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { Button } from "./button";
 import { NumberField } from "./number-field";
@@ -82,10 +83,11 @@ export function Pager({
   unit,
   labelElement = "button",
   labelClassName,
-  previousLabel = "Previous page",
-  nextLabel = "Next page",
+  previousLabel,
+  nextLabel,
   formatNumber = defaultFormatNumber,
 }: PagerProps): React.ReactElement {
+  const t = useBaseT();
   const [customPageSize, setCustomPageSize] = React.useState<number | null>(
     null,
   );
@@ -134,7 +136,7 @@ export function Pager({
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label={previousLabel}
+        aria-label={previousLabel ?? t("pager.prev")}
         disabled={!canPrev}
         onClick={() => onPageChange?.(Math.max(1, page - 1))}
       >
@@ -144,7 +146,7 @@ export function Pager({
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label={nextLabel}
+        aria-label={nextLabel ?? t("pager.next")}
         disabled={!canNext}
         onClick={() => onPageChange?.(page + 1)}
       >
@@ -173,6 +175,7 @@ function PageSizePicker({
   onCustomPageSizeChange: (value: number | null) => void;
   onPageSizeChange: (pageSize: number) => void;
 }): React.ReactElement {
+  const t = useBaseT();
   const applyPageSize = React.useCallback(
     (value: number | null) => {
       if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
@@ -196,7 +199,7 @@ function PageSizePicker({
         <PopoverPositioner sideOffset={6} align="end">
           <PopoverContent className="w-56 p-3">
             <p className="mb-2 px-1 text-13 font-semibold text-fg">
-              Rows per page
+              {t("pager.rowsPerPage")}
             </p>
             <div className="grid grid-cols-3 gap-1">
               {pageSizeOptions.map((value) => (
@@ -230,13 +233,13 @@ function PageSizePicker({
                 showStepper={false}
                 className="min-w-0 flex-1"
                 inputProps={{
-                  "aria-label": "Custom rows per page",
+                  "aria-label": t("pager.customRowsPerPage"),
                   placeholder: "42",
                 }}
                 onValueChange={onCustomPageSizeChange}
               />
               <Button type="submit" size="sm" variant="secondary">
-                Apply
+                {t("pager.apply")}
               </Button>
             </form>
           </PopoverContent>

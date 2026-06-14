@@ -250,10 +250,16 @@ visual-parity spot-check across both themes still recommended before release.
 
 ## Phase 6 — Architecture decisions (now locked)
 
-- [ ] **T6 (commit)** Expand the `base` i18n bundle; route `ModalsHost`, `auth`,
-      `communication`, chrome copy, and all `ui` default labels/aria through
-      `useBaseT()`. Give every addon (iam, operator, storage, knowledge, integrate,
-      agents) its own namespace + bundle; route all copy through `t`.
+- [~] **T6 (commit)** — IN PROGRESS, incremental:
+      - [x] base primitives: `ModalsHost` (confirm/cancel/done), `dialog` (close),
+        `alert` (dismiss), `pager` (prev/next/rows-per-page/apply), `selection-bar`
+        (clear/selected), `number-field` (inc/dec), `ListLoadingFooter/Inline`
+        (loading) → `useBaseT()` + `enBaseMessages`.
+      - [ ] base remainder: `auth` (login form), `communication` (Chatter/Revisions),
+        chrome copy, `ListInternals` `SelectionBar` wrapper (Clear/Delete/aria),
+        pager `subject`.
+      - [ ] per-addon namespace + bundle, route all copy through `t`: iam, operator
+        (expand beyond section titles), storage, knowledge, integrate, agents.
 - [ ] **T13** Previews via build-time composition: a `previews`/`widgets` map on
       `AddonManifest`, folded fail-fast by `composeAddons`, resolved through
       `AppRuntimeProvider`. Remove the module-global `Map`, the import side-effect,

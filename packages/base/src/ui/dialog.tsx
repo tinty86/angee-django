@@ -12,6 +12,7 @@ import type {
 } from "@base-ui/react/dialog";
 import { X } from "lucide-react";
 
+import { useBaseT } from "../i18n";
 import { tv, type VariantProps } from "../lib/variants";
 
 export const dialogVariants = tv({
@@ -186,8 +187,9 @@ export const DialogClose = React.forwardRef<
   HTMLButtonElement,
   DialogCloseProps
 >(function DialogClose({ className, children, ...props }, ref) {
+  const t = useBaseT();
   const styles = dialogVariants();
-  const ariaLabel = props["aria-label"] ?? (children ? undefined : "Close");
+  const ariaLabel = props["aria-label"] ?? (children ? undefined : t("dialog.close"));
   return (
     <BaseDialog.Close
       ref={ref}
