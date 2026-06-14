@@ -63,9 +63,10 @@ now guards `ok` too. `runActionResult` exports only the function (the
 - [ ] Move `DEFAULT_STATE_TONE_VALUES` / `stateToneFromValue` business semantics
       OUT of base → model/field metadata or explicit caller mapping.
 
-### T3 — Intent→glyph duplication
-- [ ] One exported `INTENT_GLYPHS` next to `tones`; consume in Toast/alert/
-      status-icon. Reconcile `info` glyph (`info` vs `help`).
+### T3 — Intent→glyph duplication ✅ done (commit)
+- [x] One exported `INTENT_GLYPHS` + `FeedbackIntent` in `lib/tones.ts`; consumed
+      by Toast/alert/status-icon. Reconciled `info` glyph to `"info"` everywhere
+      (Alert/StatusIcon were `"help"`); StatusIcon's `muted` keeps `"help"`.
 
 ### T5 — Icon registry: kill raw lucide imports (app surfaces ✅ done; rest deferred)
 - [x] Register missing generic names in `chrome/icon-registry.ts`: arrow-down,
