@@ -255,9 +255,12 @@ visual-parity spot-check across both themes still recommended before release.
         `alert` (dismiss), `pager` (prev/next/rows-per-page/apply), `selection-bar`
         (clear/selected), `number-field` (inc/dec), `ListLoadingFooter/Inline`
         (loading) → `useBaseT()` + `enBaseMessages`.
-      - [ ] base remainder: `auth` (login form), `communication` (Chatter/Revisions),
-        chrome copy, `ListInternals` `SelectionBar` wrapper (Clear/Delete/aria),
-        pager `subject`.
+      - [x] base `auth` (UsernamePasswordForm/LoginPage) + `communication`
+        (Chatter/RevisionsTab) → `useBaseT()` + `enBaseMessages` (auth.*/revisions.*
+        /chatter.*). LoginHero marketing copy left (one-off; key later if wanted).
+      - [ ] base remainder: chrome copy (AppChooser/Spotlight/GlobalSearch/UserMenu/
+        Systray/TopMenu/DataToolbar), `ListInternals` `SelectionBar` wrapper +
+        aria-labels, pager `subject`.
       - [ ] per-addon namespace + bundle, route all copy through `t`: iam, operator
         (expand beyond section titles), storage, knowledge, integrate, agents.
 - [ ] **T13** Previews via build-time composition: a `previews`/`widgets` map on

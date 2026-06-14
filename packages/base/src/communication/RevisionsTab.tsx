@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useResourceRevisions, type ResourceRevision } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { EmptyState } from "../fragments/EmptyState";
 import { ErrorBanner } from "../fragments/ErrorBanner";
 import { LoadingPanel } from "../fragments/LoadingPanel";
@@ -19,6 +20,7 @@ export function RevisionsTab({
   model,
   recordId,
 }: RevisionsTabProps): React.ReactElement {
+  const t = useBaseT();
   const activeRecordId = typeof recordId === "string" && recordId !== ""
     ? recordId
     : null;
@@ -30,8 +32,8 @@ export function RevisionsTab({
     return (
       <EmptyState
         icon="activity"
-        title="No record selected"
-        description="Open a record to view revisions."
+        title={t("revisions.noRecordTitle")}
+        description={t("revisions.noRecordDescription")}
         className="min-h-48 p-4"
       />
     );
@@ -39,20 +41,20 @@ export function RevisionsTab({
   if (revisions.error) {
     return (
       <ErrorBanner
-        title="Revisions unavailable"
+        title={t("revisions.unavailable")}
         message={revisions.error.message}
       />
     );
   }
   if (revisions.fetching && revisions.revisions.length === 0) {
-    return <LoadingPanel message="Loading revisions" />;
+    return <LoadingPanel message={t("revisions.loading")} />;
   }
   if (revisions.revisions.length === 0) {
     return (
       <EmptyState
         icon="activity"
-        title="No revisions yet"
-        description="Field changes will appear here."
+        title={t("revisions.emptyTitle")}
+        description={t("revisions.emptyDescription")}
         className="min-h-48 p-4"
       />
     );
@@ -63,7 +65,7 @@ export function RevisionsTab({
       {revisions.revisions.map((revision) => (
         <TimelineEntry
           key={revision.id}
-          title={revision.comment ?? "Record updated"}
+          title={revision.comment ?? t("revisions.recordUpdated")}
           timestamp={revision.createdAt}
           body={revisionSnapshot(revision)}
         />

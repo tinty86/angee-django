@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useLoginWithPassword } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { Button } from "../ui/button";
 import { FieldControl, FieldLabel, FieldRoot } from "../ui/field";
 
@@ -18,6 +19,7 @@ export interface UsernamePasswordFormProps {
 export function UsernamePasswordForm({
   onSuccess,
 }: UsernamePasswordFormProps): ReactNode {
+  const t = useBaseT();
   const { login, fetching } = useLoginWithPassword();
   const usernameId = useId();
   const passwordId = useId();
@@ -35,10 +37,10 @@ export function UsernamePasswordForm({
         onSuccess?.();
         return;
       }
-      setError("Incorrect username or password.");
+      setError(t("auth.invalidCredentials"));
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Something went wrong.",
+        caught instanceof Error ? caught.message : t("auth.genericError"),
       );
     }
   }
@@ -49,7 +51,7 @@ export function UsernamePasswordForm({
     <form className="flex flex-col gap-5" onSubmit={onSubmit}>
       <FieldRoot invalid={hasError} size="lg">
         <FieldLabel htmlFor={usernameId} required>
-          Username
+          {t("auth.username")}
         </FieldLabel>
         <FieldControl
           id={usernameId}
@@ -60,7 +62,7 @@ export function UsernamePasswordForm({
           disabled={fetching}
           value={username}
           onChange={(event) => setUsername(event.target.value)}
-          aria-label="Username"
+          aria-label={t("auth.username")}
           aria-invalid={hasError}
           aria-describedby={hasError ? errorId : undefined}
         />
@@ -68,7 +70,7 @@ export function UsernamePasswordForm({
 
       <FieldRoot invalid={hasError} size="lg">
         <FieldLabel htmlFor={passwordId} required>
-          Password
+          {t("auth.password")}
         </FieldLabel>
         <FieldControl
           id={passwordId}
@@ -79,7 +81,7 @@ export function UsernamePasswordForm({
           disabled={fetching}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          aria-label="Password"
+          aria-label={t("auth.password")}
           aria-invalid={hasError}
           aria-describedby={hasError ? errorId : undefined}
         />
@@ -102,7 +104,7 @@ export function UsernamePasswordForm({
         loading={fetching}
         className="mt-1 w-full justify-center"
       >
-        {fetching ? "Signing in…" : "Sign in"}
+        {fetching ? t("auth.signingIn") : t("auth.signIn")}
       </Button>
     </form>
   );

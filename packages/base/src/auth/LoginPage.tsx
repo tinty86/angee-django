@@ -9,6 +9,7 @@ import { AngeeLogo } from "@angee/logo-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSlot, type SlotContribution } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { PublicShell } from "../shell/PublicShell";
 import { safeRedirectPath } from "./safe-redirect";
 import { UsernamePasswordForm } from "./UsernamePasswordForm";
@@ -114,10 +115,11 @@ function LoginHero(): ReactNode {
 }
 
 function MobileBrandLead({ brand }: { brand?: ReactNode }): ReactNode {
+  const t = useBaseT();
   return (
     <div className="lg:hidden">
       <div className="mb-4 flex justify-center">{brand ?? <BrandLockup />}</div>
-      <p className="text-sm text-n-200">Sign in to continue.</p>
+      <p className="text-sm text-n-200">{t("auth.mobileLead")}</p>
     </div>
   );
 }
@@ -139,10 +141,11 @@ function BrandLockup(): ReactNode {
 }
 
 function DefaultCardHeader(): ReactNode {
+  const t = useBaseT();
   return (
     <div>
-      <h2 className="text-22 font-semibold text-fg">Welcome back</h2>
-      <p className="mt-1.5 text-sm text-fg-muted">Sign in to your account.</p>
+      <h2 className="text-22 font-semibold text-fg">{t("auth.welcome")}</h2>
+      <p className="mt-1.5 text-sm text-fg-muted">{t("auth.welcomeSubtext")}</p>
     </div>
   );
 }
