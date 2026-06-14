@@ -40,7 +40,6 @@ export {
   type CsrfTokenOptions,
 } from "./graphql-client";
 export {
-  createSchemaClients,
   GraphQLProvider,
   GraphQLClientProvider,
   useResetClient,
@@ -119,6 +118,9 @@ export {
   type AuthoredMutate,
   type AuthoredSubscriptionOptions,
 } from "./authored-hooks";
+
+// Action-mutation result handling.
+export { runActionResult } from "./action-result";
 
 // Live invalidation.
 export {

@@ -11,23 +11,29 @@ owner that absorbs the fix. Verify per `docs/frontend/guidelines.md` Checks
 
 ---
 
-## Phase 0 — Quick correctness wins (small, high-value)
+## Phase 0 — Quick correctness wins (small, high-value) ✅ done (commit)
 
-- [ ] **T18** Add Tailwind `@source` entries for composed addons in host CSS
+Also: `agents/web` `test` → `--passWithNoTests` (the one zero-test package was
+failing the `pnpm run test` gate). Review-driven: `agents/InferencePage` aligned
+onto `runActionResult` (was hand-rolling it); `WebhooksPage.rotate` ({ok,secret})
+now guards `ok` too. `runActionResult` exports only the function (the
+`ActionResult`/`ByIdVariables` type consolidation is deferred to Phase 3 / T10).
+
+- [x] **T18** Add Tailwind `@source` entries for composed addons in host CSS
       (`examples/notes-angee/web/src/index.css`): `integrate/web/src`,
       `storage/web/src`, `knowledge/web/src`. Verify their arbitrary classes
       (`max-w-[1100px]`, `max-w-[820px]`) now generate.
-- [ ] **T12** One `runActionResult(outcome)` for `{ ok, message }` actions
+- [x] **T12** One `runActionResult(outcome)` for `{ ok, message }` actions
       (`if (!ok) throw new Error(message); return message`), exported from
       `@angee/sdk`. Wire integrate `IntegrationsPage`/`SourcesPage`/`WebhooksPage`/
       `VCSIntegrationsPage` (+ confirm agents `InferencePage` matches). Kills the
       green-toast-on-failure bug.
-- [ ] **T11** Route aggregate reads through the model refetch/invalidation
+- [x] **T11** Route aggregate reads through the model refetch/invalidation
       registry: add `useRegisterModelRefetch` + return `refetch` from
       `useResourceAggregate`/`useResourceGroupBy` (`packages/sdk/src/aggregates.ts`),
       ideally via a shared `useModelDocumentQuery` wrapper. Confirm `AggregatePanel`
       /`GroupedList` live-refresh.
-- [ ] **T10c** Delete dead `createSchemaClients` (`graphql-provider.tsx`); point its
+- [x] **T10c** Delete dead `createSchemaClients` (`graphql-provider.tsx`); point its
       lone test at `GraphQLClientProvider`. Drop dead `by` alias on
       `GroupByDimension` (`aggregates.ts`). Remove dead import in
       `storage/web/src/data/file-rows.ts`.
