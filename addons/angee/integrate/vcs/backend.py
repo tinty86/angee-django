@@ -230,12 +230,22 @@ class LocalVCSBackend(VCSBackend):
 
     @property
     def _root(self) -> pathlib.Path:
-        """Return the configured working-tree root (resolved), or raise when unset."""
+        """Return the configured working-tree root (resolved), or raise when unset.
+
+        A relative ``local_root`` resolves against ``settings.BASE_DIR`` (the project
+        dir), so a fixture can point at the checkout portably (e.g. ``"../.."``) rather
+        than hardcoding an absolute path; an absolute ``local_root`` is used as-is.
+        """
 
         root = str(self.integration.config.get("local_root") or "").strip()
         if not root:
             raise FileNotFoundError("LocalVCSBackend requires integration.config['local_root'].")
-        return pathlib.Path(root).resolve()
+        path = pathlib.Path(root)
+        if not path.is_absolute():
+            from django.conf import settings
+
+            path = pathlib.Path(settings.BASE_DIR) / path
+        return path.resolve()
 
     def _descriptor(self) -> RepoDescriptor:
         """Project the configured local checkout into a :class:`RepoDescriptor`."""
