@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { ChromeMenuNode, MenuTree, type ChromeMenuItem } from "./menu-tree";
+import {
+  ChromeMenuNode,
+  MenuTree,
+  pathMatchesTarget,
+  type ChromeMenuItem,
+} from "./menu-tree";
 
 // Two apps with sections plus a single-page app. The top bar navigates within
 // the active app, so it shows that app's sections and never a sibling's.
@@ -110,6 +115,34 @@ describe("navigableItems", () => {
       .navigableItems()
       .map(({ item }) => item.id);
     expect(ids).toEqual(["real"]);
+  });
+});
+
+describe("isActive / pathMatchesTarget", () => {
+  test("pathMatchesTarget matches an exact or nested path, never missing/#", () => {
+    expect(pathMatchesTarget("/notes", "/notes")).toBe(true);
+    expect(pathMatchesTarget("/notes/archive", "/notes")).toBe(true);
+    expect(pathMatchesTarget("/notebooks", "/notes")).toBe(false); // segment-aware
+    expect(pathMatchesTarget("/x", "#")).toBe(false);
+    expect(pathMatchesTarget("/x", undefined)).toBe(false);
+  });
+
+  test("isActive matches a node's own target or an immediate child's", () => {
+    const tree = MenuTree.from([
+      {
+        id: "settings",
+        label: "Settings",
+        to: "/settings",
+        children: [{ id: "settings.team", label: "Team", to: "/team" }],
+      },
+    ]);
+    const settings = tree.byId.get("settings");
+    expect(settings?.isActive("/settings")).toBe(true); // own target
+    // own target `/settings` does not prefix `/team`, so this is the child path
+    expect(settings?.isActive("/team")).toBe(true);
+    expect(settings?.hasActiveDescendant("/team")).toBe(true);
+    expect(settings?.hasActiveDescendant("/settings")).toBe(false);
+    expect(settings?.isActive("/other")).toBe(false);
   });
 });
 

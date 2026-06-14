@@ -134,7 +134,7 @@ function TopMenuLinkItem({
   pathname: string;
 }): ReactElement {
   const children = item.targetedChildren;
-  const active = menuItemIsActive(item, pathname);
+  const active = item.isActive(pathname);
   const target = item.target;
   const label = item.displayLabel;
   const icon = item.iconName;
@@ -153,7 +153,7 @@ function TopMenuLinkItem({
               <TopMenuPanelLink
                 key={child.id}
                 item={child}
-                active={menuItemIsActive(child, pathname)}
+                active={child.isActive(pathname)}
               />
             ))}
           </div>
@@ -243,12 +243,5 @@ function TopMenuTabButton({
       {tab.icon ? <Glyph name={tab.icon} size={14} className="shrink-0" /> : null}
       <span className="truncate">{tab.label}</span>
     </button>
-  );
-}
-
-function menuItemIsActive(item: ChromeMenuNode, pathname: string): boolean {
-  return (
-    item.matchesPath(pathname) ||
-    Boolean(item.children?.some((child) => child.matchesPath(pathname)))
   );
 }

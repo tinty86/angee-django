@@ -30,6 +30,7 @@ import {
   type ChromeMenuStatus,
   type ChromeMenuTone,
   MenuTree,
+  pathMatchesTarget,
 } from "./menu-tree";
 
 export interface AppChooserItem {
@@ -91,7 +92,7 @@ export function AppChooser({
   );
   const groups = useMemo(() => appChooserGroups(visibleItems), [visibleItems]);
   const currentId =
-    activeId ?? resolvedItems.find((item) => itemMatchesPath(item, pathname))?.id;
+    activeId ?? resolvedItems.find((item) => pathMatchesTarget(pathname, item.to))?.id;
 
   return (
     <PopoverRoot open={open} onOpenChange={setOpen}>
@@ -313,12 +314,6 @@ function filterAppChooserItems(
       item.description?.toLowerCase().includes(normalized)
     );
   });
-}
-
-function itemMatchesPath(item: AppChooserItem, pathname: string): boolean {
-  const target = item.to;
-  if (!target || target === "#") return false;
-  return pathname === target || pathname.startsWith(`${target}/`);
 }
 
 // The primary app tile is a solid brand fill; the rest are soft. Both route

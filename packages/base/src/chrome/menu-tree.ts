@@ -34,6 +34,19 @@ export interface ChromeMenuItem extends ComposedMenuItem {
   badge?: number;
 }
 
+/**
+ * Whether `pathname` is `target` or nests under it (`target/…`). The one
+ * path-match predicate shared by `ChromeMenuNode.matchesPath` and the app
+ * chooser; a missing or `#` target never matches.
+ */
+export function pathMatchesTarget(
+  pathname: string,
+  target: string | undefined,
+): boolean {
+  if (!target || target === "#") return false;
+  return pathname === target || pathname.startsWith(`${target}/`);
+}
+
 export class ChromeMenuNode implements ChromeMenuItem {
   id: string;
   label?: string;
@@ -77,9 +90,17 @@ export class ChromeMenuNode implements ChromeMenuItem {
   }
 
   matchesPath(pathname: string): boolean {
-    const target = this.target;
-    if (!target || target === "#") return false;
-    return pathname === target || pathname.startsWith(`${target}/`);
+    return pathMatchesTarget(pathname, this.target);
+  }
+
+  /** True when this node's own target, or any immediate child's, matches `pathname`. */
+  isActive(pathname: string): boolean {
+    return this.matchesPath(pathname) || this.hasActiveDescendant(pathname);
+  }
+
+  /** True when an immediate child's target matches `pathname`. */
+  hasActiveDescendant(pathname: string): boolean {
+    return Boolean(this.children?.some((child) => child.matchesPath(pathname)));
   }
 
   appendChild(child: ChromeMenuNode): void {
