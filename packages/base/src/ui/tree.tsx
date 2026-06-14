@@ -12,6 +12,8 @@ import {
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { toneGlyph, type Tone } from "../lib/tones";
+import { tv } from "../lib/variants";
 
 /**
  * Generic recursive tree primitive. Renders one flat row per node with
@@ -27,8 +29,8 @@ export interface TreeNode {
   label: ReactNode;
   /** Icon registry name for the row glyph. */
   icon?: string;
-  /** Override colour (e.g. amber for a starred row). */
-  iconColor?: string;
+  /** Tint the row glyph with a tone (e.g. `warning` for a starred row). */
+  iconTone?: Tone;
   /** Numeric count, right-aligned. */
   count?: number;
   children?: readonly TreeNode[];
@@ -57,12 +59,18 @@ export interface TreeProps {
 /** A folder/file tree is just a `Tree`; the alias names the common use. */
 export type FolderTreeProps = TreeProps;
 
-const ROW_BASE =
-  "flex items-center gap-2 h-7 px-2 rounded-md text-13 text-fg-2 cursor-pointer transition-colors hover:bg-inset outline-none focus-visible:focus-ring [&_.glyph]:size-3.5 [&_.glyph]:text-fg-subtle";
-const ROW_ACTIVE =
-  "bg-brand-soft text-brand-soft-text font-medium [&_.glyph]:text-brand-soft-text";
-const ROW_DROP_TARGET =
-  "bg-brand-soft ring-1 ring-inset ring-brand text-brand-soft-text";
+/** The tree-row recipe: base row + the `active`/`dropTarget` highlight states. */
+export const treeVariants = tv({
+  base: "flex items-center gap-2 h-7 px-2 rounded-md text-13 text-fg-2 cursor-pointer transition-colors hover:bg-inset outline-none focus-visible:focus-ring [&_.glyph]:size-3.5 [&_.glyph]:text-fg-subtle",
+  variants: {
+    active: {
+      true: "bg-brand-soft text-brand-soft-text font-medium [&_.glyph]:text-brand-soft-text",
+    },
+    dropTarget: {
+      true: "bg-brand-soft ring-1 ring-inset ring-brand text-brand-soft-text",
+    },
+  },
+});
 
 interface FlatRow {
   node: TreeNode;
@@ -320,7 +328,7 @@ function TreeRow({
       aria-expanded={hasChildren ? !collapsed : undefined}
       aria-level={depth + 1}
       draggable={isDraggable}
-      className={cn(ROW_BASE, isActive && ROW_ACTIVE, isDropTarget && ROW_DROP_TARGET)}
+      className={treeVariants({ active: isActive, dropTarget: isDropTarget })}
       style={padLeft}
       onClick={() => {
         onFocusRow(node.id);
@@ -361,7 +369,7 @@ function TreeRow({
         />
       </button>
       {node.icon ? (
-        <span style={node.iconColor ? { color: node.iconColor } : undefined}>
+        <span className={node.iconTone ? toneGlyph(node.iconTone) : undefined}>
           <Glyph name={node.icon} />
         </span>
       ) : null}

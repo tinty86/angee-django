@@ -59,6 +59,7 @@ export {
 export {
   Tree,
   FolderTree,
+  treeVariants,
   type TreeNode,
   type TreeProps,
   type FolderTreeProps,

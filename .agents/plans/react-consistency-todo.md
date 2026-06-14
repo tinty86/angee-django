@@ -559,8 +559,18 @@ visual-parity spot-check across both themes still recommended before release.
 
 ## Phase 7 — Polish (Tier 4)
 
-- [ ] `pagerVariants`/`treeVariants`; replace `Tree.iconColor:string` with
-      token-backed `iconTone` (`ToneName`).
+- [x] `pagerVariants`/`treeVariants`; replace `Tree.iconColor:string` with
+      token-backed `iconTone` (`Tone`). DONE: extracted the hand-rolled tree row
+      consts (`ROW_BASE`/`ROW_ACTIVE`/`ROW_DROP_TARGET` + manual `cn`) into a
+      `treeVariants` `tv` recipe (boolean `active`/`dropTarget`), and the pager
+      label consts into `pagerVariants` (`label: "button" | "span"`, default
+      `span`); byte-identical class output (review-verified). `TreeNode.iconColor`
+      (raw inline `style={{color}}`) → `iconTone?: Tone`, rendered via a new
+      `toneGlyph(tone)` accessor in `tones.ts` — a `[&_.glyph]:text-*-text!`
+      glyph-scoped tint that actually wins over the row's own `[&_.glyph]:text-*`
+      (the old span tint was silently defeated by specificity; lucide glyphs stroke
+      `currentColor`). +tree.test.tsx (tint + recipe). No `iconColor` consumers
+      existed, so the prop swap is safe.
 - [ ] Standardize default `size` (switch/toggle-group `sm`→`md` or document);
       unify icon-size spelling (`iconSm/Md/Lg` vs `icon/icon-sm`); reconcile
       `badge.shape` vs `chip.shape` defaults.

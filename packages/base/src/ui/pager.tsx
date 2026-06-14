@@ -3,6 +3,7 @@ import * as React from "react";
 import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
+import { tv } from "../lib/variants";
 import { Button } from "./button";
 import { NumberField } from "./number-field";
 import {
@@ -36,9 +37,18 @@ export interface PagerProps extends PagerState {
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 80, 100, 200] as const;
 
-const BUTTON_LABEL_CLASS =
-  "h-6 rounded px-1.5 text-13 tabular-nums text-fg outline-none hover:bg-inset focus-visible:focus-ring";
-const TEXT_LABEL_CLASS = "tabular-nums";
+/** The pager range-label recipe: an interactive `button` trigger vs a static `span`. */
+export const pagerVariants = tv({
+  base: "tabular-nums",
+  variants: {
+    label: {
+      button:
+        "h-6 rounded px-1.5 text-13 text-fg outline-none hover:bg-inset focus-visible:focus-ring",
+      span: "",
+    },
+  },
+  defaultVariants: { label: "span" },
+});
 
 function defaultFormatNumber(value: number): string {
   return String(value);
@@ -118,14 +128,14 @@ export function Pager({
       ? (
         <button
           type="button"
-          className={cn(BUTTON_LABEL_CLASS, labelClassName)}
+          className={pagerVariants({ label: "button", className: labelClassName })}
           aria-label={t("pager.pageOf", { subject: resolvedSubject, pageLabel })}
         >
           {pageLabel}
         </button>
       )
       : (
-        <span className={cn(TEXT_LABEL_CLASS, labelClassName)}>
+        <span className={pagerVariants({ label: "span", className: labelClassName })}>
           {pageLabel}
         </span>
       );
@@ -191,7 +201,7 @@ function PageSizePicker({
   return (
     <PopoverRoot>
       <PopoverTrigger
-        className={cn(BUTTON_LABEL_CLASS, labelClassName)}
+        className={pagerVariants({ label: "button", className: labelClassName })}
         aria-label={t("pager.pageOf", { subject, pageLabel })}
       >
         {pageLabel}

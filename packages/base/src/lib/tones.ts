@@ -52,6 +52,30 @@ export function toneSolidBg(tone: Tone): string {
   return SOLID_BG[tone];
 }
 
+// The glyph-scoped tint per tone — the on-surface `text-*-text` colour raised to
+// `!important` and targeted at a descendant `.glyph`, so a per-node tone wins over
+// a container's own `[&_.glyph]:text-*` rule (which otherwise outranks a plain
+// class by specificity). Lucide glyphs stroke with `currentColor`, so this
+// colours the icon itself; neutral is the body foreground, not a colored token.
+const GLYPH_TONE: Record<Tone, string> = {
+  neutral: "[&_.glyph]:text-fg-2!",
+  brand: "[&_.glyph]:text-brand-soft-text!",
+  accent: "[&_.glyph]:text-accent-soft-text!",
+  info: "[&_.glyph]:text-info-text!",
+  success: "[&_.glyph]:text-success-text!",
+  warning: "[&_.glyph]:text-warning-text!",
+  danger: "[&_.glyph]:text-danger-text!",
+  purple: "[&_.glyph]:text-purple-soft-text!",
+  pink: "[&_.glyph]:text-pink-soft-text!",
+};
+
+/** Tint a descendant `<Glyph>` with a tone, overriding a container's glyph color.
+ *  Use on the wrapper of an icon that must show its own tone inside a row/list
+ *  whose recipe already sets `[&_.glyph]:text-*` (e.g. a starred tree row). */
+export function toneGlyph(tone: Tone): string {
+  return GLYPH_TONE[tone];
+}
+
 /** (tone × fill) → Tailwind classes. The single source for both axes. */
 export const toneFill: Record<Tone, Record<Fill, string>> = {
   neutral: {
