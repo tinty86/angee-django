@@ -192,10 +192,15 @@ visual-parity spot-check across both themes still recommended before release.
 
 ## Phase 5 — De-fork components (T9)
 
-- [ ] `dropdown-menu`/`context-menu` → shared `menuVariants` + `createMenuParts`
-      factory.
-- [ ] Floating overlay surface → one `OVERLAY_SURFACE`/`POPUP_BASE`; consume in
-      popover/nav-menu/dropdown/context/select/tooltip.
+- [~] `dropdown-menu`/`context-menu` → shared `menuVariants` + `createMenuParts`
+      factory — DEFERRED (not a clean mechanical dedup): the two diverge in real
+      API (dropdown has `<Payload>` generics + a `Viewport` part; context has a
+      styled `trigger` slot). A factory must parameterize those, so it's a
+      deliberate design, best done as its own focused effort. (Their shared
+      *surface* class is already deduped via POPUP_BASE — see next item.)
+- [x] Floating overlay surface → consume `POPUP_BASE` (popover's exported content
+      surface) in nav-menu (`popup` slot), select, dropdown, context. Tooltip left
+      separate (uses `bg-tooltip`, a different surface).
 - [ ] One data-view shell over injected surface hooks (collapse `ListView`/
       `RowsListView`); fold `GroupedList` table/fetch/status/footer into shared
       surface; one activation/card primitive (list/board/gallery) owning
