@@ -167,8 +167,9 @@ now guards `ok` too. `runActionResult` exports only the function (the
 - [ ] One tag primitive (`tones`-driven) → `Badge`/`Tag`/`Chip` aliases.
 - [ ] One header (collapse `CollectionHeader`/`SurfaceHeader`/`RecordHeader` into
       `PageHeader` + tone token + slots).
-- [ ] One `createShellPortalSlot` → `ControlBand` + `Statusline`; align provider
-      host types.
+- [x] One `createShellBand` factory → `ControlBand` + `Statusline` are thin
+      aliases; aligned `StatuslineProvider` host type to include `undefined`.
+      (shell/shell-band.tsx; all exports + StatusSegment/Spacer preserved.)
 - [ ] One `PageChrome`/`TwoPaneFrame` → `CanvasPage`/`RecordView`/`SplitView`/
       `HeroPage`.
 - [ ] `DaemonResourceTable` (operator's 6 raw tables) or move to `RowsListView`.
@@ -238,3 +239,16 @@ now guards `ok` too. `runActionResult` exports only the function (the
 - [ ] Update `docs/frontend/guidelines.md` + `docs/stack.md` to encode the new
       rules (two-axis color, i18n-commit, `defineBaseAddon`, icon-registry-only,
       one state-surface API) once the owners land — so docs reference the code.
+
+## Infra note (out of band — flagged 2026-06-14)
+
+- [ ] **Dev workspace template: operator port is hardcoded, not workspace-
+      allocated.** `.angee/process-compose.yaml` runs `angee operator … --port
+      9000` literally, while `.angee/angee.yaml` documents the operator port as
+      workspace-allocated (`operator.port_pool.operator`, "never a hardcoded
+      9000"). Django/UI/storybook/process-compose ports ARE allocated per
+      workspace (react-consistency 8100/5173/6006/8080 vs agents-addon
+      8103/5177/.../10002), so two workspaces' operator daemons both try to bind
+      9000 and collide. Fix the `templates/workspaces/dev` (and/or stacks/dev)
+      process-compose template to use `${ports.operator}` instead of literal 9000.
+      (Backend/template, not React — tracked here so it isn't lost.)
