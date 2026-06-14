@@ -584,11 +584,14 @@ visual-parity spot-check across both themes still recommended before release.
       `ENUM_OPTION_WIDGETS` (`model-metadata-defaults`) — two divergent
       option-bearing-widget inventories — onto a single `Field.tsx` predicate.
       (Surfaced during the T8 `fieldWidgetId`/`isRelationIdField` owner move.)
-- [ ] Delete the write-only page-element `*_SLOT` symbols
-      (`FIELD_SLOT`/`GROUP_SLOT`/`ACTION_SLOT`/`COLUMN_SLOT`/`TAB_SLOT`): each is
-      assigned `[X_SLOT]: true` on its marker but never read — only
-      `PAGE_ELEMENT_SLOT` discriminates. Drop all five together (surfaced during
-      T17's Notebook→PAGE_ELEMENT_SLOT review).
+- [x] Delete the write-only page-element `*_SLOT` symbols
+      (`FIELD_SLOT`/`GROUP_SLOT`/`ACTION_SLOT`/`COLUMN_SLOT`/`TAB_SLOT`). DONE:
+      grep-confirmed each was assigned `[X_SLOT]: true` on its marker + exported
+      from the page barrel but never READ anywhere (only `PAGE_ELEMENT_SLOT` and
+      its `PageElementKind` string discriminate, via `pageElementProps`). Deleted
+      the 5 `Symbol.for(...)` declarations, the 5 marker assignments, and the 5
+      barrel re-exports together; not re-exported above the page barrel, so no
+      external break. typecheck + test green.
 - [ ] Storybook: kill dead `args`/`argTypes` ignored by `render: () =>` (~30
       files); one `runtime-fixtures` owner (provider stack + `jsonResponse` + CSRF,
       reusing `@angee/base/testing`); drop redundant nested `ToastProvider`; fix

@@ -4,8 +4,6 @@ import type { WidgetOption } from "../../widgets/types";
 
 import { PAGE_ELEMENT_SLOT } from "./types";
 
-export const COLUMN_SLOT = Symbol.for("@angee/base.page.column");
-
 export type PageColumnAlign = "left" | "center" | "right";
 export type ColumnAggregate =
   | "count"
@@ -53,5 +51,4 @@ function ColumnMarker<
 
 export const Column = Object.assign(ColumnMarker, {
   [PAGE_ELEMENT_SLOT]: "column" as const,
-  [COLUMN_SLOT]: true,
 });

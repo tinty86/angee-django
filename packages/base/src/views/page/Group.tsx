@@ -4,8 +4,6 @@ import type { ActionDescriptor } from "./Action";
 import type { FieldDescriptor } from "./Field";
 import { PAGE_ELEMENT_SLOT } from "./types";
 
-export const GROUP_SLOT = Symbol.for("@angee/base.page.group");
-
 export interface GroupProps {
   label?: ReactNode;
   columns?: number;
@@ -25,5 +23,4 @@ function GroupMarker(_props: GroupProps): null {
 
 export const Group = Object.assign(GroupMarker, {
   [PAGE_ELEMENT_SLOT]: "group" as const,
-  [GROUP_SLOT]: true,
 });

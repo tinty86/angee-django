@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 
 import { PAGE_ELEMENT_SLOT } from "./types";
 
-export const TAB_SLOT = Symbol.for("@angee/base.page.tab");
-
 /**
  * `Tab` — one section of a `Notebook` (the form `Notebook`/`Tab` Element).
  * Render-less marker: the `Notebook` reads its props and renders the tab strip +
@@ -30,5 +28,4 @@ function TabMarker(_props: TabProps): null {
 
 export const Tab = Object.assign(TabMarker, {
   [PAGE_ELEMENT_SLOT]: "tab" as const,
-  [TAB_SLOT]: true,
 });

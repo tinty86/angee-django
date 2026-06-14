@@ -16,22 +16,20 @@ import {
   pageElementProps,
 } from "./types";
 
-export { Action, ACTION_SLOT, type ActionConfirm } from "./Action";
+export { Action, type ActionConfirm } from "./Action";
 export {
   Column,
-  COLUMN_SLOT,
   type ColumnAggregate,
   type PageColumnAlign,
 } from "./Column";
 export {
   Field,
-  FIELD_SLOT,
   fieldWidgetId,
   isRelationIdField,
   type PageFieldKind,
 } from "./Field";
-export { Group, GROUP_SLOT } from "./Group";
-export { Tab, TAB_SLOT } from "./Tab";
+export { Group } from "./Group";
+export { Tab } from "./Tab";
 export {
   PAGE_ELEMENT_SLOT,
   pageChildren,
