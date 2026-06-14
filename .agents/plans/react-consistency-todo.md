@@ -244,8 +244,12 @@ visual-parity spot-check across both themes still recommended before release.
 - [x] One `createShellBand` factory → `ControlBand` + `Statusline` are thin
       aliases; aligned `StatuslineProvider` host type to include `undefined`.
       (shell/shell-band.tsx; all exports + StatusSegment/Spacer preserved.)
-- [ ] One `PageChrome`/`TwoPaneFrame` → `CanvasPage`/`RecordView`/`SplitView`/
-      `HeroPage`.
+- [~] One `PageChrome`/`TwoPaneFrame` → `CanvasPage`/`RecordView`/`SplitView`/
+      `HeroPage` — LEAVE SEPARATE (scoped): the four layouts serve distinct purposes
+      (5-slot record form / 2-slot canvas / draggable split / centered hero) and
+      already share the page-chrome via the `findLayoutSlot`/`createLayoutSlot`
+      utilities + the optional `Page` wrapper. A forced common frame would overfit;
+      none have addon consumers yet (base layout primitives).
 - [x] `DaemonResourceTable` (operator `views/parts`) — one generic table
       (columns/rows/actions/busy/emptyMessage) replaces the hand-built `<Table>` in
       all 6 sections (Services/Sources/Workspaces/Operations/Secrets/GitOps);
@@ -255,7 +259,11 @@ visual-parity spot-check across both themes still recommended before release.
       helper could own it; cell-kind classes (muted/numeric) are inline per column;
       SecretsSection's Protected/Delete is a column (action API can't render a
       withheld cell).
-- [ ] `ScopedTreeExplorer` primitive → storage + knowledge browsers.
+- [~] `ScopedTreeExplorer` primitive → storage + knowledge browsers — LEAVE
+      SEPARATE (scoped): both already compose the shared `views/TreeView` +
+      `layouts/Explorer` primitives; what remains per-addon is genuinely domain-
+      specific (row builders `folderTreeRows` vs `pageTreeRows`, file-preview vs
+      page-reader content, file vs page actions). No further shared shell to extract.
 - [x] Shared date popover helper — `widgets/date-popover.tsx` (`DatePopover` shell +
       `dateFromValue`/`valueLabel`/`DateWidgetValue`); `date` and `datetime` consume
       it, each keeping its own `onSelectDate` (format/close vs preserve-time/stay-open)
@@ -290,8 +298,14 @@ visual-parity spot-check across both themes still recommended before release.
       (router-agnostic, external `active`) vs `SectionTabs` (a styled `Tabs`
       wrapper owning its own selected state) have different props/state/render
       models and are both storybook-only — unifying needs a `mode` bifurcation
-      (anti-DRY). Still OPEN: `RefreshingBadge`; one metric `MetricTile`+
-      `MetricCollection` (not yet scoped).
+      (anti-DRY). `RefreshingBadge` — does not exist; the nearest (knowledge
+      `SaveBadge`, autosave UX) is addon-local, not duplicated. `MetricTile`
+      (`MetricStrip`) vs `MetricGrid` — LEAVE SEPARATE: share only the
+      Card>icon-chip>label/value/detail skeleton but diverge in every slot (label
+      `SectionEyebrow` vs tone-coded `Tag`; value `text-13` vs
+      `text-2xl tabular-nums`; detail element, padding, header margin, grid
+      breakpoint, `tone`) — a unified `MetricCard` would need ~6 config props for
+      2 different-intent consumers (compact summary strip vs dashboard tiles).
 
 ## Phase 6 — Architecture decisions (now locked)
 
