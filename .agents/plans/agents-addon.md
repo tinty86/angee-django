@@ -261,16 +261,35 @@ so the embed runs one daemon poller instead of three (arch); bound/guard
 `workspace`/`service` length so a malformed daemon name degrades cleanly on Postgres
 (django); re-indent the `<>`-wrapped `FormView` return (cosmetic).
 
-### Remaining for a working end-to-end render
-- **Agent-runtime Copier templates (the substance — not yet built).** The console
-  flow is complete, but Provision needs real operator templates: a `kind:workspace`
-  (+ optional `kind:service`) Copier template under `templates/` that takes
-  `instructions` (+ skills/MCP/model) as inputs and renders `AGENTS.md`/`CLAUDE.md` +
-  the runtime. Until they exist + are discovered as `integrate.Template`s the agent
-  references, Provision reports "no operator workspace template matches".
+### Agent-runtime Copier templates — AUTHORED (2026-06-14)
+Built against the operator's real contract (studied `angee-operator/`): the operator
+owns ingress via a service `route: {port, auth: forward}` block (replaces `ports:`,
+publishes nothing, central Caddy forward-auths each upgrade with operator-minted route
+tokens) and secrets via `${secret.<name>}` + admin-bearer `secretSet`. So the
+templates carry **no** in-container caddy/verifier/HMAC the prototype hand-rolled.
+- `templates/workspaces/agent-default/` (`kind:workspace`) — renders `AGENTS.md`
+  (from `instructions`), `CLAUDE.md`→`AGENTS.md` symlink, `.mcp.json` (from `mcp_json`).
+  Inputs: `agent_name`, `instructions`, `mcp_json`.
+- `templates/services/claude-code/` + `templates/services/opencode/` (`kind:service`)
+  — one container service, `route: {port:3007, auth:forward}`, `workspace://` mount,
+  API key via `${secret.<name>}`; single-process `stdio-to-ws` Dockerfile.
+- Validated: copier.yml YAML + `parse_template_meta` discovery (kind/name/inputs) +
+  mcp_json default JSON. Jinja render is for the live test (jinja2 ships with Copier).
+
+### Remaining to render end-to-end
+- **Map agent fields → template inputs.** The provision flow currently sends only the
+  raw `workspace_inputs`/`service_inputs` JSON. The templates need `agent_name`/
+  `instructions`/`mcp_json` (workspace) and `auth_mode`/`secret_name`/`model`/… (service)
+  assembled from the agent's structured fields (name, instructions, MCP servers, model).
+  Decide where that assembly lives (a Django "resolved inputs" projection vs the console).
+- **Discover the templates as `integrate.Template`s** + make them available to the
+  operator — register `templates/` as a template source so the agent's
+  `service_template`/`workspace_template` FKs can point at them.
+- **Operator-held secret sync** — Django pushes the agent's `iam.Credential` value to
+  the operator store via `secretSet` (admin bearer, server-side) so `${secret.<name>}`
+  resolves; the browser never carries the key.
 - **Live smoke check** needs a dev-stack restart (new `@angee/operator` dep + the
-  `provisionAgent` SDL change). The `WorkspaceCreatePreflight` validator is still
-  worth wiring before create as a follow-up.
+  `provisionAgent` SDL change). `WorkspaceCreatePreflight` is worth wiring before create.
 
 ## Dropped from the reference prototype
 
