@@ -9,7 +9,9 @@ import { SkillsPage } from "./views/SkillsPage";
 const AGENTS_ID = "agents";
 
 const agentsRoutes: readonly BaseAddonRoute[] = [
-  { name: "agents.agents", path: "/agents", shell: "console", component: AgentsPage },
+  // The rail root and the dropdown leaf both target this route; `menu` picks the
+  // leaf as the chrome (title/icon/breadcrumb) owner.
+  { name: "agents.agents", path: "/agents", shell: "console", component: AgentsPage, menu: "agents.agents" },
   { name: "agents.agent", path: "/agents/$id", shell: "console", parent: "agents.agents" },
   // Static segments outrank the `/agents/$id` param route.
   { name: "agents.templates", path: "/agents/templates", shell: "console", component: TemplatesPage },
