@@ -84,9 +84,11 @@ export function LoginPage({
     <main
       className={cn(
         "relative min-h-screen overflow-hidden text-fg",
-        showHero
-          ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(28rem,34rem)]"
-          : "grid place-items-center px-5 py-8",
+        showHero && defaultHero
+          ? "grid items-center gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(25rem,31rem)] lg:gap-12 lg:px-12 xl:px-16"
+          : showHero
+            ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(28rem,34rem)]"
+            : "grid place-items-center px-5 py-8",
         showHero && defaultHero ? "bg-n-950" : "bg-canvas",
       )}
     >
@@ -99,7 +101,10 @@ export function LoginPage({
       {showHero && defaultHero && defaultAtmosphere ? <WanderingCube /> : null}
       {showHero ? (
         <div
-          className="relative z-10 hidden min-h-screen lg:block"
+          className={cn(
+            "relative z-10 hidden lg:block",
+            defaultHero ? "min-h-[32rem]" : "min-h-screen",
+          )}
           aria-hidden={defaultHero ? "true" : undefined}
         >
           {resolvedHero}
@@ -107,19 +112,29 @@ export function LoginPage({
       ) : null}
       <section
         className={cn(
-          "relative z-10 flex min-h-screen items-center justify-center px-5 py-8 sm:px-8",
-          showHero
-            ? "border-l border-n-0/20 bg-sheet/94 shadow-2xl shadow-n-950/20 backdrop-blur-xl"
-            : "bg-sheet",
-          !showHero && "min-h-0 w-full max-w-[30rem] rounded-lg border border-border shadow-lg",
+          "relative z-10 flex items-center justify-center",
+          showHero && defaultHero
+            ? "min-h-[calc(100vh-4rem)] lg:justify-end"
+            : showHero
+              ? "min-h-screen border-l border-border-subtle bg-sheet px-5 py-8 sm:px-8"
+              : "min-h-0 w-full max-w-[30rem] rounded-lg border border-border bg-sheet px-5 py-8 shadow-lg sm:px-8",
         )}
       >
-        <div className="w-full max-w-[26rem]">
-          <div className={cn("mb-9 flex justify-center", showHero && "lg:hidden")}>
+        <div
+          className={cn(
+            "w-full max-w-[26rem]",
+            showHero
+              ? defaultHero
+                ? "rounded-lg border border-n-0/20 bg-sheet/94 p-6 shadow-2xl shadow-n-950/35 backdrop-blur-xl ring-1 ring-n-0/15 sm:p-8"
+                : null
+              : null,
+          )}
+        >
+          <div className="mb-8 flex justify-center">
             {brand ?? <AngeeIdentity />}
           </div>
           {cardHeader === null ? null : (
-            <div className="mb-8">{cardHeader ?? <DefaultCardHeader />}</div>
+            <div className="mb-7">{cardHeader ?? <DefaultCardHeader />}</div>
           )}
           {loginMethods ? (
             <div className="mb-5">
@@ -157,9 +172,9 @@ function LoginBrandPanel({
   brand?: ReactNode;
 }): ReactNode {
   return (
-    <section className="relative flex min-h-screen flex-col overflow-hidden px-10 py-9 text-n-0 xl:px-12">
-      <div className="relative z-10">{brand ?? <AngeeIdentity tone="inverse" />}</div>
-      <div className="relative z-10 flex flex-1 items-center pb-16 pt-10">
+    <section className="relative flex h-full min-h-[32rem] flex-col justify-end text-n-0">
+      {brand ? <div className="absolute left-0 top-0 z-10">{brand}</div> : null}
+      <div className="relative z-10 pb-6">
         <div className="w-full max-w-xl">
           <p className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-n-0/72">
             From intent to interface
@@ -193,13 +208,12 @@ function LoginVisualBackdrop({
       ) : (
         <div className="absolute inset-0 bg-[linear-gradient(135deg,#07111f,#123129_46%,#08101d)]" />
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,9,18,0.82)_0%,rgba(4,9,18,0.34)_44%,rgba(4,9,18,0.9)_100%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,9,18,0.08)_0%,rgba(4,9,18,0.16)_48%,rgba(4,9,18,0.68)_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,9,18,0.72)_0%,rgba(4,9,18,0.18)_46%,rgba(4,9,18,0.48)_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,9,18,0.08)_0%,rgba(4,9,18,0.12)_44%,rgba(4,9,18,0.58)_100%)]" />
       {showAtmosphere ? (
         <>
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.09)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[size:56px_56px] opacity-30 [mask-image:linear-gradient(90deg,black,transparent_72%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(118deg,rgba(45,212,191,0.2)_0%,transparent_42%),linear-gradient(318deg,rgba(252,211,77,0.16)_0%,transparent_36%)]" />
-          <div className="absolute inset-x-0 top-0 h-24 border-b border-n-0/10 bg-n-950/10 backdrop-blur-[1px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:56px_56px] opacity-[0.24] [mask-image:linear-gradient(90deg,black,transparent_74%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(118deg,rgba(45,212,191,0.16)_0%,transparent_42%),linear-gradient(318deg,rgba(252,211,77,0.12)_0%,transparent_36%)]" />
         </>
       ) : null}
     </div>
