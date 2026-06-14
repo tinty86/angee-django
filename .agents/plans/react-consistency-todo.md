@@ -210,7 +210,15 @@ visual-parity spot-check across both themes still recommended before release.
 - [ ] One field stack: `field.tsx` is owner; `FieldRow` composes it; shared
       `RequiredMark`/`OptionalHint`; extend `widget-control` surface to
       textarea/field/number-field/select.
-- [ ] One tag primitive (`tones`-driven) → `Badge`/`Tag`/`Chip` aliases.
+- [~] One tag primitive (`tones`-driven) — RESOLVED by T1 / LEAVE SEPARATE: the
+      audit's core complaint (chip hard-coding soft tones) is fixed — `Badge` and
+      `Chip` both route color through `toneClass(tone, variant)` now. Merging them
+      into one primitive is NOT clean: different size scales (`density` all
+      `h-tag-h` vs `size` `h-tag-h`/`h-5`/`h-6`), bases (`min-w-0` vs
+      `truncate shrink-0`), defaults (`rounded` vs `pill`), and Chip-local tones
+      (`muted`/`inherit`) — different intents (status/count pill vs removable
+      token). Per DRY "different intent: leave separate." (`Tag` is already a thin
+      `Badge` alias.)
 - [ ] One header (collapse `CollectionHeader`/`SurfaceHeader`/`RecordHeader` into
       `PageHeader` + tone token + slots).
 - [x] One `createShellBand` factory → `ControlBand` + `Statusline` are thin
