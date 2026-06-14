@@ -149,13 +149,3 @@ export const Tooltip = function Tooltip({
   );
 };
 
-export const TooltipPrimitive = {
-  Root: TooltipRoot,
-  Trigger: TooltipTrigger,
-  Portal: TooltipPortal,
-  Positioner: TooltipPositioner,
-  Content: TooltipContent,
-  Popup: TooltipPopup,
-  Arrow: TooltipArrow,
-  Provider: TooltipProvider,
-};

@@ -576,7 +576,19 @@ visual-parity spot-check across both themes still recommended before release.
       `badge.shape` vs `chip.shape` defaults.
 - [x] Class-merge: `.filter(Boolean).join(" ")` → `cn()` in `DataPage`/`GraphView`
       (BrandButton's is an aria-id join, left alone).
-- [ ] Pick one primitive namespace-export convention (Select/Tooltip split).
+- [x] Pick one primitive namespace-export convention (Select/Tooltip split).
+      DONE (scoped + delete-the-wart): the convention is coherent once stated — a
+      primitive exports flat per-part consts (universal); a compound primitive
+      exposes a bare-name parts-namespace object (`Dialog`/`AlertDialog`/`Popover`,
+      all actively consumed as `Dialog.Root` etc.); a primitive that ships a
+      composed convenience component takes the bare name for it (`Select`,
+      `Tooltip`) and exposes parts under a `*Primitive` suffix ONLY where consumers
+      compound them (`SelectPrimitive`, used by `combobox`). The lone wart was a
+      DEAD `TooltipPrimitive` (zero consumers) — a `*Primitive` namespace on a
+      tooltip nobody compounds. Deleted it (prefer-deletion). Every surviving
+      namespace object is now one real consumers use. NOTE for the docs agent:
+      encode this convention in `docs/frontend/guidelines.md` (this slice avoided
+      docs per the handoff split).
 - [ ] Route the remaining raw widget-shape reads in FormView through the
       `fieldWidgetId` owner: `isLongTextField`'s `field.kind === "textarea"` fallback
       and `gridFieldClass` + the statusbar filter (`field.widget === "statusbar"`)
