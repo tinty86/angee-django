@@ -3,28 +3,18 @@ import {
   useContext,
   useRef,
   useState,
-  type ComponentType,
   type ReactElement,
   type ReactNode,
 } from "react";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView, keymap } from "@codemirror/view";
-import {
-  Bold,
-  CodeXml,
-  Eye,
-  Italic,
-  Link,
-  List,
-  ListOrdered,
-  Quote,
-} from "lucide-react";
 import ReactMarkdown, {
   defaultUrlTransform,
   type Components,
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -118,38 +108,38 @@ function MarkdownEdit({
         <Toolbar surface="preview" className="min-h-11 flex-wrap gap-1">
           <ToolbarButton
             label="Bold"
-            icon={Bold}
+            icon="bold"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownBoldCommand)}
           />
           <ToolbarButton
             label="Italic"
-            icon={Italic}
+            icon="italic"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownItalicCommand)}
           />
           <ToolbarButton
             label="Inline code"
-            icon={CodeXml}
+            icon="code-xml"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownInlineCodeCommand)}
           />
           <Toolbar.Separator orientation="vertical" />
           <ToolbarButton
             label="Bulleted list"
-            icon={List}
+            icon="list"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownBulletListCommand)}
           />
           <ToolbarButton
             label="Numbered list"
-            icon={ListOrdered}
+            icon="list-ordered"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownNumberedListCommand)}
           />
           <ToolbarButton
             label="Quote"
-            icon={Quote}
+            icon="quote"
             disabled={toolbarDisabled}
             onClick={() => runCommand(markdownQuoteCommand)}
           />
@@ -172,7 +162,7 @@ function MarkdownEdit({
             />
             <ToolbarButton
               label="Link"
-              icon={Link}
+              icon="link"
               disabled={toolbarDisabled || linkDraft.trim() === ""}
               onClick={applyLink}
             />
@@ -198,12 +188,12 @@ function MarkdownEdit({
 
 function ToolbarButton({
   label,
-  icon: Icon,
+  icon,
   disabled,
   onClick,
 }: {
   label: string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  icon: string;
   disabled?: boolean;
   onClick: () => void;
 }): ReactElement {
@@ -216,7 +206,7 @@ function ToolbarButton({
       disabled={disabled}
       onClick={onClick}
     >
-      <Icon className="glyph" aria-hidden />
+      <Glyph name={icon} />
     </Toolbar.Button>
   );
 }
@@ -231,7 +221,7 @@ function ModeButton({
   onSelect: (mode: MarkdownMode) => void;
 }): ReactElement {
   const active = mode === current;
-  const Icon = mode === "source" ? CodeXml : Eye;
+  const iconName = mode === "source" ? "code-xml" : "eye";
   const label = mode === "source" ? "Markdown source" : "Rendered preview";
   return (
     <Button
@@ -244,7 +234,7 @@ function ModeButton({
       title={label}
       onClick={() => onSelect(mode)}
     >
-      <Icon className="glyph" aria-hidden />
+      <Glyph name={iconName} />
     </Button>
   );
 }

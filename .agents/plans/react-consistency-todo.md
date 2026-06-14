@@ -86,7 +86,7 @@ visual-parity spot-check across both themes still recommended before release.
       by Toast/alert/status-icon. Reconciled `info` glyph to `"info"` everywhere
       (Alert/StatusIcon were `"help"`); StatusIcon's `muted` keeps `"help"`.
 
-### T5 — Icon registry: kill raw lucide imports (app surfaces ✅ done; rest deferred)
+### T5 — Icon registry: kill raw lucide imports ✅ done (commit)
 - [x] Register missing generic names in `chrome/icon-registry.ts`: arrow-down,
       arrow-up, arrow-up-down, filter, grid-2x2, layout-grid, sliders-horizontal.
 - [x] Give `Glyph` an optional `fallbackName` (used by `AppRail`, default `help`).
@@ -102,10 +102,11 @@ visual-parity spot-check across both themes still recommended before release.
       caught the lost stroke weight: gave `Glyph` a `strokeWidth` passthrough (one
       owner), restored checkbox=3 / dialog=2.25, and replaced status-icon's
       `[&_*]:stroke-[2.25]` CSS hack with it.
-- [ ] DEFERRED — `widgets/markdown` editor toolbar: passes lucide *components*
-      into a command/toolbar config (not inline JSX), so it needs its toolbar
-      glyphs registered (bold, italic, code-xml, link, list-ordered, quote, eye)
-      and the config reshaped to glyph names — a larger, careful change.
+- [x] DONE — `widgets/markdown` editor toolbar: registered the toolbar glyphs
+      (bold, italic, code-xml, link, list-ordered, quote, eye) and changed
+      `ToolbarButton.icon`/`ModeButton` from a lucide component to a glyph name
+      routed through `<Glyph>`. **T5 complete** — repo-wide drift check confirms no
+      `from "lucide-react"` imports remain outside `chrome/icon-registry.ts`.
 
 ## Phase 2 — State surfaces (T4)
 
