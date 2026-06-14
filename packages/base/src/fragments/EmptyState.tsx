@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv } from "../lib/variants";
 import { Card } from "../ui/card";
 
@@ -45,7 +45,7 @@ export const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
         {...props}
       >
         {icon ? (
-          <div className={styles.icon()}>{renderEmptyIcon(icon)}</div>
+          <div className={styles.icon()}>{renderGlyph(icon)}</div>
         ) : null}
         <div className={styles.copy()}>
           <h2 className={styles.title()}>{title}</h2>
@@ -59,7 +59,3 @@ export const EmptyState = React.forwardRef<HTMLElement, EmptyStateProps>(
   },
 );
 EmptyState.displayName = "EmptyState";
-
-function renderEmptyIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

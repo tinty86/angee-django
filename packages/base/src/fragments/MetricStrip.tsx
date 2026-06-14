@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { tv } from "../lib/variants";
 import { Card } from "../ui/card";
@@ -55,7 +55,7 @@ export const MetricTile = React.forwardRef<HTMLDivElement, MetricTileProps>(
           <div className={styles.header()}>
             <SectionEyebrow as="dt">{label}</SectionEyebrow>
             {icon ? (
-              <span className={styles.icon()}>{renderMetricIcon(icon)}</span>
+              <span className={styles.icon()}>{renderGlyph(icon)}</span>
             ) : null}
           </div>
           <dd className={styles.value()}>{value}</dd>
@@ -98,8 +98,4 @@ function resolveMetrics(
 
 function metricKey(metric: MetricTileValue, index: number): string {
   return `${String(metric.label)}:${String(metric.value)}:${index}`;
-}
-
-function renderMetricIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
 }

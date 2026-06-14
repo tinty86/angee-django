@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
 import { type Tone } from "../lib/tones";
 import { PageHeader, type PageHeaderProps } from "../page";
@@ -78,7 +78,7 @@ export const RecordHeader = React.forwardRef<HTMLElement, RecordHeaderProps>(
           {crumbs ? <div className={styles.crumbs()}>{crumbs}</div> : null}
           <div className={styles.titleRow()}>
             {icon ? (
-              <span className={styles.icon()}>{renderHeaderIcon(icon)}</span>
+              <span className={styles.icon()}>{renderGlyph(icon)}</span>
             ) : null}
             <Heading className={styles.title()}>{title}</Heading>
             {type ? <Badge>{type}</Badge> : null}
@@ -97,7 +97,3 @@ export const RecordHeader = React.forwardRef<HTMLElement, RecordHeaderProps>(
   },
 );
 RecordHeader.displayName = "RecordHeader";
-
-function renderHeaderIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

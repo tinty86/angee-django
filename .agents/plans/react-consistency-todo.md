@@ -127,12 +127,10 @@ visual-parity spot-check across both themes still recommended before release.
 ## Phase 3 — Find-the-owner (T8) + SDK/no-owner lifts (T10)
 
 ### T8 — move shape-sniffing onto its owner
-- [ ] `string|ReactNode` icon adapter → on `Glyph`. STILL OPEN (T5 added
-      `fallbackName` only): 8 fragments hand-roll
-      `typeof icon === "string" ? <Glyph name={icon}/> : icon` (EmptyState,
-      InlineEmpty, MetricStrip, MetricGrid, MiniCard, SurfaceHeader,
-      RecordHeader, CollectionHeader). Give `Glyph.name` a `ReactNode` union or
-      export `renderGlyph(icon)`.
+- [x] `string|ReactNode` icon adapter → `renderGlyph(icon)` in `chrome/Glyph.tsx`;
+      removed the 8 byte-identical local `render<X>Icon` helpers (EmptyState,
+      InlineEmpty, MetricStrip, MetricGrid, MiniCard, SurfaceHeader, RecordHeader,
+      CollectionHeader) and dropped their now-unused `Glyph` imports.
 - [ ] `recordSubtitleParts` (field-name sniffing + `atob` id decode),
       `AggregatePanel` `${field}Id` guess, `RevisionsTab.revisionSnapshot` →
       SDK/model metadata exposes subtitle parts / aggregate keys / changed fields.

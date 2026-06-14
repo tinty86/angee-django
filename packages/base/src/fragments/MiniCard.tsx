@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
@@ -56,7 +56,7 @@ export const MiniCard = React.forwardRef<HTMLElement, MiniCardProps>(
           <div className={styles.titleWrap()}>
             <div className={styles.titleRow()}>
               {icon ? (
-                <span className={styles.icon()}>{renderMiniCardIcon(icon)}</span>
+                <span className={styles.icon()}>{renderGlyph(icon)}</span>
               ) : null}
               <p className={styles.title()}>{title}</p>
             </div>
@@ -72,7 +72,3 @@ export const MiniCard = React.forwardRef<HTMLElement, MiniCardProps>(
   },
 );
 MiniCard.displayName = "MiniCard";
-
-function renderMiniCardIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

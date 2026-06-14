@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
@@ -55,7 +55,7 @@ export const MetricGrid = React.forwardRef<HTMLDListElement, MetricGridProps>(
                 </dt>
                 {metric.icon ? (
                   <span className={styles.icon()}>
-                    {renderMetricIcon(metric.icon)}
+                    {renderGlyph(metric.icon)}
                   </span>
                 ) : null}
               </div>
@@ -74,8 +74,4 @@ MetricGrid.displayName = "MetricGrid";
 
 function metricKey(metric: MetricGridTile, index: number): string {
   return `${String(metric.label)}:${String(metric.value)}:${index}`;
-}
-
-function renderMetricIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
 }

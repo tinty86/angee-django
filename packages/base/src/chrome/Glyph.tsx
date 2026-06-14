@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { cn } from "../lib/cn";
 import { useIcon } from "./icon-registry";
@@ -38,4 +38,14 @@ export function Glyph({
       style={sizeStyle}
     />
   );
+}
+
+/**
+ * Render an icon "slot" value: a registry name becomes a decorative `<Glyph>`,
+ * any other node passes through. The one owner for the
+ * `typeof icon === "string" ? <Glyph name={icon}/> : icon` adapter that the
+ * fragments each re-inlined.
+ */
+export function renderGlyph(icon: ReactNode): ReactNode {
+  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
 }
