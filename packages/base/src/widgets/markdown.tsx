@@ -1,9 +1,6 @@
 import {
   createContext,
-  useCallback,
   useContext,
-  useEffect,
-  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -11,9 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { markdown } from "@codemirror/lang-markdown";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
-import { basicSetup } from "codemirror";
+import { EditorView, keymap } from "@codemirror/view";
 import {
   Bold,
   CodeXml,
@@ -36,6 +31,7 @@ import { Input } from "../ui/input";
 import { Toolbar } from "../ui/toolbar";
 import { widgetControlSurface } from "../ui/widget-control";
 import type { WidgetDefinition, WidgetRenderProps } from "./types";
+import { useCodeMirrorEditor } from "./codemirror-editor";
 import {
   markdownBoldCommand,
   markdownBulletListCommand,
@@ -70,33 +66,13 @@ const PROSE_CLASS = cn(
   "[&_td]:border [&_td]:border-border-subtle [&_td]:px-2 [&_td]:py-1",
 );
 
-const CODEMIRROR_THEME = EditorView.theme({
-  "&": {
-    background: "transparent",
-    color: "var(--text-primary)",
-    fontFamily: "var(--font-sans)",
-    fontSize: "0.8125rem",
-    minHeight: "12rem",
-  },
-  "&.cm-focused": { outline: "none" },
-  ".cm-content": {
-    caretColor: "var(--brand)",
-    minHeight: "12rem",
-    padding: "0.5rem 0.75rem",
-  },
-  ".cm-line": { lineHeight: "1.5rem" },
-  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "var(--brand-soft)",
-  },
-  ".cm-gutters": {
-    background: "transparent",
-    borderRight: "1px solid var(--border-subtle)",
-    color: "var(--text-muted)",
-  },
-  ".cm-activeLine": { backgroundColor: "transparent" },
-  ".cm-activeLineGutter": { backgroundColor: "var(--surface-inset)" },
-  ".cm-placeholder": { color: "var(--text-subtle)" },
-});
+// Language + key bindings + soft-wrap for the markdown editor; the shared hook
+// adds the common chrome (basic setup, theme, change listener, read-only).
+const MARKDOWN_EXTENSIONS = [
+  markdown(),
+  keymap.of(markdownEditorKeymap),
+  EditorView.lineWrapping,
+];
 
 function MarkdownEdit({
   value,
@@ -107,98 +83,13 @@ function MarkdownEdit({
   const [mode, setMode] = useState<MarkdownMode>("source");
   const [linkDraft, setLinkDraft] = useState("");
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const onChangeRef = useRef(onChange);
-  const pendingChangeRef = useRef<string | null>(null);
-  const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncingRef = useRef(false);
-  const readOnlyCompartment = useMemo(() => new Compartment(), []);
-  const editableCompartment = useMemo(() => new Compartment(), []);
-  const placeholderCompartment = useMemo(() => new Compartment(), []);
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  const flushPendingChange = useCallback(() => {
-    if (changeTimerRef.current !== null) {
-      clearTimeout(changeTimerRef.current);
-      changeTimerRef.current = null;
-    }
-    const pending = pendingChangeRef.current;
-    pendingChangeRef.current = null;
-    if (pending !== null) onChangeRef.current?.(pending);
-  }, []);
-
-  const scheduleChange = useCallback(
-    (next: string) => {
-      pendingChangeRef.current = next;
-      if (changeTimerRef.current !== null) return;
-      changeTimerRef.current = setTimeout(flushPendingChange, 16);
-    },
-    [flushPendingChange],
-  );
-
-  useEffect(() => {
-    const parent = hostRef.current;
-    if (!parent) return undefined;
-    const updateListener = EditorView.updateListener.of((update) => {
-      if (!update.docChanged || syncingRef.current) return;
-      scheduleChange(update.state.doc.toString());
-    });
-    const blurHandler = EditorView.domEventHandlers({
-      blur: flushPendingChange,
-    });
-    const state = EditorState.create({
-      doc: value ?? "",
-      extensions: [
-        basicSetup,
-        markdown(),
-        keymap.of(markdownEditorKeymap),
-        EditorView.lineWrapping,
-        CODEMIRROR_THEME,
-        updateListener,
-        blurHandler,
-        readOnlyCompartment.of(EditorState.readOnly.of(Boolean(readOnly))),
-        editableCompartment.of(EditorView.editable.of(!readOnly)),
-        placeholderCompartment.of(placeholder(String(field?.label ?? "Markdown"))),
-      ] satisfies Extension[],
-    });
-    const view = new EditorView({ parent, state });
-    viewRef.current = view;
-    return () => {
-      flushPendingChange();
-      view.destroy();
-      viewRef.current = null;
-    };
-  }, [flushPendingChange, scheduleChange]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    const next = value ?? "";
-    if (!view || view.state.doc.toString() === next) return;
-    syncingRef.current = true;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: next },
-    });
-    syncingRef.current = false;
-  }, [value]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    view.dispatch({
-      effects: [
-        readOnlyCompartment.reconfigure(
-          EditorState.readOnly.of(Boolean(readOnly)),
-        ),
-        editableCompartment.reconfigure(EditorView.editable.of(!readOnly)),
-        placeholderCompartment.reconfigure(
-          placeholder(String(field?.label ?? "Markdown")),
-        ),
-      ],
-    });
-  }, [editableCompartment, field?.label, placeholderCompartment, readOnly, readOnlyCompartment]);
+  const viewRef = useCodeMirrorEditor(hostRef, {
+    value: value ?? "",
+    onChange,
+    readOnly,
+    placeholder: String(field?.label ?? "Markdown"),
+    extensions: MARKDOWN_EXTENSIONS,
+  });
 
   function runCommand(command: MarkdownCommand): void {
     const view = viewRef.current;

@@ -43,6 +43,14 @@ export interface ComposedMenuItem extends Omit<MenuItem, "children" | "id"> {
 /** Field-widget registry: widget id -> renderer (opaque to the headless SDK). */
 export type WidgetMap = Record<string, unknown>;
 
+/**
+ * Per-model create-form override: model name -> a declarative create form (the
+ * rendered binding interprets it). An addon registers the form for a model it
+ * owns; the standard form renderer uses it wherever that model is created,
+ * including the relation-picker inline create. Opaque to the headless SDK.
+ */
+export type FormOverrideMap = Record<string, unknown>;
+
 /** A chatter aside tab; merges by `id` (last wins) and orders by `sequence`. */
 export interface ChatterContribution {
   id: string;
@@ -65,6 +73,7 @@ export interface AddonManifest {
   widgets?: WidgetMap;
   i18n?: I18nResources;
   icons?: Readonly<Record<string, unknown>>;
+  forms?: FormOverrideMap;
   chatter?: readonly ChatterContribution[];
   slots?: readonly SlotContribution[];
 }
@@ -76,6 +85,7 @@ export interface ComposedAddons {
   widgets: WidgetMap;
   i18n: I18nResources;
   icons: Readonly<Record<string, unknown>>;
+  forms: FormOverrideMap;
   chatter: readonly ChatterContribution[];
   slots: readonly SlotContribution[];
 }
@@ -139,6 +149,7 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
   const widgets: WidgetMap = {};
   const i18n: Record<string, Record<string, string>> = {};
   const icons: Record<string, unknown> = {};
+  const forms: Record<string, unknown> = {};
   const routeNames: Record<string, true> = {};
   const menuIds: Record<string, true> = {};
 
@@ -165,6 +176,12 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
         icons[name] = icon;
       }
     }
+    if (addon.forms) {
+      for (const [model, form] of Object.entries(addon.forms)) {
+        claim(forms, model, addon.id, "form override");
+        forms[model] = form;
+      }
+    }
     if (addon.i18n) {
       for (const [namespace, messages] of Object.entries(addon.i18n)) {
         const target = (i18n[namespace] ??= {});
@@ -182,6 +199,7 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
     widgets,
     i18n,
     icons,
+    forms,
     chatter: mergeChatterContributions(...addons.map((a) => a.chatter ?? [])),
     slots: mergeSlotContributions(...addons.map((a) => a.slots ?? [])),
   };

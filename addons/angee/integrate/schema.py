@@ -170,9 +170,11 @@ class IntegrationInput:
     vendor: relay.GlobalID
     credential: relay.GlobalID
     owner: relay.GlobalID
-    account: relay.GlobalID | None = None
-    config: JSON | None = None
-    status: str | None = None
+    account: relay.GlobalID | None = strawberry.UNSET
+    # UNSET (not None): an omitted field must fall back to the model default, not
+    # overwrite it with null — `status`/`config` are non-null columns.
+    config: JSON | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -360,7 +362,7 @@ class VCSIntegrationType(AngeeNode):
     """Admin projection of a VCS integration (the git host capability)."""
 
     integration: IntegrationType
-    client_class: auto
+    backend_class: auto
     status: auto
     config: JSON
     last_sync_completed_at: auto
@@ -369,11 +371,11 @@ class VCSIntegrationType(AngeeNode):
     created_at: auto
     updated_at: auto
 
-    @strawberry_django.field(only=["client_class", "status"])
+    @strawberry_django.field(only=["backend_class", "status"])
     def display_name(self) -> str:
         """Return a human label for the record header and relation pickers."""
 
-        return f"{cast(Any, self).client_class} ({cast(Any, self).status})"
+        return f"{cast(Any, self).backend_class} ({cast(Any, self).status})"
 
 
 @strawberry_django.type(Repository)
@@ -438,13 +440,15 @@ class RepoCandidate:
 class VCSIntegrationInput:
     """Fields accepted when creating a VCS integration.
 
-    ``client_class`` is an ``ImplClassField`` enum key (e.g. ``github``);
+    ``backend_class`` is an ``ImplClassField`` enum key (e.g. ``github``);
     ``webhook_secret`` is write-only (never read back).
     """
 
     integration: relay.GlobalID
-    client_class: str = "none"
-    config: JSON | None = None
+    backend_class: str = "none"
+    # UNSET (not None): an omitted JSON config falls back to the non-null model
+    # default rather than overwriting it with null.
+    config: JSON | None = strawberry.UNSET
     webhook_secret: str = ""
 
 
@@ -453,7 +457,7 @@ class VCSIntegrationPatch:
     """Fields accepted when updating a VCS integration."""
 
     id: relay.GlobalID
-    client_class: str | None = strawberry.UNSET
+    backend_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
     webhook_secret: str | None = strawberry.UNSET
     status: str | None = strawberry.UNSET

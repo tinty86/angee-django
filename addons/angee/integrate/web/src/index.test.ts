@@ -21,6 +21,9 @@ describe("integrate addon manifest", () => {
       ["integrate.integration", "integrate.integrations"],
       ["integrate.vendor", "integrate.vendors"],
       ["integrate.webhook", "integrate.webhooks"],
+      ["integrate.vcsIntegration", "integrate.vcs"],
+      ["integrate.repository", "integrate.repositories"],
+      ["integrate.source", "integrate.sources"],
     ] as const) {
       const record = (integrate.routes ?? []).find((route) => route.name === name);
       expect(record?.path).toContain("/$id");
@@ -29,13 +32,21 @@ describe("integrate addon manifest", () => {
     }
   });
 
-  test("keeps vendors/webhooks as static siblings, not integration ids", () => {
-    const vendors = (integrate.routes ?? []).find((route) => route.name === "integrate.vendors");
-    expect(vendors?.path).toBe("/integrate/vendors");
-    expect(vendors?.component).toBeTypeOf("function");
+  test("keeps the static list routes as siblings, not integration ids", () => {
+    for (const [name, path] of [
+      ["integrate.vendors", "/integrate/vendors"],
+      ["integrate.webhooks", "/integrate/webhooks"],
+      ["integrate.vcs", "/integrate/vcs"],
+      ["integrate.repositories", "/integrate/repositories"],
+      ["integrate.sources", "/integrate/sources"],
+    ] as const) {
+      const route = (integrate.routes ?? []).find((entry) => entry.name === name);
+      expect(route?.path).toBe(path);
+      expect(route?.component).toBeTypeOf("function");
+    }
   });
 
-  test("exposes an Integrations menu with integrations/vendors/webhooks children", () => {
+  test("exposes an Integrations menu with every list as a child", () => {
     expect(integrate.menus).toHaveLength(1);
     const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
     expect(menu?.id).toBe("integrate");
@@ -46,6 +57,9 @@ describe("integrate addon manifest", () => {
       "integrate.integrations",
       "integrate.vendors",
       "integrate.webhooks",
+      "integrate.vcs",
+      "integrate.repositories",
+      "integrate.sources",
     ]);
   });
 
@@ -55,9 +69,16 @@ describe("integrate addon manifest", () => {
   });
 
   test("registers its glyphs", () => {
-    expect(integrate.icons?.integrate).toBeDefined();
-    expect(integrate.icons?.integration).toBeDefined();
-    expect(integrate.icons?.vendor).toBeDefined();
-    expect(integrate.icons?.webhook).toBeDefined();
+    for (const name of [
+      "integrate",
+      "integration",
+      "vendor",
+      "webhook",
+      "vcs",
+      "repository",
+      "source",
+    ] as const) {
+      expect(integrate.icons?.[name]).toBeDefined();
+    }
   });
 });

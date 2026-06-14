@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { OAuthCallbackPage } from "./OAuthCallbackPage";
 import { OAuthLoginMethods } from "./OAuthLoginMethods";
 import { LEGACY_LOGIN_CALLBACK_PATH, LOGIN_CALLBACK_PATH } from "./redirects";
+import { credentialCreateForm } from "./views/credential-form";
 import { CredentialsPage } from "./views/CredentialsPage";
 import { ExternalAccountsPage } from "./views/ExternalAccountsPage";
 import { GrantsPage } from "./views/GrantsPage";
@@ -91,6 +92,11 @@ const iam: BaseAddon = {
     ...consolePage("iam.credentials", "/iam/credentials", CredentialsPage),
   ],
   menus: identityMenu,
+  // The credential CRUD form: used by the Credentials page "New" and the
+  // relation-picker inline create (e.g. an Integration's credential field).
+  forms: {
+    Credential: credentialCreateForm,
+  },
   slots: [
     {
       slot: AUTH_LOGIN_METHOD_SLOT,

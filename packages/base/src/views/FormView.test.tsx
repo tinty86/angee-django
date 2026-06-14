@@ -518,6 +518,93 @@ describe("FormView", () => {
     expect(screen.getByText("Note is misconfigured.")).toBeTruthy();
   });
 
+  test("renders and submits a field only when its showWhen discriminator matches", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    renderWithProviders(
+      <FormView model="notes.Note">
+        <Field name="kind" label="Kind" />
+        <Field
+          name="secret"
+          label="Secret"
+          showWhen={(values) => values.kind === "static"}
+        />
+      </FormView>,
+    );
+
+    // Hidden until the discriminator matches.
+    expect(screen.queryByLabelText("Secret")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "static" } });
+    fireEvent.change(await screen.findByLabelText("Secret"), {
+      target: { value: "s3cret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: { kind: "static", secret: "s3cret" },
+    });
+  });
+
+  test("drops a showWhen field from the payload once the discriminator flips away", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    renderWithProviders(
+      <FormView model="notes.Note">
+        <Field name="kind" label="Kind" />
+        <Field
+          name="secret"
+          label="Secret"
+          showWhen={(values) => values.kind === "static"}
+        />
+      </FormView>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "static" } });
+    fireEvent.change(await screen.findByLabelText("Secret"), {
+      target: { value: "s3cret" },
+    });
+    // Flip the discriminator: the secret is hidden and excluded from the payload.
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "ssh" } });
+    await waitFor(() => expect(screen.queryByLabelText("Secret")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({ data: { kind: "ssh" } });
+  });
+
+  test("uses an addon-registered form override on create, not on edit", async () => {
+    const override = <Field name="overrideName" label="Override Name" />;
+
+    // Create (id null): the override replaces the declared fields.
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    renderWithProviders(
+      <FormView model="Widget">
+        <Field name="declaredName" label="Declared Name" />
+      </FormView>,
+      undefined,
+      { Widget: override },
+    );
+    expect(screen.getByLabelText("Override Name")).toBeTruthy();
+    expect(screen.queryByLabelText("Declared Name")).toBeNull();
+
+    cleanup();
+
+    // Edit (id set): the override is ignored; the declared lifecycle form renders.
+    sdkMocks.record = { id: "w-1", declaredName: "kept" };
+    renderWithProviders(
+      <FormView model="Widget" id="w-1">
+        <Field name="declaredName" label="Declared Name" />
+      </FormView>,
+      undefined,
+      { Widget: override },
+    );
+    expect(await screen.findByLabelText("Declared Name")).toBeTruthy();
+    expect(screen.queryByLabelText("Override Name")).toBeNull();
+  });
+
   test("shows a title-field server error in the header", async () => {
     sdkMocks.record = null;
     sdkMocks.mutate.mockReset();
@@ -549,6 +636,7 @@ function renderForm(id: string | null): void {
 function renderWithProviders(
   children: ReactElement,
   metadata?: SchemaFieldMetadata,
+  forms?: Record<string, unknown>,
 ): void {
   const rootRoute = createRootRoute();
   const indexRoute = createRoute({
@@ -566,7 +654,9 @@ function renderWithProviders(
       <ModalsHost>
         <ToastProvider>
           <ModelMetadataProvider metadata={metadata}>
-            <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
+            <AppRuntimeProvider
+              runtime={{ widgets: defaultWidgets, ...(forms ? { forms } : {}) }}
+            >
               {children}
             </AppRuntimeProvider>
           </ModelMetadataProvider>

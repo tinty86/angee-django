@@ -136,6 +136,7 @@ export {
   AppRuntimeProvider,
   useAppRuntime,
   useWidget,
+  useFormOverride,
   useMenus,
   useSlot,
   useT,
@@ -184,6 +185,7 @@ export {
   type SlotContribution,
   type MenuItem,
   type WidgetMap,
+  type FormOverrideMap,
 } from "./define-addon";
 
 // Generated, per-schema type contracts.

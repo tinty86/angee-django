@@ -1,7 +1,7 @@
-"""The GitHub VCS-client addon contributes no source models.
+"""The GitHub VCS-backend addon contributes no source models.
 
-Its capability is the :class:`~angee.integrate_github.client.GitHubClient`,
-resolved per ``VCSIntegration`` row through ``client_class``. This module exists so
+Its capability is the :class:`~angee.integrate_github.backend.GitHubBackend`,
+resolved per ``VCSIntegration`` row through ``backend_class``. This module exists so
 addon source-model discovery has a stable, empty target.
 """
 

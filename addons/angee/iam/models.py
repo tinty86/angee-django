@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import UnicodeUsernameValidator
 from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rebac import (
     RelationshipTuple,
@@ -358,7 +359,7 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
         related_name="+",
     )
     status = StateField(choices_enum=AccountStatus, default=AccountStatus.ACTIVE)
-    identity_claims = models.JSONField(default=dict)
+    identity_claims = models.JSONField(default=dict, blank=True)
     last_error = models.TextField(blank=True)
     last_error_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
@@ -701,6 +702,8 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
     )
     operation_fields = frozenset({"kind", "material"})
 
+    _REASON = "iam.connections.credential"
+
     def upsert_for_user(
         self,
         user: Any,
@@ -712,42 +715,19 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
         external_account: Any | None = None,
         **fields: Any,
     ) -> Any:
-        """Create or update one ``(user, oauth_client)`` credential."""
+        """Create or update one ``(user, oauth_client)`` OAuth credential (login flow)."""
 
-        reason = "iam.connections.credential"
         handler = handler_for(kind)
-        handler.validate(material)
-        kind_value = handler.kind
-        if owned := self.operation_fields & fields.keys():
-            names = ", ".join(sorted(owned))
-            raise ValueError(f"Credential field(s) are owned by upsert_for_user: {names}")
-        update_values = handler.upsert_fields(material)
-        update_values.update(
-            _validated_manager_values(
-                self.model,
-                fields,
-                allowed=self.caller_fields,
-            )
-        )
-        update_values["status"] = CredentialStatus.ACTIVE
-        material_value = json.dumps(material, sort_keys=True, separators=(",", ":"))
-        operation_values = {
-            "kind": kind_value,
-            "material": material_value,
-        }
+        operation_values, update_values = self._assemble_values(handler, material, fields)
         if external_account is not None:
             update_values["external_account"] = external_account
         create_values = {
             "external_account": external_account,
-            "status": CredentialStatus.ACTIVE,
-            "expires_at": None,
-            "granted_scopes": [],
-            "last_refresh_at": None,
-            "last_refresh_status": "",
+            **self._blank_create_values(),
             **operation_values,
             **update_values,
         }
-        with system_context(reason=reason), transaction.atomic():
+        with system_context(reason=self._REASON), transaction.atomic():
             instance, _created = self.update_or_create(
                 user=user,
                 oauth_client=oauth_client,
@@ -755,6 +735,78 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
                 create_defaults=create_values,
             )
         return instance
+
+    def create_local_credential(
+        self,
+        user: Any,
+        *,
+        kind: str,
+        name: str,
+        material: dict[str, Any],
+        **fields: Any,
+    ) -> Any:
+        """Create or update one provider-less (static/ssh) credential, keyed by ``(user, name)``.
+
+        The provider-less counterpart to :meth:`upsert_for_user`: ``oauth_client`` is
+        ``NULL`` (the kind/provider invariant forbids one), and ``name`` is the
+        credential's identity. OAuth credentials are minted by the login flow only.
+        """
+
+        handler = handler_for(kind)
+        if handler.kind == CredentialKind.OAUTH:
+            raise ValueError("OAuth credentials are minted by the login flow, not create_local_credential().")
+        if not name:
+            raise ValueError("A provider-less credential requires a name.")
+        operation_values, update_values = self._assemble_values(handler, material, fields)
+        create_values = {
+            "oauth_client": None,
+            "external_account": None,
+            **self._blank_create_values(),
+            **operation_values,
+            **update_values,
+        }
+        with system_context(reason=self._REASON), transaction.atomic():
+            instance, _created = self.update_or_create(
+                user=user,
+                name=name,
+                oauth_client=None,
+                defaults={**operation_values, **update_values},
+                create_defaults=create_values,
+            )
+        return instance
+
+    def _assemble_values(
+        self,
+        handler: Any,
+        material: dict[str, Any],
+        fields: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return ``(operation_values, update_values)`` for both create paths."""
+
+        handler.validate(material)
+        if owned := self.operation_fields & fields.keys():
+            names = ", ".join(sorted(owned))
+            raise ValueError(f"Credential field(s) are owned by the manager: {names}")
+        update_values = handler.upsert_fields(material)
+        update_values.update(
+            _validated_manager_values(self.model, fields, allowed=self.caller_fields)
+        )
+        update_values["status"] = CredentialStatus.ACTIVE
+        material_value = json.dumps(material, sort_keys=True, separators=(",", ":"))
+        operation_values = {"kind": handler.kind, "material": material_value}
+        return operation_values, update_values
+
+    @staticmethod
+    def _blank_create_values() -> dict[str, Any]:
+        """Return the inactive-refresh defaults a fresh credential row starts from."""
+
+        return {
+            "status": CredentialStatus.ACTIVE,
+            "expires_at": None,
+            "granted_scopes": [],
+            "last_refresh_at": None,
+            "last_refresh_status": "",
+        }
 
 
 class Credential(SqidMixin, AuditMixin, AngeeModel):
@@ -771,8 +823,13 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
     oauth_client = models.ForeignKey(
         "iam.OAuthClient",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="oauth_credentials",
     )
+    """The provider this credential authenticates to — required for ``oauth`` (its
+    identity is the provider account), optional for local kinds
+    (``static_token``/``ssh_key``), which may be created without one."""
     external_account = models.ForeignKey(
         "iam.ExternalAccount",
         on_delete=models.PROTECT,
@@ -780,6 +837,9 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
         blank=True,
         related_name="credentials",
     )
+    name = models.CharField(max_length=255, blank=True)
+    """Human label for a provider-less credential (its identity, unique per user);
+    ``oauth`` credentials leave it blank and derive a label from the provider/account."""
     kind = StateField(choices_enum=CredentialKind)
     material = EncryptedField()
     status = StateField(choices_enum=CredentialStatus, default=CredentialStatus.ACTIVE)
@@ -798,9 +858,32 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
         rebac_resource_type = "auth/credential"
         rebac_id_attr = "sqid"
         constraints = (
+            # OAuth identity: one credential per (user, provider). NULLs are
+            # distinct in SQL unique, so provider-less kinds need their own arm.
             models.UniqueConstraint(
                 fields=("user", "oauth_client"),
+                condition=Q(oauth_client__isnull=False),
                 name="uniq_iam_credential_user_oauth_client",
+            ),
+            # Provider-less identity: one named credential per user (named local
+            # credentials; provider-bearing rows use the arm above).
+            models.UniqueConstraint(
+                fields=("user", "name"),
+                condition=Q(oauth_client__isnull=True) & ~Q(name=""),
+                name="uniq_iam_credential_user_name_local",
+            ),
+            # A provider is required only for ``oauth`` (its identity is the
+            # provider account); local kinds may omit it.
+            models.CheckConstraint(
+                condition=~Q(kind=CredentialKind.OAUTH) | Q(oauth_client__isnull=False),
+                name="iam_credential_oauth_requires_provider",
+            ),
+            # The mirror of the unique arm above: a provider-less credential is
+            # identified by a non-blank name, so the DB (not just the factory) owns
+            # "every local credential is named".
+            models.CheckConstraint(
+                condition=Q(oauth_client__isnull=False) | ~Q(name=""),
+                name="iam_credential_local_requires_name",
             ),
         )
 

@@ -25,6 +25,15 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
 - Tokens beat color props and one-off variants. Theme by overriding tokens.
 - Use shared page, view, form, table, widget, and shell primitives before adding
   new local state.
+- Forms are declarative even when they branch: a `<Field showWhen={(values) => …}>`
+  predicate (mirroring `Action.visibleWhen`) drives a discriminated form — a `kind`
+  select that swaps the body — and a hidden field is never submitted. Reach for a
+  custom form component only when the declarative DSL genuinely cannot express it.
+- Register a model's create form once via `defineAddon`'s
+  `forms: { Model: <…Field/Group children…> }`; the standard renderer uses it
+  wherever that model is created, including the relation-picker inline create. Use
+  it when the create input diverges from the read projection (write-only secrets,
+  scalar-id pickers, a kind discriminator).
 - Client-side gates are UX only. The server is the authorization boundary.
 - No Python view DSL, no frontend metadata hidden in backend decorators.
 
@@ -36,6 +45,21 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   (`kind:"relation"`) auto-wires to a creatable `many2one` picker; a bare `ID`
   scalar (`kind:"scalar"`) is not auto-detected and must use `widget:"select"`
   (`many2one` selects `<field>.id`, invalid on a scalar id).
+- **An enum field reads UPPERCASE but writes lowercase** — a `StateField`/
+  `ImplClassField` column serializes the enum *member name* on read (`GITHUB`,
+  `ACTIVE`) yet its create/patch input is a `String` keyed by the lowercase
+  *value* (`github`, `active`). A bare metadata-driven `select` submits the member
+  name, which the String input rejects. On a create form pass `options` with
+  lower-cased values (the member name is `key.upper()`, so
+  `value.toLowerCase()`) and mark the field `createOnly`, so the read-side casing
+  never has to round-trip back through the select. For status verbs prefer an
+  `<Action set={{status:"disabled"}}>` over an editable status field.
+- **A server-backed typeahead is not a `RelationField`** — `RelationField`/
+  `RelationPicker` own their query state and filter a fixed `options` list
+  client-side, so they cannot drive a remote search. For one (e.g. a host repo
+  search), build a thin control on the dialog/`Input` primitives whose debounced
+  query feeds `useAuthoredQuery`, and refresh the affected list with
+  `useModelInvalidation(model)` after the write.
 - **A FormView create dialog under the console shell** needs
   `<ControlBandProvider host={undefined}>` to keep its Save band inline instead of
   portaling into the shell's band.

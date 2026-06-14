@@ -1,7 +1,7 @@
 """Tests for the VCS inventory flow — discover/import/search/refresh/sync.
 
-Uses the in-memory ``StubVCSClient`` (registered as ``stub`` in the test
-``ANGEE_VCS_CLIENT_CLASSES``); canned host data rides on the integration config.
+Uses the in-memory ``StubVCSBackend`` (registered as ``stub`` in the test
+``ANGEE_VCS_BACKEND_CLASSES``); canned host data rides on the integration config.
 REBAC-guarded reads run under ``system_context`` (writes already elevate
 themselves).
 """
@@ -131,7 +131,7 @@ def _vcs_integration(slug: str, *, config: dict[str, Any]) -> Any:
     with system_context(reason="test vcs setup"):
         integration.config = config
         integration.save(update_fields=["config", "updated_at"])
-        return VCSIntegration.objects.create(integration=integration, client_class="stub")
+        return VCSIntegration.objects.create(integration=integration, backend_class="stub")
 
 
 def _repo_names() -> set[str]:

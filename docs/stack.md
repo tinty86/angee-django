@@ -83,7 +83,7 @@ Dependency changes must update this file in the same change.
 | cmdk | Command menu | Spotlight shell surface |
 | react-day-picker | Calendar | Date widgets |
 | react-resizable-panels | Split panes | Shell and inspector layouts |
-| CodeMirror 6 | Text and Markdown editor | Markdown widget |
+| CodeMirror 6 (+ @codemirror/lang-json) | Text / Markdown / JSON editor | Markdown and JSON widget editors (shared `useCodeMirrorEditor`) |
 | @xyflow/react | node/edge graph canvas | `@angee/base` `GraphView` shell |
 | @dagrejs/dagre | directed-graph layout | `@angee/base` `GraphView` node placement |
 | @dnd-kit | Drag and drop | Board and rail interactions |
@@ -118,7 +118,7 @@ Dependency changes must update this file in the same change.
 | boto3 | S3-compatible storage backend (S3 / R2 / MinIO presigned IO) |
 | @xyflow/react | Graph and canvas (node/edge) views |
 | react-dropzone | Storage upload drop boundary |
-| react-json-view-lite + ansi-to-react | Debug/log JSON + ANSI panels |
+| react-json-view-lite + ansi-to-react | JSON widget read tree, debug/log JSON + ANSI panels |
 | simple-icons + @lobehub/icons | Brand and vendor SVG icon registry |
 
 ## Change Policy
