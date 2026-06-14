@@ -1,6 +1,4 @@
-import { useCallback, useState } from "react";
-
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
   FILE_DELETE_MUTATION,
@@ -45,26 +43,22 @@ export function useFileActions(
   const [updateFile] = useAuthoredMutation<FileUpdateData, FileUpdateVariables>(
     FILE_UPDATE_MUTATION,
   );
-  const [busy, setBusy] = useState(false);
-
-  const run = useCallback(
-    async (action: () => Promise<unknown>): Promise<void> => {
-      setBusy(true);
-      try {
-        await action();
-        onChanged?.();
-      } finally {
-        setBusy(false);
-      }
-    },
-    [onChanged],
-  );
+  const { busy, run } = useBusyRun(onChanged);
 
   return {
     busy,
-    trash: (id) => run(() => deleteFile({ id })),
-    restore: (id) => run(() => restoreFile({ id })),
-    move: (id, folder) => run(() => updateFile({ data: { id, folder } })),
+    trash: (id) =>
+      run(async () => {
+        await deleteFile({ id });
+      }),
+    restore: (id) =>
+      run(async () => {
+        await restoreFile({ id });
+      }),
+    move: (id, folder) =>
+      run(async () => {
+        await updateFile({ data: { id, folder } });
+      }),
     trashMany: (ids) =>
       run(async () => {
         for (const id of ids) await deleteFile({ id });

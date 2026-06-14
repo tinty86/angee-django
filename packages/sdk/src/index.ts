@@ -124,6 +124,7 @@ export {
 // Action-mutation result handling.
 export { runActionResult } from "./action-result";
 export { errorMessage } from "./error-message";
+export { useBusyRun, type BusyRun } from "./use-busy-run";
 
 // Live invalidation.
 export {

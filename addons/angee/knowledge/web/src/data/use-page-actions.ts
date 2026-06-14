@@ -1,6 +1,4 @@
-import { useCallback, useState } from "react";
-
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
   CREATE_PAGE_MUTATION,
@@ -59,21 +57,7 @@ export function usePageActions(
     UpdatePageData,
     UpdatePageVariables
   >(UPDATE_PAGE_MUTATION);
-  const [busy, setBusy] = useState(false);
-
-  const run = useCallback(
-    async <T>(action: () => Promise<T>): Promise<T> => {
-      setBusy(true);
-      try {
-        const result = await action();
-        onChanged?.();
-        return result;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [onChanged],
-  );
+  const { busy, run } = useBusyRun(onChanged);
 
   return {
     busy,

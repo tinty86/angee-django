@@ -131,7 +131,9 @@ now guards `ok` too. `runActionResult` exports only the function (the
 - [x] `unknown→message` error helper → `@angee/sdk` `errorMessage`; routed 8
       sites (3 local defs removed + 5 inline ternaries) across iam/operator/
       integrate/storage. (validation-errors & useBulkDelete left — different intent.)
-- [ ] `run()` busy-wrapper hook (×3) → `useBusyAction`/`useAsyncAction`.
+- [x] `run()` busy-wrapper hook (×3) → SDK `useBusyRun(onChanged)` ({busy, run<T>});
+      storage useFile/useFolderActions + knowledge usePageActions consume it
+      (+ unit test for the busy/onChanged/throw contract).
 - [x] relay `global-id` codec (×2) → `@angee/sdk` (`toRelayGlobalId`,
       `relationRelayGlobalId`); storage/knowledge re-export + keep `*_TYPE` consts.
 - [ ] `ActionResultData`/`IdVariables` per addon → export from `@angee/sdk` (pairs
