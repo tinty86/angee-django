@@ -66,10 +66,11 @@ big-ticket open items:
    (`field`/`form`/`form-layout`), header collapse
    (`CollectionHeader`/`SurfaceHeader`/`RecordHeader` → `PageHeader`),
    `ScopedTreeExplorer` (storage ≈ knowledge), `PageChrome`/`TwoPaneFrame`,
-   `FormSectionKicker`/`ControlRow`, `InlineNameField`/`RefreshingBadge`/`SectionNav`/
-   `MetricTile`. The dropdown/context-menu factory is **deliberately deferred**
-   (real API divergence — see the todo note); their shared surface is already
-   deduped via `POPUP_BASE`.
+   a shared date popover (date/datetime) + a `ChipList`/`TokenList` primitive
+   (tagInput/many2many), `FormSectionKicker`/`ControlRow`,
+   `InlineNameField`/`RefreshingBadge`/`SectionNav`/`MetricTile`. The
+   dropdown/context-menu factory is **deliberately deferred** (real API divergence
+   — see the todo note); their shared surface is already deduped via `POPUP_BASE`.
 3. **T8 remainder** (find-the-owner): `recordSubtitleParts`/aggregate-key/changed-field
    sniffing → SDK/model metadata; `FormView` field-behavior decoders → widget/field
    resolver; lookup-operator guards → `data-view-model`; **AppChooser/TopMenu active
@@ -78,6 +79,8 @@ big-ticket open items:
    palette work — good next pick); model-metadata humanization → rendered binding.
 4. **T2** move `DEFAULT_STATE_TONE_VALUES`/`stateToneFromValue` business semantics
    out of base into model/field metadata or explicit caller mapping.
+   **T10 remainder**: one `useDocumentMutation` SDK hook; collapse
+   `useStableMeasures` into a generic `useStableValue`.
 5. **T4** state-surface API: align `EmptyState`/`InlineEmpty`/`LoadingPanel`/
    `ErrorBanner` prop vocab; the `CollectionStatus`/`DataViewFrame` frame; delete
    `Chatter`'s local `EmptyState`; preview renderers own their own loading/error.
@@ -86,8 +89,15 @@ big-ticket open items:
    convention; storybook cleanups; `useOperatorSnapshot` `want*` → `SECTION_KEYS`.
 7. **Docs** — extend `docs/frontend/guidelines.md` for T4 (state-surface) and T17
    (forms-DSL) once those owners land. `docs/stack.md` needs no change (no new libs).
-8. **T19 fragments** — **decision: keep** (deferred); revisit per fragment on first
+8. **Final drift sweep** — after the above land, grep for remaining `from
+   "lucide-react"` outside the registry, hardcoded copy, `.join(" ")` class merges,
+   and the retired `error` tone; close any stragglers.
+9. **T19 fragments** — **decision: keep** (deferred); revisit per fragment on first
    real consumer. Do not delete.
+10. **Infra (not React, tracked)** — the dev workspace template hardcodes the
+    operator port `9000` instead of allocating it per workspace; fix
+    `templates/workspaces/dev` (and/or `stacks/dev`) process-compose to use
+    `${ports.operator}`.
 
 ## Locked decisions (do not relitigate)
 
