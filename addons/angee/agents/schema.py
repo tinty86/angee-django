@@ -11,7 +11,7 @@ this addon owns only the discovered :class:`Skill` rows.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import strawberry
 import strawberry_django
@@ -253,7 +253,8 @@ class AgentInput:
     """Fields accepted when creating an agent.
 
     ``owner`` is field-backed REBAC, so writing it derives the owner tuple. M2M skill
-    and MCP selections are set after creation with the ``setAgent…`` actions.
+    and MCP selections are set on the agent's update (``skills``/``mcpServers``/``mcpTools``
+    on ``AgentPatch``), not at create.
     """
 
     name: str
@@ -279,6 +280,9 @@ class AgentPatch:
     is_template: bool | None = strawberry.UNSET
     instructions: str | None = strawberry.UNSET
     model: relay.GlobalID | None = strawberry.UNSET
+    skills: list[relay.GlobalID] | None = strawberry.UNSET
+    mcp_servers: list[relay.GlobalID] | None = strawberry.UNSET
+    mcp_tools: list[relay.GlobalID] | None = strawberry.UNSET
     service_template: relay.GlobalID | None = strawberry.UNSET
     workspace_template: relay.GlobalID | None = strawberry.UNSET
     service_inputs: JSON | None = strawberry.UNSET
@@ -436,66 +440,6 @@ class InferenceActionMutation:
         return ActionResult(ok=True, message=f"Synced {count} model(s).")
 
 
-def _set_agent_relation(
-    agent_id: relay.GlobalID,
-    field_name: str,
-    related_model: type[models.Model],
-    related_ids: list[relay.GlobalID],
-    *,
-    reason: str,
-) -> Any:
-    """Replace one of an agent's M2M selections with the addressed rows, elevated."""
-
-    with system_context(reason=reason):
-        agent = instance_from_public_id(Agent, agent_id.node_id, queryset=Agent._default_manager.all())
-        if agent is None:
-            raise ValueError(f"Agent {agent_id.node_id!r} was not found.")
-        related = [
-            instance_from_public_id(related_model, gid.node_id, queryset=related_model._default_manager.all())
-            for gid in related_ids
-        ]
-        getattr(agent, field_name).set([item for item in related if item is not None])
-    return agent
-
-
-@strawberry.type
-class AgentActionMutation:
-    """Membership actions on an agent's skill and MCP selections.
-
-    Replace-set semantics: each call sets the named M2M to exactly the passed rows,
-    which the ``AgentInput`` create path deliberately leaves empty.
-    """
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def set_agent_skills(self, id: relay.GlobalID, skill_ids: list[relay.GlobalID]) -> AgentType:
-        """Replace the agent's selected skills."""
-
-        return cast(
-            AgentType,
-            _set_agent_relation(id, "skills", Skill, skill_ids, reason="agents.graphql.set_agent_skills"),
-        )
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def set_agent_mcp_servers(self, id: relay.GlobalID, mcp_server_ids: list[relay.GlobalID]) -> AgentType:
-        """Replace the agent's selected MCP servers."""
-
-        return cast(
-            AgentType,
-            _set_agent_relation(
-                id, "mcp_servers", MCPServer, mcp_server_ids, reason="agents.graphql.set_agent_mcp_servers"
-            ),
-        )
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def set_agent_mcp_tools(self, id: relay.GlobalID, mcp_tool_ids: list[relay.GlobalID]) -> AgentType:
-        """Replace the agent's selected MCP tools."""
-
-        return cast(
-            AgentType,
-            _set_agent_relation(id, "mcp_tools", MCPTool, mcp_tool_ids, reason="agents.graphql.set_agent_mcp_tools"),
-        )
-
-
 # Explicit annotation widens a homogeneous AngeeNode list past mypy's invariance check
 # (see integrate.schema._CONSOLE_TYPES).
 _CONSOLE_TYPES: list[type] = [
@@ -517,7 +461,6 @@ schemas = {
             _MCP_SERVER_MUTATION,
             _MCP_TOOL_MUTATION,
             _SKILL_MUTATION,
-            AgentActionMutation,
             InferenceActionMutation,
         ],
         "subscription": [changes(Agent, field="agentChanged")],
