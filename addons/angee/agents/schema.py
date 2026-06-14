@@ -398,6 +398,16 @@ _MCP_TOOL_MUTATION = crud(
 )
 """Admin MCP-tool CRUD: FK input resolves via strawberry-django; written elevated."""
 
+_SKILL_MUTATION = crud(
+    SkillType,
+    delete=True,
+    permission_classes=_ADMIN_PERMISSION_CLASSES,
+    name="skill",
+    write_context="agents.graphql.skill",
+)
+"""Admin skill delete: rows arrive via source discovery; removal is inventory cleanup
+(re-discovered on the next source sync). No create/update — the source owns the data."""
+
 
 def _resolve(model: type[models.Model], gid: relay.GlobalID, *, reason: str) -> Any:
     """Return the elevated instance addressed by ``gid`` for an action write."""
@@ -506,6 +516,7 @@ schemas = {
             _INFERENCE_MODEL_MUTATION,
             _MCP_SERVER_MUTATION,
             _MCP_TOOL_MUTATION,
+            _SKILL_MUTATION,
             AgentActionMutation,
             InferenceActionMutation,
         ],
