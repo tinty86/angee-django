@@ -150,11 +150,15 @@ export function LoginPage({
               : null,
           )}
         >
-          <div className="mb-8 flex justify-center">
-            {brand ?? <AngeeIdentity />}
-          </div>
-          {cardHeader === null ? null : (
-            <div className="mb-7">{cardHeader ?? <DefaultCardHeader />}</div>
+          {cardHeader === null ? (
+            brand ? <div className="mb-8">{brand}</div> : null
+          ) : cardHeader ? (
+            <>
+              <div className="mb-7">{brand ?? <AngeeIdentity />}</div>
+              <div className="mb-7">{cardHeader}</div>
+            </>
+          ) : (
+            <DefaultCardHeader brand={brand} />
           )}
           {loginMethods ? (
             <div className="mb-5">
@@ -356,15 +360,52 @@ function AngeeIdentity({
   );
 }
 
-function DefaultCardHeader(): ReactNode {
+function DefaultCardHeader({
+  brand,
+}: {
+  brand?: ReactNode;
+}): ReactNode {
+  if (brand) {
+    return (
+      <div className="mb-8">
+        <div className="mb-6">{brand}</div>
+        <h1 className="text-28 font-semibold leading-tight text-fg">
+          Sign in
+        </h1>
+        <p className="mt-2 text-sm text-fg-muted">
+          Use your Angee account credentials.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <h1 className="text-28 font-semibold leading-tight text-fg">
-        Sign in
-      </h1>
-      <p className="mt-2 text-sm text-fg-muted">
-        Use your Angee account credentials.
-      </p>
+    <div className="mb-8 flex items-start gap-4">
+      <span
+        className="grid size-11 shrink-0 place-content-center rounded-md border border-border-subtle bg-inset/80 shadow-sm"
+        aria-hidden="true"
+      >
+        <AngeeLogo
+          aria-hidden="true"
+          preset="gold"
+          geometry="full"
+          bgColor={null}
+          size={24}
+          width={24}
+          height={24}
+        />
+      </span>
+      <div className="min-w-0 pt-0.5">
+        <p className="mb-1 text-base font-semibold leading-none text-fg">
+          Angee
+        </p>
+        <h1 className="text-28 font-semibold leading-tight text-fg">
+          Sign in
+        </h1>
+        <p className="mt-2 text-sm text-fg-muted">
+          Use your account credentials.
+        </p>
+      </div>
     </div>
   );
 }
