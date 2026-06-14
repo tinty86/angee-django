@@ -35,6 +35,8 @@ import {
   type WidgetField,
 } from "../widgets";
 import {
+  fieldWidgetId,
+  isRelationIdField,
   pageChildren,
   pageElementProps,
   parsePageActions,
@@ -689,7 +691,7 @@ function FieldWidget({
   readOnly?: boolean;
   onChange?: (value: unknown) => void;
 }): React.ReactElement {
-  const widget = useResolvedWidget(widgetId(field)) ?? fallbackWidget();
+  const widget = useResolvedWidget(fieldWidgetId(field)) ?? fallbackWidget();
   const Component = readOnly ? widget.read : (widget.edit ?? widget.read);
   const widgetField: WidgetField = {
     name: field.name,
@@ -932,7 +934,7 @@ function isNamedBodyField(field: FieldDescriptor): boolean {
 }
 
 function isLongTextField(field: FieldDescriptor): boolean {
-  const id = widgetId(field);
+  const id = fieldWidgetId(field);
   return (
     id === "textarea" ||
     id === "markdown" ||
@@ -1074,7 +1076,7 @@ function emptyValue(field: FieldDescriptor): unknown {
   if (field.kind === "switch" || field.widget === "switch") return false;
   // An empty JSON field is an empty object, not the JSON string "" — the latter
   // is stored verbatim and breaks downstream `config.get(...)` reads.
-  if (widgetId(field) === "json") return {};
+  if (fieldWidgetId(field) === "json") return {};
   return "";
 }
 
@@ -1087,7 +1089,7 @@ function isEmptyFieldValue(value: unknown): boolean {
 }
 
 function isNullableScalarWidget(field: FieldDescriptor): boolean {
-  const id = widgetId(field);
+  const id = fieldWidgetId(field);
   return id === "date" || id === "datetime";
 }
 
@@ -1115,15 +1117,6 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     left.length === right.length &&
     left.every((item, index) => valuesEqual(item, right[index]))
   );
-}
-
-function widgetId(field: FieldDescriptor): string {
-  if (field.widget) return field.widget;
-  return field.kind ?? "text";
-}
-
-function isRelationIdField(field: FieldDescriptor): boolean {
-  return widgetId(field) === "many2one";
 }
 
 function isRecord(value: unknown): value is Row {

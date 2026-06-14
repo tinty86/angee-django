@@ -58,6 +58,25 @@ export interface FieldDescriptor {
   description?: ReactNode;
 }
 
+/**
+ * The widget id a field descriptor resolves to: its explicit `widget`, else its
+ * `kind`, else the `text` fallback. The descriptor owns this resolution so a
+ * view never re-derives "which widget is this field" from its shape.
+ */
+export function fieldWidgetId(field: FieldDescriptor): string {
+  // Truthy (not nullish) so an empty `widget` string falls through to `kind`.
+  return field.widget || field.kind || "text";
+}
+
+/**
+ * Whether a field is a scalar-id relation picker (`many2one`), which selects the
+ * related node's `<name>.id` and submits/clears as a relation id. A field-shape
+ * fact the descriptor answers about itself.
+ */
+export function isRelationIdField(field: FieldDescriptor): boolean {
+  return fieldWidgetId(field) === "many2one";
+}
+
 function FieldMarker(_props: FieldProps): null {
   return null;
 }

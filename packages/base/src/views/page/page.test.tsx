@@ -4,7 +4,9 @@ import {
   Action,
   Column,
   Field,
+  fieldWidgetId,
   Group,
+  isRelationIdField,
   parsePageActions,
   parsePageColumns,
   parsePageFields,
@@ -183,5 +185,27 @@ describe("page element markers", () => {
         </>,
       ),
     ).toThrow("Duplicate page action id: archive");
+  });
+});
+
+describe("field descriptor resolution", () => {
+  test("fieldWidgetId prefers widget, then kind, then text", () => {
+    expect(fieldWidgetId({ name: "a", widget: "select", kind: "text" })).toBe(
+      "select",
+    );
+    expect(fieldWidgetId({ name: "a", kind: "switch" })).toBe("switch");
+    expect(fieldWidgetId({ name: "a" })).toBe("text");
+    // An empty widget string falls through to kind (truthy, not nullish).
+    expect(fieldWidgetId({ name: "a", widget: "", kind: "switch" })).toBe(
+      "switch",
+    );
+    expect(fieldWidgetId({ name: "a", widget: "" })).toBe("text");
+  });
+
+  test("isRelationIdField is true only for the many2one widget", () => {
+    expect(isRelationIdField({ name: "a", widget: "many2one" })).toBe(true);
+    expect(isRelationIdField({ name: "a", kind: "many2one" })).toBe(true);
+    expect(isRelationIdField({ name: "a", widget: "select" })).toBe(false);
+    expect(isRelationIdField({ name: "a" })).toBe(false);
   });
 });

@@ -154,9 +154,26 @@ visual-parity spot-check across both themes still recommended before release.
       — it is presentation/humanization (the SDK stays structural), `wordCount` is
       product-flavored, and metadata does not classify created/updated/words
       semantics, so moving the names would not cleanly help.
-- [ ] `FormView` field-behavior decoders (`widgetId`, `isRelationIdField`,
-      `hasOptionValue`, `emptyValue`) → widget/field resolver owns selection path /
-      empty value / submit normalization / layout role.
+- [x] PARTIAL — moved the field-SHAPE decoders to the `FieldDescriptor` owner;
+      kept the form-SUBMIT/draft helpers in FormView (different intent):
+      • `widgetId` → `fieldWidgetId(field)` and `isRelationIdField(field)` moved to
+        `views/page/Field.tsx` (where `FieldDescriptor` is defined) + exported via the
+        page barrel. They are pure field-shape facts ("which widget does this field
+        resolve to" / "is it a `many2one` relation-id picker → `<name>.id` selection
+        path"), so the descriptor answers them about itself; FormView's 4+3 call
+        sites now route through the owner. +unit tests beside the owner. Review fix:
+        preserved the original TRUTHY guard (`widget || kind || "text"`, not `??`) so
+        an empty `widget` string still falls through to `kind`; +edge tests.
+      • `emptyValue(field)` / `hasOptionValue(field)` LEAVE-SEPARATE: they encode
+        FormView's draft-seed + submit-normalization semantics (date→null,
+        tagInput→[], switch→false, json→{}; "don't submit an empty select/relation"),
+        entangled with the mutation/baseline logic — not field identity. They now
+        build on the owner's `fieldWidgetId`.
+      • Follow-ups (out of scope, tracked in Phase 7): `isLongTextField`'s
+        `field.kind === "textarea"` fallback + `gridFieldClass`/the statusbar filter
+        still read `field.widget` raw — fold through `fieldWidgetId`. And the two
+        divergent option-widget inventories (`hasOptionValue` vs
+        `model-metadata-defaults` `ENUM_OPTION_WIDGETS`) could converge on the owner.
 - [x] option `value→label` resolver → one `optionLabel(options, value)` owner in
       `widgets/types.ts` (beside `WidgetOption`); routed select, combobox, many2one,
       statusBadge, many2many (its local copy deleted). Left separate (different
@@ -486,6 +503,13 @@ visual-parity spot-check across both themes still recommended before release.
 - [x] Class-merge: `.filter(Boolean).join(" ")` → `cn()` in `DataPage`/`GraphView`
       (BrandButton's is an aria-id join, left alone).
 - [ ] Pick one primitive namespace-export convention (Select/Tooltip split).
+- [ ] Route the remaining raw widget-shape reads in FormView through the
+      `fieldWidgetId` owner: `isLongTextField`'s `field.kind === "textarea"` fallback
+      and `gridFieldClass` + the statusbar filter (`field.widget === "statusbar"`)
+      read `field.widget` directly. Converge `hasOptionValue` (FormView) and
+      `ENUM_OPTION_WIDGETS` (`model-metadata-defaults`) — two divergent
+      option-bearing-widget inventories — onto a single `Field.tsx` predicate.
+      (Surfaced during the T8 `fieldWidgetId`/`isRelationIdField` owner move.)
 - [ ] Delete the write-only page-element `*_SLOT` symbols
       (`FIELD_SLOT`/`GROUP_SLOT`/`ACTION_SLOT`/`COLUMN_SLOT`/`TAB_SLOT`): each is
       assigned `[X_SLOT]: true` on its marker but never read — only

@@ -23,7 +23,13 @@ export {
   type ColumnAggregate,
   type PageColumnAlign,
 } from "./Column";
-export { Field, FIELD_SLOT, type PageFieldKind } from "./Field";
+export {
+  Field,
+  FIELD_SLOT,
+  fieldWidgetId,
+  isRelationIdField,
+  type PageFieldKind,
+} from "./Field";
 export { Group, GROUP_SLOT } from "./Group";
 export { Tab, TAB_SLOT } from "./Tab";
 export {
