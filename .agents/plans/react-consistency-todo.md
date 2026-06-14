@@ -270,8 +270,13 @@ visual-parity spot-check across both themes still recommended before release.
       routed `Spotlight`'s icon adapter through the shared `renderGlyph` owner.
 - [x] `createVariantContext` (`lib/variant-context.tsx`) → tabs/accordion/
       collapsible consume it (replaced 3 local `createContext + useXVariant`).
-- [ ] `FormSectionKicker` composes `SectionEyebrow`; shared `ControlRow`
-      (switch/radio/field). (Still open — separate from the variant-context dedup.)
+- [x] `FormSectionKicker` was a byte-identical duplicate of `SectionEyebrow` (same
+      recipe, only the default `as` differed) — DELETED it, routed its 3 consumers
+      (FormView ×2, `FieldRow`) to `SectionEyebrow` (preserving `as`), and removed
+      the now-dead `kicker` slot + its 6 variants/type-exports from
+      `formLayoutVariants`. Review-confirmed behavior-preserving. `ControlRow` —
+      LEAVE: scoping found no such component and no repeated label+control+hint row
+      to extract (field-row label logic already lives in `Field`/`FieldRow`).
 - [~] `InlineNameField`/`SectionNav`/`SectionTabs` — LEAVE SEPARATE (scoped):
       the inline-title editors are only 2 (knowledge `PageEditor` autosave-on-blur
       vs `NewPageControl` form-submit+cancel) with incompatible save/cancel

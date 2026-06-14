@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { tv, type VariantProps } from "../lib/variants";
+import { SectionEyebrow } from "./section-eyebrow";
 
 export const formLayoutVariants = tv({
   slots: {
@@ -10,7 +11,6 @@ export const formLayoutVariants = tv({
     fieldRow: "block min-w-0",
     fieldHeader: "mb-1 flex min-h-4 items-center justify-between gap-2",
     fieldControl: "min-w-0",
-    kicker: "m-0 uppercase",
   },
   variants: {
     density: {
@@ -73,34 +73,6 @@ export const formLayoutVariants = tv({
       four: { fieldRow: "xl:col-span-4" },
       full: { fieldRow: "col-span-full" },
     },
-    size: {
-      xs: { kicker: "text-2xs" },
-      sm: { kicker: "text-xs" },
-    },
-    tone: {
-      muted: { kicker: "text-fg-muted" },
-      fg: { kicker: "text-fg" },
-      brand: { kicker: "text-brand" },
-      danger: { kicker: "text-danger-text" },
-    },
-    weight: {
-      medium: { kicker: "font-medium" },
-      semibold: { kicker: "font-semibold" },
-    },
-    tracking: {
-      normal: { kicker: "tracking-normal" },
-      wide: { kicker: "tracking-wide" },
-      wider: { kicker: "tracking-wider" },
-    },
-    spacing: {
-      none: { kicker: "" },
-      menu: { kicker: "px-2 pb-1" },
-      field: { kicker: "mb-1 block" },
-    },
-    truncate: {
-      true: { kicker: "truncate" },
-      false: { kicker: "" },
-    },
   },
   defaultVariants: {
     align: "end",
@@ -108,13 +80,8 @@ export const formLayoutVariants = tv({
     columns: "one",
     density: "comfortable",
     padding: "none",
-    size: "xs",
     span: "one",
     surface: "transparent",
-    tone: "muted",
-    tracking: "wide",
-    truncate: false,
-    weight: "semibold",
   },
 });
 
@@ -126,17 +93,6 @@ export type FormActionsAlign = NonNullable<FormLayoutRecipeProps["align"]>;
 export type FormFooterBorder = NonNullable<FormLayoutRecipeProps["border"]>;
 export type FormFooterSurface = NonNullable<FormLayoutRecipeProps["surface"]>;
 export type FormFieldSpan = NonNullable<FormLayoutRecipeProps["span"]>;
-export type FormSectionKickerSize = NonNullable<FormLayoutRecipeProps["size"]>;
-export type FormSectionKickerTone = NonNullable<FormLayoutRecipeProps["tone"]>;
-export type FormSectionKickerWeight = NonNullable<
-  FormLayoutRecipeProps["weight"]
->;
-export type FormSectionKickerTracking = NonNullable<
-  FormLayoutRecipeProps["tracking"]
->;
-export type FormSectionKickerSpacing = NonNullable<
-  FormLayoutRecipeProps["spacing"]
->;
 
 export type FormGridAreas = readonly string[] | string;
 
@@ -225,60 +181,6 @@ export const FormFooter = React.forwardRef<HTMLElement, FormFooterProps>(
 );
 FormFooter.displayName = "FormFooter";
 
-export type FormSectionKickerElement =
-  | "dt"
-  | "h2"
-  | "h3"
-  | "label"
-  | "p"
-  | "span";
-
-export type FormSectionKickerProps = Omit<
-  React.HTMLAttributes<HTMLElement>,
-  "className" | "color"
-> &
-  Pick<
-    FormLayoutRecipeProps,
-    "size" | "spacing" | "tone" | "tracking" | "truncate" | "weight"
-  > & {
-    as?: FormSectionKickerElement;
-    className?: string;
-    htmlFor?: string;
-  };
-
-export const FormSectionKicker = React.forwardRef<
-  HTMLElement,
-  FormSectionKickerProps
->(function FormSectionKicker(
-  {
-    as = "span",
-    className,
-    size = "xs",
-    spacing = "none",
-    tone = "muted",
-    tracking = "wide",
-    truncate = false,
-    weight = "semibold",
-    ...props
-  },
-  ref,
-) {
-  const styles = formLayoutVariants({
-    size,
-    spacing,
-    tone,
-    tracking,
-    truncate,
-    weight,
-  });
-  return React.createElement(as, {
-    ref,
-    className: styles.kicker({ className }),
-    ...props,
-  });
-});
-FormSectionKicker.displayName = "FormSectionKicker";
-
 export type FieldRowProps = Omit<
   React.LabelHTMLAttributes<HTMLLabelElement>,
   "className"
@@ -324,14 +226,14 @@ export const FieldRow = React.forwardRef<HTMLLabelElement, FieldRowProps>(
         {label || meta ? (
           <span className={styles.fieldHeader({ className: labelClassName })}>
             {label ? (
-              <FormSectionKicker weight="medium">
+              <SectionEyebrow as="span" weight="medium">
                 {label}
                 {required ? (
                   <span className="ml-1 text-danger-text" aria-hidden="true">
                     {requiredIndicator}
                   </span>
                 ) : null}
-              </FormSectionKicker>
+              </SectionEyebrow>
             ) : null}
             {meta ? (
               <span className="shrink-0 text-2xs font-normal normal-case text-fg-subtle">

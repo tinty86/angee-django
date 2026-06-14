@@ -21,10 +21,8 @@ import {
   FieldLabel,
   FieldRoot,
 } from "../ui/field";
-import {
-  FormGrid,
-  FormSectionKicker,
-} from "../ui/form-layout";
+import { FormGrid } from "../ui/form-layout";
+import { SectionEyebrow } from "../ui/section-eyebrow";
 import { Input } from "../ui/input";
 import { Spinner } from "../ui/spinner";
 import { ControlBand } from "../shell/ControlBand";
@@ -600,7 +598,7 @@ export function FormView({
         {bodyField ? (
           <section className="grid gap-2">
             {bodyField.label ? (
-              <FormSectionKicker>{bodyField.label}</FormSectionKicker>
+              <SectionEyebrow as="span">{bodyField.label}</SectionEyebrow>
             ) : null}
             <form.Field name={bodyField.name}>
               {(api) => (
@@ -762,7 +760,7 @@ function FormSection({
   return (
     <section className="grid gap-3">
       {section.label ? (
-        <FormSectionKicker
+        <SectionEyebrow
           as="h3"
           spacing="field"
           tracking="wide"
@@ -770,7 +768,7 @@ function FormSection({
           className="border-b border-border-subtle pb-1"
         >
           {section.label}
-        </FormSectionKicker>
+        </SectionEyebrow>
       ) : null}
       <FormGrid
         columns={section.columns === 1 ? "one" : "two"}
