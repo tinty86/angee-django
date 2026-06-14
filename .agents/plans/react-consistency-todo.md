@@ -262,7 +262,7 @@ visual-parity spot-check across both themes still recommended before release.
 
 ## Phase 6 — Architecture decisions (now locked)
 
-- [~] **T6 (commit)** — IN PROGRESS, incremental:
+- [x] **T6 (commit)** — DONE (base + all 6 addons routed through i18n):
       - [x] base primitives: `ModalsHost` (confirm/cancel/done), `dialog` (close),
         `alert` (dismiss), `pager` (prev/next/rows-per-page/apply), `selection-bar`
         (clear/selected), `number-field` (inc/dec), `ListLoadingFooter/Inline`
@@ -273,8 +273,12 @@ visual-parity spot-check across both themes still recommended before release.
       - [x] base chrome (AppChooser/Spotlight/GlobalSearch/UserMenu/Systray/TopBar/
         AppRail/Breadcrumb) → `useBaseT()` + `chrome.*` keys (also stabilized
         `useBaseT` with `useCallback`). `TopMenu` `DEFAULT_TABS` left for T16.
-      - [ ] base minor remainder: `toolbars/DataToolbar` copy, `ListInternals`
-        `SelectionBar` wrapper (Clear/Delete) + row aria-labels, pager `subject`.
+      - [x] base minor remainder: `toolbars/DataToolbar` (~30 keys, `dataToolbar.*`),
+        `ListInternals` `SelectionBar` (Clear/Delete/`{count} selected`) + row/sort
+        aria-labels (`list.*`/`selection.*`), pager `subject` (`pager.records`/
+        `pager.pageOf`) → `useBaseT()`. English prop defaults (createLabel,
+        pagerSubject, subject, ariaLabel) became `undefined` + in-body coalesce so
+        the public API is preserved; sort/page aria strings reproduce exact output.
       - [x] per-addon namespace + bundle, all copy routed: iam, operator, storage,
         knowledge, integrate, agents (~280 keys, produced by 6 parallel agents).
       - [x] unified translator owner: added `useNamespaceT(ns, fallback)` to

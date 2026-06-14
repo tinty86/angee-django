@@ -79,7 +79,7 @@ export function Pager({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
-  subject = "Records",
+  subject,
   unit,
   labelElement = "button",
   labelClassName,
@@ -88,6 +88,7 @@ export function Pager({
   formatNumber = defaultFormatNumber,
 }: PagerProps): React.ReactElement {
   const t = useBaseT();
+  const resolvedSubject = subject ?? t("pager.records");
   const [customPageSize, setCustomPageSize] = React.useState<number | null>(
     null,
   );
@@ -106,7 +107,7 @@ export function Pager({
         pageLabel={pageLabel}
         pageSize={pageSize}
         pageSizeOptions={pageSizeOptions}
-        subject={subject}
+        subject={resolvedSubject}
         labelClassName={labelClassName}
         customPageSize={customPageSize}
         onCustomPageSizeChange={setCustomPageSize}
@@ -118,7 +119,7 @@ export function Pager({
         <button
           type="button"
           className={cn(BUTTON_LABEL_CLASS, labelClassName)}
-          aria-label={`${subject} ${pageLabel}`}
+          aria-label={t("pager.pageOf", { subject: resolvedSubject, pageLabel })}
         >
           {pageLabel}
         </button>
@@ -191,7 +192,7 @@ function PageSizePicker({
     <PopoverRoot>
       <PopoverTrigger
         className={cn(BUTTON_LABEL_CLASS, labelClassName)}
-        aria-label={`${subject} ${pageLabel}`}
+        aria-label={t("pager.pageOf", { subject, pageLabel })}
       >
         {pageLabel}
       </PopoverTrigger>

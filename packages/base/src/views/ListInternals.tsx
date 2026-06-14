@@ -109,6 +109,7 @@ export function SelectionBar({
   /** Caller-supplied bulk actions rendered before the built-in Delete/Clear. */
   actions?: React.ReactNode;
 }): React.ReactElement {
+  const t = useBaseT();
   const actions = (
     <>
       {extraActions}
@@ -119,11 +120,11 @@ export function SelectionBar({
           onClick={onDelete}
         >
           <Glyph name="trash" />
-          Delete
+          {t("selection.delete")}
         </SelectionBarPrimitive.Action>
       ) : null}
       <SelectionBarPrimitive.Action surface="brand" onClick={onClear}>
-        Clear
+        {t("selection.clear")}
       </SelectionBarPrimitive.Action>
     </>
   );
@@ -131,7 +132,7 @@ export function SelectionBar({
     <SelectionBarPrimitive
       className="h-11 w-full rounded-none border-b border-border-subtle shadow-none"
       count={count}
-      countLabel={`${count} selected`}
+      countLabel={t("selection.countSelected", { count })}
       actions={actions}
     />
   );
@@ -184,6 +185,7 @@ export function FlatListBody<TRow extends Row>({
   fetching,
   footerAggregate,
 }: FlatListBodyProps<TRow>): React.ReactElement {
+  const t = useBaseT();
   const colSpan = Math.max(1, visibleColumnCount + (selectable ? 1 : 0));
   const measures = React.useMemo(
     () => groupMeasuresFromColumns(columns),
@@ -216,7 +218,7 @@ export function FlatListBody<TRow extends Row>({
                 <TableHead sticky className="w-8">
                   <Checkbox
                     size="sm"
-                    aria-label="Select all rows on this page"
+                    aria-label={t("list.selectAllOnPage")}
                     checked={allPageSelected}
                     indeterminate={!allPageSelected && somePageSelected}
                     onCheckedChange={onPageSelectionChange}
@@ -382,6 +384,7 @@ export function VisibleFieldsMenu({
   fields: readonly VisibleFieldOption[];
   onToggle?: (id: string, visible: boolean) => void;
 }): React.ReactElement {
+  const t = useBaseT();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
@@ -390,7 +393,7 @@ export function VisibleFieldsMenu({
             type="button"
             variant="ghost"
             size="iconSm"
-            aria-label="Visible fields"
+            aria-label={t("list.visibleFields")}
             className="justify-self-end"
           >
             <Glyph name="columns" />
@@ -401,7 +404,7 @@ export function VisibleFieldsMenu({
         <DropdownMenu.Positioner sideOffset={6} align="end">
           <DropdownMenu.Content className="w-56">
             <DropdownMenu.Group>
-              <DropdownMenu.Label>Visible fields</DropdownMenu.Label>
+              <DropdownMenu.Label>{t("list.visibleFields")}</DropdownMenu.Label>
               {fields.map((field) => (
                 <DropdownMenu.CheckboxItem
                   key={field.id}
@@ -483,6 +486,7 @@ function SortHeader<TRow extends Row>({
   dataView: DataViewContextValue;
   children: React.ReactNode;
 }): React.ReactElement {
+  const t = useBaseT();
   if (column.sortable === false) return <>{children}</>;
   const sort = dataView.state.sort;
   const active = sort?.field === column.field;
@@ -492,11 +496,16 @@ function SortHeader<TRow extends Row>({
       ? "arrow-up"
       : "arrow-down";
   const label = columnLabelText(column);
+  const sortKey = !active
+    ? "list.sortNotSorted"
+    : sort.dir === "asc"
+      ? "list.sortAscending"
+      : "list.sortDescending";
   return (
     <button
       type="button"
       className="inline-flex min-w-0 items-center gap-1 rounded text-left outline-none hover:text-fg focus-visible:focus-ring"
-      aria-label={`Sort ${label} (${active ? `currently ${sort.dir === "asc" ? "ascending" : "descending"}` : "not sorted"})`}
+      aria-label={t(sortKey, { label })}
       onClick={() => dataView.setSort(nextSort(sort, column.field))}
     >
       <span className="truncate">{children}</span>
