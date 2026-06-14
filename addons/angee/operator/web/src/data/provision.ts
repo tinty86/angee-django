@@ -18,24 +18,26 @@ import type {
   WorkspaceRef,
 } from "./types";
 
-/** A daemon template identified by its path + kind (e.g. an agent's template FK). */
+/** A daemon template identified by its name + kind (e.g. an agent's template FK). */
 export interface TemplateMatch {
-  path?: string | null;
+  name?: string | null;
   kind?: string | null;
 }
 
 /**
- * Resolve the daemon's `template` ref for a path + kind. The daemon owns the ref
+ * Resolve the daemon's `template` ref for a name + kind. The daemon owns the ref
  * format and emits it in its own `templates` listing, so match against the
- * listing rather than constructing the ref.
+ * listing rather than constructing the ref. Matching is by `name` (+ optional
+ * `kind`) because the descriptor's `path` is an absolute fs path on the daemon,
+ * not the source-relative path Django records.
  */
 export function resolveTemplateRef(
   templates: readonly TemplateDescriptor[],
   match: TemplateMatch | null | undefined,
 ): string | null {
-  if (!match?.path) return null;
+  if (!match?.name) return null;
   const found = templates.find(
-    (template) => template.path === match.path && (!match.kind || template.kind === match.kind),
+    (template) => template.name === match.name && (!match.kind || template.kind === match.kind),
   );
   return found?.ref ?? null;
 }

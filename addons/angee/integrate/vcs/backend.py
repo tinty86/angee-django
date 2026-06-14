@@ -1,11 +1,12 @@
 """The host-agnostic git-backend contract.
 
-A :class:`VCSBackend` is bound to one ``Integration`` and reads its remote over the
-host's REST API — listing repositories, walking trees, reading blobs, resolving
-refs, and verifying inbound webhooks. It never clones: git transport belongs to
-the operator. Concrete hosts (``integrate_github.GitHubBackend``) implement the
-primitives; ``VCSIntegration`` owns the shared enumeration walk over them. This
-module imports no models, so it breaks no import cycle.
+A :class:`VCSBackend` is bound to one ``Integration`` and reads a repository —
+either a host's remote over its REST API (``integrate_github.GitHubBackend``) or a
+local working tree (:class:`LocalVCSBackend`) — listing repositories, walking trees,
+reading blobs, and resolving refs. A host backend never clones (git transport
+belongs to the operator); the local backend reads files directly for dev/offline
+inventory. ``VCSIntegration`` owns the shared enumeration walk over the primitives.
+This module imports no models, so it breaks no import cycle.
 """
 
 from __future__ import annotations
@@ -13,6 +14,12 @@ from __future__ import annotations
 import pathlib
 from dataclasses import dataclass, field
 from typing import Any
+
+from django.conf import settings
+
+# Directories the local backend never treats as source — a broad ``Source.path`` on a
+# working tree would otherwise walk (and ingest stray ``copier.yml`` from) these.
+_LOCAL_SKIP_DIRS = frozenset({".git", ".venv", "node_modules", "__pycache__", ".angee"})
 
 
 @dataclass(frozen=True)
@@ -174,7 +181,12 @@ class LocalVCSBackend(VCSBackend):
         return [self._descriptor()]
 
     def ls_tree(self, repository: Any, *, ref: str, path: str, recursive: bool = False) -> list[TreeEntry]:
-        """Walk the working tree under ``path``; entry paths are relative to the repo root."""
+        """Walk the working tree under ``path``; entry paths are relative to the repo root.
+
+        Prunes ``_LOCAL_SKIP_DIRS`` — a working-tree-only concern (a REST host returns
+        committed tree entries and has no such noise), so the filter lives here, not in
+        the host-agnostic ``VCSIntegration.discover`` walk.
+        """
 
         del repository, ref
         base = self._safe_join(path)
@@ -184,7 +196,7 @@ class LocalVCSBackend(VCSBackend):
         entries: list[TreeEntry] = []
         for child in children:
             relative = child.relative_to(self._root)
-            if ".git" in relative.parts:
+            if _LOCAL_SKIP_DIRS.intersection(relative.parts):
                 continue
             entries.append(TreeEntry(path=relative.as_posix(), type="tree" if child.is_dir() else "blob"))
         return entries
@@ -242,8 +254,6 @@ class LocalVCSBackend(VCSBackend):
             raise FileNotFoundError("LocalVCSBackend requires integration.config['local_root'].")
         path = pathlib.Path(root)
         if not path.is_absolute():
-            from django.conf import settings
-
             path = pathlib.Path(settings.BASE_DIR) / path
         return path.resolve()
 
