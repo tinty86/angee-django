@@ -842,6 +842,10 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
             **operation_values,
             **update_values,
         }
+        # Give the credential a human label on create (OAuth rows carry no name of their
+        # own). Create-only so an admin rename, and token refreshes, are preserved.
+        if not str(create_values.get("name") or ""):
+            create_values["name"] = self._oauth_credential_name(oauth_client, external_account)
         with system_context(reason=self._REASON), transaction.atomic():
             instance, _created = self.update_or_create(
                 user=user,
@@ -850,6 +854,23 @@ class CredentialManager(RebacManager.from_queryset(CredentialQuerySet)):  # type
                 create_defaults=create_values,
             )
         return instance
+
+    @staticmethod
+    def _oauth_credential_name(oauth_client: Any, external_account: Any | None) -> str:
+        """Return a default label for an OAuth credential: the provider, plus its subject."""
+
+        label = str(
+            getattr(oauth_client, "display_name", "") or getattr(oauth_client, "slug", "") or "OAuth"
+        )
+        subject = ""
+        if external_account is not None:
+            subject = str(
+                getattr(external_account, "email", "")
+                or getattr(external_account, "display_name", "")
+                or getattr(external_account, "external_id", "")
+                or ""
+            )
+        return f"{label} ({subject})" if subject else label
 
     def create_local_credential(
         self,

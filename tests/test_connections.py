@@ -226,6 +226,53 @@ def test_connection_managers_authorize_their_own_writes() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+def test_upsert_for_user_labels_the_credential_from_provider_and_subject() -> None:
+    """A provider credential is named on create from its provider + subject, create-only.
+
+    The relation-picker representation reads the ``name`` column, so an OAuth row (which
+    carries no name of its own) needs one to be pickable.
+    """
+
+    created_models = _create_missing_tables()
+    try:
+        user = get_user_model().objects.create_user(username="namer", email="namer@example.com")
+        call_command("rebac", "sync", verbosity=0)
+        with system_context(reason="test name"):
+            oauth_client = OAuthClient.objects.create(
+                slug="example", display_name="Example prod", client_id="example-client"
+            )
+            account = ExternalAccount.objects.link(
+                oauth_client, "ext-name", owner=user, email="picker@example.com"
+            )
+            credential = Credential.objects.upsert_for_user(
+                user,
+                oauth_client,
+                CredentialKind.STATIC_TOKEN,
+                {"api_key": "k"},
+                external_account=account,
+            )
+            assert credential.name == "Example prod (picker@example.com)"
+
+            # Create-only: a rename survives a later upsert (token refresh / reconnect).
+            credential.name = "Renamed"
+            credential.save(update_fields=["name", "updated_at"])
+            again = Credential.objects.upsert_for_user(
+                user,
+                oauth_client,
+                CredentialKind.STATIC_TOKEN,
+                {"api_key": "k2"},
+                external_account=account,
+            )
+            assert again.pk == credential.pk
+            assert again.name == "Renamed"
+    finally:
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
 def test_create_local_credential_needs_no_provider_and_keys_by_name() -> None:
     """A static-token credential is minted with no provider, identified by ``name``."""
 

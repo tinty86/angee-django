@@ -294,22 +294,26 @@ class CredentialType(AngeeNode):
 
     @strawberry_django.field(only=["oauth_client", "external_account", "name"])
     def display_name(self) -> str:
-        """Return a human label for relation pickers.
+        """Return a human label for the list, form title, and relation pickers.
 
-        Credential has no natural string column; OAuth credentials read as
-        ``provider: subject``, while provider-less ones read as their ``name``.
-        ``only`` lists the FK *id* columns, but this dereferences the related rows
-        — list resolvers must feed `console_credentials()`/`connected_for()`, which
-        `rebac_select_related("oauth_client", "external_account")` to avoid an N+1.
+        The stored ``name`` is the label (OAuth rows are named on create from their
+        provider + subject; see ``CredentialManager._oauth_credential_name``). It is the
+        ``name`` column the relation-picker representation reads, so preferring it keeps
+        the picker, list, and form consistent without dereferencing related rows. A
+        legacy unnamed OAuth row falls back to ``provider: subject`` (``only`` lists the
+        FK id columns, so that path needs a `console_credentials()`-style select_related).
         """
 
+        name = str(cast(Any, self).name or "")
+        if name:
+            return name
         client = getattr(cast(Any, self), "oauth_client", None)
         if client is not None:
             provider = str(getattr(client, "slug", "") or getattr(client, "display_name", "") or "credential")
             account = getattr(cast(Any, self), "external_account", None)
             subject = str(getattr(account, "external_id", "") or "") if account else ""
             return f"{provider}: {subject}" if subject else provider
-        return str(cast(Any, self).name or "credential")
+        return "credential"
 
 
 @strawberry.type
