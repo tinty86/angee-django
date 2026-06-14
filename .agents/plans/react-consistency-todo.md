@@ -218,7 +218,15 @@ visual-parity spot-check across both themes still recommended before release.
       (shell/shell-band.tsx; all exports + StatusSegment/Spacer preserved.)
 - [ ] One `PageChrome`/`TwoPaneFrame` → `CanvasPage`/`RecordView`/`SplitView`/
       `HeroPage`.
-- [ ] `DaemonResourceTable` (operator's 6 raw tables) or move to `RowsListView`.
+- [x] `DaemonResourceTable` (operator `views/parts`) — one generic table
+      (columns/rows/actions/busy/emptyMessage) replaces the hand-built `<Table>` in
+      all 6 sections (Services/Sources/Workspaces/Operations/Secrets/GitOps);
+      behavior-preserved (colSpans, actions, confirm flows, OperatorSection chrome).
+      Follow-ups (review, non-blocking): the `runDaemonAction({name})` adapter is
+      still spelled 3× (Services/Sources/Workspaces) — a thin `useDaemonRowActions`
+      helper could own it; cell-kind classes (muted/numeric) are inline per column;
+      SecretsSection's Protected/Delete is a column (action API can't render a
+      withheld cell).
 - [ ] `ScopedTreeExplorer` primitive → storage + knowledge browsers.
 - [ ] Shared date popover helper (date/datetime); `ChipList`/`TokenList` primitive
       (tagInput/many2many).

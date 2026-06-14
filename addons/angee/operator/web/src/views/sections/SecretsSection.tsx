@@ -6,12 +6,6 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   useConfirm,
 } from "@angee/base";
 import { useT } from "@angee/sdk";
@@ -20,6 +14,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { SECRET_DELETE_MUTATION, SECRET_SET_MUTATION } from "../../data/documents";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { SecretRef } from "../../data/types";
+import { DaemonResourceTable } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -122,79 +117,73 @@ export function SecretsSection(): ReactNode {
         </CardContent>
       </Card>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Declared</TableHead>
-            <TableHead>Has value</TableHead>
-            <TableHead>Required</TableHead>
-            <TableHead>Env var</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {secrets.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={6}>
-                No declared secrets.
-              </TableCell>
-            </TableRow>
-          ) : (
-            secrets.map((secret) => (
-              <TableRow key={secret.name}>
-                <TableCell className="font-medium text-fg">{secret.name}</TableCell>
-                <TableCell className="text-13 text-fg-muted">
-                  {secret.declared ? "yes" : "no"}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    density="compact"
-                    shape="pill"
-                    tone={secret.hasValue ? "success" : "neutral"}
-                  >
-                    {secret.hasValue ? "set" : "empty"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {secret.required ? (
-                    <Badge density="compact" shape="pill" tone="warning">
-                      yes
-                    </Badge>
-                  ) : (
-                    <span className="text-fg-muted">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="font-mono text-13 text-fg-muted">
-                  {secret.envVar ?? "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  {secret.required || secret.generated ? (
-                    // Required/generated secrets are control-plane (e.g. the
-                    // generated operator bearer shared by Django + the daemon);
-                    // deleting one can brick minting, so the console withholds it.
-                    <span
-                      className="text-13 text-fg-muted"
-                      title="Control-plane secret (required or generated) — cannot be deleted from the console."
-                    >
-                      Protected
-                    </span>
-                  ) : (
-                    <Button
-                      disabled={busy}
-                      onClick={() => handleDelete(secret)}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      Delete
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        columns={[
+          {
+            header: "Name",
+            cell: (secret) => <span className="font-medium text-fg">{secret.name}</span>,
+          },
+          {
+            header: "Declared",
+            cell: (secret) => (
+              <span className="text-13 text-fg-muted">{secret.declared ? "yes" : "no"}</span>
+            ),
+          },
+          {
+            header: "Has value",
+            cell: (secret) => (
+              <Badge density="compact" shape="pill" tone={secret.hasValue ? "success" : "neutral"}>
+                {secret.hasValue ? "set" : "empty"}
+              </Badge>
+            ),
+          },
+          {
+            header: "Required",
+            cell: (secret) =>
+              secret.required ? (
+                <Badge density="compact" shape="pill" tone="warning">
+                  yes
+                </Badge>
+              ) : (
+                <span className="text-fg-muted">—</span>
+              ),
+          },
+          {
+            header: "Env var",
+            cell: (secret) => (
+              <span className="font-mono text-13 text-fg-muted">{secret.envVar ?? "—"}</span>
+            ),
+          },
+          {
+            header: "Actions",
+            align: "end",
+            cell: (secret) =>
+              secret.required || secret.generated ? (
+                // Required/generated secrets are control-plane (e.g. the
+                // generated operator bearer shared by Django + the daemon);
+                // deleting one can brick minting, so the console withholds it.
+                <span
+                  className="text-13 text-fg-muted"
+                  title="Control-plane secret (required or generated) — cannot be deleted from the console."
+                >
+                  Protected
+                </span>
+              ) : (
+                <Button
+                  disabled={busy}
+                  onClick={() => handleDelete(secret)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  Delete
+                </Button>
+              ),
+          },
+        ]}
+        emptyMessage="No declared secrets."
+        rowKey={(secret) => secret.name}
+        rows={secrets}
+      />
     </OperatorSection>
   );
 }

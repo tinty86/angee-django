@@ -1,13 +1,4 @@
-import {
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  useConfirm,
-} from "@angee/base";
+import { useConfirm } from "@angee/base";
 import { useT } from "@angee/sdk";
 import { useState, type ReactNode } from "react";
 
@@ -17,6 +8,7 @@ import {
 } from "../../data/documents";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { WorkspaceRef } from "../../data/types";
+import { DaemonResourceTable, type DaemonResourceAction } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -82,54 +74,50 @@ export function WorkspacesSection(): ReactNode {
       loadingMessage="Loading workspaces"
       actionError={actionError}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Template</TableHead>
-            <TableHead>Path</TableHead>
-            <TableHead className="text-right">Port</TableHead>
-            <TableHead>TTL</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {workspaces.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={6}>
-                No workspaces.
-              </TableCell>
-            </TableRow>
-          ) : (
-            workspaces.map((workspace) => (
-              <TableRow key={workspace.name}>
-                <TableCell className="font-medium text-fg">{workspace.name}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{workspace.template}</TableCell>
-                <TableCell className="font-mono text-13 text-fg-muted">{workspace.path}</TableCell>
-                <TableCell className="text-right text-13 tabular-nums text-fg-muted">
-                  {workspace.processComposePort ?? "—"}
-                </TableCell>
-                <TableCell className="text-13 text-fg-muted">{workspace.ttl ?? "—"}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {actions.map((action) => (
-                      <Button
-                        disabled={busy}
-                        key={action.field}
-                        onClick={() => handle(action, workspace)}
-                        size="sm"
-                        variant={action.variant}
-                      >
-                        {action.label}
-                      </Button>
-                    ))}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        actions={actions.map(
+          (action): DaemonResourceAction<WorkspaceRef> => ({
+            label: action.label,
+            variant: action.variant,
+            run: (workspace) => handle(action, workspace),
+          }),
+        )}
+        busy={busy}
+        columns={[
+          {
+            header: "Name",
+            cell: (workspace) => <span className="font-medium text-fg">{workspace.name}</span>,
+          },
+          {
+            header: "Template",
+            cell: (workspace) => (
+              <span className="text-13 text-fg-muted">{workspace.template}</span>
+            ),
+          },
+          {
+            header: "Path",
+            cell: (workspace) => (
+              <span className="font-mono text-13 text-fg-muted">{workspace.path}</span>
+            ),
+          },
+          {
+            header: "Port",
+            align: "end",
+            cell: (workspace) => (
+              <span className="text-13 tabular-nums text-fg-muted">
+                {workspace.processComposePort ?? "—"}
+              </span>
+            ),
+          },
+          {
+            header: "TTL",
+            cell: (workspace) => <span className="text-13 text-fg-muted">{workspace.ttl ?? "—"}</span>,
+          },
+        ]}
+        emptyMessage="No workspaces."
+        rowKey={(workspace) => workspace.name}
+        rows={workspaces}
+      />
     </OperatorSection>
   );
 }

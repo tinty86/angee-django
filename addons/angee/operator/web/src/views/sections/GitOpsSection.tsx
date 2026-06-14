@@ -1,12 +1,6 @@
 import {
   EmptyState,
   MetricGrid,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   type MetricGridTile,
 } from "@angee/base";
 import { useT } from "@angee/sdk";
@@ -14,6 +8,7 @@ import type { ReactNode } from "react";
 
 import { useOperatorSnapshot } from "../../data/transport";
 import type { GitOpsLink, GitOpsSummary } from "../../data/types";
+import { DaemonResourceTable } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { StateTag } from "../parts/StateTag";
 
@@ -73,46 +68,45 @@ function GitOpsTopologyView({
         metrics={metrics}
       />
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Source</TableHead>
-            <TableHead>Workspace</TableHead>
-            <TableHead>Slot</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead className="text-right">Ahead/Behind</TableHead>
-            <TableHead>Pushed</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {links.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={7}>
-                No GitOps links.
-              </TableCell>
-            </TableRow>
-          ) : (
-            links.map((link) => (
-              <TableRow key={link.id}>
-                <TableCell className="font-medium text-fg">{link.source}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{link.workspace}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{link.slot}</TableCell>
-                <TableCell>
-                  <StateTag state={link.state} />
-                </TableCell>
-                <TableCell className="text-13 text-fg-muted">{link.branch ?? "—"}</TableCell>
-                <TableCell className="text-right text-13 tabular-nums text-fg-muted">
-                  ↑{link.ahead ?? 0} ↓{link.behind ?? 0}
-                </TableCell>
-                <TableCell className="text-13 text-fg-muted">
-                  {link.pushed ? "yes" : "no"}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        columns={[
+          {
+            header: "Source",
+            cell: (link) => <span className="font-medium text-fg">{link.source}</span>,
+          },
+          {
+            header: "Workspace",
+            cell: (link) => <span className="text-13 text-fg-muted">{link.workspace}</span>,
+          },
+          {
+            header: "Slot",
+            cell: (link) => <span className="text-13 text-fg-muted">{link.slot}</span>,
+          },
+          { header: "Status", cell: (link) => <StateTag state={link.state} /> },
+          {
+            header: "Branch",
+            cell: (link) => <span className="text-13 text-fg-muted">{link.branch ?? "—"}</span>,
+          },
+          {
+            header: "Ahead/Behind",
+            align: "end",
+            cell: (link) => (
+              <span className="text-13 tabular-nums text-fg-muted">
+                ↑{link.ahead ?? 0} ↓{link.behind ?? 0}
+              </span>
+            ),
+          },
+          {
+            header: "Pushed",
+            cell: (link) => (
+              <span className="text-13 text-fg-muted">{link.pushed ? "yes" : "no"}</span>
+            ),
+          },
+        ]}
+        emptyMessage="No GitOps links."
+        rowKey={(link) => link.id}
+        rows={links}
+      />
     </>
   );
 }

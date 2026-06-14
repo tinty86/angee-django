@@ -4,12 +4,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   useConfirm,
 } from "@angee/base";
 import { useT } from "@angee/sdk";
@@ -23,6 +17,7 @@ import {
   STACK_UP_MUTATION,
 } from "../../data/documents";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
+import { DaemonResourceTable } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -104,50 +99,37 @@ export function OperationsSection(): ReactNode {
       loadingMessage="Loading operations"
       actionError={actionError}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Runtime</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {jobs.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={3}>
-                No jobs.
-              </TableCell>
-            </TableRow>
-          ) : (
-            jobs.map((job) => (
-              <TableRow key={job.name}>
-                <TableCell className="font-medium text-fg">{job.name}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{job.runtime}</TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void runDaemonAction({
-                        run: jobRun.run,
-                        field: "jobRun",
-                        variables: { name: job.name },
-                        label: "Run",
-                        setError: setActionError,
-                        refetch,
-                      })
-                    }
-                    size="sm"
-                    variant="secondary"
-                  >
-                    Run
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        actions={[
+          {
+            label: "Run",
+            variant: "secondary",
+            run: (job) =>
+              runDaemonAction({
+                run: jobRun.run,
+                field: "jobRun",
+                variables: { name: job.name },
+                label: "Run",
+                setError: setActionError,
+                refetch,
+              }),
+          },
+        ]}
+        busy={busy}
+        columns={[
+          {
+            header: "Name",
+            cell: (job) => <span className="font-medium text-fg">{job.name}</span>,
+          },
+          {
+            header: "Runtime",
+            cell: (job) => <span className="text-13 text-fg-muted">{job.runtime}</span>,
+          },
+        ]}
+        emptyMessage="No jobs."
+        rowKey={(job) => job.name}
+        rows={jobs}
+      />
 
       <Card>
         <CardHeader>
