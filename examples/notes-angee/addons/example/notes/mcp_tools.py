@@ -52,5 +52,13 @@ def register(server: FastMCP) -> None:
                 flatten="data",
                 description="Update fields of a note the caller may write, and return it.",
             ),
+            GraphQLTool(
+                operation="deleteNote",
+                name="delete_note",
+                fields=("total_deleted_count",),
+                id_arg="id",
+                fixed={"confirm": True},
+                description="Delete a note the caller may delete, by its public id (sqid).",
+            ),
         ],
     )

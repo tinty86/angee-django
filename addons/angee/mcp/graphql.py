@@ -20,10 +20,11 @@ Boundary conventions (the agent surface differs from the GraphQL wire):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from fastmcp.exceptions import ToolError
 from fastmcp.tools.tool import Tool, ToolResult
 from graphql import (
@@ -59,10 +60,14 @@ async def execute_under_actor(schema: str, document: str, variables: dict[str, A
     whatever ``rebac.current_actor()`` holds — set per call by
     :class:`angee.mcp.middleware.ActorMiddleware`; the schema's ``RebacExtension`` opens
     its own scopes and pins every queryset to that actor, so no Django request is needed.
+
+    Runs ``execute_sync`` in a thread: it matches the sync Django GraphQL view the browser
+    uses, and the crud delete resolver does sync ORM that isn't async-safe. ``sync_to_async``
+    (thread-sensitive) copies the ambient actor ContextVar into the sync thread.
     """
 
     built = GraphQLSchemas.from_discovery().build(schema)
-    result = await built.execute(
+    result = await sync_to_async(built.execute_sync)(
         document,
         variable_values=dict(variables or {}),
         context_value=SimpleNamespace(request=None),
@@ -101,7 +106,8 @@ class GraphQLTool:
     from introspection; the hints below name the one input arg the tool drives:
     ``flatten`` lifts an input object's fields to top-level args, ``id_arg`` exposes a
     scalar GraphQL id arg as ``sqid``, ``limit_arg`` maps a top-level int to
-    ``pagination.limit`` for an offset-paginated list.
+    ``pagination.limit`` for an offset-paginated list, and ``fixed`` injects constant
+    GraphQL arguments the agent never sees (e.g. ``confirm`` on a delete).
     """
 
     operation: str
@@ -112,6 +118,7 @@ class GraphQLTool:
     flatten: str | None = None
     id_arg: str | None = None
     limit_arg: str | None = None
+    fixed: dict[str, Any] = field(default_factory=dict)
 
 
 def register_graphql_tools(server: Any, specs: list[GraphQLTool]) -> None:
@@ -137,6 +144,7 @@ class _CompiledTool(Tool):
     flatten_arg: str | None = None
     id_arg: str | None = None
     limit_arg: str | None = None
+    fixed: dict[str, Any] = {}
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Execute the operation and return the projected payload as structured content."""
@@ -165,6 +173,7 @@ class _CompiledTool(Tool):
             if sqid is not None:
                 obj["id"] = to_base64(self.node_type, str(sqid))
             variables[self.flatten_arg] = obj
+        variables.update(self.fixed)
         return variables
 
     def _project(self, row: dict[str, Any]) -> dict[str, Any]:
@@ -203,6 +212,7 @@ def _compile(spec: GraphQLTool) -> _CompiledTool:
         flatten_arg=spec.flatten,
         id_arg=spec.id_arg,
         limit_arg=spec.limit_arg,
+        fixed=spec.fixed,
     )
 
 
@@ -256,6 +266,7 @@ def _document(op_type: str, spec: GraphQLTool, field: Any, leaves: list[tuple[st
     """Render the GraphQL operation document with variable defs and the selection set."""
 
     used = [arg for arg in (("pagination" if spec.limit_arg else None), spec.id_arg, spec.flatten) if arg]
+    used += list(spec.fixed)
     var_defs = ", ".join(f"${arg}: {field.args[arg].type}" for arg in used)
     call_args = ", ".join(f"{arg}: ${arg}" for arg in used)
     selection = " ".join(wire for _key, wire, _is_id in leaves)
