@@ -14,7 +14,10 @@ from fastmcp import FastMCP
 
 from angee.mcp.graphql import GraphQLTool, register_graphql_tools
 
-_SUMMARY = ("sqid", "title", "status", "word_count", "is_starred")
+# ``is_starred`` / ``reminder_at`` are owner-gated (``read__is_starred = owner``): an agent
+# acting as a non-owner (e.g. a platform admin editing another user's note) gets them
+# redacted to null, which the non-nullable GraphQL fields reject. Project only ungated fields.
+_SUMMARY = ("sqid", "title", "status", "word_count")
 _DETAIL = (*_SUMMARY, "body", "tags")
 
 
