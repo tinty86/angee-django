@@ -7,6 +7,8 @@ import {
 } from "react-resizable-panels";
 
 import { Glyph } from "../chrome/Glyph";
+import { EmptyState } from "../fragments/EmptyState";
+import { useBaseT, type BaseMessageVars } from "../i18n";
 import { cn } from "../lib/cn";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tabs } from "../ui/tabs";
@@ -31,9 +33,10 @@ export function Chatter({
   composer,
   className,
 }: ChatterProps): React.ReactElement | null {
+  const t = useBaseT();
   const { activeTab, collapsed, content, setActiveTab, setWidth, width } =
     useChatter();
-  const resolvedTabs = tabs ?? content?.tabs ?? defaultTabs(children);
+  const resolvedTabs = tabs ?? content?.tabs ?? defaultTabs(children, t);
   const resolvedComposer = composer ?? content?.composer;
   const active = resolvedTabs.some((tab) => tab.id === activeTab)
     ? activeTab
@@ -43,7 +46,7 @@ export function Chatter({
 
   return (
     <aside
-      aria-label="Chatter"
+      aria-label={t("chatter.label")}
       className={cn(
         "h-full min-h-0 overflow-hidden border-l border-border-subtle bg-sheet",
         className,
@@ -57,7 +60,7 @@ export function Chatter({
       >
         <PanelResizeHandle
           id="chatter-resize"
-          aria-label="Resize chatter"
+          aria-label={t("chatter.resize")}
           className="w-1.5 cursor-col-resize bg-transparent outline-none transition-colors hover:bg-brand focus-visible:bg-brand"
         />
         <Panel
@@ -116,49 +119,51 @@ export function Chatter({
   );
 }
 
-function defaultTabs(children: React.ReactNode): readonly ChatterTab[] {
+function defaultTabs(
+  children: React.ReactNode,
+  t: (key: string, vars?: BaseMessageVars) => string,
+): readonly ChatterTab[] {
   return [
     {
       id: "angee",
       label: "Angee",
       icon: "agent",
-      children: children ?? <AngeeEmptyState />,
+      children: children ?? (
+        <EmptyState
+          icon="agent"
+          title={t("chatter.noAgent")}
+          description={t("chatter.agentHint")}
+          className="min-h-48 p-4"
+        />
+      ),
     },
     {
       id: "comments",
-      label: "Comments",
+      label: t("chatter.tabComments"),
       icon: "comments",
-      children: <EmptyState title="No comments yet" body="Comments will appear here." />,
+      children: (
+        <EmptyState
+          icon="comments"
+          title={t("chatter.noComments")}
+          description={t("chatter.commentsHint")}
+          className="min-h-48 p-4"
+        />
+      ),
     },
     {
       id: "activity",
-      label: "Activity",
+      label: t("chatter.tabActivity"),
       icon: "activity",
-      children: <EmptyState title="No activity yet" body="Record activity will appear here." />,
+      children: (
+        <EmptyState
+          icon="activity"
+          title={t("chatter.noActivity")}
+          description={t("chatter.activityHint")}
+          className="min-h-48 p-4"
+        />
+      ),
     },
   ];
-}
-
-function AngeeEmptyState(): React.ReactElement {
-  return <EmptyState title="No agent yet" body="Set up your assistant" />;
-}
-
-function EmptyState({
-  title,
-  body,
-}: {
-  title: React.ReactNode;
-  body: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div className="grid min-h-48 place-content-center gap-2 text-center">
-      <div className="mx-auto grid size-10 place-content-center rounded-md bg-accent-soft text-accent-soft-text [&_.glyph]:size-5">
-        <Glyph name="agent" />
-      </div>
-      <p className="text-sm font-semibold text-fg">{title}</p>
-      <p className="text-13 text-fg-muted">{body}</p>
-    </div>
-  );
 }
 
 function updateWidth(

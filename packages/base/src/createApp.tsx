@@ -46,7 +46,7 @@ import {
   type ChromeMenuItem,
   type ChromeMenuNode,
 } from "./chrome/menu-tree";
-import { enBaseBundle } from "./i18n";
+import { enBaseBundle, useBaseT } from "./i18n";
 import {
   useRouteChrome,
   type BreadcrumbItem,
@@ -74,6 +74,17 @@ export interface BaseAddonRoute extends AddonRoute {
 export interface BaseAddon extends Omit<AddonManifest, "routes" | "menus"> {
   routes?: readonly BaseAddonRoute[];
   menus?: readonly BaseMenuItem[];
+}
+
+/**
+ * Declare a rendered (base-binding) addon — the one seam every addon's manifest
+ * goes through. The rendered analog of the SDK's headless `defineAddon`: it
+ * type-checks the literal against {@link BaseAddon} (routes carrying React
+ * components) and returns it unchanged, so addons `defineBaseAddon({...})`
+ * instead of annotating `const x: BaseAddon = {...}`.
+ */
+export function defineBaseAddon(addon: BaseAddon): BaseAddon {
+  return addon;
 }
 
 /** Props passed from the active route into a shell chrome component. */
@@ -152,6 +163,9 @@ export function createApp(input: CreateAppInput): AngeeApp {
     forms: composed.forms,
     chatter: composed.chatter,
     slots: mergeSlotContributions(composed.slots, input.slots ?? []),
+    // Built-in renderers are universal (PreviewPane always includes them); the
+    // runtime carries only addon-contributed providers.
+    previews: composed.previews,
   };
 
   const defaultSchema = input.defaultSchema ?? "public";
@@ -453,6 +467,7 @@ function compareCodePoint(left: string, right: string): number {
 
 /** Gate a subtree behind sign-in; bounce to `/login` while or after resolving. */
 function RequireAuth({ children }: { children: ReactNode }): ReactNode {
+  const t = useBaseT();
   const { auth, fetching } = useRuntimeAuthState();
   const navigate = useNavigate();
   const signedOut = !fetching && !auth.user;
@@ -464,8 +479,8 @@ function RequireAuth({ children }: { children: ReactNode }): ReactNode {
         : "/";
     void navigate({ to: "/login", search: { next } });
   }, [signedOut, navigate]);
-  if (fetching && !auth.user) return <FullPageStatus message="Loading workspace…" />;
-  if (!auth.user) return <FullPageStatus message="Redirecting to sign in…" />;
+  if (fetching && !auth.user) return <FullPageStatus message={t("app.loadingWorkspace")} />;
+  if (!auth.user) return <FullPageStatus message={t("app.redirectingSignIn")} />;
   return <>{children}</>;
 }
 

@@ -1,14 +1,15 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
-import { Tag, type TagVariant } from "../ui/badge";
+import { Tag } from "../ui/badge";
 import { Card } from "../ui/card";
 
 export interface MiniCardPrimaryTag {
   label: React.ReactNode;
-  variant: TagVariant;
+  tone: Tone;
 }
 
 export type MiniCardProps = Omit<
@@ -55,14 +56,14 @@ export const MiniCard = React.forwardRef<HTMLElement, MiniCardProps>(
           <div className={styles.titleWrap()}>
             <div className={styles.titleRow()}>
               {icon ? (
-                <span className={styles.icon()}>{renderMiniCardIcon(icon)}</span>
+                <span className={styles.icon()}>{renderGlyph(icon)}</span>
               ) : null}
               <p className={styles.title()}>{title}</p>
             </div>
             {meta ? <p className={styles.meta()}>{meta}</p> : null}
           </div>
           {primaryTag ? (
-            <Tag variant={primaryTag.variant}>{primaryTag.label}</Tag>
+            <Tag tone={primaryTag.tone}>{primaryTag.label}</Tag>
           ) : null}
         </div>
         {tags ? <div className={styles.tags()}>{tags}</div> : null}
@@ -71,7 +72,3 @@ export const MiniCard = React.forwardRef<HTMLElement, MiniCardProps>(
   },
 );
 MiniCard.displayName = "MiniCard";
-
-function renderMiniCardIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv } from "../lib/variants";
 import { PageHeader, type PageHeaderProps } from "../page";
 import { Tag } from "../ui/badge";
@@ -64,10 +64,10 @@ export const SurfaceHeader = React.forwardRef<HTMLElement, SurfaceHeaderProps>(
         <div className={styles.main()}>
           <div className={styles.titleRow()}>
             {icon ? (
-              <span className={styles.icon()}>{renderSurfaceIcon(icon)}</span>
+              <span className={styles.icon()}>{renderGlyph(icon)}</span>
             ) : null}
             <Heading className={styles.title()}>{title}</Heading>
-            {fetching ? <Tag variant="info">Refreshing</Tag> : null}
+            {fetching ? <Tag tone="info">Refreshing</Tag> : null}
           </div>
           {subtitle ? <p className={styles.subtitle()}>{subtitle}</p> : null}
         </div>
@@ -79,7 +79,3 @@ export const SurfaceHeader = React.forwardRef<HTMLElement, SurfaceHeaderProps>(
   },
 );
 SurfaceHeader.displayName = "SurfaceHeader";
-
-function renderSurfaceIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

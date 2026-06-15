@@ -18,13 +18,56 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
 
 - Python ships schema and operations. TypeScript ships UX.
 - React does not own business logic, permissions, models, or persistence.
-- Use `defineAddon` for addon contribution and `createApp` for the project's
-  host composition.
+- Use `defineAddon` (headless, `@angee/sdk`) or `defineBaseAddon` (rendered,
+  `@angee/base`, routes carry React components) to declare an addon, and
+  `createApp` for the project's host composition. One greppable seam per addon —
+  never annotate a bare `const x: BaseAddon = {…}`.
+- Compose addon capabilities at build time through the manifest + `composeAddons`
+  (widgets, i18n, icons, forms, slots, previews); never register or mutate a
+  module-global at runtime. `usePreviews`/`useWidget`/`useMenus`/`useSlot` read the
+  composed `AppRuntime`.
 - One component tree. Extend or register; do not fork.
 - Slots are additive extension points. Use them before copying a component.
 - Tokens beat color props and one-off variants. Theme by overriding tokens.
+- Color is two orthogonal axes (`lib/tones.ts` is the owner): `tone` (the palette
+  — `neutral`/`brand`/`info`/`success`/`warning`/`danger`) × `variant`/fill
+  (`solid`/`soft`/`surface`/`outline`/`ghost`). Drive recipe color through
+  `toneClass(tone, fill)`; never hand-type a soft/solid tone triple, and never use
+  the retired `default`/`error` names (they are `neutral`/`danger`).
+- Route every user-facing string through i18n: `useBaseT()` in `@angee/base`,
+  `use<Addon>T()` in an addon (both built on the SDK's `useNamespaceT(ns,
+  fallback)`), with the English in the namespace bundle. A prop whose default is a
+  label defaults to `undefined` and resolves `?? t("key")` in the body — never call
+  `t()` in a default parameter. No hardcoded copy in a component. Two boundaries
+  stay plain English: an addon's declarative manifest menu/route `label:` (chrome
+  data, not in-component copy — none are routed), and a form registered via
+  `forms:` (a statically parsed element, never rendered as a component, so a hook
+  cannot reach its `<Field label>`).
+- Every icon is a registered glyph rendered via `<Glyph name="…">` (or the
+  `renderGlyph(icon)` slot adapter). A component never imports `lucide-react`
+  directly: base glyphs live in `chrome/icon-registry.ts`; an addon contributes its
+  own lucide components through the manifest `icons:` field (the registry seam), not
+  by rendering them.
 - Use shared page, view, form, table, widget, and shell primitives before adding
   new local state.
+- A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
+  across recipes). A default `size` is a visual contract — do not flip it without a
+  requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`
+  are intentional, not drift).
+- Primitive export convention: a primitive exports flat per-part consts; a compound
+  primitive exposes a bare-name parts-namespace object (`Dialog.Root`, …); a
+  primitive that ships a composed convenience component takes the bare name for it
+  (`Select`, `Tooltip`) and exposes its parts under a `*Primitive` suffix only where
+  a consumer compounds them (`SelectPrimitive`). Don't add a `*Primitive` namespace
+  nobody compounds.
+- State surfaces are shared fragments — never hand-roll an empty/loading/error
+  block. The titled surfaces (`EmptyState`, `ErrorBanner`) take the one
+  `{title, description, icon?, actions?}` vocabulary; the single-line ones keep
+  their own slot (`InlineEmpty` `label`, `LoadingPanel` `message`). For a
+  full-height empty panel pass `EmptyState fill` (it centers an intrinsic-size
+  card) instead of wrapping it in a `grid place-content-center` div; `LoadingPanel`
+  already self-centers. A renderer owns its own loading/error so callers describe
+  only the happy path (cf. `preview/builtins.tsx` `FileText`).
 - Forms are declarative even when they branch: a `<Field showWhen={(values) => …}>`
   predicate (mirroring `Action.visibleWhen`) drives a discriminated form — a `kind`
   select that swaps the body — and a hidden field is never submitted. Reach for a
@@ -33,7 +76,20 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   `forms: { Model: <…Field/Group children…> }`; the standard renderer uses it
   wherever that model is created, including the relation-picker inline create. Use
   it when the create input diverges from the read projection (write-only secrets,
-  scalar-id pickers, a kind discriminator).
+  scalar-id pickers, a kind discriminator). With a registered form,
+  `RelationPicker`'s `create` needs only `{ model }` (the override supersedes any
+  passed `fields` on create); pass inline `fields` only for a data-dependent form
+  whose options are fetched at runtime and so cannot be a static registration.
+- A labeled control is a page element or a `FieldRoot`. Reach for `FieldRoot` /
+  `FieldLabel` (the stacked label-over-control owner, e.g. for an ephemeral
+  composer not bound to a model record) before hand-rolling a `<label>` wrapper.
+  A native input pairs `FieldLabel htmlFor` with the control `id`; a button-trigger
+  control (a `Select`) labels via `FieldLabel nativeLabel={false} render={<span/>}`
+  + the control's `aria-labelledby`.
+- Base exposes seams for product chrome; it does not hardcode product affordances.
+  Record-level chrome (star/share/follow) is host-contributed into
+  `FORM_VIEW_RECORD_CHROME_SLOT` via the manifest `slots:`; render contributions
+  with the shared `SlotOutlet`.
 - Client-side gates are UX only. The server is the authorization boundary.
 - No Python view DSL, no frontend metadata hidden in backend decorators.
 
@@ -76,7 +132,12 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **Add every new addon web package to the app CSS `@source`** — its unique
   arbitrary Tailwind classes silently fail to generate otherwise.
 - **Shared/generic icon glyphs live in the base `chrome/icon-registry.ts`** —
-  registration is fail-fast, so an addon cannot re-register another's glyph.
+  composition is fail-fast on id, so an addon cannot re-register another's glyph,
+  **and adding a name to `baseIcons` collides with any addon already contributing
+  it** (base composes first). This throws only at app boot — `typecheck`/`build`
+  miss it — so the full addon set is composed in
+  `examples/notes-angee/web/src/addon-composition.test.tsx`; run `pnpm run test`
+  (not just `tsc`) after touching `baseIcons` or an addon's `icons`.
 - **A new web package needs `pnpm install` + a Vite restart** (Vite snapshots
   workspace packages at start) plus registration in the host `main.tsx` addons and
   `package.json`.
@@ -105,6 +166,16 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   is silently *not* sent, failing a required create input. Use `createOnly` (editable
   on create carrying the seed, locked on edit) or a plain field; reserve `readOnly`
   for values the create input does not accept.
+- **A storybook `meta.args`/`argTypes` is dead only if no story consumes it.** A
+  bare `export const X: Story = {}` (or a `render: (args) => …`) AUTO-RENDERS from
+  `meta.args` — those args are live; only a file whose every story is a zero-param
+  `render: () => …` has dead meta args. Removing them when `meta.component` has a
+  required prop breaks `StoryObj<typeof meta>` (it still demands the arg) — type the
+  self-rendering stories as bare `StoryObj` (keep `component:` for autodocs). A
+  data-bound view story uses the shared `runtime-fixtures` owner (`RuntimeFixture` +
+  `storySchema(fetch)` + `jsonResponse`), not a hand-rolled provider stack; global
+  providers (`ToastProvider`, router, runtime, client) come from the preview
+  decorator — don't nest a second one.
 
 ## Checks
 

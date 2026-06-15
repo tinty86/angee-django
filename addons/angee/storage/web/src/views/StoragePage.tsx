@@ -46,6 +46,7 @@ import { FileBrowserContent } from "./FileBrowserContent";
 import { FileDetail } from "./FileDetail";
 import { NewFolderControl } from "./NewFolderControl";
 import { SelectedFolderControl } from "./SelectedFolderControl";
+import { useStorageT } from "../i18n";
 
 /** Detail route for one file row — its relay id, percent-encoded into the path. */
 function fileDetailPath(id: string): string {
@@ -62,6 +63,7 @@ const STORAGE_LIST_LIMIT = 500;
  * folder tree drive client-side scoping, and a row click previews the file.
  */
 export function StoragePage(): ReactElement {
+  const t = useStorageT();
   const variables = useMemo<OffsetPaginationVariables>(
     () => ({ pagination: { offset: 0, limit: STORAGE_LIST_LIMIT } }),
     [],
@@ -111,6 +113,9 @@ export function StoragePage(): ReactElement {
   );
   // The inline drive-create form. `name` is the record title (prefilled with the
   // typed query); `backend` is the required FK, picked from the catalogue above.
+  // This stays a passed `fields` (not a `forms:` registration) because its
+  // `backend` options are fetched at runtime — a static module-scope form override
+  // cannot carry them (cf. the static `Vault` form in the knowledge manifest).
   const driveCreateFields = useMemo<readonly FieldDescriptor[]>(
     () => [
       { name: "name", label: "Name" },
@@ -203,9 +208,9 @@ export function StoragePage(): ReactElement {
   const handleDeleteFolder = async (): Promise<void> => {
     if (!selectedFolder) return;
     const ok = await confirm({
-      title: `Delete "${selectedFolder.name}"?`,
-      body: "Files inside this folder move to the drive root.",
-      confirm: "Delete",
+      title: t("storage.folder.deleteTitle", { name: selectedFolder.name }),
+      body: t("storage.folder.deleteBody"),
+      confirm: t("storage.folder.deleteConfirm"),
       danger: true,
     });
     if (!ok) return;
@@ -220,7 +225,7 @@ export function StoragePage(): ReactElement {
         onClick={() => void fileActions.restoreMany(ids).then(clear)}
       >
         <Glyph name="restore" />
-        Restore
+        {t("storage.bulk.restore")}
       </SelectionBarAction>
     ) : (
       <SelectionBarAction
@@ -229,7 +234,7 @@ export function StoragePage(): ReactElement {
         onClick={() => void fileActions.trashMany(ids).then(clear)}
       >
         <Glyph name="trash" />
-        Trash
+        {t("storage.bulk.trash")}
       </SelectionBarAction>
     );
   // Uploads land in the active drive, into the current folder (or its root); the
@@ -247,30 +252,33 @@ export function StoragePage(): ReactElement {
   );
 
   if (drivesQuery.fetching && drives.length === 0) {
-    return <LoadingPanel message="Loading storage" />;
+    return <LoadingPanel message={t("storage.loading")} />;
   }
   if (drives.length === 0) {
     return (
-      <div className="grid h-full place-content-center p-8">
-        <EmptyState
-          icon="drive"
-          title={drivesQuery.error ? "Storage unavailable" : "No drives"}
-          description={
-            drivesQuery.error?.message ?? "No storage drives are available to you."
-          }
-        />
-      </div>
+      <EmptyState
+        fill
+        icon="drive"
+        title={
+          drivesQuery.error
+            ? t("storage.drives.unavailableTitle")
+            : t("storage.drives.emptyTitle")
+        }
+        description={
+          drivesQuery.error?.message ?? t("storage.drives.emptyDescription")
+        }
+      />
     );
   }
 
   const navigator = (
     <div className="flex h-full flex-col gap-2 p-2">
       <RelationPicker
-        aria-label="Drive"
+        aria-label={t("storage.drive.label")}
         value={driveId}
         options={driveOptions}
-        placeholder="Select a drive"
-        searchPlaceholder="Search drives…"
+        placeholder={t("storage.drive.placeholder")}
+        searchPlaceholder={t("storage.drive.searchPlaceholder")}
         onChange={(value) => {
           setPinnedDriveId(value);
           setScope(ALL_SCOPE);
@@ -322,18 +330,15 @@ export function StoragePage(): ReactElement {
             onClose={closeDetail}
             onChanged={() => filesQuery.refetch()}
           />
+        ) : filesQuery.fetching ? (
+          <LoadingPanel message={t("storage.loadingFile")} />
         ) : (
-          <div className="grid h-full place-content-center p-8">
-            {filesQuery.fetching ? (
-              <LoadingPanel message="Loading file" />
-            ) : (
-              <EmptyState
-                icon="file"
-                title="File not found"
-                description="This file is no longer available."
-              />
-            )}
-          </div>
+          <EmptyState
+            fill
+            icon="file"
+            title={t("storage.file.notFoundTitle")}
+            description={t("storage.file.notFoundDescription")}
+          />
         )
       ) : (
         <FileBrowserContent
@@ -352,15 +357,15 @@ export function StoragePage(): ReactElement {
 }
 
 function FilePreview({ file }: { file: StorageFile | null }): ReactElement {
+  const t = useStorageT();
   if (!file) {
     return (
-      <div className="grid h-full place-content-center p-6">
-        <EmptyState
-          icon="file"
-          title="Select a file"
-          description="Choose a file from the list to preview it."
-        />
-      </div>
+      <EmptyState
+        fill
+        icon="file"
+        title={t("storage.preview.emptyTitle")}
+        description={t("storage.preview.emptyDescription")}
+      />
     );
   }
   const previewFile: PreviewFile = {
@@ -377,7 +382,7 @@ function FilePreview({ file }: { file: StorageFile | null }): ReactElement {
           <EmptyState
             icon="file"
             title={file.title || file.filename}
-            description="No inline preview for this file type."
+            description={t("storage.preview.unsupported")}
           />
         }
       />

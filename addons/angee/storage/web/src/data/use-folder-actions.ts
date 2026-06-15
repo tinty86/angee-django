@@ -1,6 +1,4 @@
-import { useCallback, useState } from "react";
-
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
   CREATE_FOLDER_MUTATION,
@@ -48,26 +46,21 @@ export function useFolderActions(
     DeleteFolderData,
     DeleteFolderVariables
   >(DELETE_FOLDER_MUTATION);
-  const [busy, setBusy] = useState(false);
-
-  const run = useCallback(
-    async (action: () => Promise<unknown>): Promise<void> => {
-      setBusy(true);
-      try {
-        await action();
-        onChanged?.();
-      } finally {
-        setBusy(false);
-      }
-    },
-    [onChanged],
-  );
+  const { busy, run } = useBusyRun(onChanged);
 
   return {
     busy,
     create: ({ drive, name, parent }) =>
-      run(() => createFolder({ data: { drive, name, parent } })),
-    rename: (id, name) => run(() => updateFolder({ data: { id, name } })),
-    remove: (id) => run(() => deleteFolder({ id })),
+      run(async () => {
+        await createFolder({ data: { drive, name, parent } });
+      }),
+    rename: (id, name) =>
+      run(async () => {
+        await updateFolder({ data: { id, name } });
+      }),
+    remove: (id) =>
+      run(async () => {
+        await deleteFolder({ id });
+      }),
   };
 }

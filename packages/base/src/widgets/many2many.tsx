@@ -5,7 +5,12 @@ import { Button } from "../ui/button";
 import { Chip } from "../ui/chip";
 import { Select } from "../ui/select";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetOption, WidgetRenderProps } from "./types";
+import {
+  optionLabel,
+  type WidgetDefinition,
+  type WidgetOption,
+  type WidgetRenderProps,
+} from "./types";
 
 function Many2ManyEdit({
   value,
@@ -103,13 +108,6 @@ export const many2manyWidget = {
 
 function normaliseValues(value: readonly string[] | null | undefined): string[] {
   return [...new Set(value ?? [])].filter(Boolean);
-}
-
-function optionLabel(
-  options: readonly WidgetOption[],
-  value: string,
-): WidgetOption["label"] {
-  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function textLabel(value: WidgetOption["label"]): string {

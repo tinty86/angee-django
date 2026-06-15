@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import {
   SelectIcon,
   SelectItem,
@@ -11,7 +12,12 @@ import {
   SelectValue,
 } from "../ui/select";
 import { widgetLabel } from "./label";
-import type { WidgetDefinition, WidgetOption, WidgetRenderProps } from "./types";
+import {
+  optionLabel,
+  type WidgetDefinition,
+  type WidgetOption,
+  type WidgetRenderProps,
+} from "./types";
 
 function ComboboxEdit({
   value,
@@ -19,6 +25,7 @@ function ComboboxEdit({
   field,
   readOnly,
 }: WidgetRenderProps<string>): ReactElement {
+  const t = useBaseT();
   const [query, setQuery] = useState("");
   const options = field?.options ?? [];
   const labels = useMemo(() => optionLabelMap(options), [options]);
@@ -39,13 +46,13 @@ function ComboboxEdit({
       onValueChange={(next) => onChange?.(next ?? "")}
     >
       <SelectPrimitive.Trigger
-        aria-label={widgetLabel(field, "Combobox")}
+        aria-label={widgetLabel(field, t("combobox.label"))}
         readOnly={readOnly}
       >
         <SelectValue>
           {(selected) =>
             labels.get(String(selected ?? "")) ??
-            widgetLabel(field, "Select option")
+            widgetLabel(field, t("combobox.selectOption"))
           }
         </SelectValue>
         <SelectIcon />
@@ -58,9 +65,9 @@ function ComboboxEdit({
               <input
                 type="search"
                 value={query}
-                aria-label="Search options"
+                aria-label={t("combobox.searchOptions")}
                 className="min-w-0 flex-1 border-0 bg-transparent text-13 text-fg outline-none placeholder:text-fg-muted"
-                placeholder="Search"
+                placeholder={t("combobox.search")}
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={(event) => event.stopPropagation()}
               />
@@ -79,7 +86,7 @@ function ComboboxEdit({
                   </SelectItem>
                 ))
               ) : (
-                <div className="px-2 py-3 text-13 text-fg-muted">No options</div>
+                <div className="px-2 py-3 text-13 text-fg-muted">{t("combobox.noOptions")}</div>
               )}
             </SelectList>
           </SelectPrimitive.Content>
@@ -93,8 +100,7 @@ function ComboboxRead({
   value,
   field,
 }: WidgetRenderProps<string>): ReactElement {
-  const label =
-    field?.options?.find((option) => option.value === value)?.label ?? value ?? "";
+  const label = optionLabel(field?.options, value);
   return <span className="text-13 text-fg">{label}</span>;
 }
 

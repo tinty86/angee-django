@@ -7,7 +7,9 @@ import {
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useMenus } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
+import { toneClass as toneFillClass } from "../lib/tones";
 import { Button } from "../ui/button";
 import {
   PopoverClose,
@@ -28,6 +30,7 @@ import {
   type ChromeMenuStatus,
   type ChromeMenuTone,
   MenuTree,
+  pathMatchesTarget,
 } from "./menu-tree";
 
 export interface AppChooserItem {
@@ -62,13 +65,17 @@ export function AppChooser({
   className,
   defaultOpen = false,
   items,
-  searchPlaceholder = "Search apps...",
+  searchPlaceholder,
   side = "right",
   sideOffset = 8,
-  title = "Switch app",
+  title,
   trigger,
-  triggerLabel = "Switch app",
+  triggerLabel,
 }: AppChooserProps): ReactElement {
+  const t = useBaseT();
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t("chrome.searchApps");
+  const resolvedTitle = title ?? t("chrome.switchApp");
+  const resolvedTriggerLabel = triggerLabel ?? t("chrome.switchApp");
   const runtimeItems = useMenus() as readonly ChromeMenuItem[];
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -85,13 +92,13 @@ export function AppChooser({
   );
   const groups = useMemo(() => appChooserGroups(visibleItems), [visibleItems]);
   const currentId =
-    activeId ?? resolvedItems.find((item) => itemMatchesPath(item, pathname))?.id;
+    activeId ?? resolvedItems.find((item) => pathMatchesTarget(pathname, item.to))?.id;
 
   return (
     <PopoverRoot open={open} onOpenChange={setOpen}>
-      <Tooltip label={triggerLabel} side={side}>
+      <Tooltip label={resolvedTriggerLabel} side={side}>
         <PopoverTrigger
-          aria-label={triggerLabel}
+          aria-label={resolvedTriggerLabel}
           className={cn(
             "group grid size-9 place-content-center rounded-6 text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring",
             className,
@@ -104,7 +111,7 @@ export function AppChooser({
         <PopoverPositioner side={side} align={align} sideOffset={sideOffset}>
           <PopoverContent
             role="dialog"
-            aria-label={triggerLabel}
+            aria-label={resolvedTriggerLabel}
             surface="sheet"
             className="w-[min(45rem,calc(100vw-2rem))] p-5"
           >
@@ -114,10 +121,10 @@ export function AppChooser({
               </span>
               <div className="min-w-0 flex-1">
                 <h2 className="m-0 truncate text-15 font-semibold text-fg">
-                  {title}
+                  {resolvedTitle}
                 </h2>
                 <p className="mt-0.5 truncate text-xs text-fg-muted">
-                  Pick one to navigate, or start typing to filter.
+                  {t("chrome.appChooserHint")}
                 </p>
               </div>
               <PopoverClose
@@ -126,7 +133,7 @@ export function AppChooser({
                     type="button"
                     variant="icon"
                     size="iconSm"
-                    aria-label="Close app chooser"
+                    aria-label={t("chrome.closeAppChooser")}
                   >
                     <Glyph name="x" />
                   </Button>
@@ -140,28 +147,28 @@ export function AppChooser({
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder={searchPlaceholder}
-                aria-label="Search apps"
+                placeholder={resolvedSearchPlaceholder}
+                aria-label={t("chrome.searchAppsLabel")}
                 className="min-w-0 flex-1 px-0 text-sm"
               />
             </label>
 
             <div className="grid gap-4">
               <AppChooserGroup
-                title="Apps"
+                title={t("chrome.apps")}
                 items={groups.domain}
                 activeId={currentId}
                 onSelect={() => setOpen(false)}
               />
               <AppChooserGroup
-                title="Platform"
+                title={t("chrome.platform")}
                 items={groups.platform}
                 activeId={currentId}
                 onSelect={() => setOpen(false)}
               />
               {visibleItems.length === 0 ? (
                 <div className="px-2 py-8 text-center text-13 text-fg-muted">
-                  No apps match.
+                  {t("chrome.noApps")}
                 </div>
               ) : null}
             </div>
@@ -309,26 +316,22 @@ function filterAppChooserItems(
   });
 }
 
-function itemMatchesPath(item: AppChooserItem, pathname: string): boolean {
-  const target = item.to;
-  if (!target || target === "#") return false;
-  return pathname === target || pathname.startsWith(`${target}/`);
-}
-
+// The primary app tile is a solid brand fill; the rest are soft. Both route
+// through the shared (tone × fill) matrix so they can't drift from the palette.
 function toneClass(tone: ChromeMenuTone | undefined): string {
   switch (tone ?? "brand") {
+    case "neutral":
+      return toneFillClass("neutral", "soft");
     case "danger":
-      return "bg-danger-soft text-danger-text";
+      return toneFillClass("danger", "soft");
     case "info":
-      return "bg-info-soft text-info-text";
-    case "muted":
-      return "bg-inset text-fg-muted";
+      return toneFillClass("info", "soft");
     case "success":
-      return "bg-success-soft text-success-text";
+      return toneFillClass("success", "soft");
     case "warning":
-      return "bg-warning-soft text-warning-text";
+      return toneFillClass("warning", "soft");
     case "brand":
     default:
-      return "bg-brand text-on-brand";
+      return toneFillClass("brand", "solid");
   }
 }

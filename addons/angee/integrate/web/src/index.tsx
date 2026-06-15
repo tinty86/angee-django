@@ -1,4 +1,5 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import {
   FolderGit2,
   GitBranch,
@@ -9,6 +10,7 @@ import {
   Webhook,
 } from "lucide-react";
 
+import { enIntegrateMessages } from "./i18n";
 import { IntegrationsPage } from "./views/IntegrationsPage";
 import { RepositoriesPage } from "./views/RepositoriesPage";
 import { SourcesPage } from "./views/SourcesPage";
@@ -119,10 +121,11 @@ const integrateMenu: readonly BaseMenuItem[] = [
   },
 ];
 
-const integrate: BaseAddon = {
+const integrate = defineBaseAddon({
   id: INTEGRATE_ID,
   routes: integrateRoutes,
   menus: integrateMenu,
+  i18n: { integrate: enIntegrateMessages },
   icons: {
     integrate: Plug,
     integration: Link2,
@@ -132,6 +135,6 @@ const integrate: BaseAddon = {
     repository: FolderGit2,
     source: GitBranch,
   },
-};
+});
 
 export default integrate;

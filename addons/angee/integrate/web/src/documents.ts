@@ -2,6 +2,8 @@
 // (DataPage reads the SDL); these are the non-CRUD operations a DataPage `<Action>`
 // invokes, typed the same way as other authored ops (e.g. iam's grant/revoke).
 
+import type { ActionOutcome, ByIdVariables } from "@angee/sdk";
+
 export const SYNC_INTEGRATION_MUTATION = `
   mutation SyncIntegration($id: ID!) {
     syncIntegration(id: $id) { ok message }
@@ -14,10 +16,8 @@ export const TEST_CONNECTION_MUTATION = `
   }
 `;
 
-export interface ActionResultData {
-  ok: boolean;
-  message: string;
-}
+/** `{ ok, message }` action outcome — the shared SDK contract. */
+export type ActionResultData = ActionOutcome;
 
 export interface SyncIntegrationData {
   syncIntegration: ActionResultData;
@@ -27,9 +27,8 @@ export interface TestConnectionData {
   testConnection: ActionResultData;
 }
 
-export interface IdVariables extends Record<string, unknown> {
-  id: string;
-}
+/** Single-id action variables — the shared SDK contract. */
+export type IdVariables = ByIdVariables;
 
 export const TEST_WEBHOOK_DELIVERY_MUTATION = `
   mutation TestWebhookDelivery($id: ID!) {

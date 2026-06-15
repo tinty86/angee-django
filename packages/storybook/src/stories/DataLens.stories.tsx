@@ -9,7 +9,7 @@ const rows = [
   { id: "api", name: "Production API", value: 42, tone: "success" },
   { id: "csv", name: "CSV import", value: 18, tone: "info" },
   { id: "mail", name: "Mailbox sync", value: 9, tone: "warning" },
-  { id: "files", name: "File drop", value: 27, tone: "default" },
+  { id: "files", name: "File drop", value: 27, tone: "brand" },
 ] as const;
 
 const visuals = ["graph", "chart", "metrics", "map", "tree"] satisfies readonly DataLensVisual[];
@@ -18,14 +18,11 @@ const meta = {
   title: "Fragments/DataLens",
   component: DataLens,
   parameters: { layout: "padded" },
-  args: {
-    visual: "graph",
-  },
 } satisfies Meta<typeof DataLens>;
 
 export default meta;
 
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj;
 
 export const Lens: Story = {
   render: () => (

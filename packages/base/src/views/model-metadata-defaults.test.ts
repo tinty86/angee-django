@@ -23,9 +23,9 @@ const NOTE_METADATA: ModelMetadata = {
       enumName: "NoteStatus",
       label: "Status",
       values: [
-        { value: "DRAFT", label: "Draft" },
-        { value: "IN_REVIEW", label: "In Review" },
-        { value: "ACTIVE", label: "Active" },
+        { value: "DRAFT", description: "Draft" },
+        { value: "IN_REVIEW" },
+        { value: "ACTIVE" },
       ],
     },
     updatedAt: { name: "updatedAt", kind: "scalar", scalar: "DateTime" },
@@ -33,7 +33,12 @@ const NOTE_METADATA: ModelMetadata = {
   },
 };
 
-const STATUS_VALUES = required(NOTE_METADATA.fields.status).values;
+// The widget options enumOptions derives: SDL description, else humanized value.
+const STATUS_OPTIONS = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "IN_REVIEW", label: "In Review" },
+  { value: "ACTIVE", label: "Active" },
+];
 
 describe("SDL metadata defaults", () => {
   const columns: readonly ColumnDescriptor<Row>[] = [
@@ -59,7 +64,7 @@ describe("SDL metadata defaults", () => {
 
     expect(resolvedColumns[0]?.header).toBe("Title");
     expect(resolvedColumns[1]?.header).toBe("Status");
-    expect(resolvedColumns[1]?.options).toEqual(STATUS_VALUES);
+    expect(resolvedColumns[1]?.options).toEqual(STATUS_OPTIONS);
     expect(resolvedColumns[2]?.header).toBe("Updated At");
     expect(resolvedColumns[4]?.header).toBe("Lifecycle");
     expect(resolvedColumns[4]?.options).toEqual([
@@ -80,7 +85,7 @@ describe("SDL metadata defaults", () => {
 
     expect(resolvedFields[0]?.label).toBe("Title");
     expect(resolvedFields[1]?.label).toBe("Status");
-    expect(resolvedFields[1]?.options).toEqual(STATUS_VALUES);
+    expect(resolvedFields[1]?.options).toEqual(STATUS_OPTIONS);
     expect(resolvedFields[2]?.label).toBe("State");
     expect(resolvedFields[2]?.options).toEqual([
       { value: "CUSTOM", label: "Custom" },
@@ -97,7 +102,7 @@ describe("SDL metadata defaults", () => {
           name: "status",
           kind: "enum",
           enumName: "ConfigState",
-          values: [{ value: "READY", label: "Ready" }],
+          values: [{ value: "READY" }],
         },
         defaultScopes: { name: "defaultScopes", kind: "list", scalar: "String" },
         vendor: { name: "vendor", kind: "relation", relationTarget: "VendorType" },
@@ -139,7 +144,7 @@ describe("SDL metadata defaults", () => {
         field: "status",
         label: "Status",
         type: "selection",
-        options: STATUS_VALUES,
+        options: STATUS_OPTIONS,
       },
       {
         id: "updatedAt",

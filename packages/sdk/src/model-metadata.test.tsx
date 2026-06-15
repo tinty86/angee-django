@@ -80,12 +80,12 @@ describe("fieldMetadataFromSDL", () => {
     });
   });
 
-  test("derives enum labels from enum-value descriptions with a fallback", () => {
+  test("carries enum values with their SDL description where present", () => {
     const note = required(metadata.types.NoteType);
     expect(required(note.fields.status).values).toEqual([
-      { value: "DRAFT", label: "Draft" },
-      { value: "IN_REVIEW", label: "In Review" },
-      { value: "ACTIVE", label: "Active" },
+      { value: "DRAFT", description: "Draft" },
+      { value: "IN_REVIEW", description: "In Review" },
+      { value: "ACTIVE" },
     ]);
   });
 

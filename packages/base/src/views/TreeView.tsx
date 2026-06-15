@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 
+import { cn } from "../lib/cn";
 import {
   dragHasAcceptedType,
   readDndPayload,
@@ -7,6 +8,7 @@ import {
   type DndPayload,
 } from "../lib/dnd";
 import { Tree, type TreeNode } from "../ui/tree";
+import { ListEmpty } from "./ListInternals";
 
 /**
  * The hierarchical View: flat `rows` carrying a self-referential `parent`
@@ -39,6 +41,8 @@ export interface TreeViewProps<
   canDropOnNode?: (nodeId: string, row: TRow) => boolean;
   /** Called with the decoded payload when an accepted item drops on a node. */
   onNodeDrop?: (nodeId: string, payload: DndPayload, row: TRow) => void;
+  /** Shown centered when there are no nodes. */
+  emptyMessage?: ReactNode;
   className?: string;
 }
 
@@ -56,6 +60,7 @@ export function TreeView<TRow extends Record<string, unknown>>({
   dropAccept,
   canDropOnNode,
   onNodeDrop,
+  emptyMessage = "No records.",
   className,
 }: TreeViewProps<TRow>): ReactElement {
   const rowsById = useMemo(
@@ -68,6 +73,12 @@ export function TreeView<TRow extends Record<string, unknown>>({
   );
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const droppable = onNodeDrop != null;
+
+  if (nodes.length === 0) {
+    return (
+      <ListEmpty className={cn("min-h-0 p-8", className)}>{emptyMessage}</ListEmpty>
+    );
+  }
 
   return (
     <Tree

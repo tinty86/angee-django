@@ -1,14 +1,15 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import type {
   ChatterContribution,
   ComposedMenuItem,
   FormOverrideMap,
+  PreviewContribution,
   SlotContribution,
   WidgetMap,
 } from "./define-addon";
-import type { I18nResources, MessageVars } from "./i18n";
-import { interpolateMessage } from "./i18n";
+import type { I18nResources, MessageResources, MessageVars } from "./i18n";
+import { interpolateMessage, translateWithFallback } from "./i18n";
 import { makeContext } from "./make-context";
 
 /**
@@ -24,6 +25,7 @@ export interface AppRuntime {
   forms: FormOverrideMap;
   chatter: readonly ChatterContribution[];
   slots: readonly SlotContribution[];
+  previews: readonly PreviewContribution[];
 }
 
 const EMPTY_RUNTIME: AppRuntime = {
@@ -34,6 +36,7 @@ const EMPTY_RUNTIME: AppRuntime = {
   forms: {},
   chatter: [],
   slots: [],
+  previews: [],
 };
 
 const RuntimeContext = makeContext<AppRuntime>("AppRuntime");
@@ -78,6 +81,11 @@ export function useSlot(slot: string): readonly SlotContribution[] {
   return useMemo(() => slots.filter((entry) => entry.slot === slot), [slots, slot]);
 }
 
+/** The addon-contributed file-preview renderers, in composed order. */
+export function usePreviews(): readonly PreviewContribution[] {
+  return useAppRuntime().previews;
+}
+
 /** A translator bound to one namespace; resolves keys against merged i18n. */
 export function useT(namespace: string): (key: string, vars?: MessageVars) => string {
   const { i18n } = useAppRuntime();
@@ -86,4 +94,25 @@ export function useT(namespace: string): (key: string, vars?: MessageVars) => st
     return (key: string, vars: MessageVars = {}) =>
       interpolateMessage(messages[key] ?? key, vars);
   }, [i18n, namespace]);
+}
+
+/**
+ * A namespaced translator with a bundled-English `fallback`: resolves a key
+ * against the host runtime's merged i18n for `namespace`, then falls back to
+ * `fallback`, then the key. The one owner of the translate-with-fallback pattern
+ * — `@angee/base`'s `useBaseT` and each addon's `useXT` build on it — so a
+ * component renders its English even before its runtime bundle is mounted
+ * (unit tests, storybook, provider-less embeds). Stable identity (memoized on
+ * the namespace translator) for use in dependency arrays.
+ */
+export function useNamespaceT(
+  namespace: string,
+  fallback: MessageResources,
+): (key: string, vars?: MessageVars) => string {
+  const t = useT(namespace);
+  return useCallback(
+    (key: string, vars: MessageVars = {}) =>
+      translateWithFallback(t, fallback, key, vars),
+    [t, fallback],
+  );
 }

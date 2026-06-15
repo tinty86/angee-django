@@ -3,8 +3,7 @@ import {
   Checkbox as BaseCheckbox,
   type CheckboxRootProps as BaseCheckboxRootProps,
 } from "@base-ui/react/checkbox";
-import { Check, Minus } from "lucide-react";
-
+import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 
@@ -134,11 +133,7 @@ function CheckboxIndicatorIcon({
 }: {
   indeterminate: boolean;
 }): React.ReactElement {
-  return indeterminate ? (
-    <Minus aria-hidden="true" strokeWidth={3} />
-  ) : (
-    <Check aria-hidden="true" strokeWidth={3} />
-  );
+  return <Glyph name={indeterminate ? "minus" : "check"} strokeWidth={3} />;
 }
 
 function checkboxChangeEvent(checked: boolean): React.ChangeEvent<HTMLInputElement> {

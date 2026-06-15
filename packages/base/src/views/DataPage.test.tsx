@@ -774,7 +774,7 @@ describe("DataPage", () => {
         tone: {
           ACTIVE: "success",
           DRAFT: "warning",
-          ARCHIVED: "default",
+          ARCHIVED: "neutral",
         },
       },
       { field: "priority", header: "Priority" },
@@ -846,7 +846,7 @@ describe("DataPage", () => {
         tone: {
           ACTIVE: "success",
           DRAFT: "warning",
-          ARCHIVED: "default",
+          ARCHIVED: "neutral",
         },
       },
       { field: "updatedAt", header: "Updated At" },

@@ -11,7 +11,7 @@ import type {
   FieldDescriptor,
 } from "./page";
 import { titleCase } from "../lib/titleCase";
-import { groupFieldLabel } from "./ListInternals";
+import { enumValueLabel, groupFieldLabel } from "./ListInternals";
 
 /** A form field's resolved relation target — which model the picker lists, its
  * display field, and whether the related model can be created inline. */
@@ -194,7 +194,7 @@ export function enumOptions(
   if (field?.kind !== "enum" && field?.kind !== "list") return [];
   return field.values?.map((value) => ({
     value: value.value,
-    label: value.label,
+    label: enumValueLabel(value),
   })) ?? [];
 }
 

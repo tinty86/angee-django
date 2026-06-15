@@ -18,6 +18,7 @@ import type {
 
 import { Glyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
+import { POPUP_BASE } from "./popover";
 
 export const navigationMenuVariants = tv({
   slots: {
@@ -31,8 +32,7 @@ export const navigationMenuVariants = tv({
     text:
       "inline-flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-md pl-3 text-13 font-medium text-on-rail-mut [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80",
     content: "p-2",
-    popup:
-      "z-popover overflow-hidden rounded-lg border border-border-subtle bg-popover shadow-popover outline-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+    popup: POPUP_BASE,
     viewport: "overflow-hidden",
     icon:
       "ml-0.5 flex size-3 shrink-0 items-center justify-center text-current transition-transform data-[popup-open]:rotate-180 [&_.glyph]:size-3",

@@ -1,13 +1,13 @@
 import type {
   BaseMenuItem,
-  BaseAddon,
   BaseAddonRoute,
 } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { Boxes } from "lucide-react";
 import { createElement, type ComponentType, type ReactNode } from "react";
 
 import { OperatorTransportProvider } from "./data/transport";
-import { enOperatorBundleForMenu } from "./i18n";
+import { enOperatorBundleForMenu, enOperatorMessages } from "./i18n";
 import {
   GitOpsSection,
 } from "./views/sections/GitOpsSection";
@@ -155,12 +155,17 @@ const operatorRootMenu: BaseMenuItem = {
 
 const operatorMenu: readonly BaseMenuItem[] = [operatorRootMenu];
 
-const operator: BaseAddon = {
+const operator = defineBaseAddon({
   id: OPERATOR_ID,
   routes: operatorRoutes,
   menus: operatorMenu,
-  i18n: enOperatorBundleForMenu(operatorRootMenu),
+  i18n: {
+    operator: {
+      ...enOperatorBundleForMenu(operatorRootMenu).operator,
+      ...enOperatorMessages,
+    },
+  },
   icons: { operator: Boxes },
-};
+});
 
 export default operator;

@@ -1,8 +1,11 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
-import { BookOpen, FileStack, FileText, Library, Link2 } from "lucide-react";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
+import { BookOpen, FileStack, FileText, Library } from "lucide-react";
 
+import { enKnowledgeMessages } from "./i18n";
 import { KnowledgePage, PageCrumb } from "./views/KnowledgePage";
 import { KnowledgeSettingsPage } from "./views/KnowledgeSettingsPage";
+import { vaultCreateForm } from "./views/vault-form";
 
 const KNOWLEDGE_ID = "knowledge";
 
@@ -50,17 +53,21 @@ const knowledgeMenu: readonly BaseMenuItem[] = [
 ];
 
 // Glyphs the wiki reaches for that the base registry doesn't carry.
-const knowledge: BaseAddon = {
+const knowledge = defineBaseAddon({
   id: KNOWLEDGE_ID,
   routes: knowledgeRoutes,
   menus: knowledgeMenu,
+  i18n: { knowledge: enKnowledgeMessages },
+  // The Vault create form, used wherever a vault is created (the wiki's
+  // relation-picker inline create resolves it via the model name).
+  forms: { Vault: vaultCreateForm },
   icons: {
     knowledge: BookOpen,
     vault: Library,
     note: FileText,
     template: FileStack,
-    link: Link2,
+    // `link` now resolves from the base registry (added for the markdown toolbar).
   },
-};
+});
 
 export default knowledge;

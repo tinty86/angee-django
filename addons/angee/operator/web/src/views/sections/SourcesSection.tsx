@@ -1,13 +1,3 @@
-import {
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@angee/base";
-import { useT } from "@angee/sdk";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -15,7 +5,10 @@ import {
   SOURCE_PULL_MUTATION,
   SOURCE_PUSH_MUTATION,
 } from "../../data/documents";
+import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
+import type { SourceState } from "../../data/types";
+import { DaemonResourceTable, type DaemonResourceAction } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { StateTag } from "../parts/StateTag";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
@@ -32,7 +25,7 @@ interface SourceAction {
 
 /** Sources pane: cached git/local sources with fetch/pull/push + drift readout. */
 export function SourcesSection(): ReactNode {
-  const t = useT("operator");
+  const t = useOperatorT();
   const { snapshot, result, refetch } = useOperatorSnapshot({ sources: true });
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -42,83 +35,73 @@ export function SourcesSection(): ReactNode {
   const busy = fetchSource.result.fetching || pull.result.fetching || push.result.fetching;
 
   const sources = snapshot?.sources ?? [];
-  const actions: readonly SourceAction[] = [
-    { field: "sourceFetch", label: "Fetch", variant: "secondary", run: fetchSource.run },
-    { field: "sourcePull", label: "Pull", variant: "ghost", run: pull.run },
-    { field: "sourcePush", label: "Push", variant: "ghost", run: push.run },
+  const actionDefs: readonly SourceAction[] = [
+    { field: "sourceFetch", label: t("operator.sources.fetch"), variant: "secondary", run: fetchSource.run },
+    { field: "sourcePull", label: t("operator.sources.pull"), variant: "ghost", run: pull.run },
+    { field: "sourcePush", label: t("operator.sources.push"), variant: "ghost", run: push.run },
   ];
+  const actions: readonly DaemonResourceAction<SourceState>[] = actionDefs.map((action) => ({
+    label: action.label,
+    variant: action.variant,
+    run: (source) =>
+      runDaemonAction({
+        run: action.run,
+        field: action.field,
+        variables: { name: source.name },
+        label: action.label,
+        setError: setActionError,
+        refetch,
+      }),
+  }));
 
   return (
     <OperatorSection
       title={t("section.operator.sources.title")}
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
-      loadingMessage="Loading sources"
+      loadingMessage={t("operator.sources.loading")}
       actionError={actionError}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Kind</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead className="text-right">Ahead/Behind</TableHead>
-            <TableHead>Dirty</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sources.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={7}>
-                No sources.
-              </TableCell>
-            </TableRow>
-          ) : (
-            sources.map((source) => (
-              <TableRow key={source.name}>
-                <TableCell className="font-medium text-fg">{source.name}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{source.kind}</TableCell>
-                <TableCell>
-                  <StateTag state={source.state ?? "unknown"} />
-                </TableCell>
-                <TableCell className="text-13 text-fg-muted">{source.branch ?? "—"}</TableCell>
-                <TableCell className="text-right text-13 tabular-nums text-fg-muted">
-                  ↑{source.ahead ?? 0} ↓{source.behind ?? 0}
-                </TableCell>
-                <TableCell className="text-13 text-fg-muted">
-                  {source.dirty ? "dirty" : "clean"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {actions.map((action) => (
-                      <Button
-                        disabled={busy}
-                        key={action.field}
-                        onClick={() =>
-                          void runDaemonAction({
-                            run: action.run,
-                            field: action.field,
-                            variables: { name: source.name },
-                            label: action.label,
-                            setError: setActionError,
-                            refetch,
-                          })
-                        }
-                        size="sm"
-                        variant={action.variant}
-                      >
-                        {action.label}
-                      </Button>
-                    ))}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        actions={actions}
+        actionsLabel={t("operator.table.actions")}
+        busy={busy}
+        columns={[
+          {
+            header: t("operator.sources.column.name"),
+            cell: (source) => <span className="font-medium text-fg">{source.name}</span>,
+          },
+          {
+            header: t("operator.sources.column.kind"),
+            cell: (source) => <span className="text-13 text-fg-muted">{source.kind}</span>,
+          },
+          { header: t("operator.sources.column.status"), cell: (source) => <StateTag state={source.state ?? "unknown"} /> },
+          {
+            header: t("operator.sources.column.branch"),
+            cell: (source) => <span className="text-13 text-fg-muted">{source.branch ?? "—"}</span>,
+          },
+          {
+            header: t("operator.sources.column.aheadBehind"),
+            align: "end",
+            cell: (source) => (
+              <span className="text-13 tabular-nums text-fg-muted">
+                ↑{source.ahead ?? 0} ↓{source.behind ?? 0}
+              </span>
+            ),
+          },
+          {
+            header: t("operator.sources.column.dirty"),
+            cell: (source) => (
+              <span className="text-13 text-fg-muted">
+                {source.dirty ? t("operator.sources.dirty") : t("operator.sources.clean")}
+              </span>
+            ),
+          },
+        ]}
+        emptyMessage={t("operator.sources.empty")}
+        rowKey={(source) => source.name}
+        rows={sources}
+      />
     </OperatorSection>
   );
 }

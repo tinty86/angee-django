@@ -55,13 +55,12 @@ export {
 } from "./TimelineView";
 export {
   Notebook,
-  Tab,
   type NotebookProps,
-  type TabProps,
 } from "./Notebook";
 export {
   Tree,
   FolderTree,
+  treeVariants,
   type TreeNode,
   type TreeProps,
   type FolderTreeProps,
@@ -76,6 +75,7 @@ export {
 } from "./Form";
 export {
   FormView,
+  FORM_VIEW_RECORD_CHROME_SLOT,
   type FormViewProps,
   type FormField,
   type FieldKind,
@@ -104,6 +104,7 @@ export {
   useBulkDelete,
   type UseBulkDeleteResult,
 } from "./useBulkDelete";
+export { enumValueLabel, statusLabel } from "./ListInternals";
 export * from "./data-view-model";
 export * from "./data-view-context";
 export type { StringIdRow } from "./data-view-surface";
@@ -112,12 +113,14 @@ export {
   Column,
   Field,
   Group,
+  Tab,
   pageChildren,
   pageElementProps,
   parsePageActions,
   parsePageColumns,
   parsePageFields,
   parsePageGroups,
+  parsePageTabs,
   PAGE_ELEMENT_SLOT,
 } from "./page";
 export type {
@@ -137,4 +140,6 @@ export type {
   PageElement,
   PageElementKind,
   PageFieldKind,
+  TabDescriptor,
+  TabProps,
 } from "./page";

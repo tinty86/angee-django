@@ -8,7 +8,7 @@ export type ChromeMenuTone =
   | "brand"
   | "danger"
   | "info"
-  | "muted"
+  | "neutral"
   | "success"
   | "warning";
 
@@ -32,6 +32,19 @@ export interface ChromeMenuItem extends ComposedMenuItem {
   status?: ChromeMenuStatus;
   tone?: ChromeMenuTone;
   badge?: number;
+}
+
+/**
+ * Whether `pathname` is `target` or nests under it (`target/…`). The one
+ * path-match predicate shared by `ChromeMenuNode.matchesPath` and the app
+ * chooser; a missing or `#` target never matches.
+ */
+export function pathMatchesTarget(
+  pathname: string,
+  target: string | undefined,
+): boolean {
+  if (!target || target === "#") return false;
+  return pathname === target || pathname.startsWith(`${target}/`);
 }
 
 export class ChromeMenuNode implements ChromeMenuItem {
@@ -77,9 +90,17 @@ export class ChromeMenuNode implements ChromeMenuItem {
   }
 
   matchesPath(pathname: string): boolean {
-    const target = this.target;
-    if (!target || target === "#") return false;
-    return pathname === target || pathname.startsWith(`${target}/`);
+    return pathMatchesTarget(pathname, this.target);
+  }
+
+  /** True when this node's own target, or any immediate child's, matches `pathname`. */
+  isActive(pathname: string): boolean {
+    return this.matchesPath(pathname) || this.hasActiveDescendant(pathname);
+  }
+
+  /** True when an immediate child's target matches `pathname`. */
+  hasActiveDescendant(pathname: string): boolean {
+    return Boolean(this.children?.some((child) => child.matchesPath(pathname)));
   }
 
   appendChild(child: ChromeMenuNode): void {
@@ -128,6 +149,31 @@ export class MenuTree {
       if (CHROME_MENU_PARENT_IDS.has(item.id)) return false;
       return Boolean(item.target);
     });
+  }
+
+  /**
+   * Every navigable destination for the command palette: each leaf carrying its
+   * own resolved `target`, paired with its root ancestor (so the palette groups
+   * by app). Parents that only borrow a child's target are skipped — their
+   * leaves carry the real destinations — as are the chrome action menus
+   * (systray/user) and their entries. Build-order deterministic (`byId`).
+   */
+  navigableItems(): readonly {
+    item: ChromeMenuNode;
+    root: ChromeMenuNode;
+    target: string;
+  }[] {
+    const result: { item: ChromeMenuNode; root: ChromeMenuNode; target: string }[] = [];
+    for (const node of this.byId.values()) {
+      if (CHROME_MENU_PARENT_IDS.has(node.id)) continue;
+      const target = node.target;
+      if (!target || target === "#") continue;
+      if (node.targetedChildren.length) continue;
+      const root = this.trailFor(node.id)[0];
+      if (root && CHROME_MENU_PARENT_IDS.has(root.id)) continue;
+      result.push({ item: node, root: root ?? node, target });
+    }
+    return result;
   }
 
   /**

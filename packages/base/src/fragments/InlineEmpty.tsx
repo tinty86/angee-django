@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv } from "../lib/variants";
 
 export const inlineEmptyVariants = tv({
@@ -27,14 +27,10 @@ export const InlineEmpty = React.forwardRef<HTMLDivElement, InlineEmptyProps>(
 
     return (
       <div ref={ref} className={styles.root({ className })} {...props}>
-        {icon ? <span className={styles.icon()}>{renderInlineIcon(icon)}</span> : null}
+        {icon ? <span className={styles.icon()}>{renderGlyph(icon)}</span> : null}
         <span className={styles.label()}>{label}</span>
       </div>
     );
   },
 );
 InlineEmpty.displayName = "InlineEmpty";
-
-function renderInlineIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

@@ -41,7 +41,6 @@ const noteList = (
     model={MODEL}
     list={GroupListView}
     defaultGroups={NOTE_DEFAULT_GROUPS}
-    pageSize={50}
     order={{ updatedAt: "DESC" }}
   >
     <Column field="title" />

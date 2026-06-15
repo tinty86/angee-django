@@ -124,7 +124,7 @@ export function OAuthCallback({
   return (
     <CallbackFrame>
       <div className="flex flex-col gap-4">
-        <Alert intent="danger" title={copy.errorTitle}>
+        <Alert tone="danger" title={copy.errorTitle}>
           {state.message}
         </Alert>
         <Button asChild className="w-full justify-center" size="lg" variant="secondary">

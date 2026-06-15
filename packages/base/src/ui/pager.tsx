@@ -1,7 +1,9 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
+import { tv } from "../lib/variants";
 import { Button } from "./button";
 import { NumberField } from "./number-field";
 import {
@@ -35,9 +37,18 @@ export interface PagerProps extends PagerState {
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 80, 100, 200] as const;
 
-const BUTTON_LABEL_CLASS =
-  "h-6 rounded px-1.5 text-13 tabular-nums text-fg outline-none hover:bg-inset focus-visible:focus-ring";
-const TEXT_LABEL_CLASS = "tabular-nums";
+/** The pager range-label recipe: an interactive `button` trigger vs a static `span`. */
+export const pagerVariants = tv({
+  base: "tabular-nums",
+  variants: {
+    label: {
+      button:
+        "h-6 rounded px-1.5 text-13 text-fg outline-none hover:bg-inset focus-visible:focus-ring",
+      span: "",
+    },
+  },
+  defaultVariants: { label: "span" },
+});
 
 function defaultFormatNumber(value: number): string {
   return String(value);
@@ -78,14 +89,16 @@ export function Pager({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
-  subject = "Records",
+  subject,
   unit,
   labelElement = "button",
   labelClassName,
-  previousLabel = "Previous page",
-  nextLabel = "Next page",
+  previousLabel,
+  nextLabel,
   formatNumber = defaultFormatNumber,
 }: PagerProps): React.ReactElement {
+  const t = useBaseT();
+  const resolvedSubject = subject ?? t("pager.records");
   const [customPageSize, setCustomPageSize] = React.useState<number | null>(
     null,
   );
@@ -104,7 +117,7 @@ export function Pager({
         pageLabel={pageLabel}
         pageSize={pageSize}
         pageSizeOptions={pageSizeOptions}
-        subject={subject}
+        subject={resolvedSubject}
         labelClassName={labelClassName}
         customPageSize={customPageSize}
         onCustomPageSizeChange={setCustomPageSize}
@@ -115,14 +128,14 @@ export function Pager({
       ? (
         <button
           type="button"
-          className={cn(BUTTON_LABEL_CLASS, labelClassName)}
-          aria-label={`${subject} ${pageLabel}`}
+          className={pagerVariants({ label: "button", className: labelClassName })}
+          aria-label={t("pager.pageOf", { subject: resolvedSubject, pageLabel })}
         >
           {pageLabel}
         </button>
       )
       : (
-        <span className={cn(TEXT_LABEL_CLASS, labelClassName)}>
+        <span className={pagerVariants({ label: "span", className: labelClassName })}>
           {pageLabel}
         </span>
       );
@@ -134,21 +147,21 @@ export function Pager({
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label={previousLabel}
+        aria-label={previousLabel ?? t("pager.prev")}
         disabled={!canPrev}
         onClick={() => onPageChange?.(Math.max(1, page - 1))}
       >
-        <ChevronLeft className="glyph" aria-hidden />
+        <Glyph name="chevron-left" />
       </Button>
       <Button
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label={nextLabel}
+        aria-label={nextLabel ?? t("pager.next")}
         disabled={!canNext}
         onClick={() => onPageChange?.(page + 1)}
       >
-        <ChevronRight className="glyph" aria-hidden />
+        <Glyph name="chevron-right" />
       </Button>
     </>
   );
@@ -173,6 +186,7 @@ function PageSizePicker({
   onCustomPageSizeChange: (value: number | null) => void;
   onPageSizeChange: (pageSize: number) => void;
 }): React.ReactElement {
+  const t = useBaseT();
   const applyPageSize = React.useCallback(
     (value: number | null) => {
       if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
@@ -187,8 +201,8 @@ function PageSizePicker({
   return (
     <PopoverRoot>
       <PopoverTrigger
-        className={cn(BUTTON_LABEL_CLASS, labelClassName)}
-        aria-label={`${subject} ${pageLabel}`}
+        className={pagerVariants({ label: "button", className: labelClassName })}
+        aria-label={t("pager.pageOf", { subject, pageLabel })}
       >
         {pageLabel}
       </PopoverTrigger>
@@ -196,7 +210,7 @@ function PageSizePicker({
         <PopoverPositioner sideOffset={6} align="end">
           <PopoverContent className="w-56 p-3">
             <p className="mb-2 px-1 text-13 font-semibold text-fg">
-              Rows per page
+              {t("pager.rowsPerPage")}
             </p>
             <div className="grid grid-cols-3 gap-1">
               {pageSizeOptions.map((value) => (
@@ -230,13 +244,13 @@ function PageSizePicker({
                 showStepper={false}
                 className="min-w-0 flex-1"
                 inputProps={{
-                  "aria-label": "Custom rows per page",
+                  "aria-label": t("pager.customRowsPerPage"),
                   placeholder: "42",
                 }}
                 onValueChange={onCustomPageSizeChange}
               />
               <Button type="submit" size="sm" variant="secondary">
-                Apply
+                {t("pager.apply")}
               </Button>
             </form>
           </PopoverContent>

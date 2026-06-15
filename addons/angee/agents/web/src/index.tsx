@@ -1,6 +1,8 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { Box, Cpu, GitBranch, LayoutTemplate, Server, Sparkles, Wrench } from "lucide-react";
 
+import { enAgentsMessages } from "./i18n";
 import { AgentsPage, TemplatesPage } from "./views/AgentsPage";
 import { InferenceModelsPage, InferenceProvidersPage } from "./views/InferencePage";
 import { McpServersPage, McpToolsPage } from "./views/McpPage";
@@ -80,10 +82,11 @@ const agentsMenu: readonly BaseMenuItem[] = [
   },
 ];
 
-const agents: BaseAddon = {
+const agents = defineBaseAddon({
   id: AGENTS_ID,
   routes: agentsRoutes,
   menus: agentsMenu,
+  i18n: { agents: enAgentsMessages },
   icons: {
     // `agent` is a shared glyph owned by the base icon registry — reference it, don't
     // redefine it (the registry is fail-fast on re-registration).
@@ -95,6 +98,6 @@ const agents: BaseAddon = {
     inferenceProvider: Cpu,
     inferenceModel: Box,
   },
-};
+});
 
 export default agents;

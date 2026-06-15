@@ -15,6 +15,7 @@ export {
   toRelayGlobalId,
   fromRelayGlobalId,
   relationRelayGlobalId,
+  relayGlobalIdSuffix,
   clampPageSize,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
@@ -92,9 +93,11 @@ export type {
   DeletePreviewGroup,
   DeletePreviewNode,
 } from "./resource-result";
+export { revisionSnapshot } from "./resource-result";
 
 // Aggregates.
 export {
+  bucketKey,
   useResourceAggregate,
   useResourceGroupBy,
   type GroupByDimension,
@@ -123,7 +126,13 @@ export {
 } from "./authored-hooks";
 
 // Action-mutation result handling.
-export { runActionResult } from "./action-result";
+export {
+  runActionResult,
+  type ActionOutcome,
+  type ByIdVariables,
+} from "./action-result";
+export { errorMessage } from "./error-message";
+export { useBusyRun, type BusyRun } from "./use-busy-run";
 
 // Live invalidation.
 export {
@@ -144,7 +153,9 @@ export {
   useFormOverride,
   useMenus,
   useSlot,
+  usePreviews,
   useT,
+  useNamespaceT,
   type AppRuntime,
 } from "./runtime";
 export {
@@ -188,6 +199,7 @@ export {
   type ComposedMenuItem,
   type ChatterContribution,
   type SlotContribution,
+  type PreviewContribution,
   type MenuItem,
   type WidgetMap,
   type FormOverrideMap,

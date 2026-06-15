@@ -23,11 +23,11 @@ import type {
 
 import { Glyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
+import { POPUP_BASE } from "./popover";
 
 export const contextMenuVariants = tv({
   slots: {
-    content:
-      "z-popover min-w-44 overflow-hidden rounded-lg border border-border-subtle bg-popover p-1 shadow-popover outline-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+    content: `${POPUP_BASE} min-w-44 p-1`,
     trigger:
       "outline-none focus-visible:focus-ring data-[popup-open]:focus-ring",
     item:

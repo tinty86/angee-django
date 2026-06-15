@@ -13,9 +13,25 @@ export {
   readDndPayload,
   dragHasAcceptedType,
   useDraggable,
+  dragSourceProps,
   useDropTarget,
   type DndPayload,
+  type DragSourceProps,
   type UseDropTargetOptions,
+} from "./lib";
+
+// The semantic-color vocabulary: one tone (palette) × variant (fill) model.
+export {
+  TONES,
+  FILLS,
+  toneFill,
+  toneClass,
+  INTENT_GLYPHS,
+  stateToneFromValue,
+  type Tone,
+  type Fill,
+  type FeedbackIntent,
+  type ToneValueBuckets,
 } from "./lib";
 
 // The stack's debounce owner (docs/stack.md), re-exported so addons reuse it
@@ -28,6 +44,7 @@ export { useBaseT, enBaseMessages } from "./i18n";
 // App composition root.
 export {
   createApp,
+  defineBaseAddon,
   PassthroughChrome,
   type AngeeApp,
   type BaseAddon,

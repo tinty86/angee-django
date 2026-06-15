@@ -8,6 +8,7 @@ import {
   ArrowUpDown,
   Bell,
   BellOff,
+  Bold,
   Calendar,
   Check,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
   CircleCheck,
   CircleHelp,
   CircleX,
+  CodeXml,
   Columns3,
   Eye,
   FileText,
@@ -27,9 +29,12 @@ import {
   Grid3X3,
   Home,
   Info,
+  Italic,
   LayoutDashboard,
   LayoutGrid,
+  Link2,
   List,
+  ListOrdered,
   LogOut,
   MessageCircle,
   Minus,
@@ -37,6 +42,7 @@ import {
   PanelRight,
   Paperclip,
   Plus,
+  Quote,
   Search,
   Settings,
   Shield,
@@ -73,6 +79,7 @@ export const baseIcons = {
   auth: Shield,
   bell: Bell,
   "bell-off": BellOff,
+  bold: Bold,
   calendar: Calendar,
   check: Check,
   "chevron-down": ChevronDown,
@@ -81,6 +88,7 @@ export const baseIcons = {
   "chevron-up": ChevronUp,
   "circle-check": CircleCheck,
   "circle-x": CircleX,
+  "code-xml": CodeXml,
   comments: MessageCircle,
   columns: Columns3,
   eye: Eye,
@@ -94,9 +102,12 @@ export const baseIcons = {
   help: CircleHelp,
   home: Home,
   info: Info,
+  italic: Italic,
   "layout-dashboard": LayoutDashboard,
   "layout-grid": LayoutGrid,
+  link: Link2,
   list: List,
+  "list-ordered": ListOrdered,
   "log-out": LogOut,
   minus: Minus,
   "more-vertical": MoreVertical,
@@ -104,6 +115,7 @@ export const baseIcons = {
   "panel-right": PanelRight,
   attachment: Paperclip,
   plus: Plus,
+  quote: Quote,
   reports: FileText,
   search: Search,
   settings: Settings,
@@ -120,7 +132,12 @@ export const baseIcons = {
 
 export function useIcon(name: string): IconComponent | null {
   const { icons } = useAppRuntime();
-  return getIcon(icons, name);
+  // Fall back to the static base set when the runtime registry lacks the name, so
+  // a base glyph (check, chevrons, x, …) still resolves when no AppRuntime is
+  // mounted (unit tests, storybook, provider-less embeds). The runtime normally
+  // already includes baseIcons (createApp seeds them), so this only matters
+  // provider-less; addon-contributed glyphs still require the runtime.
+  return getIcon(icons, name) ?? getIcon(baseIcons, name);
 }
 
 export function getIcon(

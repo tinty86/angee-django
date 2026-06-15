@@ -1,9 +1,10 @@
 import { useMemo, type ReactElement, type ReactNode } from "react";
-import { format, isValid, parseISO } from "date-fns";
+import { format } from "date-fns";
 import type { Row } from "@angee/sdk";
 
 import { cn } from "../lib/cn";
 import { TimelineEntry } from "../fragments/TimelineEntry";
+import { ListEmpty, parseRowDate } from "./ListInternals";
 
 /**
  * The chronological View — rows bucketed by day (newest first), each rendered
@@ -23,6 +24,8 @@ export interface TimelineViewProps<TRow extends Row = Row> {
   rowKey?: keyof TRow & string;
   /** Override the entry body. */
   renderEntry?: (row: TRow) => ReactNode;
+  /** Shown centered when there are no dated rows. */
+  emptyMessage?: ReactNode;
   className?: string;
 }
 
@@ -39,11 +42,12 @@ export function TimelineView<TRow extends Row = Row>({
   bodyField,
   rowKey = "id" as keyof TRow & string,
   renderEntry,
+  emptyMessage = "No records.",
   className,
 }: TimelineViewProps<TRow>): ReactElement {
   const groups = useMemo<DayGroup<TRow>[]>(() => {
     const dated = rows
-      .map((row) => ({ row, date: parseDate(row[dateField]) }))
+      .map((row) => ({ row, date: parseRowDate(row[dateField]) }))
       .filter((entry): entry is { row: TRow; date: Date } => entry.date !== null)
       .sort((a, b) => b.date.getTime() - a.date.getTime());
     const buckets = new Map<string, DayGroup<TRow>>();
@@ -58,6 +62,9 @@ export function TimelineView<TRow extends Row = Row>({
 
   return (
     <div className={cn("flex-1 overflow-y-auto bg-canvas p-6", className)}>
+      {groups.length === 0 ? (
+        <ListEmpty>{emptyMessage}</ListEmpty>
+      ) : (
       <ol className="mx-auto flex max-w-3xl flex-col gap-6">
         {groups.map((group) => (
           <li key={group.key} className="space-y-3">
@@ -75,7 +82,7 @@ export function TimelineView<TRow extends Row = Row>({
                   <TimelineEntry
                     key={id}
                     title={titleField ? String(row[titleField] ?? "") : ""}
-                    timestamp={parseDate(row[dateField])}
+                    timestamp={parseRowDate(row[dateField])}
                     body={bodyField ? row[bodyField] : undefined}
                   />
                 );
@@ -84,13 +91,7 @@ export function TimelineView<TRow extends Row = Row>({
           </li>
         ))}
       </ol>
+      )}
     </div>
   );
-}
-
-function parseDate(value: unknown): Date | null {
-  if (value instanceof Date) return isValid(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const date = parseISO(value);
-  return isValid(date) ? date : null;
 }

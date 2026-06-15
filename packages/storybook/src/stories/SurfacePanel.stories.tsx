@@ -5,15 +5,11 @@ const meta = {
   title: "Fragments/SurfacePanel",
   component: SurfacePanel,
   parameters: { layout: "padded" },
-  args: {
-    children: <div />,
-    title: "Release queue",
-  },
 } satisfies Meta<typeof SurfacePanel>;
 
 export default meta;
 
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj;
 
 export const Panel: Story = {
   render: () => (
@@ -30,12 +26,12 @@ export const Panel: Story = {
       <div className="divide-y divide-border-subtle">
         <ListItem
           meta="Framework build"
-          status={{ label: "Ready", variant: "success" }}
+          status={{ label: "Ready", tone: "success" }}
           title="Base fragments"
         />
         <ListItem
           meta="Storybook review"
-          status={{ label: "Draft", variant: "info" }}
+          status={{ label: "Draft", tone: "info" }}
           title="Console panels"
         />
       </div>

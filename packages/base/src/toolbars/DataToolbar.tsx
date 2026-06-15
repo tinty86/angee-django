@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { titleCase } from "../lib/titleCase";
 import { Button } from "../ui/button";
@@ -131,7 +132,7 @@ export function DataToolbar({
   favorites = [],
   activeFilterIds = [],
   filterText = "",
-  createLabel = "New",
+  createLabel,
   onCreate,
   actions,
   viewSwitcher,
@@ -146,10 +147,12 @@ export function DataToolbar({
   onCustomFilterRemove,
   onFavoriteSave,
   onFavoriteSelect,
-  pagerSubject = "Records",
+  pagerSubject,
   pagerTotalUnit,
   className,
 }: DataToolbarProps): ReactElement {
+  const t = useBaseT();
+  const resolvedCreateLabel = createLabel ?? t("dataToolbar.create");
   const groupControls =
     groupOptions !== undefined
     || groupStack !== undefined
@@ -163,7 +166,7 @@ export function DataToolbar({
   );
   return (
     <section
-      aria-label="Data controls"
+      aria-label={t("dataToolbar.controls")}
       className={cn(
         "flex min-h-11 items-center gap-2 border-b border-border-subtle bg-sheet px-3 py-2",
         className,
@@ -172,7 +175,7 @@ export function DataToolbar({
       {onCreate ? (
         <Button type="button" variant="primary" size="sm" onClick={onCreate}>
           <Glyph name="plus" className="glyph" />
-          {createLabel}
+          {resolvedCreateLabel}
         </Button>
       ) : null}
       {actions}
@@ -251,6 +254,8 @@ function FilterPicker({
   onFavoriteSave?: (label: string) => void;
   onFavoriteSelect?: (favorite: DataViewFavorite) => void;
 }): ReactElement {
+  const t = useBaseT();
+  const defaultFavoriteLabel = t("dataToolbar.savedSearch");
   const [customFilterOpen, setCustomFilterOpen] = React.useState(false);
   const [customFieldId, setCustomFieldId] = React.useState("");
   const [customOperator, setCustomOperator] =
@@ -269,7 +274,8 @@ function FilterPicker({
   const selectedCustomGroup =
     groupOptions.find((option) => option.id === customGroupId) ?? groupOptions[0];
   const [favoriteOpen, setFavoriteOpen] = React.useState(false);
-  const [favoriteLabel, setFavoriteLabel] = React.useState("Saved search");
+  const [favoriteLabel, setFavoriteLabel] =
+    React.useState(defaultFavoriteLabel);
 
   function addCustomFilter() {
     if (!selectedCustomField || !onCustomFilterAdd) return;
@@ -302,7 +308,7 @@ function FilterPicker({
     const label = favoriteLabel.trim();
     if (!label || !onFavoriteSave) return;
     onFavoriteSave(label);
-    setFavoriteLabel("Saved search");
+    setFavoriteLabel(defaultFavoriteLabel);
     setFavoriteOpen(false);
   }
 
@@ -313,9 +319,13 @@ function FilterPicker({
         {groups.map((nextGroup, index) => (
           <FacetChip
             key={`${nextGroup.field}:${nextGroup.granularity ?? ""}`}
-            label={index === 0 ? "Group by" : "Then"}
+            label={index === 0 ? t("dataToolbar.groupBy") : t("dataToolbar.then")}
             value={groupLabel(nextGroup)}
-            removeLabel={`Remove ${index === 0 ? "group" : "group level"}`}
+            removeLabel={
+              index === 0
+                ? t("dataToolbar.removeGroup")
+                : t("dataToolbar.removeGroupLevel")
+            }
             onRemove={() => {
               const next = groups.filter((_, groupIndex) => groupIndex !== index);
               if (next.length === 0) onClearGroup?.();
@@ -326,33 +336,39 @@ function FilterPicker({
         {activeFilters.map((option) => (
           <FacetChip
             key={option.id}
-            label="Filter"
+            label={t("dataToolbar.filter")}
             value={option.chipLabel ?? option.label}
-            removeLabel={`Remove ${String(option.chipLabel ?? option.label)}`}
+            removeLabel={t("dataToolbar.remove", {
+              label: String(option.chipLabel ?? option.label),
+            })}
             onRemove={() => onFilterToggle?.(option.id)}
           />
         ))}
         {customFilterChips.map((chip) => (
           <FacetChip
             key={chip.id}
-            label="Filter"
+            label={t("dataToolbar.filter")}
             value={chip.label}
-            removeLabel={`Remove ${labelText(chip.label) ?? "filter"}`}
+            removeLabel={t("dataToolbar.remove", {
+              label: labelText(chip.label) ?? t("dataToolbar.filterFallback"),
+            })}
             onRemove={() => onCustomFilterRemove?.(chip.id)}
           />
         ))}
         <input
           type="search"
           value={filterText}
-          placeholder="Filter..."
-          aria-label="Filter records"
+          placeholder={t("dataToolbar.filterPlaceholder")}
+          aria-label={t("dataToolbar.filterRecords")}
           className="h-full min-w-[7rem] flex-1 border-0 bg-transparent text-13 text-fg outline-none placeholder:text-fg-muted"
           onChange={(event) => onFilterTextChange?.(event.currentTarget.value)}
         />
         <PopoverTrigger
           className="grid size-6 shrink-0 place-content-center rounded text-fg-muted outline-none transition-colors hover:bg-sheet hover:text-fg focus-visible:focus-ring"
           aria-label={
-            groupControls ? "Filter, group, favorites" : "Filter and favorites"
+            groupControls
+              ? t("dataToolbar.filterGroupFavorites")
+              : t("dataToolbar.filterAndFavorites")
           }
         >
           <Glyph name="chevron-down" className="size-3" />
@@ -366,9 +382,12 @@ function FilterPicker({
               groupControls ? "w-[45rem] grid-cols-3" : "w-[30rem] grid-cols-2",
             )}
           >
-            <PickerColumn icon={<Glyph name="filter" className="size-3.5" />} title="Filters">
+            <PickerColumn
+              icon={<Glyph name="filter" className="size-3.5" />}
+              title={t("dataToolbar.filters")}
+            >
               {filterOptions.length === 0 ? (
-                <PickerMuted>No filters</PickerMuted>
+                <PickerMuted>{t("dataToolbar.noFilters")}</PickerMuted>
               ) : (
                 filterOptions.map((option) => (
                   <PickerButton
@@ -387,7 +406,7 @@ function FilterPicker({
                 onClick={() => setCustomFilterOpen((value) => !value)}
               >
                 <Glyph name="plus" className="size-3" />
-                Add custom filter
+                {t("dataToolbar.addCustomFilter")}
               </PickerButton>
               {customFilterOpen ? (
                 <CustomFilterEditor
@@ -412,7 +431,7 @@ function FilterPicker({
             {groupControls ? (
               <PickerColumn
                 icon={<Glyph name="sliders-horizontal" className="size-3.5" />}
-                title="Group by"
+                title={t("dataToolbar.groupBy")}
               >
                 {groupOptions.map((option) => (
                   <GroupOptionButton
@@ -429,7 +448,7 @@ function FilterPicker({
                   onClick={() => setCustomGroupOpen((value) => !value)}
                 >
                   <Glyph name="plus" className="size-3" />
-                  Add custom group
+                  {t("dataToolbar.addCustomGroup")}
                 </PickerButton>
                 {customGroupOpen ? (
                   <CustomGroupEditor
@@ -450,14 +469,17 @@ function FilterPicker({
                 ) : null}
               </PickerColumn>
             ) : null}
-            <PickerColumn icon={<Glyph name="star" className="size-3.5" />} title="Favorites">
+            <PickerColumn
+              icon={<Glyph name="star" className="size-3.5" />}
+              title={t("dataToolbar.favorites")}
+            >
               <PickerButton
                 active={favoriteOpen}
                 muted={!favoriteOpen}
                 onClick={() => setFavoriteOpen((value) => !value)}
               >
                 <Glyph name="plus" className="size-3" />
-                Save current search
+                {t("dataToolbar.saveCurrentSearch")}
               </PickerButton>
               {favoriteOpen ? (
                 <form
@@ -470,7 +492,7 @@ function FilterPicker({
                   <Input
                     size="sm"
                     value={favoriteLabel}
-                    aria-label="Favorite name"
+                    aria-label={t("dataToolbar.favoriteName")}
                     onChange={(event) =>
                       setFavoriteLabel(event.currentTarget.value)}
                   />
@@ -480,12 +502,12 @@ function FilterPicker({
                     variant="secondary"
                     className="justify-center"
                   >
-                    Save
+                    {t("dataToolbar.save")}
                   </Button>
                 </form>
               ) : null}
               {favorites.length === 0 ? (
-                <PickerMuted>No saved searches</PickerMuted>
+                <PickerMuted>{t("dataToolbar.noSavedSearches")}</PickerMuted>
               ) : (
                 favorites.map((favorite) => (
                   <PickerButton
@@ -601,18 +623,19 @@ function CustomFilterEditor({
   onValue: (value: string) => void;
   onAdd: () => void;
 }): ReactElement {
+  const t = useBaseT();
   const operators = operatorsForField(field);
   const needsValue = customFilterNeedsValue(operator);
   return (
     <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
       {fields.length === 0 ? (
-        <PickerMuted>No filter fields</PickerMuted>
+        <PickerMuted>{t("dataToolbar.noFilterFields")}</PickerMuted>
       ) : (
         <>
           <Select
             size="sm"
             value={fieldId}
-            aria-label="Filter field"
+            aria-label={t("dataToolbar.filterField")}
             options={fields.map((item) => ({
               value: item.id,
               label: item.label,
@@ -624,7 +647,7 @@ function CustomFilterEditor({
               size="sm"
               value={operator}
               className="min-w-0 flex-1"
-              aria-label="Filter operator"
+              aria-label={t("dataToolbar.filterOperator")}
               options={operators.map((item) => ({
                 value: item,
                 label: FILTER_OPERATOR_LABEL[item],
@@ -638,8 +661,8 @@ function CustomFilterEditor({
                   size="sm"
                   value={value}
                   className="min-w-0 flex-1"
-                  aria-label="Filter value"
-                  placeholder="Value"
+                  aria-label={t("dataToolbar.filterValue")}
+                  placeholder={t("dataToolbar.value")}
                   options={field.options.map((option) => ({
                     value: option.value,
                     label: option.label,
@@ -651,8 +674,8 @@ function CustomFilterEditor({
                   size="sm"
                   type={filterInputType(field)}
                   value={value}
-                  placeholder="Value"
-                  aria-label="Filter value"
+                  placeholder={t("dataToolbar.value")}
+                  aria-label={t("dataToolbar.filterValue")}
                   className="min-w-0 flex-1"
                   onChange={(event) => onValue(event.currentTarget.value)}
                 />
@@ -667,7 +690,7 @@ function CustomFilterEditor({
             disabled={!field || (needsValue && value.trim() === "")}
             onClick={onAdd}
           >
-            Add
+            {t("dataToolbar.add")}
           </Button>
         </>
       )}
@@ -692,17 +715,18 @@ function CustomGroupEditor({
   onGranularity: (granularity: DataViewGroupGranularity) => void;
   onAdd: () => void;
 }): ReactElement {
+  const t = useBaseT();
   const granularities = option?.granularities ?? DEFAULT_GRANULARITIES;
   return (
     <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
       {options.length === 0 ? (
-        <PickerMuted>No group fields</PickerMuted>
+        <PickerMuted>{t("dataToolbar.noGroupFields")}</PickerMuted>
       ) : (
         <>
           <Select
             size="sm"
             value={optionId}
-            aria-label="Group field"
+            aria-label={t("dataToolbar.groupField")}
             options={options.map((item) => ({
               value: item.id,
               label: item.label,
@@ -713,7 +737,7 @@ function CustomGroupEditor({
             <Select
               size="sm"
               value={granularity}
-              aria-label="Group granularity"
+              aria-label={t("dataToolbar.groupGranularity")}
               options={granularities.map((item) => ({
                 value: item,
                 label: titleCase(item),
@@ -729,7 +753,7 @@ function CustomGroupEditor({
             className="justify-center"
             onClick={onAdd}
           >
-            Add
+            {t("dataToolbar.add")}
           </Button>
         </>
       )}
@@ -818,20 +842,21 @@ function PickerMuted({ children }: { children: ReactNode }): ReactElement {
 export function DataViewSwitcher({
   view,
   onViewChange,
-  ariaLabel = "View switcher",
+  ariaLabel,
   className,
 }: DataViewSwitcherProps): ReactElement {
+  const t = useBaseT();
   return (
     <div
       className={cn("flex items-center gap-1", className)}
       role="group"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? t("dataToolbar.viewSwitcher")}
     >
       <Button
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label="List view"
+        aria-label={t("dataToolbar.listView")}
         aria-pressed={view === "list"}
         active={view === "list"}
         onClick={() => onViewChange?.("list")}
@@ -842,7 +867,7 @@ export function DataViewSwitcher({
         type="button"
         variant="ghost"
         size="iconSm"
-        aria-label="Board view"
+        aria-label={t("dataToolbar.boardView")}
         aria-pressed={view === "board"}
         active={view === "board"}
         onClick={() => onViewChange?.("board")}

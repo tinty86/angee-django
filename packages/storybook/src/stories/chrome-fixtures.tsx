@@ -43,7 +43,7 @@ export const chromeMenuItems: readonly ChromeMenuItem[] = [
         icon: "auth",
         description: "Users, groups, and access policy.",
         group: "platform",
-        tone: "muted",
+        tone: "neutral",
       },
       {
         id: "resources",
@@ -89,7 +89,7 @@ export const appChooserItems: readonly AppChooserItem[] = [
     to: "/activity",
     icon: "activity",
     description: "Recent workspace changes",
-    tone: "muted",
+    tone: "neutral",
     badge: 3,
   },
   {
@@ -99,7 +99,7 @@ export const appChooserItems: readonly AppChooserItem[] = [
     icon: "auth",
     description: "Identity and permissions",
     group: "platform",
-    tone: "muted",
+    tone: "neutral",
   },
   {
     id: "resources",
@@ -117,19 +117,16 @@ export const appChooserItems: readonly AppChooserItem[] = [
     icon: "calendar",
     description: "Scheduling surfaces",
     status: "future",
-    tone: "muted",
+    tone: "neutral",
   },
 ];
 
+// Tabs are presentational here; a product route reads `?tab=` to apply its own
+// filter (e.g. starred/archived). The framework owns only the strip.
 export const topMenuTabs: readonly TopMenuTab[] = [
-  { id: "all", label: "All notes", icon: "list", filter: {} },
-  { id: "starred", label: "Starred", icon: "star", filter: { isStarred: true } },
-  {
-    id: "archive",
-    label: "Archive",
-    icon: "archive",
-    filter: { status: { exact: "ARCHIVED" } },
-  },
+  { id: "all", label: "All notes", icon: "list" },
+  { id: "starred", label: "Starred", icon: "star" },
+  { id: "archive", label: "Archive", icon: "archive" },
 ];
 
 export const spotlightCommands: readonly SpotlightCommand[] = [

@@ -24,10 +24,14 @@ import { typeNameForModel } from "./selection";
 /** Field shape classes the SDL can expose to rendered bindings. */
 export type ModelFieldKind = "scalar" | "enum" | "relation" | "list";
 
-/** One GraphQL enum value plus its human label. */
+/**
+ * One GraphQL enum value plus its SDL-authored description, if any. The SDK
+ * stays structural: it carries the raw value and the SDL description; the
+ * rendered binding humanizes a description-less value into a display label.
+ */
 export interface ModelEnumValueMetadata {
   value: string;
-  label: string;
+  description?: string;
 }
 
 /** Metadata for one GraphQL object field, derived from the printed SDL. */
@@ -89,9 +93,9 @@ export const EMPTY_SCHEMA_FIELD_METADATA: SchemaFieldMetadata = { types: {} };
 const ModelMetadataContext = makeContext<SchemaFieldMetadata>("ModelMetadata");
 
 /**
- * Parse one printed GraphQL SDL string into object-field metadata. Enum value
- * labels come from enum-value descriptions and fall back to humanized enum
- * names when descriptions are absent.
+ * Parse one printed GraphQL SDL string into object-field metadata. Enum values
+ * carry their SDL description (the authored label) where present; the rendered
+ * binding humanizes a description-less value into a display label.
  */
 export function fieldMetadataFromSDL(sdl: string): SchemaFieldMetadata {
   return fieldMetadataFromSchema(buildSchema(sdl));
@@ -455,7 +459,9 @@ function metadataForNamedType(
       enumName: namedType.name,
       values: namedType.getValues().map((value) => ({
         value: value.name,
-        label: enumValueLabel(value.name, value.description),
+        ...(value.description?.trim()
+          ? { description: value.description.trim() }
+          : {}),
       })),
     };
   }
@@ -474,18 +480,6 @@ function metadataForNamedType(
 function hasList(type: GraphQLType): boolean {
   if (isNonNullType(type)) return hasList(type.ofType);
   return isListType(type);
-}
-
-function enumValueLabel(
-  value: string,
-  description: string | null | undefined,
-): string {
-  const label = description?.trim();
-  if (label) return label;
-  return value
-    .toLowerCase()
-    .replace(/[-_.\s]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 /**

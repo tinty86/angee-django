@@ -1,6 +1,8 @@
-import type { BaseAddon, BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
+import { defineBaseAddon } from "@angee/base";
 import { ArchiveRestore, Download, HardDrive, Image, Pencil } from "lucide-react";
 
+import { enStorageMessages } from "./i18n";
 import { StoragePage } from "./views/StoragePage";
 import { FileCrumb } from "./views/FileDetail";
 import { StorageSettingsPage } from "./views/StorageSettingsPage";
@@ -59,10 +61,11 @@ const storageMenu: readonly BaseMenuItem[] = [
 
 // Glyphs the browser reaches for that the base registry doesn't carry; `file`,
 // `files`, and `trash` already live there.
-const storage: BaseAddon = {
+const storage = defineBaseAddon({
   id: STORAGE_ID,
   routes: storageRoutes,
   menus: storageMenu,
+  i18n: { storage: enStorageMessages },
   icons: {
     drive: HardDrive,
     image: Image,
@@ -70,6 +73,6 @@ const storage: BaseAddon = {
     restore: ArchiveRestore,
     edit: Pencil,
   },
-};
+});
 
 export default storage;

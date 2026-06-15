@@ -4,15 +4,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   useConfirm,
 } from "@angee/base";
-import { useT } from "@angee/sdk";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -22,7 +15,9 @@ import {
   STACK_DOWN_MUTATION,
   STACK_UP_MUTATION,
 } from "../../data/documents";
+import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
+import { DaemonResourceTable } from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -42,7 +37,7 @@ interface StackAction {
 
 /** Operations pane: a daemon job table with run + stack lifecycle controls. */
 export function OperationsSection(): ReactNode {
-  const t = useT("operator");
+  const t = useOperatorT();
   const confirm = useConfirm();
   const { snapshot, result, refetch } = useOperatorSnapshot({ operations: true });
   const [actionError, setActionError] = useState<string | null>(null);
@@ -61,12 +56,12 @@ export function OperationsSection(): ReactNode {
 
   const jobs = snapshot?.jobs ?? [];
   const stackActions: readonly StackAction[] = [
-    { field: "stackBuild", label: "Build", variant: "secondary", variables: {}, run: build.run },
-    { field: "stackUp", label: "Up", variant: "secondary", variables: {}, run: up.run },
-    { field: "stackDown", label: "Down", variant: "ghost", variables: {}, run: down.run },
+    { field: "stackBuild", label: t("operator.operations.stack.build"), variant: "secondary", variables: {}, run: build.run },
+    { field: "stackUp", label: t("operator.operations.stack.up"), variant: "secondary", variables: {}, run: up.run },
+    { field: "stackDown", label: t("operator.operations.stack.down"), variant: "ghost", variables: {}, run: down.run },
     {
       field: "stackDestroy",
-      label: "Destroy",
+      label: t("operator.operations.stack.destroy"),
       variant: "ghost",
       variables: { purge: false },
       dangerous: true,
@@ -78,8 +73,8 @@ export function OperationsSection(): ReactNode {
     void (async () => {
       if (action.dangerous) {
         const ok = await confirm({
-          title: "Destroy stack?",
-          body: "All services and runtime state are removed. This cannot be undone.",
+          title: t("operator.operations.stack.destroy.confirm.title"),
+          body: t("operator.operations.stack.destroy.confirm.body"),
           confirm: action.label,
           danger: true,
         });
@@ -101,57 +96,45 @@ export function OperationsSection(): ReactNode {
       title={t("section.operator.operations.title")}
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
-      loadingMessage="Loading operations"
+      loadingMessage={t("operator.operations.loading")}
       actionError={actionError}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Runtime</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {jobs.length === 0 ? (
-            <TableRow>
-              <TableCell className="text-center text-13 text-fg-muted" colSpan={3}>
-                No jobs.
-              </TableCell>
-            </TableRow>
-          ) : (
-            jobs.map((job) => (
-              <TableRow key={job.name}>
-                <TableCell className="font-medium text-fg">{job.name}</TableCell>
-                <TableCell className="text-13 text-fg-muted">{job.runtime}</TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void runDaemonAction({
-                        run: jobRun.run,
-                        field: "jobRun",
-                        variables: { name: job.name },
-                        label: "Run",
-                        setError: setActionError,
-                        refetch,
-                      })
-                    }
-                    size="sm"
-                    variant="secondary"
-                  >
-                    Run
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <DaemonResourceTable
+        actions={[
+          {
+            label: t("operator.operations.run"),
+            variant: "secondary",
+            run: (job) =>
+              runDaemonAction({
+                run: jobRun.run,
+                field: "jobRun",
+                variables: { name: job.name },
+                label: t("operator.operations.run"),
+                setError: setActionError,
+                refetch,
+              }),
+          },
+        ]}
+        actionsLabel={t("operator.table.actions")}
+        busy={busy}
+        columns={[
+          {
+            header: t("operator.operations.column.name"),
+            cell: (job) => <span className="font-medium text-fg">{job.name}</span>,
+          },
+          {
+            header: t("operator.operations.column.runtime"),
+            cell: (job) => <span className="text-13 text-fg-muted">{job.runtime}</span>,
+          },
+        ]}
+        emptyMessage={t("operator.operations.empty")}
+        rowKey={(job) => job.name}
+        rows={jobs}
+      />
 
       <Card>
         <CardHeader>
-          <CardTitle>Stack lifecycle</CardTitle>
+          <CardTitle>{t("operator.operations.stack.title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">

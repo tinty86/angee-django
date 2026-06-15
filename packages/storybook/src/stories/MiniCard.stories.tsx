@@ -5,14 +5,11 @@ const meta = {
   title: "Fragments/MiniCard",
   component: MiniCard,
   parameters: { layout: "padded" },
-  args: {
-    title: "Q3 review brief",
-  },
 } satisfies Meta<typeof MiniCard>;
 
 export default meta;
 
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj;
 
 export const Summary: Story = {
   render: () => (
@@ -20,11 +17,11 @@ export const Summary: Story = {
       <MiniCard
         icon="file"
         meta="Updated today"
-        primaryTag={{ label: "Draft", variant: "warning" }}
+        primaryTag={{ label: "Draft", tone: "warning" }}
         title="Q3 review brief"
         tags={
           <>
-            <Tag variant="info">Internal</Tag>
+            <Tag tone="info">Internal</Tag>
             <Tag>2,840 words</Tag>
           </>
         }
@@ -32,7 +29,7 @@ export const Summary: Story = {
       <MiniCard
         icon="archive"
         meta="Published May 28"
-        primaryTag={{ label: "Live", variant: "success" }}
+        primaryTag={{ label: "Live", tone: "success" }}
         title="Storage policy memo"
       />
     </div>

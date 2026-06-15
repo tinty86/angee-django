@@ -11,7 +11,7 @@ export {
   type BreadcrumbItem,
   type BreadcrumbProps,
 } from "./Breadcrumb";
-export { GlobalSearch, type GlobalSearchProps } from "./GlobalSearch";
+export { CommandPalette, type CommandPaletteProps } from "./CommandPalette";
 export { Glyph, type GlyphProps } from "./Glyph";
 export {
   baseIcons,
@@ -43,6 +43,5 @@ export {
   type TopMenuItem,
   type TopMenuProps,
   type TopMenuTab,
-  type TopMenuTabId,
 } from "./TopMenu";
 export { UserMenu, type UserMenuProps } from "./UserMenu";

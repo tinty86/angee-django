@@ -1,6 +1,7 @@
 import * as React from "react";
-import { useResourceRevisions, type ResourceRevision } from "@angee/sdk";
+import { revisionSnapshot, useResourceRevisions } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { EmptyState } from "../fragments/EmptyState";
 import { ErrorBanner } from "../fragments/ErrorBanner";
 import { LoadingPanel } from "../fragments/LoadingPanel";
@@ -12,13 +13,12 @@ export interface RevisionsTabProps {
   enabled?: boolean;
 }
 
-const REVISION_META_FIELDS = new Set(["id", "createdAt", "comment", "__typename"]);
-
 export function RevisionsTab({
   enabled = true,
   model,
   recordId,
 }: RevisionsTabProps): React.ReactElement {
+  const t = useBaseT();
   const activeRecordId = typeof recordId === "string" && recordId !== ""
     ? recordId
     : null;
@@ -30,8 +30,8 @@ export function RevisionsTab({
     return (
       <EmptyState
         icon="activity"
-        title="No record selected"
-        description="Open a record to view revisions."
+        title={t("revisions.noRecordTitle")}
+        description={t("revisions.noRecordDescription")}
         className="min-h-48 p-4"
       />
     );
@@ -39,20 +39,20 @@ export function RevisionsTab({
   if (revisions.error) {
     return (
       <ErrorBanner
-        title="Revisions unavailable"
-        message={revisions.error.message}
+        title={t("revisions.unavailable")}
+        description={revisions.error.message}
       />
     );
   }
   if (revisions.fetching && revisions.revisions.length === 0) {
-    return <LoadingPanel message="Loading revisions" />;
+    return <LoadingPanel message={t("revisions.loading")} />;
   }
   if (revisions.revisions.length === 0) {
     return (
       <EmptyState
         icon="activity"
-        title="No revisions yet"
-        description="Field changes will appear here."
+        title={t("revisions.emptyTitle")}
+        description={t("revisions.emptyDescription")}
         className="min-h-48 p-4"
       />
     );
@@ -63,18 +63,11 @@ export function RevisionsTab({
       {revisions.revisions.map((revision) => (
         <TimelineEntry
           key={revision.id}
-          title={revision.comment ?? "Record updated"}
+          title={revision.comment ?? t("revisions.recordUpdated")}
           timestamp={revision.createdAt}
           body={revisionSnapshot(revision)}
         />
       ))}
     </ol>
   );
-}
-
-function revisionSnapshot(revision: ResourceRevision): unknown {
-  for (const [field, value] of Object.entries(revision)) {
-    if (!REVISION_META_FIELDS.has(field) && value != null) return value;
-  }
-  return "";
 }

@@ -1,10 +1,9 @@
 import type { ReactElement } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useMenus } from "@angee/sdk";
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsString, useQueryState } from "nuqs";
 
 import { cn } from "../lib/cn";
-import type { DataViewFilter } from "../views";
 import { Glyph } from "./Glyph";
 import {
   NavigationMenu,
@@ -16,26 +15,17 @@ import {
   MenuTree,
 } from "./menu-tree";
 
-const TOP_TAB_IDS = ["all", "starred", "archive"] as const;
-export type TopMenuTabId = (typeof TOP_TAB_IDS)[number];
-
+/**
+ * A presentational collection-view tab. The framework owns the tab strip and
+ * its `?tab=` query state; the product owns what each tab *means* — a route or
+ * data view reads `?tab=` and applies its own filter. No data-view coupling
+ * lives here.
+ */
 export interface TopMenuTab {
-  id: TopMenuTabId;
+  id: string;
   label: string;
   icon?: string;
-  filter: DataViewFilter;
 }
-
-const DEFAULT_TABS: readonly TopMenuTab[] = [
-  { id: "all", label: "All notes", icon: "list", filter: {} },
-  { id: "starred", label: "Starred", icon: "star", filter: { isStarred: true } },
-  {
-    id: "archive",
-    label: "Archive",
-    icon: "archive",
-    filter: { status: { exact: "ARCHIVED" } },
-  },
-];
 
 const tabClass =
   "inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring aria-selected:bg-rail-hi aria-selected:text-on-rail-hi";
@@ -62,17 +52,18 @@ export function TopMenu({
 
 function TopMenuTabs({
   className,
-  tabs = DEFAULT_TABS,
+  tabs,
 }: {
   className?: string;
-  tabs?: readonly TopMenuTab[];
+  tabs: readonly TopMenuTab[];
 }): ReactElement | null {
-  const [activeTab, setActiveTab] = useQueryState(
-    "tab",
-    parseAsStringLiteral(TOP_TAB_IDS).withDefault("all"),
-  );
+  const [rawTab, setActiveTab] = useQueryState("tab", parseAsString);
 
-  if (!tabs.length) return null;
+  const [firstTab] = tabs;
+  if (!firstTab) return null;
+
+  // The first tab is the default; an unknown `?tab=` falls back to it.
+  const activeId = tabs.some((tab) => tab.id === rawTab) ? rawTab : firstTab.id;
 
   return (
     <div
@@ -84,7 +75,7 @@ function TopMenuTabs({
         <TopMenuTabButton
           key={tab.id}
           tab={tab}
-          active={activeTab === tab.id}
+          active={activeId === tab.id}
           onSelect={() => {
             void setActiveTab(tab.id);
           }}
@@ -143,7 +134,7 @@ function TopMenuLinkItem({
   pathname: string;
 }): ReactElement {
   const children = item.targetedChildren;
-  const active = menuItemIsActive(item, pathname);
+  const active = item.isActive(pathname);
   const target = item.target;
   const label = item.displayLabel;
   const icon = item.iconName;
@@ -162,7 +153,7 @@ function TopMenuLinkItem({
               <TopMenuPanelLink
                 key={child.id}
                 item={child}
-                active={menuItemIsActive(child, pathname)}
+                active={child.isActive(pathname)}
               />
             ))}
           </div>
@@ -252,12 +243,5 @@ function TopMenuTabButton({
       {tab.icon ? <Glyph name={tab.icon} size={14} className="shrink-0" /> : null}
       <span className="truncate">{tab.label}</span>
     </button>
-  );
-}
-
-function menuItemIsActive(item: ChromeMenuNode, pathname: string): boolean {
-  return (
-    item.matchesPath(pathname) ||
-    Boolean(item.children?.some((child) => child.matchesPath(pathname)))
   );
 }

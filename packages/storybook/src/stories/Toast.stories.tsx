@@ -1,19 +1,13 @@
 import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import {
-  Button,
-  ToastProvider,
-  useToast,
-  type ToastOptions,
-} from "@angee/base";
+import { Button, useToast, type ToastOptions } from "@angee/base";
 
 const meta = {
-  title: "Feedback/Toast",
-  component: ToastProvider,
+  title: "Primitives/Toast",
   parameters: {
     layout: "padded",
   },
-} satisfies Meta<typeof ToastProvider>;
+} satisfies Meta;
 
 export default meta;
 
@@ -24,7 +18,7 @@ export const Info: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "info",
+          tone: "info",
           title: "Import queued",
           description: "Resource sync will start shortly.",
           duration: 0,
@@ -39,7 +33,7 @@ export const Success: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "success",
+          tone: "success",
           title: "Saved",
           description: "The record is ready for the next step.",
           duration: 0,
@@ -54,7 +48,7 @@ export const Warning: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "warning",
+          tone: "warning",
           title: "Review needed",
           description: "Two imported rows need field confirmation.",
           duration: 0,
@@ -69,7 +63,7 @@ export const Error: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "error",
+          tone: "danger",
           title: "Import failed",
           description: "The source returned an invalid response.",
         }}
@@ -83,7 +77,7 @@ export const WithAction: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "warning",
+          tone: "warning",
           title: "Draft changes",
           description: "Review the pending edits before publishing.",
           duration: 0,
@@ -102,7 +96,7 @@ export const PersistentError: Story = {
     <ToastCanvas>
       <SeedToast
         options={{
-          intent: "error",
+          tone: "danger",
           title: "Connection lost",
           description: "Retry after the workspace connection is restored.",
           duration: Infinity,
@@ -120,16 +114,14 @@ export const Interactive: Story = {
   ),
 };
 
+// The global preview decorator already provides the `ToastProvider`; this is just
+// the canvas the seeded toasts render against.
 function ToastCanvas({
   children,
 }: {
   children?: React.ReactNode;
 }): React.ReactElement {
-  return (
-    <ToastProvider>
-      <div className="flex min-h-80 items-start">{children}</div>
-    </ToastProvider>
-  );
+  return <div className="flex min-h-80 items-start">{children}</div>;
 }
 
 function SeedToast({ options }: { options: ToastOptions }): null {

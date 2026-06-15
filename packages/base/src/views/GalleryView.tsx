@@ -2,9 +2,10 @@ import type { ReactElement, ReactNode } from "react";
 import type { Row } from "@angee/sdk";
 
 import { cn } from "../lib/cn";
-import { writeDndPayload, type DndPayload } from "../lib/dnd";
+import { dragSourceProps, type DndPayload } from "../lib/dnd";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
+import { ListEmpty } from "./ListInternals";
 
 /**
  * The card-grid View — a frameless sibling of `ListView` that renders each row
@@ -31,6 +32,8 @@ export interface GalleryViewProps<TRow extends Row = Row> {
   draggableRow?: (row: TRow) => DndPayload | null;
   selectedIds?: ReadonlySet<string>;
   onToggleSelected?: (id: string, selected: boolean) => void;
+  /** Shown centered when `rows` is empty. */
+  emptyMessage?: ReactNode;
   className?: string;
 }
 
@@ -46,10 +49,14 @@ export function GalleryView<TRow extends Row = Row>({
   draggableRow,
   selectedIds,
   onToggleSelected,
+  emptyMessage = "No records.",
   className,
 }: GalleryViewProps<TRow>): ReactElement {
   return (
     <div className={cn("flex-1 overflow-y-auto bg-canvas p-4", className)}>
+      {rows.length === 0 ? (
+        <ListEmpty>{emptyMessage}</ListEmpty>
+      ) : (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
         {rows.map((row) => {
           const id = String(row[rowKey] ?? "");
@@ -74,6 +81,7 @@ export function GalleryView<TRow extends Row = Row>({
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -108,13 +116,7 @@ function GalleryCard<TRow extends Row>({
       "cursor-pointer hover:border-border-strong focus-visible:focus-ring",
     selected && "border-brand",
   );
-  const dragProps = dragPayload
-    ? {
-        draggable: true,
-        onDragStart: (event: React.DragEvent) =>
-          writeDndPayload(event.dataTransfer, dragPayload),
-      }
-    : undefined;
+  const dragProps = dragSourceProps(dragPayload ?? null);
   const title = cardTitle(row, titleField);
   // Card body (custom or default) plus the selection checkbox overlay — kept at
   // card level so a custom `renderCard` still gets selection. The checkbox stops

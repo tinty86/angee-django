@@ -1,5 +1,5 @@
 import { Alert, Button, Glyph, Spinner } from "@angee/base";
-import { useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
+import { errorMessage, useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -11,8 +11,10 @@ import {
   type LoginStartVariables,
 } from "./documents";
 import { loginCallbackRedirectUri, loginNextFromLocation } from "./redirects";
+import { useIamT } from "./i18n";
 
 export function OAuthLoginMethods(): ReactNode {
+  const t = useIamT();
   const { data, fetching, error: queryError } =
     useAuthoredQuery<AvailableConnectionsData>(AVAILABLE_CONNECTIONS_QUERY);
   const [loginStart] = useAuthoredMutation<LoginStartData, LoginStartVariables>(
@@ -39,9 +41,9 @@ export function OAuthLoginMethods(): ReactNode {
         window.location.assign(payload.authorizeUrl);
         return;
       }
-      setStartError(payload?.error ?? "Could not start sign-in.");
+      setStartError(payload?.error ?? t("iam.login.startError"));
     } catch (caught) {
-      setStartError(errorMessage(caught, "Could not start sign-in."));
+      setStartError(errorMessage(caught, t("iam.login.startError")));
     }
     setStartingSqid(null);
   }
@@ -54,15 +56,15 @@ export function OAuthLoginMethods(): ReactNode {
         role="status"
       >
         <Spinner size="sm" tone="brand" />
-        <span>Loading sign-in options...</span>
+        <span>{t("iam.login.loadingOptions")}</span>
       </div>
     );
   }
 
   if (queryError && connections.length === 0) {
     return (
-      <Alert intent="danger" title="Sign-in providers unavailable">
-        Username and password sign-in is still available.
+      <Alert className="mb-6" tone="danger" title={t("iam.login.providersUnavailable")}>
+        {t("iam.login.passwordStillAvailable")}
       </Alert>
     );
   }
@@ -82,19 +84,19 @@ export function OAuthLoginMethods(): ReactNode {
               className="!h-11 w-full justify-start bg-sheet"
               disabled={startingSqid !== null}
               loading={active}
-              loadingText={`Continue with ${label}`}
+              loadingText={t("iam.login.continueWith", { provider: label })}
               onClick={() => void startLogin(connection)}
               size="lg"
               variant="secondary"
             >
               <ProviderMark label={label} />
-              <span className="min-w-0 truncate">Continue with {label}</span>
+              <span className="min-w-0 truncate">{t("iam.login.continueWith", { provider: label })}</span>
             </Button>
           );
         })}
       </div>
       {startError ? (
-        <Alert intent="danger" title="Sign-in could not start">
+        <Alert tone="danger" title={t("iam.login.startFailed")}>
           {startError}
         </Alert>
       ) : null}
@@ -120,8 +122,4 @@ function connectionLabel(connection: AvailableConnection): string {
     connection.oauthClientSlug.trim() ||
     "provider"
   );
-}
-
-function errorMessage(caught: unknown, fallback: string): string {
-  return caught instanceof Error ? caught.message : fallback;
 }

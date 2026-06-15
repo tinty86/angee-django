@@ -1,8 +1,4 @@
-import {
-  translateWithFallback,
-  useT,
-  type MessageVars,
-} from "@angee/sdk";
+import { useNamespaceT, type MessageVars } from "@angee/sdk";
 
 import { enBaseMessages } from "./en";
 
@@ -10,13 +6,12 @@ export { enBaseBundle, enBaseMessages } from "./en";
 
 export type BaseMessageVars = MessageVars;
 
-// A translator bound to the `base` namespace. Resolves against the host
-// runtime's merged i18n first, then falls back to the bundled English strings.
+// A translator bound to the `base` namespace: resolves against the host runtime's
+// merged i18n first, then falls back to the bundled English. Thin alias over the
+// shared `useNamespaceT` owner (the same pattern every addon's `useXT` uses).
 export function useBaseT(): (
   key: string,
   vars?: BaseMessageVars,
 ) => string {
-  const t = useT("base");
-  return (key: string, vars?: BaseMessageVars) =>
-    translateWithFallback(t, enBaseMessages, key, vars);
+  return useNamespaceT("base", enBaseMessages);
 }

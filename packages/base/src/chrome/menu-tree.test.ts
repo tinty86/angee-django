@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { ChromeMenuNode, MenuTree, type ChromeMenuItem } from "./menu-tree";
+import {
+  ChromeMenuNode,
+  MenuTree,
+  pathMatchesTarget,
+  type ChromeMenuItem,
+} from "./menu-tree";
 
 // Two apps with sections plus a single-page app. The top bar navigates within
 // the active app, so it shows that app's sections and never a sibling's.
@@ -54,6 +59,90 @@ describe("appSectionItems", () => {
 
   test("an unmatched path yields no sections", () => {
     expect(MenuTree.from(MENU).appSectionItems("/nope")).toEqual([]);
+  });
+});
+
+describe("navigableItems", () => {
+  test("returns navigable leaves paired with their root app, in build order", () => {
+    expect(
+      MenuTree.from(MENU)
+        .navigableItems()
+        .map(({ item, root, target }) => ({ id: item.id, root: root.id, target })),
+    ).toEqual([
+      { id: "notes.all", root: "notes", target: "/notes" },
+      { id: "notes.archive", root: "notes", target: "/notes/archive" },
+      { id: "operator.overview", root: "operator", target: "/operator" },
+      { id: "operator.services", root: "operator", target: "/operator/services" },
+      { id: "single", root: "single", target: "/single" },
+    ]);
+  });
+
+  test("excludes a parent that only borrows a child's target — the leaf carries it", () => {
+    const ids = MenuTree.from(MENU)
+      .navigableItems()
+      .map(({ item }) => item.id);
+    // `operator` resolves /operator from its first child; `notes` has its own
+    // `to` but also children — both are parents, so their leaves carry targets.
+    expect(ids).not.toContain("operator");
+    expect(ids).not.toContain("notes");
+  });
+
+  test("excludes the chrome action menus (systray/user) and their entries", () => {
+    const ids = MenuTree.from([
+      { id: "notes", label: "Notes", to: "/notes" },
+      {
+        id: "user",
+        label: "User",
+        children: [{ id: "user.profile", label: "Profile", to: "/profile" }],
+      },
+      {
+        id: "systray",
+        label: "Systray",
+        children: [{ id: "systray.help", label: "Help", to: "/help" }],
+      },
+    ])
+      .navigableItems()
+      .map(({ item }) => item.id);
+    expect(ids).toEqual(["notes"]);
+  });
+
+  test("skips entries with no target or a '#' placeholder", () => {
+    const ids = MenuTree.from([
+      { id: "real", label: "Real", to: "/real" },
+      { id: "placeholder", label: "Placeholder", to: "#" },
+      { id: "labelOnly", label: "Label only" },
+    ])
+      .navigableItems()
+      .map(({ item }) => item.id);
+    expect(ids).toEqual(["real"]);
+  });
+});
+
+describe("isActive / pathMatchesTarget", () => {
+  test("pathMatchesTarget matches an exact or nested path, never missing/#", () => {
+    expect(pathMatchesTarget("/notes", "/notes")).toBe(true);
+    expect(pathMatchesTarget("/notes/archive", "/notes")).toBe(true);
+    expect(pathMatchesTarget("/notebooks", "/notes")).toBe(false); // segment-aware
+    expect(pathMatchesTarget("/x", "#")).toBe(false);
+    expect(pathMatchesTarget("/x", undefined)).toBe(false);
+  });
+
+  test("isActive matches a node's own target or an immediate child's", () => {
+    const tree = MenuTree.from([
+      {
+        id: "settings",
+        label: "Settings",
+        to: "/settings",
+        children: [{ id: "settings.team", label: "Team", to: "/team" }],
+      },
+    ]);
+    const settings = tree.byId.get("settings");
+    expect(settings?.isActive("/settings")).toBe(true); // own target
+    // own target `/settings` does not prefix `/team`, so this is the child path
+    expect(settings?.isActive("/team")).toBe(true);
+    expect(settings?.hasActiveDescendant("/team")).toBe(true);
+    expect(settings?.hasActiveDescendant("/settings")).toBe(false);
+    expect(settings?.isActive("/other")).toBe(false);
   });
 });
 

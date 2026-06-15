@@ -1,9 +1,10 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
-import { Tag, type TagVariant } from "../ui/badge";
+import { Tag } from "../ui/badge";
 import { Card } from "../ui/card";
 
 export interface MetricGridTile {
@@ -11,7 +12,7 @@ export interface MetricGridTile {
   icon?: React.ReactNode | string;
   label: React.ReactNode;
   value: React.ReactNode;
-  variant?: TagVariant;
+  tone?: Tone;
 }
 
 export type MetricGridProps = Omit<
@@ -50,11 +51,11 @@ export const MetricGrid = React.forwardRef<HTMLDListElement, MetricGridProps>(
             <div>
               <div className={styles.header()}>
                 <dt className="contents">
-                  <Tag variant={metric.variant ?? "default"}>{metric.label}</Tag>
+                  <Tag tone={metric.tone ?? "neutral"}>{metric.label}</Tag>
                 </dt>
                 {metric.icon ? (
                   <span className={styles.icon()}>
-                    {renderMetricIcon(metric.icon)}
+                    {renderGlyph(metric.icon)}
                   </span>
                 ) : null}
               </div>
@@ -73,8 +74,4 @@ MetricGrid.displayName = "MetricGrid";
 
 function metricKey(metric: MetricGridTile, index: number): string {
   return `${String(metric.label)}:${String(metric.value)}:${index}`;
-}
-
-function renderMetricIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
 }

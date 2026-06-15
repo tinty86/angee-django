@@ -5,14 +5,11 @@ const meta = {
   title: "Fragments/RailPanel",
   component: RailPanel,
   parameters: { layout: "padded" },
-  args: {
-    title: "Active sources",
-  },
 } satisfies Meta<typeof RailPanel>;
 
 export default meta;
 
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj;
 
 export const Section: Story = {
   render: () => (
@@ -29,12 +26,12 @@ export const Section: Story = {
         <div className="grid gap-2">
           <MiniCard
             meta="Synced 4 minutes ago"
-            primaryTag={{ label: "Live", variant: "success" }}
+            primaryTag={{ label: "Live", tone: "success" }}
             title="Production API"
           />
           <MiniCard
             meta="Manual import"
-            tags={<Tag variant="info">CSV</Tag>}
+            tags={<Tag tone="info">CSV</Tag>}
             title="Partner export"
           />
         </div>

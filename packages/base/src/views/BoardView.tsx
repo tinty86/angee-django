@@ -5,7 +5,8 @@ import type { Row as TableRowModel } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import type { Row } from "@angee/sdk";
 
-import { CountBadge, type BadgeVariant } from "../ui/badge";
+import { type Tone } from "../lib/tones";
+import { CountBadge } from "../ui/badge";
 import { StatusDot } from "../ui/status-icon";
 import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
@@ -15,6 +16,7 @@ import {
   readPath,
   type RowGroup,
 } from "./ListInternals";
+import { columnTone } from "./page";
 import type { ColumnDescriptor } from "./page";
 
 const BOARD_SCROLL_STYLE: React.CSSProperties = {
@@ -228,16 +230,15 @@ function laneDotTone<TRow extends Row>(
   group: RowGroup<TRow>,
   groupStack: readonly DataViewGroup[],
   columns: readonly ColumnDescriptor<TRow>[],
-): BadgeVariant | undefined {
+): Tone | undefined {
   const groupField = groupStack[group.depth]?.field;
   const column = groupField
     ? columns.find((candidate) => candidate.field === groupField)
     : undefined;
-  if (!groupField || !column?.tone) return undefined;
+  if (!groupField || !column) return undefined;
   const row = group.rows[0]?.original;
   const value = row ? readPath(row, groupField) : undefined;
-  const label = value == null ? "" : String(value);
-  return column.tone[label] ?? "default";
+  return columnTone(column, value);
 }
 
 function flattenLeaves<TRow extends Row>(group: RowGroup<TRow>): RowGroup<TRow>[] {

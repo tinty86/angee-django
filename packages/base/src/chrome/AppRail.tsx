@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMenus } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { Tooltip } from "../ui/tooltip";
 import { AppChooser } from "./AppChooser";
@@ -22,6 +23,7 @@ const RAIL_BUTTON_ACTIVE =
   "bg-rail-hi text-on-rail-hi before:absolute before:-left-[7px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-r-2 before:bg-brand before:content-['']";
 
 export function AppRail({ className }: AppRailProps): ReactElement {
+  const t = useBaseT();
   const tree = MenuTree.from(useMenus() as readonly ChromeMenuItem[]);
   const items = tree.railMenuItems();
   return (
@@ -34,7 +36,7 @@ export function AppRail({ className }: AppRailProps): ReactElement {
       <AppChooser className="text-on-rail-hi" />
       <div className="h-px w-6 bg-border-on-rail" />
       <nav
-        aria-label="Primary navigation"
+        aria-label={t("chrome.primaryNav")}
         className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto"
       >
         {items.map((item) => (

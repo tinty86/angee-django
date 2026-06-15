@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv } from "../lib/variants";
 import { PageHeader, type PageHeaderProps } from "../page";
 import { Badge } from "../ui/badge";
@@ -63,7 +63,7 @@ export const CollectionHeader = React.forwardRef<
       <div className={styles.main()}>
         <div className={styles.titleRow()}>
           {icon ? (
-            <span className={styles.icon()}>{renderHeaderIcon(icon)}</span>
+            <span className={styles.icon()}>{renderGlyph(icon)}</span>
           ) : null}
           <Heading className={styles.title()}>{title}</Heading>
           {count !== undefined ? <Badge>{count}</Badge> : null}
@@ -77,7 +77,3 @@ export const CollectionHeader = React.forwardRef<
   );
 });
 CollectionHeader.displayName = "CollectionHeader";
-
-function renderHeaderIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

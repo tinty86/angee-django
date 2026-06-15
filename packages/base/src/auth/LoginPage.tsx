@@ -1,18 +1,17 @@
 import {
-  Fragment,
-  isValidElement,
   useCallback,
   useEffect,
   useState,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AngeeLogo, AngeeLogoCube } from "@angee/logo-react";
 import "@angee/logo-react/style.css";
-import { useSlot, type SlotContribution } from "@angee/sdk";
+import { useSlot } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
+import { SlotOutlet, slotEntriesHaveContent } from "../lib/slot-outlet";
 import { safeRedirectPath } from "./safe-redirect";
 import { UsernamePasswordForm } from "./UsernamePasswordForm";
 import { Button } from "../ui/button";
@@ -22,23 +21,7 @@ export const AUTH_LOGIN_CARD_FOOTER_SLOT = "auth.login.card-footer";
 export const AUTH_LOGIN_PAGE_FOOTER_SLOT = "auth.login.page-footer";
 export const AUTH_LOGIN_PASSWORD_HELP_SLOT = "auth.login.password-help";
 
-const HERO_SLIDES = [
-  {
-    eyebrow: "From intent to interface",
-    headline: "Build what you can imagine.",
-    body: "Shape the idea. Watch it become a living product surface.",
-  },
-  {
-    eyebrow: "Agent-Native Generative Execution Environment",
-    headline: "Define your vision. Agents build the reality.",
-    body: "The self-building SaaS platform where autonomous AI agents scaffold, wire, and extend production-ready software.",
-  },
-  {
-    eyebrow: "Composable by design",
-    headline: "One surface for real product work.",
-    body: "Compose Django, React, permissions, data views, and agent workflows into a deterministic product surface that stays clear as it grows.",
-  },
-] as const;
+const HERO_SLIDE_KEYS = ["intent", "agentNative", "composable"] as const;
 
 export interface LoginPageProps {
   brand?: ReactNode;
@@ -74,6 +57,7 @@ export function LoginPage({
     }
     window.location.assign(target);
   }, [navigate, redirectTo]);
+  const t = useBaseT();
   const methodSlot = useSlot(AUTH_LOGIN_METHOD_SLOT);
   const cardFooterSlot = useSlot(AUTH_LOGIN_CARD_FOOTER_SLOT);
   const pageFooterSlot = useSlot(AUTH_LOGIN_PAGE_FOOTER_SLOT);
@@ -165,7 +149,7 @@ export function LoginPage({
               {loginMethods}
               <div className="mt-5 flex items-center gap-3 text-xs text-fg-muted">
                 <span className="h-px flex-1 bg-border-subtle" aria-hidden />
-                <span>or use password</span>
+                <span>{t("auth.orUsePassword")}</span>
                 <span className="h-px flex-1 bg-border-subtle" aria-hidden />
               </div>
             </div>
@@ -221,12 +205,12 @@ function LoginBrandPanel({
             </p>
           </div>
           <div className="mt-7 flex gap-2" aria-hidden="true">
-            {HERO_SLIDES.map((candidate) => (
+            {HERO_SLIDE_KEYS.map((candidate) => (
               <span
-                key={candidate.headline}
+                key={candidate}
                 className={cn(
                   "h-1.5 rounded-full transition-all duration-500 motion-reduce:transition-none",
-                  candidate === slide
+                  candidate === slide.key
                     ? "w-8 bg-n-0/78"
                     : "w-1.5 bg-n-0/32",
                 )}
@@ -239,21 +223,29 @@ function LoginBrandPanel({
   );
 }
 
+interface HeroSlide {
+  key: (typeof HERO_SLIDE_KEYS)[number];
+  eyebrow: string;
+  headline: string;
+  body: string;
+}
+
 function useHeroSlide(): {
   isSwitching: boolean;
-  slide: (typeof HERO_SLIDES)[number];
+  slide: HeroSlide;
 } {
+  const t = useBaseT();
   const [index, setIndex] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
 
   useEffect(() => {
-    if (HERO_SLIDES.length < 2 || prefersReducedMotion()) return undefined;
+    if (HERO_SLIDE_KEYS.length < 2 || prefersReducedMotion()) return undefined;
 
     let timeout: number | undefined;
     const interval = window.setInterval(() => {
       setIsSwitching(true);
       timeout = window.setTimeout(() => {
-        setIndex((current) => (current + 1) % HERO_SLIDES.length);
+        setIndex((current) => (current + 1) % HERO_SLIDE_KEYS.length);
         setIsSwitching(false);
       }, 320);
     }, 5600);
@@ -264,9 +256,15 @@ function useHeroSlide(): {
     };
   }, []);
 
+  const key = HERO_SLIDE_KEYS[index] ?? HERO_SLIDE_KEYS[0];
   return {
     isSwitching,
-    slide: HERO_SLIDES[index] ?? HERO_SLIDES[0],
+    slide: {
+      key,
+      eyebrow: t(`auth.hero.${key}.eyebrow`),
+      headline: t(`auth.hero.${key}.headline`),
+      body: t(`auth.hero.${key}.body`),
+    },
   };
 }
 
@@ -365,15 +363,16 @@ function DefaultCardHeader({
 }: {
   brand?: ReactNode;
 }): ReactNode {
+  const t = useBaseT();
   if (brand) {
     return (
       <div className="mb-8">
         <div className="mb-6">{brand}</div>
         <h1 className="text-28 font-semibold leading-tight text-fg">
-          Sign in
+          {t("auth.signIn")}
         </h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Use your Angee account credentials.
+          {t("auth.signInSubtextBranded")}
         </p>
       </div>
     );
@@ -400,10 +399,10 @@ function DefaultCardHeader({
           Angee
         </p>
         <h1 className="text-28 font-semibold leading-tight text-fg">
-          Sign in
+          {t("auth.signIn")}
         </h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Use your account credentials.
+          {t("auth.signInSubtext")}
         </p>
       </div>
     </div>
@@ -411,6 +410,7 @@ function DefaultCardHeader({
 }
 
 function DefaultPasswordHelp(): ReactNode {
+  const t = useBaseT();
   return (
     <Button
       type="button"
@@ -418,32 +418,7 @@ function DefaultPasswordHelp(): ReactNode {
       size="sm"
       className="!h-auto px-0 py-0 text-sm font-medium"
     >
-      Forgot your password?
+      {t("auth.forgotPassword")}
     </Button>
   );
-}
-
-function SlotOutlet({
-  entries,
-}: {
-  entries: readonly SlotContribution[];
-}): ReactElement | null {
-  const nodes = entries.flatMap((entry) => slotNode(entry.content, entry.id));
-  return nodes.length > 0 ? <>{nodes}</> : null;
-}
-
-function slotNode(value: unknown, key: string): ReactNode[] {
-  if (value == null || typeof value === "boolean") return [];
-  if (typeof value === "string" || typeof value === "number") {
-    return [<span key={key}>{value}</span>];
-  }
-  if (isValidElement(value)) return [<Fragment key={key}>{value}</Fragment>];
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) => slotNode(item, `${key}:${index}`));
-  }
-  return [];
-}
-
-function slotEntriesHaveContent(entries: readonly SlotContribution[]): boolean {
-  return entries.some((entry) => slotNode(entry.content, entry.id).length > 0);
 }

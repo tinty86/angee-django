@@ -4,11 +4,18 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { usePreviews } from "@angee/sdk";
 
 import { EmptyState } from "../fragments/EmptyState";
 import { LoadingPanel } from "../fragments/LoadingPanel";
+import { useBaseT } from "../i18n";
+import { builtinPreviewProviders } from "./builtins";
 import { displayMime } from "./model";
-import { resolvePreviewProvider, type PreviewFile } from "./registry";
+import {
+  resolvePreviewProvider,
+  type PreviewFile,
+  type PreviewProvider,
+} from "./registry";
 
 export interface PreviewPaneProps {
   file: PreviewFile;
@@ -19,19 +26,29 @@ export interface PreviewPaneProps {
 }
 
 /**
- * The preview surface: resolves the registered renderer for a file's mime and
- * mounts it inside a Suspense boundary (renderers may lazy-load their deps) and
- * an error boundary (a renderer crash degrades to the fallback, not a blank
- * pane). With no provider registered for the mime it renders the fallback.
+ * The preview surface: resolves the matching renderer for a file's mime — from
+ * the built-ins plus any addon-contributed providers on the runtime — and mounts
+ * it inside a Suspense boundary (renderers may lazy-load their deps) and an error
+ * boundary (a renderer crash degrades to the fallback, not a blank pane). With no
+ * match it renders the fallback.
  */
 export function PreviewPane({
   file,
   mime,
   fallback,
 }: PreviewPaneProps): ReactElement {
+  const t = useBaseT();
   const resolvedMime = mime ?? displayMime(file);
-  const provider = resolvePreviewProvider(resolvedMime);
-  const empty = fallback ?? <EmptyState title="No preview available" />;
+  // Addon-contributed providers first so one can override a built-in at an equal
+  // priority (resolve sorts stably); built-ins are always available. The SDK
+  // tracks only the contribution id for collision detection — base addons author
+  // full `PreviewProvider`s, so this widening cast is a deliberate boundary.
+  const runtimePreviews = usePreviews() as readonly PreviewProvider[];
+  const provider = resolvePreviewProvider(
+    [...runtimePreviews, ...builtinPreviewProviders],
+    resolvedMime,
+  );
+  const empty = fallback ?? <EmptyState title={t("preview.unavailable")} />;
   if (!provider) return <>{empty}</>;
 
   const Renderer = provider.component;
@@ -40,7 +57,7 @@ export function PreviewPane({
       fallback={empty}
       resetKey={`${provider.id}:${file.url}`}
     >
-      <Suspense fallback={<LoadingPanel message="Loading preview…" />}>
+      <Suspense fallback={<LoadingPanel message={t("preview.loading")} />}>
         <Renderer file={file} mime={resolvedMime} />
       </Suspense>
     </PreviewErrorBoundary>

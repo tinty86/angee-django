@@ -23,11 +23,11 @@ import type {
 
 import { Glyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
+import { POPUP_BASE } from "./popover";
 
 export const dropdownMenuVariants = tv({
   slots: {
-    content:
-      "z-popover min-w-44 overflow-hidden rounded-lg border border-border-subtle bg-popover p-1 shadow-popover outline-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+    content: `${POPUP_BASE} min-w-44 p-1`,
     item:
       "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded px-2 text-13 text-fg outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset [&_.glyph]:size-3.5 [&_.glyph]:shrink-0 [&_.glyph]:text-fg-muted",
     indicator:

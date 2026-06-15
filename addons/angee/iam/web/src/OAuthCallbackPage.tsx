@@ -1,5 +1,5 @@
 import { useAuthoredMutation } from "@angee/sdk";
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 
 import {
   OAuthCallback,
@@ -11,21 +11,25 @@ import {
   type LoginCompleteData,
   type LoginCompleteVariables,
 } from "./documents";
+import { useIamT } from "./i18n";
 import { loginCallbackRedirectUri } from "./redirects";
-
-const COPY: OAuthCallbackCopy = {
-  pendingTitle: "Completing sign-in...",
-  pendingBody: "Your session is being confirmed.",
-  errorTitle: "Could not sign in",
-  backHref: "/login",
-  backLabel: "Back to sign in",
-  serverError: "The sign-in callback can only be completed in a browser.",
-  missingInfo: "The sign-in callback is missing required information.",
-  failure: "Could not complete sign-in.",
-};
 
 /** OIDC sign-in redirect handler: completes the login code exchange. */
 export function OAuthCallbackPage(): ReactNode {
+  const t = useIamT();
+  const copy = useMemo<OAuthCallbackCopy>(
+    () => ({
+      pendingTitle: t("iam.callback.completing"),
+      pendingBody: t("iam.callback.confirming"),
+      errorTitle: t("iam.callback.signInFailed"),
+      backHref: "/login",
+      backLabel: t("iam.callback.backToSignIn"),
+      serverError: t("iam.callback.browserOnly"),
+      missingInfo: t("iam.callback.missingInfo"),
+      failure: t("iam.callback.completeError"),
+    }),
+    [t],
+  );
   const [loginComplete] = useAuthoredMutation<
     LoginCompleteData,
     LoginCompleteVariables
@@ -35,15 +39,15 @@ export function OAuthCallbackPage(): ReactNode {
     async (args) => {
       const payload = (await loginComplete(args))?.loginComplete;
       if (payload?.ok) return { ok: true, next: payload.next };
-      return { ok: false, error: payload?.error ?? COPY.failure };
+      return { ok: false, error: payload?.error ?? copy.failure };
     },
-    [loginComplete],
+    [loginComplete, copy.failure],
   );
 
   return (
     <OAuthCallback
       complete={complete}
-      copy={COPY}
+      copy={copy}
       fallbackRedirect="/"
       redirectUri={loginCallbackRedirectUri()}
     />

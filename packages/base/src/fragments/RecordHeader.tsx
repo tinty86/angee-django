@@ -1,9 +1,10 @@
 import * as React from "react";
 
-import { Glyph } from "../chrome/Glyph";
+import { renderGlyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
+import { type Tone } from "../lib/tones";
 import { PageHeader, type PageHeaderProps } from "../page";
-import { Badge, type BadgeVariant } from "../ui/badge";
+import { Badge } from "../ui/badge";
 
 export const recordHeaderVariants = tv({
   slots: {
@@ -25,7 +26,7 @@ type RecordHeaderHeadingTag = `h${RecordHeaderHeadingLevel}`;
 
 export interface RecordHeaderStatus {
   label: React.ReactNode;
-  variant?: BadgeVariant;
+  tone?: Tone;
 }
 
 export type RecordHeaderProps = Omit<
@@ -77,12 +78,12 @@ export const RecordHeader = React.forwardRef<HTMLElement, RecordHeaderProps>(
           {crumbs ? <div className={styles.crumbs()}>{crumbs}</div> : null}
           <div className={styles.titleRow()}>
             {icon ? (
-              <span className={styles.icon()}>{renderHeaderIcon(icon)}</span>
+              <span className={styles.icon()}>{renderGlyph(icon)}</span>
             ) : null}
             <Heading className={styles.title()}>{title}</Heading>
             {type ? <Badge>{type}</Badge> : null}
             {status ? (
-              <Badge variant={status.variant ?? "default"}>{status.label}</Badge>
+              <Badge tone={status.tone ?? "neutral"}>{status.label}</Badge>
             ) : null}
           </div>
           {meta ? <div className={styles.meta()}>{meta}</div> : null}
@@ -96,7 +97,3 @@ export const RecordHeader = React.forwardRef<HTMLElement, RecordHeaderProps>(
   },
 );
 RecordHeader.displayName = "RecordHeader";
-
-function renderHeaderIcon(icon: React.ReactNode | string): React.ReactNode {
-  return typeof icon === "string" ? <Glyph decorative name={icon} /> : icon;
-}

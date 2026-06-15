@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useState,
   type FormEvent,
@@ -10,13 +11,16 @@ import {
   Alert,
   Button,
   DashboardView,
+  FieldDescription,
+  FieldLabel,
+  FieldRoot,
   InlineEmpty,
   Metric,
   MiniCard,
   Select,
   SurfacePanel,
 } from "@angee/base";
-import { useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
+import { errorMessage, useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
 
 import {
   IAM_GRANTS_QUERY,
@@ -38,6 +42,7 @@ import {
 import { titleLabel, userLabel } from "../identity-labels";
 import { grantRows, roleRef, roleRows, type IAMGrantRow } from "../identity-rows";
 import { IAM_LIST_LIMIT } from "../list-config";
+import { useIamT } from "../i18n";
 
 const OVERVIEW_COUNT_LIMIT = 1;
 const PEEK_LIMIT = 6;
@@ -49,6 +54,7 @@ const PEEK_LIMIT = 6;
  * same reads. Writes route through the grant/revoke mutations and refetch.
  */
 export function OverviewPage(): ReactElement {
+  const t = useIamT();
   const countVars = useMemo<IAMOverviewVariables>(
     () => ({ pagination: { offset: 0, limit: OVERVIEW_COUNT_LIMIT } }),
     [],
@@ -128,6 +134,8 @@ export function OverviewPage(): ReactElement {
   const [principalId, setPrincipalId] = useState("");
   const [role, setRole] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const principalLabelId = useId();
+  const roleLabelId = useId();
 
   useEffect(() => {
     if (!roleOptions.some((option) => option.value === role)) {
@@ -143,18 +151,18 @@ export function OverviewPage(): ReactElement {
   async function handleGrant(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!principalId || !role) {
-      setError("Choose a principal and role before granting access.");
+      setError(t("iam.overview.grant.chooseBoth"));
       return;
     }
     setError(null);
     try {
       const result = await grantRole({ principalId, role });
-      if (result?.grantRole === false) throw new Error("Could not grant role.");
+      if (result?.grantRole === false) throw new Error(t("iam.overview.grant.error"));
       setPrincipalId("");
       grantsQuery.refetch();
       overview.refetch();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not grant role.");
+      setError(errorMessage(caught, t("iam.overview.grant.error")));
     }
   }
 
@@ -162,63 +170,71 @@ export function OverviewPage(): ReactElement {
 
   return (
     <DashboardView className="p-1">
-      <Metric label="Users" value={count(overview.data?.users.totalCount, loading)} icon="users" />
-      <Metric label="Roles" value={count(roles.length, loading)} icon="auth" variant="brand" />
-      <Metric label="Grants" value={count(overview.data?.grants.totalCount, loading)} icon="check" variant="success" />
-      <Metric label="Relationships" value={count(overview.data?.relationships.totalCount, loading)} icon="share" variant="info" />
-      <Metric label="Privileged" value={count(privileged.length, loading)} icon="auth" variant="warning" detail="admin-tier grants" />
-      <Metric label="Unassigned" value={count(unassigned.length, loading)} icon="users" variant="danger" detail="no direct roles" />
+      <Metric label={t("iam.overview.metric.users")} value={count(overview.data?.users.totalCount, loading)} icon="users" />
+      <Metric label={t("iam.overview.metric.roles")} value={count(roles.length, loading)} icon="auth" tone="brand" />
+      <Metric label={t("iam.overview.metric.grants")} value={count(overview.data?.grants.totalCount, loading)} icon="check" tone="success" />
+      <Metric label={t("iam.overview.metric.relationships")} value={count(overview.data?.relationships.totalCount, loading)} icon="share" tone="info" />
+      <Metric label={t("iam.overview.metric.privileged")} value={count(privileged.length, loading)} icon="auth" tone="warning" detail={t("iam.overview.metric.privilegedDetail")} />
+      <Metric label={t("iam.overview.metric.unassigned")} value={count(unassigned.length, loading)} icon="users" tone="danger" detail={t("iam.overview.metric.unassignedDetail")} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-6">
-          <SurfacePanel title="Grant access" summary="Direct role binding for a user or group.">
+          <SurfacePanel title={t("iam.overview.grant.title")} summary={t("iam.overview.grant.summary")}>
             <div className="p-4">
               <form
                 className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)_auto]"
                 onSubmit={(event) => void handleGrant(event)}
               >
-                <label className="grid min-w-0 gap-1.5 text-13 font-medium text-fg">
-                  Principal
+                <FieldRoot>
+                  {/* A Select trigger is a button, not a labelable control, so the
+                      label renders as a span and associates via aria-labelledby. */}
+                  <FieldLabel id={principalLabelId} nativeLabel={false} render={<span />}>
+                    {t("iam.overview.grant.principal")}
+                  </FieldLabel>
                   <Select
                     value={principalId}
                     options={principalOptions}
-                    placeholder={usersQuery.fetching ? "Loading users" : "Select user"}
-                    aria-label="Principal"
+                    placeholder={usersQuery.fetching ? t("iam.overview.grant.loadingUsers") : t("iam.overview.grant.selectUser")}
+                    aria-labelledby={principalLabelId}
                     disabled={usersQuery.fetching || principalOptions.length === 0}
                     onValueChange={setPrincipalId}
                   />
                   {usersTruncated ? (
-                    <span className="text-12 font-normal text-fg-muted">
-                      Showing first {IAM_LIST_LIMIT.toLocaleString()} of{" "}
-                      {userTotalCount.toLocaleString()} users.
-                    </span>
+                    <FieldDescription>
+                      {t("iam.overview.grant.truncated", {
+                        shown: IAM_LIST_LIMIT.toLocaleString(),
+                        total: userTotalCount.toLocaleString(),
+                      })}
+                    </FieldDescription>
                   ) : null}
-                </label>
-                <label className="grid min-w-0 gap-1.5 text-13 font-medium text-fg">
-                  Role
+                </FieldRoot>
+                <FieldRoot>
+                  <FieldLabel id={roleLabelId} nativeLabel={false} render={<span />}>
+                    {t("iam.overview.grant.role")}
+                  </FieldLabel>
                   <Select
                     value={role}
                     options={roleOptions}
-                    placeholder="Select role"
-                    aria-label="Role"
+                    placeholder={t("iam.overview.grant.selectRole")}
+                    aria-labelledby={roleLabelId}
                     onValueChange={setRole}
                   />
-                </label>
+                </FieldRoot>
                 <div className="flex items-end">
                   <Button type="submit" variant="primary" pending={grantState.fetching} disabled={!principalId || !role}>
-                    Grant
+                    {t("iam.overview.grant.submit")}
                   </Button>
                 </div>
               </form>
               {error ? (
-                <Alert className="mt-3" intent="danger" title="Role was not granted">{error}</Alert>
+                <Alert className="mt-3" tone="danger" title={t("iam.overview.grant.failedTitle")}>{error}</Alert>
               ) : null}
             </div>
           </SurfacePanel>
 
           <SurfacePanel
-            title="Privileged grants"
-            summary={`${privileged.length.toLocaleString()} admin-tier grants`}
+            title={t("iam.overview.privileged.title")}
+            summary={t("iam.overview.privileged.summary", { count: privileged.length.toLocaleString() })}
           >
             <div className="divide-y divide-border-subtle">
               {privileged.slice(0, PEEK_LIMIT).map((grant) => (
@@ -228,7 +244,7 @@ export function OverviewPage(): ReactElement {
                 }} />
               ))}
               {privileged.length === 0 ? (
-                <div className="p-4"><InlineEmpty label="No admin-tier grants." /></div>
+                <div className="p-4"><InlineEmpty label={t("iam.overview.privileged.empty")} /></div>
               ) : null}
             </div>
           </SurfacePanel>
@@ -236,28 +252,32 @@ export function OverviewPage(): ReactElement {
 
         <div className="space-y-6">
           <SurfacePanel
-            title="Role namespaces"
-            summary={`${namespaces.length.toLocaleString()} namespaces`}
+            title={t("iam.overview.namespaces.title")}
+            summary={t("iam.overview.namespaces.summary", { count: namespaces.length.toLocaleString() })}
           >
             <div className="space-y-3 p-4">
               {namespaces.map(([namespace, counts]) => (
                 <MiniCard
                   key={namespace}
                   title={titleLabel(namespace)}
-                  meta={`${counts.roles.toLocaleString()} ${counts.roles === 1 ? "role" : "roles"}`}
+                  meta={
+                    counts.roles === 1
+                      ? t("iam.overview.namespaces.roleCount.one", { count: counts.roles.toLocaleString() })
+                      : t("iam.overview.namespaces.roleCount.other", { count: counts.roles.toLocaleString() })
+                  }
                   primaryTag={{
-                    label: `${counts.grants.toLocaleString()} grants`,
-                    variant: counts.grants > 0 ? "brand" : "default",
+                    label: t("iam.overview.namespaces.grantCount", { count: counts.grants.toLocaleString() }),
+                    tone: counts.grants > 0 ? "brand" : "neutral",
                   }}
                 />
               ))}
-              {namespaces.length === 0 ? <InlineEmpty label="No roles defined." /> : null}
+              {namespaces.length === 0 ? <InlineEmpty label={t("iam.overview.namespaces.empty")} /> : null}
             </div>
           </SurfacePanel>
 
           <SurfacePanel
-            title="Unassigned principals"
-            summary={`${unassigned.length.toLocaleString()} without direct roles`}
+            title={t("iam.overview.unassigned.title")}
+            summary={t("iam.overview.unassigned.summary", { count: unassigned.length.toLocaleString() })}
           >
             <div className="divide-y divide-border-subtle">
               {unassigned.slice(0, PEEK_LIMIT).map((user) => (
@@ -269,7 +289,7 @@ export function OverviewPage(): ReactElement {
                 </div>
               ))}
               {unassigned.length === 0 ? (
-                <div className="p-4"><InlineEmpty label="Every principal has a role." /></div>
+                <div className="p-4"><InlineEmpty label={t("iam.overview.unassigned.empty")} /></div>
               ) : null}
             </div>
           </SurfacePanel>
@@ -286,6 +306,7 @@ function PrivilegedGrantRow({
   grant: IAMGrantRow;
   onRevoked: () => void;
 }): ReactElement {
+  const t = useIamT();
   const [revoke, state] = useAuthoredMutation<
     IAMRevokeRoleData,
     IAMRevokeRoleVariables
@@ -304,7 +325,7 @@ function PrivilegedGrantRow({
           void revoke({ principalId: grant.principalId, role: grant.role }).then(onRevoked);
         }}
       >
-        Revoke
+        {t("iam.revoke")}
       </Button>
     </div>
   );

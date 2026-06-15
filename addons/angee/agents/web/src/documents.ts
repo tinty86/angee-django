@@ -1,6 +1,7 @@
 // Non-CRUD console operations the agents pages invoke. Model CRUD is derived from
 // the SDL by the DataPage; only bespoke action mutations are authored here.
 
+import type { ActionOutcome, ByIdVariables } from "@angee/sdk";
 import * as v from "valibot";
 
 export const REFRESH_PROVIDER_MODELS_MUTATION = `
@@ -12,10 +13,8 @@ export const REFRESH_PROVIDER_MODELS_MUTATION = `
   }
 `;
 
-export interface ActionResultData {
-  ok: boolean;
-  message: string;
-}
+/** `{ ok, message }` action outcome — the shared SDK contract. */
+export type ActionResultData = ActionOutcome;
 
 export interface RefreshProviderModelsData {
   refreshProviderModels: ActionResultData;
@@ -66,9 +65,8 @@ export interface DeprovisionAgentData {
   deprovisionAgent: ActionResultData;
 }
 
-export interface IdVariables extends Record<string, unknown> {
-  id: string;
-}
+/** Single-id action variables — the shared SDK contract. */
+export type IdVariables = ByIdVariables;
 
 // The browser-reachable chat endpoint for a running agent: the routed WebSocket URL
 // (no token), a per-actor route token to append as `?token=`, and the agent's rendered

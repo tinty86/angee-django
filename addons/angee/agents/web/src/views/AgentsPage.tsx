@@ -2,6 +2,7 @@ import * as React from "react";
 import { Column, DataPage, Field, Form, Group, List } from "@angee/base";
 import { fromRelayGlobalId, useResourceRecord, type Row } from "@angee/sdk";
 
+import { useAgentsT } from "../i18n";
 import { AgentChat } from "./AgentChat";
 import { AgentProvisioning } from "./AgentProvisioning";
 import type { AgentChatView } from "../documents";
@@ -36,8 +37,10 @@ function AgentChatPanel({ agentId }: { agentId: string }): React.ReactElement | 
 // One model, two list tabs: the server-side ``isTemplate`` filter is the only
 // difference between Agents and Templates, and a create on either tab defaults
 // ``isTemplate`` to match. A real agent renders into the operator; a template is a
-// reusable blueprint, so only the Agents tab carries the provisioning panel.
-function agentDataPage(isTemplate: boolean): React.ReactElement {
+// reusable blueprint, so only the Agents tab carries the provisioning panel. The
+// translated group label is passed in because `useAgentsT` must be called at a
+// component's render top level.
+function agentDataPage(isTemplate: boolean, modelTemplatesLabel: string): React.ReactElement {
   return (
     <DataPage
       model={MODEL}
@@ -66,7 +69,7 @@ function agentDataPage(isTemplate: boolean): React.ReactElement {
         <Field name="description" />
         <Field name="instructions" />
         <Field name="isTemplate" />
-        <Group label="Model & operator templates" columns={2}>
+        <Group label={modelTemplatesLabel} columns={2}>
           <Field name="model" />
           <Field name="owner" createOnly />
           <Field name="serviceTemplate" />
@@ -81,9 +84,11 @@ function agentDataPage(isTemplate: boolean): React.ReactElement {
 }
 
 export function AgentsPage(): React.ReactElement {
-  return agentDataPage(false);
+  const t = useAgentsT();
+  return agentDataPage(false, t("agents.agent.modelTemplates"));
 }
 
 export function TemplatesPage(): React.ReactElement {
-  return agentDataPage(true);
+  const t = useAgentsT();
+  return agentDataPage(true, t("agents.agent.modelTemplates"));
 }

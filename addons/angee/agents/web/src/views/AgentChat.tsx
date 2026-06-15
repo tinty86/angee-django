@@ -44,7 +44,7 @@ export function AgentChat({
       </CardHeader>
       <CardContent>
         <AssistantRuntimeProvider runtime={runtime}>
-          {error !== null ? <Alert intent="danger">{error}</Alert> : null}
+          {error !== null ? <Alert tone="danger">{error}</Alert> : null}
           <ThreadPrimitive.Root className="flex h-96 flex-col gap-3">
             <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
               <ThreadPrimitive.Empty>

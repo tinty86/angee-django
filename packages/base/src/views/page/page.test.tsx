@@ -3,18 +3,44 @@ import { describe, expect, test } from "vitest";
 import {
   Action,
   Column,
+  columnTone,
   Field,
+  fieldWidgetId,
   Group,
+  isRelationIdField,
   parsePageActions,
   parsePageColumns,
   parsePageFields,
   parsePageGroups,
 } from "./index";
+import type { ColumnDescriptor } from "./Column";
 
 interface TestRow {
   title: string;
   updatedAt: string;
 }
+
+describe("columnTone", () => {
+  const toned: ColumnDescriptor = {
+    field: "status",
+    tone: { active: "success", blocked: "danger" },
+  };
+
+  test("resolves a value against the column's tone map", () => {
+    expect(columnTone(toned, "active")).toBe("success");
+    expect(columnTone(toned, "blocked")).toBe("danger");
+  });
+
+  test("falls back to neutral for an unmapped or nullish value", () => {
+    expect(columnTone(toned, "unknown")).toBe("neutral");
+    expect(columnTone(toned, null)).toBe("neutral");
+    expect(columnTone(toned, undefined)).toBe("neutral");
+  });
+
+  test("returns undefined when the column declares no tone map", () => {
+    expect(columnTone({ field: "title" }, "anything")).toBeUndefined();
+  });
+});
 
 describe("page element markers", () => {
   test("render null because parent views own rendering", () => {
@@ -183,5 +209,27 @@ describe("page element markers", () => {
         </>,
       ),
     ).toThrow("Duplicate page action id: archive");
+  });
+});
+
+describe("field descriptor resolution", () => {
+  test("fieldWidgetId prefers widget, then kind, then text", () => {
+    expect(fieldWidgetId({ name: "a", widget: "select", kind: "text" })).toBe(
+      "select",
+    );
+    expect(fieldWidgetId({ name: "a", kind: "switch" })).toBe("switch");
+    expect(fieldWidgetId({ name: "a" })).toBe("text");
+    // An empty widget string falls through to kind (truthy, not nullish).
+    expect(fieldWidgetId({ name: "a", widget: "", kind: "switch" })).toBe(
+      "switch",
+    );
+    expect(fieldWidgetId({ name: "a", widget: "" })).toBe("text");
+  });
+
+  test("isRelationIdField is true only for the many2one widget", () => {
+    expect(isRelationIdField({ name: "a", widget: "many2one" })).toBe(true);
+    expect(isRelationIdField({ name: "a", kind: "many2one" })).toBe(true);
+    expect(isRelationIdField({ name: "a", widget: "select" })).toBe(false);
+    expect(isRelationIdField({ name: "a" })).toBe(false);
   });
 });

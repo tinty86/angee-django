@@ -1,11 +1,12 @@
 import {
   AUTH_LOGIN_METHOD_SLOT,
-  type BaseAddon,
+  defineBaseAddon,
   type BaseAddonRoute,
   type BaseMenuItem,
 } from "@angee/base";
 import { createElement } from "react";
 
+import { enIamMessages } from "./i18n";
 import { OAuthCallbackPage } from "./OAuthCallbackPage";
 import { OAuthConnectCallbackPage } from "./OAuthConnectCallbackPage";
 import { OAuthLoginMethods } from "./OAuthLoginMethods";
@@ -72,7 +73,7 @@ const consolePage = (name: string, path: string, component: BaseAddonRoute["comp
   { name: `${name}.record`, path: `${path}/$id`, shell: "console", parent: name },
 ];
 
-const iam: BaseAddon = {
+const iam = defineBaseAddon({
   id: "iam",
   routes: [
     {
@@ -110,6 +111,7 @@ const iam: BaseAddon = {
     ...consolePage("iam.credentials", "/iam/credentials", CredentialsPage),
   ],
   menus: identityMenu,
+  i18n: { iam: enIamMessages },
   // The credential CRUD form: used by the Credentials page "New" and the
   // relation-picker inline create (e.g. an Integration's credential field).
   forms: {
@@ -122,6 +124,6 @@ const iam: BaseAddon = {
       content: createElement(OAuthLoginMethods),
     },
   ],
-};
+});
 
 export default iam;

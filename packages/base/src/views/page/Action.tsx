@@ -4,8 +4,6 @@ import type { Row } from "@angee/sdk";
 import type { PromptOptions } from "../../feedback";
 import { PAGE_ELEMENT_SLOT } from "./types";
 
-export const ACTION_SLOT = Symbol.for("@angee/base.page.action");
-
 export interface ActionConfirm {
   title: ReactNode;
   body?: ReactNode;
@@ -73,5 +71,4 @@ function ActionMarker(_props: ActionProps): null {
 
 export const Action = Object.assign(ActionMarker, {
   [PAGE_ELEMENT_SLOT]: "action" as const,
-  [ACTION_SLOT]: true,
 });

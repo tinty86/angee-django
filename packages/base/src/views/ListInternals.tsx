@@ -19,14 +19,18 @@ import type {
   AggregateMeasureOperator,
   GroupByDimension,
   GroupByOrder,
+  ModelEnumValueMetadata,
   ModelMetadata,
   Row,
 } from "@angee/sdk";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
+import { Spinner } from "../ui/spinner";
 
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { RelativeTime } from "../fragments/RelativeTime";
-import { writeDndPayload, type DndPayload } from "../lib/dnd";
+import { cn } from "../lib/cn";
+import { dragSourceProps, type DndPayload, type DragSourceProps } from "../lib/dnd";
 import { titleCase } from "../lib/titleCase";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -46,6 +50,7 @@ import {
 import { useResolvedWidget } from "../widgets";
 import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
+import { columnTone } from "./page";
 import type {
   ColumnAggregate,
   ColumnDescriptor,
@@ -107,6 +112,7 @@ export function SelectionBar({
   /** Caller-supplied bulk actions rendered before the built-in Delete/Clear. */
   actions?: React.ReactNode;
 }): React.ReactElement {
+  const t = useBaseT();
   const actions = (
     <>
       {extraActions}
@@ -117,11 +123,11 @@ export function SelectionBar({
           onClick={onDelete}
         >
           <Glyph name="trash" />
-          Delete
+          {t("selection.delete")}
         </SelectionBarPrimitive.Action>
       ) : null}
       <SelectionBarPrimitive.Action surface="brand" onClick={onClear}>
-        Clear
+        {t("selection.clear")}
       </SelectionBarPrimitive.Action>
     </>
   );
@@ -129,7 +135,7 @@ export function SelectionBar({
     <SelectionBarPrimitive
       className="h-11 w-full rounded-none border-b border-border-subtle shadow-none"
       count={count}
-      countLabel={`${count} selected`}
+      countLabel={t("selection.countSelected", { count })}
       actions={actions}
     />
   );
@@ -182,6 +188,7 @@ export function FlatListBody<TRow extends Row>({
   fetching,
   footerAggregate,
 }: FlatListBodyProps<TRow>): React.ReactElement {
+  const t = useBaseT();
   const colSpan = Math.max(1, visibleColumnCount + (selectable ? 1 : 0));
   const measures = React.useMemo(
     () => groupMeasuresFromColumns(columns),
@@ -214,7 +221,7 @@ export function FlatListBody<TRow extends Row>({
                 <TableHead sticky className="w-8">
                   <Checkbox
                     size="sm"
-                    aria-label="Select all rows on this page"
+                    aria-label={t("list.selectAllOnPage")}
                     checked={allPageSelected}
                     indeterminate={!allPageSelected && somePageSelected}
                     onCheckedChange={onPageSelectionChange}
@@ -301,6 +308,7 @@ function FlatMeasureFooter<TRow extends Row>({
   aggregate: AggregateBucket;
   selectable: boolean;
 }): React.ReactElement {
+  const t = useBaseT();
   const byColumn = new Map(measures.map((measure) => [measure.columnId, measure]));
   return (
     <TableFooter>
@@ -318,14 +326,16 @@ function FlatMeasureFooter<TRow extends Row>({
               className={ALIGN_CLASS[alignOf(column.columnDef)]}
               aria-label={
                 measure
-                  ? `Total ${measure.label}${formatted ? `: ${formatted}` : ""}`
+                  ? formatted
+                    ? t("list.totalMeasureValue", { label: measure.label, value: formatted })
+                    : t("list.totalMeasure", { label: measure.label })
                   : undefined
               }
             >
               {measure ? (
                 formatted
               ) : index === 0 ? (
-                <span className="text-fg-muted">Total</span>
+                <span className="text-fg-muted">{t("list.total")}</span>
               ) : null}
             </TableCell>
           );
@@ -380,6 +390,7 @@ export function VisibleFieldsMenu({
   fields: readonly VisibleFieldOption[];
   onToggle?: (id: string, visible: boolean) => void;
 }): React.ReactElement {
+  const t = useBaseT();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
@@ -388,7 +399,7 @@ export function VisibleFieldsMenu({
             type="button"
             variant="ghost"
             size="iconSm"
-            aria-label="Visible fields"
+            aria-label={t("list.visibleFields")}
             className="justify-self-end"
           >
             <Glyph name="columns" />
@@ -399,7 +410,7 @@ export function VisibleFieldsMenu({
         <DropdownMenu.Positioner sideOffset={6} align="end">
           <DropdownMenu.Content className="w-56">
             <DropdownMenu.Group>
-              <DropdownMenu.Label>Visible fields</DropdownMenu.Label>
+              <DropdownMenu.Label>{t("list.visibleFields")}</DropdownMenu.Label>
               {fields.map((field) => (
                 <DropdownMenu.CheckboxItem
                   key={field.id}
@@ -464,6 +475,7 @@ export function ListCellContent<TRow extends Row>({
           name: column.field,
           label: column.header,
           options: column.options,
+          tone: column.tone,
         }}
         readOnly
       />
@@ -481,6 +493,7 @@ function SortHeader<TRow extends Row>({
   dataView: DataViewContextValue;
   children: React.ReactNode;
 }): React.ReactElement {
+  const t = useBaseT();
   if (column.sortable === false) return <>{children}</>;
   const sort = dataView.state.sort;
   const active = sort?.field === column.field;
@@ -490,11 +503,16 @@ function SortHeader<TRow extends Row>({
       ? "arrow-up"
       : "arrow-down";
   const label = columnLabelText(column);
+  const sortKey = !active
+    ? "list.sortNotSorted"
+    : sort.dir === "asc"
+      ? "list.sortAscending"
+      : "list.sortDescending";
   return (
     <button
       type="button"
       className="inline-flex min-w-0 items-center gap-1 rounded text-left outline-none hover:text-fg focus-visible:focus-ring"
-      aria-label={`Sort ${label} (${active ? `currently ${sort.dir === "asc" ? "ascending" : "descending"}` : "not sorted"})`}
+      aria-label={t(sortKey, { label })}
       onClick={() => dataView.setSort(nextSort(sort, column.field))}
     >
       <span className="truncate">{children}</span>
@@ -520,7 +538,7 @@ export function RecordRow<TRow extends Row>({
   onRowClick?: (row: TRow) => void;
   draggableRow?: (row: TRow) => DndPayload | null;
 }): React.ReactElement {
-  const dragProps = rowDragProps(draggableRow?.(row.original) ?? null);
+  const dragProps = dragSourceProps(draggableRow?.(row.original) ?? null);
   const href = rowHref?.(row.original);
   if (href) {
     return (
@@ -545,19 +563,6 @@ export function RecordRow<TRow extends Row>({
   );
 }
 
-type RowDragProps =
-  | { draggable: true; onDragStart: React.DragEventHandler }
-  | undefined;
-
-/** Native-drag props for a row carrying a dnd payload (the wire format seam). */
-function rowDragProps(payload: DndPayload | null): RowDragProps {
-  if (!payload) return undefined;
-  return {
-    draggable: true,
-    onDragStart: (event) => writeDndPayload(event.dataTransfer, payload),
-  };
-}
-
 function LinkedRecordRow<TRow extends Row>({
   row,
   dataView,
@@ -569,8 +574,9 @@ function LinkedRecordRow<TRow extends Row>({
   dataView: DataViewContextValue;
   selectable: boolean;
   href: string;
-  dragProps?: RowDragProps;
+  dragProps?: DragSourceProps;
 }): React.ReactElement {
+  const t = useBaseT();
   const id = row.id;
   const selected = dataView.state.selectedIds.has(id);
   const navigate = useNavigate();
@@ -606,7 +612,7 @@ function LinkedRecordRow<TRow extends Row>({
         <TableCell className="w-8">
           <Checkbox
             size="sm"
-            aria-label="Select row"
+            aria-label={t("list.selectRow")}
             checked={selected}
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={(checked) =>
@@ -640,8 +646,9 @@ function PlainRecordRow<TRow extends Row>({
   interactive: boolean;
   selectable: boolean;
   onRowClick?: (row: TRow) => void;
-  dragProps?: RowDragProps;
+  dragProps?: DragSourceProps;
 }): React.ReactElement {
+  const t = useBaseT();
   const id = row.id;
   const selected = dataView.state.selectedIds.has(id);
   return (
@@ -655,7 +662,7 @@ function PlainRecordRow<TRow extends Row>({
         <TableCell className="w-8">
           <Checkbox
             size="sm"
-            aria-label="Select row"
+            aria-label={t("list.selectRow")}
             checked={selected}
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={(checked) =>
@@ -862,7 +869,7 @@ export function groupKey(
     ? enumLabelFromMetadata(metadata, group.field, value)
     : null;
   if (enumLabel) return enumLabel;
-  const date = parseDate(value);
+  const date = parseRowDate(value);
   if (!date) return typeof value === "string" ? statusLabel(value) : String(value);
   if (group.granularity === "year") return String(date.getFullYear());
   if (group.granularity === "quarter") {
@@ -891,7 +898,7 @@ function enumLabelFromMetadata(
       candidate.value === value
       || normalizeEnumValue(candidate.value) === normalized,
   );
-  return option ? String(option.label) : null;
+  return option ? enumValueLabel(option) : null;
 }
 
 function normalizeEnumValue(value: string): string {
@@ -904,10 +911,10 @@ export function cellContent<TRow extends Row>(
 ): React.ReactNode {
   if (column.render) return column.render(row);
   const value = readPath(row, column.field);
-  if (column.tone) {
+  const tone = columnTone(column, value);
+  if (tone) {
     const label = value == null ? "" : String(value);
-    const tone = column.tone[label] ?? "default";
-    return <Badge variant={tone}>{label ? statusLabel(label) : "-"}</Badge>;
+    return <Badge tone={tone}>{label ? statusLabel(label) : "-"}</Badge>;
   }
   if (Array.isArray(value)) {
     return (
@@ -920,7 +927,7 @@ export function cellContent<TRow extends Row>(
       </span>
     );
   }
-  const date = looksLikeDateField(column.field) ? parseDate(value) : null;
+  const date = looksLikeDateField(column.field) ? parseRowDate(value) : null;
   if (date) return <RelativeTime value={date} />;
   return displayValue(value);
 }
@@ -1153,16 +1160,83 @@ export function groupFieldLabel(field: string): string {
   return label.endsWith(" At") ? label.slice(0, -3) : label;
 }
 
+/**
+ * Humanize a bare enum member name for display (`IN_REVIEW` → `In Review`). The
+ * rendered binding's one owner for enum-string casing; `enumValueLabel` uses it
+ * as the fallback when the SDL authors no description.
+ */
 export function statusLabel(value: string): string {
   return titleCase(value.toLowerCase());
+}
+
+/**
+ * The display label for an enum metadata value: its SDL description where the
+ * schema authored one, otherwise the humanized value. The SDK carries only the
+ * structural `value`/`description`; this rendered binding owns the casing.
+ */
+export function enumValueLabel(value: ModelEnumValueMetadata): string {
+  return value.description ?? statusLabel(value.value);
+}
+
+/** The flush "Loading…" footer shown under a list shell while a page fetches. */
+export function ListLoadingFooter(): React.ReactElement {
+  const t = useBaseT();
+  return (
+    <div className="flex items-center justify-center gap-2 border-t border-border px-3 py-4 text-13 text-fg-muted">
+      <Spinner size="sm" />
+      {t("list.loading")}
+    </div>
+  );
+}
+
+/** Inline "Loading…" content (spinner + label) for a table-cell/status body. */
+export function ListLoadingInline(): React.ReactElement {
+  const t = useBaseT();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Spinner size="sm" />
+      {t("list.loading")}
+    </span>
+  );
+}
+
+/** The centered, full-height empty body the non-table renderers (gallery,
+ *  timeline, tree) share — a single line of muted text in the middle of the pane. */
+export function ListEmpty({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        "grid h-full place-content-center text-center text-13 text-fg-muted",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function looksLikeDateField(field: string): boolean {
   return /(?:At|Date|On)$/.test(field);
 }
 
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? null : date;
+/**
+ * Coerce a row cell value to a `Date`, or `null`. One owner (date-fns, per
+ * `docs/stack.md`) so list cells, grouping, and the timeline bucket a value the
+ * same way: a `Date` passes through, a number is an epoch, a string is ISO-parsed.
+ */
+export function parseRowDate(value: unknown): Date | null {
+  if (value instanceof Date) return isValid(value) ? value : null;
+  if (typeof value === "number") {
+    const date = new Date(value);
+    return isValid(date) ? date : null;
+  }
+  if (typeof value !== "string") return null;
+  const date = parseISO(value);
+  return isValid(date) ? date : null;
 }

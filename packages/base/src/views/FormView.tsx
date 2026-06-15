@@ -2,18 +2,19 @@ import * as React from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useBlocker } from "@tanstack/react-router";
 import {
+  relayGlobalIdSuffix,
   useFormOverride,
   useResourceMutation,
   useResourceRecord,
   useModelMetadata,
   useSchemaFieldMetadata,
+  useSlot,
   validationErrorsFromError,
   type ModelMetadata,
   type Row,
 } from "@angee/sdk";
 
 import { Button } from "../ui/button";
-import { Glyph } from "../chrome/Glyph";
 import { ErrorBanner } from "../fragments/ErrorBanner";
 import { useConfirm } from "../feedback";
 import {
@@ -21,20 +22,21 @@ import {
   FieldLabel,
   FieldRoot,
 } from "../ui/field";
-import {
-  FormGrid,
-  FormSectionKicker,
-} from "../ui/form-layout";
+import { FormGrid } from "../ui/form-layout";
+import { SectionEyebrow } from "../ui/section-eyebrow";
 import { Input } from "../ui/input";
 import { Spinner } from "../ui/spinner";
 import { ControlBand } from "../shell/ControlBand";
 import { cn } from "../lib/cn";
+import { SlotOutlet } from "../lib/slot-outlet";
 import {
   useResolvedWidget,
   type WidgetDefinition,
   type WidgetField,
 } from "../widgets";
 import {
+  fieldWidgetId,
+  isRelationIdField,
   pageChildren,
   pageElementProps,
   parsePageActions,
@@ -57,6 +59,7 @@ import {
   type RecordDeleteAction,
 } from "./RecordActionBar";
 import { RelationFieldWidget } from "./RelationFieldWidget";
+import { useBaseT } from "../i18n";
 
 export type FieldKind = PageFieldKind;
 export type FormField = FieldDescriptor;
@@ -102,6 +105,15 @@ export interface FormViewProps {
   /** Class name applied to the form root. */
   className?: string;
 }
+
+/**
+ * Slot for record-level chrome (e.g. star/share/follow) rendered in the form
+ * toolbar of a saved record. Base ships no product affordances here — a host or
+ * addon contributes them at build time via `slots: [{ slot:
+ * FORM_VIEW_RECORD_CHROME_SLOT, id, content }]`. Contributions render in their
+ * merged order on a saved record only (not while creating).
+ */
+export const FORM_VIEW_RECORD_CHROME_SLOT = "form-view.record-chrome";
 
 type Values = Record<string, unknown>;
 
@@ -151,6 +163,7 @@ export function FormView({
   deleteAction,
   className,
 }: FormViewProps): React.ReactElement {
+  const t = useBaseT();
   const hasFieldChildren = hasPageField(children);
   const hasGroupChildren = hasDirectPageElement(children, "group");
   if (
@@ -167,6 +180,8 @@ export function FormView({
   const modelMetadata = useModelMetadata(model);
   const schemaMetadata = useSchemaFieldMetadata();
   const formOverride = useFormOverride(model);
+  // Host/addon-contributed record chrome (star/share/…); base ships none.
+  const recordChrome = useSlot(FORM_VIEW_RECORD_CHROME_SLOT);
   const isCreate = id == null;
   // An addon may register a declarative create form for a model (composed into the
   // runtime). On create it replaces the declared/metadata fields, so DataPage "New"
@@ -408,7 +423,7 @@ export function FormView({
 
   const titleField = titleFieldFor(formFields, modelMetadata);
   const statusField = formFields.find(
-    (field) => field.widget === "statusbar" && !field.showWhen,
+    (field) => fieldWidgetId(field) === "statusbar" && !field.showWhen,
   );
   const bodyField = React.useMemo(
     () => bodyFieldFor(formFields, titleField, statusField),
@@ -530,7 +545,7 @@ export function FormView({
               </div>
               <div className="min-w-2 flex-1" />
               <div className="flex min-w-0 items-center gap-2">
-                {!isCreate ? <RecordChromeButtons /> : null}
+                {!isCreate ? <SlotOutlet entries={recordChrome} /> : null}
                 {toolbar}
               </div>
             </ControlBand>
@@ -594,7 +609,7 @@ export function FormView({
 
         </header>
 
-        <ErrorBanner message={saveError} title="Save failed" />
+        <ErrorBanner description={saveError} title={t("form.saveFailed")} />
 
         <div className="grid gap-6">
           {hasConditionalFields ? (
@@ -623,7 +638,7 @@ export function FormView({
         {bodyField ? (
           <section className="grid gap-2">
             {bodyField.label ? (
-              <FormSectionKicker>{bodyField.label}</FormSectionKicker>
+              <SectionEyebrow as="span">{bodyField.label}</SectionEyebrow>
             ) : null}
             <form.Field name={bodyField.name}>
               {(api) => (
@@ -649,26 +664,6 @@ export function FormView({
       </div>
     ) : null}
     </>
-  );
-}
-
-/** Presentational record chrome (star/share) rendered in the toolbar; wiring pending. */
-function RecordChromeButtons(): React.ReactElement {
-  return (
-    <div className="flex items-center gap-1">
-      <Button
-        type="button"
-        variant="icon"
-        size="iconMd"
-        aria-label="Star"
-        className="text-amber-500 hover:text-amber-500"
-      >
-        <Glyph name="star" className="fill-current" />
-      </Button>
-      <Button type="button" variant="icon" size="iconMd" aria-label="Share">
-        <Glyph name="share" />
-      </Button>
-    </div>
   );
 }
 
@@ -727,7 +722,7 @@ function FieldWidget({
   readOnly?: boolean;
   onChange?: (value: unknown) => void;
 }): React.ReactElement {
-  const widget = useResolvedWidget(widgetId(field)) ?? fallbackWidget();
+  const widget = useResolvedWidget(fieldWidgetId(field)) ?? fallbackWidget();
   const Component = readOnly ? widget.read : (widget.edit ?? widget.read);
   const widgetField: WidgetField = {
     name: field.name,
@@ -791,7 +786,7 @@ function FormSection({
   return (
     <section className="grid gap-3">
       {section.label ? (
-        <FormSectionKicker
+        <SectionEyebrow
           as="h3"
           spacing="field"
           tracking="wide"
@@ -799,7 +794,7 @@ function FormSection({
           className="border-b border-border-subtle pb-1"
         >
           {section.label}
-        </FormSectionKicker>
+        </SectionEyebrow>
       ) : null}
       <FormGrid
         columns={section.columns === 1 ? "one" : "two"}
@@ -970,13 +965,15 @@ function isNamedBodyField(field: FieldDescriptor): boolean {
 }
 
 function isLongTextField(field: FieldDescriptor): boolean {
-  const id = widgetId(field);
+  // `fieldWidgetId` already returns `kind` when no `widget` is set, so a bare
+  // `kind:"textarea"` resolves to the `textarea` id — a separate `field.kind`
+  // read would only (wrongly) fire when an explicit widget overrides the kind.
+  const id = fieldWidgetId(field);
   return (
     id === "textarea" ||
     id === "markdown" ||
     id === "markdown.editor" ||
-    id === "markdown.preview" ||
-    field.kind === "textarea"
+    id === "markdown.preview"
   );
 }
 
@@ -1112,7 +1109,7 @@ function emptyValue(field: FieldDescriptor): unknown {
   if (field.kind === "switch" || field.widget === "switch") return false;
   // An empty JSON field is an empty object, not the JSON string "" — the latter
   // is stored verbatim and breaks downstream `config.get(...)` reads.
-  if (widgetId(field) === "json") return {};
+  if (fieldWidgetId(field) === "json") return {};
   return "";
 }
 
@@ -1125,7 +1122,7 @@ function isEmptyFieldValue(value: unknown): boolean {
 }
 
 function isNullableScalarWidget(field: FieldDescriptor): boolean {
-  const id = widgetId(field);
+  const id = fieldWidgetId(field);
   return id === "date" || id === "datetime";
 }
 
@@ -1155,15 +1152,6 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   );
 }
 
-function widgetId(field: FieldDescriptor): string {
-  if (field.widget) return field.widget;
-  return field.kind ?? "text";
-}
-
-function isRelationIdField(field: FieldDescriptor): boolean {
-  return widgetId(field) === "many2one";
-}
-
 function isRecord(value: unknown): value is Row {
   return Boolean(value) && typeof value === "object";
 }
@@ -1173,7 +1161,7 @@ function fieldAriaLabel(field: FieldDescriptor): string {
 }
 
 function gridFieldClass(field: FieldDescriptor): string | undefined {
-  return field.widget === "tagInput" ? FULL_FIELD_CLASS : undefined;
+  return fieldWidgetId(field) === "tagInput" ? FULL_FIELD_CLASS : undefined;
 }
 
 function fieldErrorMessages(errors: readonly unknown[]): string[] {
@@ -1238,25 +1226,11 @@ function presentValue(value: unknown): unknown | undefined {
 
 /**
  * Prefer the human-facing public id in the subtitle. A relay global id encodes
- * `Type:publicId`, so decode it to that suffix (e.g. the sqid); otherwise fall
- * back to a short slice of whatever identifier the record carries.
+ * `Type:publicId`, so the relay codec decodes it to that suffix (e.g. the sqid);
+ * otherwise fall back to a short slice of whatever identifier the record carries.
  */
 function recordIdLabel(value: string): string {
-  return globalIdSuffix(value) ?? shortRecordId(value);
-}
-
-function globalIdSuffix(value: string): string | null {
-  let decoded: string;
-  try {
-    decoded = typeof atob === "function" ? atob(value.trim()) : "";
-  } catch {
-    return null;
-  }
-  const separator = decoded.indexOf(":");
-  if (separator <= 0) return null;
-  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(decoded.slice(0, separator))) return null;
-  const suffix = decoded.slice(separator + 1).trim();
-  return suffix === "" ? null : suffix;
+  return relayGlobalIdSuffix(value) ?? shortRecordId(value);
 }
 
 function shortRecordId(value: string): string {
