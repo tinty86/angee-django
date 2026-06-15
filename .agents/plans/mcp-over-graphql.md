@@ -209,6 +209,15 @@ call.
    mapper, `execute_under_actor`, build-time validation. Convert notes (deletes
    hand-rolled `mcp_tools.py`); add `createVault`/`createPage` + one `CustomTool` to
    exercise all three paths and the `flatten`/`fields`/sqid rules.
+   **✅ engine + notes conversion DONE (2026-06-15):** `execute_under_actor` (verified
+   off-request, scoped), the `GraphQLTool` spec + `_compile`/`register_graphql_tools`
+   seam, the graphql-core→JSON-Schema mapper, projection (camelCase↔snake_case,
+   `relay.GlobalID`↔`sqid` via base64), operation-document generation, and
+   `ToolAnnotations` from op kind. Notes' four tools are now GraphQL-backed — the
+   hand-rolled ORM access/`_summary`/`_detail` are gone; `test_mcp.py` green; ruff + mypy
+   clean. **Deferred to B1.x:** the `fixed`/`args` levers, `CustomTool`, the
+   `createVault`/`createPage` + `CustomTool` example, explicit build-time validation
+   (unknown op / bad field name / name collisions), and union/interface returns.
 3. **B2 (later)** — generate `MCPTool` catalogue rows from specs; `Agent.mcp_tools` M2M
    as the per-agent allow-list (closes the `mcp_verifier.py` TODO "which tools the agent
    may use"); operator-agent server (admin actor) for console actions; unions.
