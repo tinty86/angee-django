@@ -14,7 +14,11 @@
   "dependencies": {
     "@angee/base": "workspace:*",
     "@angee/sdk": "workspace:*",
-    "lucide-react": "^1.17.0"
+    "@vidstack/react": "^1.12.13",
+    "heic-to": "^1.2.1",
+    "lucide-react": "^1.17.0",
+    "pdfjs-dist": "5.4.296",
+    "react-pdf": "^10.4.1"
   },
   "peerDependencies": {
     "@tanstack/react-router": "^1",

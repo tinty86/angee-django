@@ -20,6 +20,7 @@ export {
   languageForFile,
   formatSize,
   isImageMime,
+  isHeicMime,
   isMarkdownMime,
   isJsonMime,
   isTextOrCodeMime,

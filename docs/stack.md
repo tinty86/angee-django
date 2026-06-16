@@ -69,6 +69,9 @@ Dependency changes must update this file in the same change.
 | @zed-industries/agent-client-protocol | ACP client — agent JSON-RPC session, prompt/cancel, session-update stream | WebSocket ndjson transport to a routed agent + assistant-ui runtime bridge |
 | @assistant-ui/react | Chat thread UI — message store, composer, tool-call rendering | ACP-streaming runtime adapter and styled thread surface |
 | streamdown | Streamed-markdown render for assistant chunks | Assistant message body in the agent chat |
+| react-pdf (+ pdfjs-dist) | Inline PDF rendering (pdf.js) | storage file previewer |
+| @vidstack/react | Inline video/audio player | storage file previewer |
+| heic-to | Client-side HEIC/HEIF decode to a displayable image (current libheif-wasm) | storage HEIC previewer |
 | pnpm | JavaScript dependency resolution and workspaces | Workspace layout |
 | Node >= 22.13 | JavaScript build runtime | Project runtime |
 

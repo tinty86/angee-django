@@ -52,13 +52,14 @@ export function PreviewPane({
   if (!provider) return <>{empty}</>;
 
   const Renderer = provider.component;
+  // Key the renderer by provider + file so it remounts (not just re-renders)
+  // when the previewed file changes — a renderer's per-file state (e.g. a PDF's
+  // page index) must not carry across files in a persistent pane.
+  const instanceKey = `${provider.id}:${file.url}`;
   return (
-    <PreviewErrorBoundary
-      fallback={empty}
-      resetKey={`${provider.id}:${file.url}`}
-    >
+    <PreviewErrorBoundary fallback={empty} resetKey={instanceKey}>
       <Suspense fallback={<LoadingPanel message={t("preview.loading")} />}>
-        <Renderer file={file} mime={resolvedMime} />
+        <Renderer key={instanceKey} file={file} mime={resolvedMime} />
       </Suspense>
     </PreviewErrorBoundary>
   );

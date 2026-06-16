@@ -37,6 +37,11 @@
   category: image
   label: HEIC image
   icon_key: image
+- xref: image_heif
+  mime_type: image/heif
+  category: image
+  label: HEIF image
+  icon_key: image
 - xref: image_avif
   mime_type: image/avif
   category: image

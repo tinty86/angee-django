@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import mimetypes
 from typing import BinaryIO
 
 import magic
@@ -64,15 +65,26 @@ def sha256_stream(reader: BinaryIO, *, capture_head: int = 0) -> tuple[str, int,
     return digest.hexdigest(), total, bytes(head)
 
 
-def detect_mime(payload: bytes) -> str:
-    """Detect a MIME type from the head bytes of a stored object via libmagic."""
+def detect_mime(payload: bytes, filename: str = "") -> str:
+    """Detect a MIME type for a stored object.
+
+    libmagic sniffs the head bytes and is authoritative when it recognises the
+    content. It does not know every format (e.g. HEIC on older magic
+    databases), so when it yields nothing we fall back to the filename
+    extension via the stdlib ``mimetypes`` registry, so the row still carries a
+    useful type instead of the generic catch-all.
+    """
 
     try:
         detected = str(magic.from_buffer(payload, mime=True) or "")
     except (OSError, ValueError, magic.MagicException) as error:
         logger.warning("storage.finalize: libmagic detection failed: %s", error)
-        return FALLBACK_MIME
-    return detected.split(";", 1)[0].strip().lower() or FALLBACK_MIME
+        detected = ""
+    detected = detected.split(";", 1)[0].strip().lower()
+    if detected and detected != FALLBACK_MIME:
+        return detected
+    guessed = mimetypes.guess_type(filename)[0] if filename else None
+    return (guessed or FALLBACK_MIME).split(";", 1)[0].strip().lower()
 
 
 class BodyTooLarge(Exception):

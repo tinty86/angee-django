@@ -13,6 +13,8 @@ const EXT_MIME: Record<string, string> = {
   webp: "image/webp",
   svg: "image/svg+xml",
   avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
   pdf: "application/pdf",
   md: "text/markdown",
   markdown: "text/markdown",
@@ -80,6 +82,18 @@ export function displayMime(file: PreviewFile): string {
 
 export function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
+}
+/**
+ * HEIC/HEIF images — a subset of `isImageMime` that browsers (bar Safari) cannot
+ * decode, so they need a dedicated renderer rather than a plain `<img>`.
+ */
+export function isHeicMime(mime: string): boolean {
+  return (
+    mime === "image/heic" ||
+    mime === "image/heif" ||
+    mime === "image/heic-sequence" ||
+    mime === "image/heif-sequence"
+  );
 }
 export function isMarkdownMime(mime: string): boolean {
   return mime === "text/markdown" || mime === "text/x-markdown";

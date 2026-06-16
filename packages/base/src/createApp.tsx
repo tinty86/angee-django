@@ -47,6 +47,7 @@ import {
   type ChromeMenuNode,
 } from "./chrome/menu-tree";
 import { enBaseBundle, useBaseT } from "./i18n";
+import { type PreviewProvider } from "./preview";
 import {
   useRouteChrome,
   type BreadcrumbItem,
@@ -71,9 +72,16 @@ export interface BaseAddonRoute extends AddonRoute {
 }
 
 /** An addon manifest whose routes carry their page components. */
-export interface BaseAddon extends Omit<AddonManifest, "routes" | "menus"> {
+export interface BaseAddon
+  extends Omit<AddonManifest, "routes" | "menus" | "previews"> {
   routes?: readonly BaseAddonRoute[];
   menus?: readonly BaseMenuItem[];
+  /**
+   * Full preview renderers. The SDK manifest tracks only the contribution id
+   * (for collision detection); the rendered binding owns `PreviewProvider`, so
+   * its addon authors the whole renderer here — `PreviewPane` reads it back.
+   */
+  previews?: readonly PreviewProvider[];
 }
 
 /**

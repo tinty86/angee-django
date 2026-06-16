@@ -851,7 +851,9 @@ class File(SqidMixin, AuditMixin, AngeeModel):
 
         self.content_hash = actual_hash
         self.size_bytes = actual_size
-        self.mime_type = _mime_row(type(self), detect_mime(head)) or _mime_row(type(self), FALLBACK_MIME)
+        self.mime_type = _mime_row(type(self), detect_mime(head, self.filename)) or _mime_row(
+            type(self), FALLBACK_MIME
+        )
         self.upload_state = cast(UploadState, UploadState.READY)
         try:
             with transaction.atomic():

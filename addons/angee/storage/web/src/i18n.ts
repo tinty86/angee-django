@@ -16,6 +16,13 @@ export const enStorageMessages: Record<string, string> = {
   "storage.preview.emptyTitle": "Select a file",
   "storage.preview.emptyDescription": "Choose a file from the list to preview it.",
   "storage.preview.unsupported": "No inline preview for this file type.",
+  // Rich renderer (PDF / media / HEIC) loading and error surfaces.
+  "storage.preview.loading": "Loading preview",
+  "storage.preview.loadError": "Could not load this preview.",
+  "storage.preview.decoding": "Decoding photo",
+  "storage.preview.pdfPage": "Page {page} of {total}",
+  "storage.preview.pdfPrev": "Previous page",
+  "storage.preview.pdfNext": "Next page",
 
   // Drive switcher.
   "storage.drive.label": "Drive",

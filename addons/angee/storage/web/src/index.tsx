@@ -3,6 +3,7 @@ import { defineBaseAddon } from "@angee/base";
 import { ArchiveRestore, Download, HardDrive, Image, Pencil } from "lucide-react";
 
 import { enStorageMessages } from "./i18n";
+import { storagePreviews } from "./previews";
 import { StoragePage } from "./views/StoragePage";
 import { FileCrumb } from "./views/FileDetail";
 import { StorageSettingsPage } from "./views/StorageSettingsPage";
@@ -73,6 +74,8 @@ const storage = defineBaseAddon({
     restore: ArchiveRestore,
     edit: Pencil,
   },
+  // Rich file renderers (PDF, media, HEIC) contributed to `PreviewPane`.
+  previews: storagePreviews,
 });
 
 export default storage;

@@ -48,6 +48,21 @@ def test_file_source_model_owns_the_upload_protocol() -> None:
     assert set(UploadState.values) == {"draft", "ready", "failed"}
 
 
+def test_detect_mime_falls_back_to_the_filename_when_libmagic_is_unsure() -> None:
+    """libmagic wins on content it recognises; an opaque blob defers to the
+    filename extension, so a format libmagic misses (e.g. HEIC) still gets a
+    real type instead of the generic catch-all."""
+
+    from angee.storage.uploads import detect_mime
+
+    # Recognised content beats a misleading extension.
+    assert detect_mime(PNG_BYTES, "trick.heic") == "image/png"
+    # An opaque blob (libmagic → octet-stream) defers to the extension.
+    assert detect_mime(b"\x00\x01\x02\x03", "IMG_9803.HEIC") == "image/heic"
+    # Nothing to sniff and no name stays the catch-all.
+    assert detect_mime(b"\x00\x01\x02\x03") == "application/octet-stream"
+
+
 @pytest.fixture
 def storage_tables() -> Iterator[None]:
     """Provide the concrete storage tables for one test."""

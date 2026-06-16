@@ -1,4 +1,11 @@
-import { Badge, Glyph, formatSize, isImageMime, type ListColumn } from "@angee/base";
+import {
+  Badge,
+  Glyph,
+  formatSize,
+  isHeicMime,
+  isImageMime,
+  type ListColumn,
+} from "@angee/base";
 import type { ReactElement } from "react";
 
 import type { StorageFileRow } from "../data/file-rows";
@@ -48,12 +55,14 @@ export function fileColumns(
 }
 
 /** Grid-card body for a file: an image thumbnail (READY images stream from the
- * token URL) or the type glyph, with the name and type · size beneath. */
+ * token URL) or the type glyph, with the name and type · size beneath. HEIC is
+ * an image the browser can't render in an `<img>`, so it shows the glyph here —
+ * the preview pane decodes it on demand. */
 export function fileGalleryCard(row: StorageFileRow): ReactElement {
   return (
     <>
       <div className="grid aspect-square place-content-center overflow-hidden bg-inset">
-        {isImageMime(row.mime) && row.url ? (
+        {isImageMime(row.mime) && !isHeicMime(row.mime) && row.url ? (
           <img
             src={row.url}
             alt={row.name}
