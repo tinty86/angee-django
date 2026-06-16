@@ -83,6 +83,7 @@ export {
   type FormField,
   type FieldKind,
   type RecordPanelContext,
+  type RecordToolbarContext,
   type RecordTabDescriptor,
 } from "./FormView";
 export {

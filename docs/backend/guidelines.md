@@ -291,7 +291,10 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   live edit refreshes `runtime/schemas/*.graphql` and Vite HMRs; `schema --check`
   stays a real drift gate because management commands never import `angee.asgi`.
   Generated files (runtime models + SDL) are written atomically via
-  `angee.fs.write_atomic`. Install `pywatchman` for event-based (vs 1s-poll) reload.
+  `angee.fs.write_atomic`. The override also hard-exits the autoreloader child on
+  reload: open uvicorn/channels WebSocket work can leave non-daemon runtime threads
+  alive, so Django's default `sys.exit(3)` can wedge the child on a dead listener.
+  Install `pywatchman` for event-based (vs 1s-poll) reload.
 - **`makemigrations` must name every changed app** — include `resources` (and
   `base`) or `resources load` fails with `no such table: resources_resource`.
 - **A resource yaml loads only when listed** in the addon's `AppConfig.resources`

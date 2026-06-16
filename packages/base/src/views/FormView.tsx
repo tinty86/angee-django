@@ -76,6 +76,13 @@ export interface RecordPanelContext {
   reload: () => void;
 }
 
+export interface RecordToolbarContext {
+  recordId: string | null;
+  record: Row | null;
+  patchRecord: (patch: Record<string, unknown>) => void;
+  reload: () => void;
+}
+
 /** One tab beside the form's leading "Overview" tab, for a saved record. */
 export interface RecordTabDescriptor {
   /** Stable tab id, also used as the panel value. */
@@ -119,8 +126,12 @@ export interface FormViewProps {
   onSaved?: (row: Row) => void;
   /** Label used for the submit button. */
   submitLabel?: React.ReactNode;
-  /** Left-side record commands the host renders before dirty Save/Discard actions. */
-  toolbarStart?: React.ReactNode;
+  /**
+   * Left-side record commands the host renders before dirty Save/Discard actions.
+   * A function receives the loaded record so commands can hide or disable against
+   * server state while keeping the form toolbar as the layout owner.
+   */
+  toolbarStart?: React.ReactNode | ((context: RecordToolbarContext) => React.ReactNode);
   /** Right-side record chrome the host renders after the toolbar spacer. */
   toolbar?: React.ReactNode;
   /**
@@ -141,6 +152,8 @@ export interface FormViewProps {
   recordTabs?: readonly RecordTabDescriptor[];
   /** Optional delete command folded into the record action menu. */
   deleteAction?: RecordDeleteAction;
+  /** Hide the optional delete command unless the loaded record matches. */
+  deleteVisibleWhen?: (record: Row) => boolean;
   /** Class name applied to the form root. */
   className?: string;
 }
@@ -201,6 +214,7 @@ export function FormView({
   recordExtras,
   recordTabs,
   deleteAction,
+  deleteVisibleWhen,
   className,
 }: FormViewProps): React.ReactElement {
   const t = useBaseT();
@@ -317,6 +331,8 @@ export function FormView({
     () => formFields.length > 0 && formFields.every((field) => field.readOnly),
     [formFields],
   );
+  const [patchedRecord, setPatchedRecord] = React.useState<Row | null>(null);
+  const displayRecord = patchedRecord ?? record;
   // `useForm` re-seeds an untouched form whenever `defaultValues` deep-changes.
   // Source it from this stable baseline ref (reassigned only on record seed,
   // post-save reset, and create reset) so a post-save re-render carrying new
@@ -373,6 +389,7 @@ export function FormView({
         if (saved) {
           const savedValues = recordToValues(saved, formFields);
           baselineValuesRef.current = savedValues;
+          setPatchedRecord(saved);
           form.reset(savedValues);
           onSaved?.(saved);
         }
@@ -409,6 +426,7 @@ export function FormView({
       if (saved) {
         const savedValues = recordToValues(saved, formFields);
         baselineValuesRef.current = savedValues;
+        setPatchedRecord(saved);
         form.reset(savedValues);
         setSaveError(null);
         setServerFieldErrors({});
@@ -417,6 +435,25 @@ export function FormView({
     },
     [form, formFields, id, mutate],
   );
+
+  const patchRecord = React.useCallback(
+    (patch: Record<string, unknown>): void => {
+      const source = patchedRecord ?? record;
+      if (!source) return;
+      const next = { ...source, ...patch };
+      const nextValues = recordToValues(next, formFields);
+      setPatchedRecord(next);
+      baselineValuesRef.current = nextValues;
+      form.reset(nextValues);
+      setSaveError(null);
+      setServerFieldErrors({});
+    },
+    [form, formFields, patchedRecord, record],
+  );
+
+  React.useEffect(() => {
+    setPatchedRecord(null);
+  }, [record]);
 
   // A custom `run` action mutates server state we can't predict; re-pull the
   // record (network-only, so a fresh object always lands) and let the seed
@@ -498,8 +535,8 @@ export function FormView({
     [gridFields, gridGroups],
   );
   const subtitleParts = React.useMemo(
-    () => recordSubtitleParts(record, id),
-    [id, record],
+    () => recordSubtitleParts(displayRecord, id),
+    [displayRecord, id],
   );
 
   const renderField = (field: FieldDescriptor): React.ReactNode => (
@@ -522,6 +559,21 @@ export function FormView({
 
   const recordPanelContext: RecordPanelContext | null =
     !isCreate && id != null ? { recordId: id, reload } : null;
+  const toolbarStartNode =
+    typeof toolbarStart === "function"
+      ? toolbarStart({
+          recordId: id ?? null,
+          record: displayRecord ?? null,
+          patchRecord,
+          reload,
+        })
+      : toolbarStart;
+  const visibleDeleteAction =
+    deleteAction === undefined ||
+    (deleteVisibleWhen !== undefined &&
+      (displayRecord == null || !deleteVisibleWhen(displayRecord)))
+      ? undefined
+      : deleteAction;
   const recordTabList = recordTabs ?? [];
   const tabbed = recordPanelContext != null && recordTabList.length > 0;
 
@@ -612,7 +664,7 @@ export function FormView({
           return (
             <ControlBand className={state.isDirty ? "bg-brand-soft" : undefined}>
               <div className="flex min-w-0 items-center gap-2">
-                {toolbarStart}
+                {toolbarStartNode}
                 {showActions ? (
                   <div className="flex items-center gap-2">
                     {state.isDirty ? (
@@ -640,13 +692,13 @@ export function FormView({
                     </Button>
                   </div>
                 ) : null}
-                {declaredActions.length > 0 || deleteAction !== undefined ? (
+                {declaredActions.length > 0 || visibleDeleteAction !== undefined ? (
                   <RecordActionBar
-                    record={record ?? null}
+                    record={displayRecord ?? null}
                     actions={declaredActions}
                     applyPatch={applyPatch}
                     reload={reload}
-                    deleteAction={deleteAction}
+                    deleteAction={visibleDeleteAction}
                   />
                 ) : null}
               </div>

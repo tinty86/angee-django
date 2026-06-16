@@ -71,6 +71,7 @@ class AgentStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     PROVISIONING = "provisioning", "Provisioning"
     RUNNING = "running", "Running"
+    DEPROVISIONING = "deprovisioning", "Deprovisioning"
     STOPPED = "stopped", "Stopped"
     ERROR = "error", "Error"
     ARCHIVED = "archived", "Archived"
@@ -208,9 +209,7 @@ class InferenceModel(SqidMixin, AuditMixin, AngeeModel):
         ordering = ("provider", "name")
         rebac_resource_type = "agents/inference_model"
         rebac_id_attr = "sqid"
-        constraints = (
-            models.UniqueConstraint(fields=("provider", "name"), name="uniq_agents_inference_model_name"),
-        )
+        constraints = (models.UniqueConstraint(fields=("provider", "name"), name="uniq_agents_inference_model_name"),)
 
     def __str__(self) -> str:
         """Return the model's display label."""
@@ -278,9 +277,7 @@ class Skill(SqidMixin, AuditMixin, AngeeModel):
         ordering = ("name", "path")
         rebac_resource_type = "agents/skill"
         rebac_id_attr = "sqid"
-        constraints = (
-            models.UniqueConstraint(fields=("source", "path"), name="uniq_agents_skill_path"),
-        )
+        constraints = (models.UniqueConstraint(fields=("source", "path"), name="uniq_agents_skill_path"),)
 
     def __str__(self) -> str:
         """Return the skill's display label."""
@@ -380,9 +377,7 @@ class MCPTool(SqidMixin, AuditMixin, AngeeModel):
         ordering = ("server", "name")
         rebac_resource_type = "agents/mcp_tool"
         rebac_id_attr = "sqid"
-        constraints = (
-            models.UniqueConstraint(fields=("server", "name"), name="uniq_agents_mcp_tool_name"),
-        )
+        constraints = (models.UniqueConstraint(fields=("server", "name"), name="uniq_agents_mcp_tool_name"),)
 
     def __str__(self) -> str:
         """Return the tool's name."""
@@ -457,6 +452,29 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
 
         return self.name
 
+    def mark_provisioning(self) -> None:
+        """Mark the agent as running through the operator provision flow."""
+
+        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.last_error = ""
+        self.save(update_fields=["status", "last_error", "updated_at"])
+
+    def mark_workspace_provisioned(self, *, workspace: str) -> None:
+        """Record the workspace as soon as the operator creates it."""
+
+        self.workspace = workspace
+        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.last_error = ""
+        self.save(update_fields=["workspace", "status", "last_error", "updated_at"])
+
+    def mark_service_provisioned(self, *, service: str) -> None:
+        """Record the service as soon as the operator creates it."""
+
+        self.service = service
+        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.last_error = ""
+        self.save(update_fields=["service", "status", "last_error", "updated_at"])
+
     def mark_provisioned(self, *, workspace: str, service: str = "") -> None:
         """Record the operator instance the provision flow rendered for this agent.
 
@@ -481,12 +499,35 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         self.last_error = ""
         self.save(update_fields=["workspace", "service", "status", "last_error", "updated_at"])
 
-    def mark_provision_failed(self, message: str) -> None:
-        """Record a provisioning failure: mark the agent errored, keeping the reason."""
+    def mark_deprovisioning(self) -> None:
+        """Mark the agent as tearing down through the operator teardown flow."""
 
+        self.status = cast(AgentStatus, AgentStatus.DEPROVISIONING)
+        self.last_error = ""
+        self.save(update_fields=["status", "last_error", "updated_at"])
+
+    def mark_provision_failed(
+        self, message: str, *, clear_instances: bool = False, clear_service: bool = False
+    ) -> None:
+        """Record a provisioning failure: mark the agent errored, keeping the reason.
+
+        ``clear_instances`` blanks both instance names when a provision rolled the
+        workspace back; ``clear_service`` blanks only the service, for a reprovision
+        that destroyed the old service before the recreate failed (the workspace is
+        preserved). Either way the persisted names never point at a torn-down instance.
+        """
+
+        update_fields = ["status", "last_error", "updated_at"]
+        if clear_instances:
+            self.workspace = ""
+            self.service = ""
+            update_fields = ["workspace", "service", *update_fields]
+        elif clear_service:
+            self.service = ""
+            update_fields = ["service", *update_fields]
         self.status = cast(AgentStatus, AgentStatus.ERROR)
         self.last_error = message[:2000]
-        self.save(update_fields=["status", "last_error", "updated_at"])
+        self.save(update_fields=update_fields)
 
     def service_environment(self) -> dict[str, str]:
         """Return model-provider environment variables for rendered services."""
@@ -534,9 +575,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         # (this must agree with the secret sync in the provision flow).
         if self.inference_secret():
             credential = self._inference_credential()
-            structured["auth_mode"] = (
-                "oauth" if credential.kind == CredentialKind.OAUTH else "api_key"
-            )
+            structured["auth_mode"] = "oauth" if credential.kind == CredentialKind.OAUTH else "api_key"
             structured["secret_name"] = self.inference_secret_name()
         # The MCP bearers ride the container env too: one ``${secret.<name>}`` env line per
         # credentialed server (the operator resolves it), which the service template renders

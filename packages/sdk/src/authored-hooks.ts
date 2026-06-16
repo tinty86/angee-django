@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSubscription as useUrqlSubscription } from "urql";
 
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
@@ -56,6 +56,11 @@ export interface AuthoredSubscriptionOptions<TData> {
   onData?: (data: TData) => void;
 }
 
+interface SubscriptionEvent<TData> {
+  data: TData;
+  version: number;
+}
+
 /** Subscribe to a hand-authored subscription document, firing `onData` per push. */
 export function useAuthoredSubscription<TData = Variables, TVariables extends Variables = Variables>(
   document: string,
@@ -65,19 +70,27 @@ export function useAuthoredSubscription<TData = Variables, TVariables extends Va
   const enabled = options.enabled ?? true;
   const stable = useStableVariables(variables);
   const { onData } = options;
-  const [state] = useUrqlSubscription<TData, TData, TVariables>(
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
+  const [state] = useUrqlSubscription<TData, SubscriptionEvent<TData>, TVariables>(
     {
       query: enabled ? document : DISABLED_DOCUMENTS.subscription,
       variables: stable,
       pause: !enabled,
     },
     (_previous, value) => {
-      onData?.(value);
-      return value;
+      return {
+        data: value,
+        version: (_previous?.version ?? 0) + 1,
+      };
     },
   );
+  const event = state.data;
+  useEffect(() => {
+    if (event) onDataRef.current?.(event.data);
+  }, [event]);
   return {
-    data: state.data,
+    data: event?.data,
     fetching: state.fetching,
     error: state.error ?? null,
   };

@@ -152,6 +152,92 @@ describe("FormView", () => {
     await screen.findByRole("menuitem", { name: "Archive" });
   });
 
+  test("hides the record delete action when its predicate does not match", async () => {
+    const deleteAction = {
+      canDelete: true,
+      isPending: false,
+      onDelete: vi.fn(),
+    };
+
+    renderWithProviders(
+      <FormView
+        model="notes.Note"
+        id="note-1"
+        deleteAction={deleteAction}
+        deleteVisibleWhen={(record) => record.status === "ARCHIVED"}
+      >
+        <Field name="title" label="Title" title />
+        <Field name="status" label="Status" />
+      </FormView>,
+    );
+
+    await screen.findByLabelText("Title");
+    expect(screen.queryByRole("button", { name: "Actions" })).toBeNull();
+
+    cleanup();
+    sdkMocks.record = { ...sdkMocks.record, status: "ARCHIVED" };
+    renderWithProviders(
+      <FormView
+        model="notes.Note"
+        id="note-1"
+        deleteAction={deleteAction}
+        deleteVisibleWhen={(record) => record.status === "ARCHIVED"}
+      >
+        <Field name="title" label="Title" title />
+        <Field name="status" label="Status" />
+      </FormView>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeTruthy();
+  });
+
+  test("renders record-aware toolbarStart content", async () => {
+    renderWithProviders(
+      <FormView
+        model="notes.Note"
+        id="note-1"
+        toolbarStart={({ record }) =>
+          record?.status === "ACTIVE" ? (
+            <button type="button">Provision</button>
+          ) : null
+        }
+      >
+        <Field name="title" label="Title" title />
+        <Field name="status" label="Status" />
+      </FormView>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Provision" })).toBeTruthy();
+  });
+
+  test("lets toolbarStart patch displayed record state immediately", async () => {
+    renderWithProviders(
+      <FormView
+        model="notes.Note"
+        id="note-1"
+        fields={fields}
+        toolbarStart={({ patchRecord, record }) =>
+          record?.status === "ACTIVE" ? (
+            <button type="button" onClick={() => patchRecord({ status: "ARCHIVED" })}>
+              Mark archived
+            </button>
+          ) : null
+        }
+      />,
+    );
+
+    expect(statusStep("Active")?.getAttribute("aria-current")).toBe("step");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark archived" }));
+
+    await waitFor(() =>
+      expect(statusStep("Archived")?.getAttribute("aria-current")).toBe("step"),
+    );
+    expect(screen.queryByRole("button", { name: "Mark archived" })).toBeNull();
+    expect(sdkMocks.mutate).not.toHaveBeenCalled();
+  });
+
   test("runs a declarative set action through the update mutation", async () => {
     renderWithProviders(
       <FormView model="notes.Note" id="note-1">
@@ -671,6 +757,10 @@ function renderWithProviders(
 
 function cloneFields(source: readonly FormField[]): FormField[] {
   return source.map((field) => ({ ...field }));
+}
+
+function statusStep(label: string): Element | null {
+  return screen.getByText(label).closest("[role='listitem']");
 }
 
 function nextTask(): Promise<void> {

@@ -12,6 +12,7 @@ this addon owns only the discovered :class:`Skill` rows.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -582,7 +583,12 @@ class _RenderPlan:
     service_template: tuple[str, str] | None
 
 
-def _render_agent(plan: _RenderPlan) -> dict[str, str]:
+def _render_agent(
+    plan: _RenderPlan,
+    *,
+    on_workspace_created: Callable[[str], None] | None = None,
+    on_service_created: Callable[[str], None] | None = None,
+) -> dict[str, str]:
     """Drive the daemon render for one agent over its REST API; return the instance names.
 
     The daemon owns the template ref format (resolve it from its own listing) and the
@@ -593,17 +599,19 @@ def _render_agent(plan: _RenderPlan) -> dict[str, str]:
     """
 
     daemon = OperatorDaemon.from_settings()
-    workspace_ref = daemon.resolve_template_ref(
-        name=plan.workspace_template[0], kind=plan.workspace_template[1]
-    )
+    workspace_ref = daemon.resolve_template_ref(name=plan.workspace_template[0], kind=plan.workspace_template[1])
     if not workspace_ref:
         raise ValueError(f"No operator workspace template matches {plan.workspace_template[0]!r}.")
     _sync_secrets(daemon, plan)
     workspace = daemon.create_workspace(template=workspace_ref, inputs=plan.workspace_inputs)
     if not workspace:
         raise ValueError("The operator did not return a workspace.")
+    if on_workspace_created is not None:
+        on_workspace_created(workspace)
     try:
         service = _render_service(daemon, plan, workspace)
+        if service and on_service_created is not None:
+            on_service_created(service)
     except Exception:
         with contextlib.suppress(Exception):  # best-effort rollback; surface the original failure
             daemon.destroy_workspace(workspace)
@@ -638,12 +646,8 @@ def _render_plan(agent: Any) -> _RenderPlan:
         secret_name=agent.inference_secret_name(),
         secret_value=agent.inference_secret(),
         mcp_secrets=agent.mcp_secrets(),
-        workspace_template=(
-            (workspace_template.name, workspace_template.kind) if workspace_template else ("", "")
-        ),
-        service_template=(
-            (service_template.name, service_template.kind) if service_template else None
-        ),
+        workspace_template=((workspace_template.name, workspace_template.kind) if workspace_template else ("", "")),
+        service_template=((service_template.name, service_template.kind) if service_template else None),
     )
 
 
@@ -667,16 +671,23 @@ def _sync_secrets(daemon: OperatorDaemon, plan: _RenderPlan) -> None:
 class AgentActionMutation:
     """Server-side provisioning actions for an agent.
 
-    Provisioning is one Django flow: it resolves the agent's template inputs +
-    credential, syncs the inference secret to the operator store, and drives the
-    daemon's workspace/service render over its REST API (admin bearer — the secret
-    never reaches the browser). The console only triggers these and watches live
-    runtime health straight from the daemon.
+    Provisioning is one Django flow: record the status, resolve the agent's template
+    inputs + credential, sync secrets to the operator store, and drive the daemon's
+    workspace/service render over its REST API (admin bearer — the secret never reaches
+    the browser). SQLite contention is handled by the composed database options; this
+    layer stays a thin action bridge and the console watches daemon state directly.
     """
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def provision_agent(self, id: relay.GlobalID) -> ActionResult:
-        """Render the agent into an operator workspace + service and record the instance."""
+        """Render the agent into an operator workspace + service and record the instance.
+
+        A render failure (including credential/plan resolution) records the reason and
+        moves the agent to ``ERROR``, rolling back and clearing any half-created
+        workspace so a retry starts clean. Blocks once a workspace is recorded — even
+        for an agent stranded mid-flow: :meth:`deprovision_agent` is the reset for any
+        stuck state, then provision again.
+        """
 
         agent = _resolve(Agent, id, reason="agents.graphql.provision_agent", select_related=_PROVISION_CHAIN)
         with system_context(reason="agents.graphql.provision_agent"):
@@ -684,12 +695,29 @@ class AgentActionMutation:
                 return ActionResult(ok=False, message="Agent is already provisioned — deprovision it first.")
             if agent.workspace_template is None:
                 return ActionResult(ok=False, message="Set a workspace template on this agent first.")
-            plan = _render_plan(agent)
+            agent.mark_provisioning()
+        created_workspace: list[str] = []
+
+        def record_workspace(workspace: str) -> None:
+            created_workspace.append(workspace)
+            with system_context(reason="agents.graphql.provision_agent.workspace_recorded"):
+                agent.mark_workspace_provisioned(workspace=workspace)
+
+        def record_service(service: str) -> None:
+            with system_context(reason="agents.graphql.provision_agent.service_recorded"):
+                agent.mark_service_provisioned(service=service)
+
         try:
-            result = _render_agent(plan)
-        except Exception as error:  # noqa: BLE001 — a render failure is the result, not a 500
+            with system_context(reason="agents.graphql.provision_agent.plan"):
+                plan = _render_plan(agent)
+            result = _render_agent(
+                plan,
+                on_workspace_created=record_workspace,
+                on_service_created=record_service,
+            )
+        except Exception as error:  # noqa: BLE001 — a render/plan failure is the result, not a 500
             with system_context(reason="agents.graphql.provision_agent.failed"):
-                agent.mark_provision_failed(str(error))
+                agent.mark_provision_failed(str(error), clear_instances=bool(created_workspace))
             return ActionResult(ok=False, message=f"Provisioning failed: {error}")
         with system_context(reason="agents.graphql.provision_agent.recorded"):
             agent.mark_provisioned(workspace=result["workspace"], service=result["service"])
@@ -703,6 +731,10 @@ class AgentActionMutation:
         ``${secret.<name>}`` env at create time, so a new value lands only on a fresh
         service — destroy + create over the same workspace, not a restart. The
         workspace (and its files) is preserved.
+
+        A failed recreate records the reason and moves the agent to ``ERROR``; the
+        preserved workspace stays, and the destroyed service name is cleared so a later
+        deprovision doesn't chase a service the daemon already removed. Re-run to retry.
         """
 
         agent = _resolve(Agent, id, reason="agents.graphql.reprovision_agent", select_related=_PROVISION_CHAIN)
@@ -713,16 +745,25 @@ class AgentActionMutation:
                 return ActionResult(ok=False, message="Agent isn't provisioned — provision it first.")
             if agent.service_template is None:
                 return ActionResult(ok=False, message="Set a service template on this agent first.")
-            plan = _render_plan(agent)
+            agent.mark_provisioning()
         daemon = OperatorDaemon.from_settings()
+        service_destroyed = False
         try:
+            with system_context(reason="agents.graphql.reprovision_agent.plan"):
+                plan = _render_plan(agent)
             _sync_secrets(daemon, plan)
             if service:
                 daemon.destroy_service(service)
+                service_destroyed = True
             new_service = _render_service(daemon, plan, workspace)
-        except Exception as error:  # noqa: BLE001 — a render failure is the result, not a 500
+            if new_service:
+                with system_context(reason="agents.graphql.reprovision_agent.service_recorded"):
+                    agent.mark_service_provisioned(service=new_service)
+        except Exception as error:  # noqa: BLE001 — a render/plan failure is the result, not a 500
             with system_context(reason="agents.graphql.reprovision_agent.failed"):
-                agent.mark_provision_failed(str(error))
+                # Once the old service is destroyed its name is stale; clear it so a later
+                # deprovision doesn't try to tear down a service the daemon already removed.
+                agent.mark_provision_failed(str(error), clear_service=service_destroyed)
             return ActionResult(ok=False, message=f"Reprovisioning failed: {error}")
         with system_context(reason="agents.graphql.reprovision_agent.recorded"):
             agent.mark_provisioned(workspace=workspace, service=new_service)
@@ -786,22 +827,34 @@ class AgentActionMutation:
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def deprovision_agent(self, id: relay.GlobalID) -> ActionResult:
-        """Tear down the agent's operator workspace (and its services) and clear the record."""
+        """Tear down the agent's operator workspace and services, then clear the record.
+
+        Also the reset for any stuck agent (stranded ``PROVISIONING``/``DEPROVISIONING``
+        or an ``ERROR`` with stale instance names): re-running tears down whatever names
+        the record holds and returns the agent to ``STOPPED``. An agent with no recorded
+        instances is marked stopped directly; a teardown failure records the reason and
+        moves it to ``ERROR``, preserving the names so the teardown can be retried.
+        """
 
         agent = _resolve(Agent, id, reason="agents.graphql.deprovision_agent")
         with system_context(reason="agents.graphql.deprovision_agent"):
+            if not agent.workspace and not agent.service:
+                agent.mark_deprovisioned()
+                return ActionResult(ok=True, message="Deprovisioned.")
             workspace = agent.workspace
             service = agent.service
+            agent.mark_deprovisioning()
         daemon = OperatorDaemon.from_settings()
         try:
-            # The service is a stack entry distinct from the workspace it mounts, so
-            # destroy it explicitly — destroying only the workspace leaves the service
-            # behind and the next provision 409s. Service first, then its workspace.
+            # The service is a stack entry distinct from the workspace it mounts, so destroy
+            # it explicitly before the workspace; otherwise the next provision can 409.
             if service:
                 daemon.destroy_service(service)
             if workspace:
                 daemon.destroy_workspace(workspace)
         except Exception as error:  # noqa: BLE001 — teardown failure is the result, not a 500
+            with system_context(reason="agents.graphql.deprovision_agent.failed"):
+                agent.mark_provision_failed(f"Teardown failed: {error}")
             return ActionResult(ok=False, message=f"Teardown failed: {error}")
         with system_context(reason="agents.graphql.deprovision_agent.recorded"):
             agent.mark_deprovisioned()

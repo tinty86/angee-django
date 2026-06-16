@@ -4,6 +4,7 @@ import {
   Provider as UrqlProvider,
   useMutation,
   useQuery,
+  useSubscription,
   type Client,
   type OperationResult,
   type UseMutationState,
@@ -31,6 +32,12 @@ import type {
 } from "./types";
 
 const CONSOLE_SCHEMA = "console";
+// Known exception to the frontend no-poll rule (docs/frontend/guidelines.md): the
+// daemon publishes per-resource subscriptions (onWorkspaceStatusChange/onServiceLogs)
+// but no aggregate snapshot-change event, so the multi-root console snapshot is
+// polled until the daemon SDL grows one. Per-agent views already stream live.
+// Fix proposed daemon-side: angee-operator docs/proposals/console-snapshot-subscription.md
+// (onConsoleSnapshotChange) — switch this hook to subscribe + one-shot query then.
 const POLL_INTERVAL_MS = 5_000;
 // Daemon connection tokens are short-lived (the daemon mints with a ~30m TTL).
 // Refresh the bridge token well before then and rebuild the daemon client, so a
@@ -272,6 +279,45 @@ export function useOperatorAction<
     [execute],
   );
   return { result, run };
+}
+
+export interface OperatorSubscriptionOptions<TData> {
+  enabled?: boolean;
+  onData?: (data: TData) => void;
+}
+
+export interface OperatorSubscriptionResult<TData> {
+  data: TData | undefined;
+  fetching: boolean;
+  error: Error | null;
+}
+
+export function useOperatorSubscription<
+  TData extends object,
+  TVariables extends Record<string, unknown> = EmptyVariables,
+>(
+  document: string,
+  variables?: TVariables,
+  options: OperatorSubscriptionOptions<TData> = {},
+): OperatorSubscriptionResult<TData> {
+  const enabled = options.enabled ?? true;
+  const { onData } = options;
+  const [state] = useSubscription<TData, TData, TVariables>(
+    {
+      query: document,
+      variables: (variables ?? {}) as TVariables,
+      pause: !enabled,
+    },
+    (_previous, value) => {
+      onData?.(value);
+      return value;
+    },
+  );
+  return {
+    data: state.data,
+    fetching: state.fetching,
+    error: state.error ?? null,
+  };
 }
 
 // The daemon exposes its state as separate root fields; assemble the roots each

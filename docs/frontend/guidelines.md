@@ -90,6 +90,17 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   Record-level chrome (star/share/follow) is host-contributed into
   `FORM_VIEW_RECORD_CHROME_SLOT` via the manifest `slots:`; render contributions
   with the shared `SlotOutlet`.
+- Never poll for data freshness. Live updates ride GraphQL subscriptions and the
+  normalized cache, not a `setInterval` refetch loop. Opt a model into live
+  cross-actor refresh by declaring `changes(Model, field="<model>Changed")` in its
+  `schema.py` — the relay invalidator then auto-subscribes and refetches every
+  registered read (`useResourceRecord`/list/picker) on each push; a model without
+  it still invalidates on local writes. Stream foreign-system state (e.g. the
+  operator daemon's `onWorkspaceStatusChange`/`onServiceLogs`) over its own
+  subscriptions. A timed `setInterval` is only ever for non-data UI motion (a
+  carousel) or rotating a short-lived credential before it expires — never to
+  re-read a resolver hoping it changed. If a foreign system publishes no change
+  subscription, add one there rather than polling it from the client.
 - Client-side gates are UX only. The server is the authorization boundary.
 - No Python view DSL, no frontend metadata hidden in backend decorators.
 

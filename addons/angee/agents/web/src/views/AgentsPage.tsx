@@ -1,21 +1,40 @@
 import * as React from "react";
 import {
+  Action,
+  Button,
   Card,
   CardContent,
   Column,
   DataPage,
   Field,
   Form,
+  Glyph,
   Group,
   List,
+  useToast,
+  type RecordToolbarContext,
   type RecordTabDescriptor,
 } from "@angee/base";
-import { fromRelayGlobalId, useResourceRecord, type Row } from "@angee/sdk";
+import {
+  fromRelayGlobalId,
+  useAuthoredMutation,
+  useModelInvalidation,
+  useResourceRecord,
+  type Row,
+} from "@angee/sdk";
 
 import { useAgentsT } from "../i18n";
 import { AgentChat } from "./AgentChat";
 import { AgentProvisioning } from "./AgentProvisioning";
-import type { AgentChatView } from "../documents";
+import {
+  DEPROVISION_AGENT_MUTATION,
+  PROVISION_AGENT_MUTATION,
+  type ActionResultData,
+  type AgentChatView,
+  type DeprovisionAgentData,
+  type IdVariables,
+  type ProvisionAgentData,
+} from "../documents";
 
 const MODEL = "agents.Agent";
 
@@ -28,6 +47,34 @@ const CHAT_FIELDS = ["id", "status", "service"] as const;
 function stringField(record: Row | null, key: string): string {
   const value = record?.[key];
   return typeof value === "string" ? value : "";
+}
+
+function agentStatus(record: Row | null): string {
+  return stringField(record, "status").toUpperCase();
+}
+
+function canProvisionAgent(record: Row | null): boolean {
+  return ["DRAFT", "STOPPED", "ERROR"].includes(agentStatus(record));
+}
+
+function canDeprovisionAgent(record: Row | null): boolean {
+  return agentStatus(record) === "RUNNING";
+}
+
+function canDeleteAgent(record: Row): boolean {
+  return (
+    !["PROVISIONING", "RUNNING", "DEPROVISIONING"].includes(agentStatus(record)) &&
+    stringField(record, "workspace") === "" &&
+    stringField(record, "service") === ""
+  );
+}
+
+function actionMessage(
+  result: ActionResultData | undefined,
+  fallback: string,
+): string {
+  if (!result?.ok) throw new Error(result?.message ?? fallback);
+  return result.message ?? "";
 }
 
 /**
@@ -54,12 +101,73 @@ function AgentChatPanel({ agentId }: { agentId: string }): React.ReactElement {
   return <AgentChat agentId={agentId} view={view} />;
 }
 
+function AgentProvisionToolbarAction({
+  patchRecord,
+  record,
+  recordId,
+  reload,
+}: RecordToolbarContext): React.ReactElement | null {
+  const t = useAgentsT();
+  const toast = useToast();
+  const invalidateAgent = useModelInvalidation(MODEL);
+  const [optimisticProvisioning, setOptimisticProvisioning] = React.useState(false);
+  const [provisionAgent, provisionState] = useAuthoredMutation<ProvisionAgentData, IdVariables>(
+    PROVISION_AGENT_MUTATION,
+  );
+  const status = agentStatus(record);
+
+  React.useEffect(() => {
+    if (status !== "PROVISIONING") setOptimisticProvisioning(false);
+  }, [status]);
+
+  if (optimisticProvisioning || !recordId || !canProvisionAgent(record)) return null;
+
+  const handleProvision = async (): Promise<void> => {
+    const previousStatus = stringField(record, "status");
+    setOptimisticProvisioning(true);
+    patchRecord({ status: "PROVISIONING" });
+    try {
+      const message = actionMessage(
+        (await provisionAgent({ id: recordId }))?.provisionAgent,
+        t("agents.provisioning.provisionFailed"),
+      );
+      invalidateAgent();
+      reload();
+      if (message) toast.success({ title: message });
+    } catch (caught) {
+      setOptimisticProvisioning(false);
+      if (previousStatus) patchRecord({ status: previousStatus });
+      toast.danger({
+        title: t("agents.provisioning.provisionFailed"),
+        description:
+          caught instanceof Error
+            ? caught.message
+            : t("agents.provisioning.actionFailed"),
+      });
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      variant="primary"
+      size="sm"
+      loading={provisionState.fetching}
+      onClick={() => void handleProvision()}
+    >
+      <Glyph name="plus" />
+      {t("agents.provisioning.provision")}
+    </Button>
+  );
+}
+
 // Translated copy resolved at a component's render top level (where hooks belong)
 // and threaded into the plain `agentDataPage` builder below.
 interface AgentLabels {
   modelTemplates: string;
   provisioningInputs: string;
-  tabProvision: string;
+  tabService: string;
+  tabWorkspace: string;
   tabChat: string;
 }
 
@@ -68,7 +176,8 @@ function useAgentLabels(): AgentLabels {
   return {
     modelTemplates: t("agents.agent.modelTemplates"),
     provisioningInputs: t("agents.agent.provisioningInputs"),
-    tabProvision: t("agents.agent.tabProvision"),
+    tabService: t("agents.agent.tabService"),
+    tabWorkspace: t("agents.agent.tabWorkspace"),
     tabChat: t("agents.agent.tabChat"),
   };
 }
@@ -78,16 +187,29 @@ function useAgentLabels(): AgentLabels {
 // ``isTemplate`` to match. A real agent renders into the operator; a template is a
 // reusable blueprint, so only the Agents detail carries the Provision/Chat record
 // tabs beside the Overview form.
-function agentDataPage(isTemplate: boolean, labels: AgentLabels): React.ReactElement {
+function AgentDataPage({
+  isTemplate,
+}: {
+  isTemplate: boolean;
+}): React.ReactElement {
+  const labels = useAgentLabels();
+  const t = useAgentsT();
+  const invalidateAgent = useModelInvalidation(MODEL);
+  const [deprovisionAgent] = useAuthoredMutation<DeprovisionAgentData, IdVariables>(
+    DEPROVISION_AGENT_MUTATION,
+  );
   const recordTabs: readonly RecordTabDescriptor[] | undefined = isTemplate
     ? undefined
     : [
         {
-          id: "provision",
-          label: labels.tabProvision,
-          render: ({ recordId, reload }) => (
-            <AgentProvisioning agentId={recordId} onChanged={reload} />
-          ),
+          id: "service",
+          label: labels.tabService,
+          render: ({ recordId }) => <AgentProvisioning agentId={recordId} pane="service" />,
+        },
+        {
+          id: "workspace",
+          label: labels.tabWorkspace,
+          render: ({ recordId }) => <AgentProvisioning agentId={recordId} pane="workspace" />,
         },
         {
           id: "chat",
@@ -103,13 +225,47 @@ function agentDataPage(isTemplate: boolean, labels: AgentLabels): React.ReactEle
       filter={{ isTemplate: { exact: isTemplate } }}
       createDefaults={{ isTemplate }}
       recordTabs={recordTabs}
+      returning={isTemplate ? undefined : ["status", "workspace", "service"]}
     >
       <List model={MODEL} pageSize={50}>
         <Column field="name" />
         <Column field="status" widget="statusBadge" />
         <Column field="updatedAt" />
       </List>
-      <Form model={MODEL}>
+      <Form
+        model={MODEL}
+        deleteVisibleWhen={isTemplate ? undefined : canDeleteAgent}
+        toolbarStart={
+          isTemplate
+            ? undefined
+            : (context) => <AgentProvisionToolbarAction {...context} />
+        }
+      >
+        {!isTemplate ? (
+          <Action
+            id="deprovision"
+            label={t("agents.provisioning.deprovision")}
+            icon="trash"
+            danger
+            confirm={{
+              title: t("agents.provisioning.confirmTitle"),
+              body: t("agents.provisioning.confirmBody"),
+              danger: true,
+            }}
+            visibleWhen={canDeprovisionAgent}
+            run={async ({ record, refresh }) => {
+              const id = stringField(record, "id");
+              if (!id) throw new Error(t("agents.provisioning.saveFirst"));
+              const message = actionMessage(
+                (await deprovisionAgent({ id }))?.deprovisionAgent,
+                t("agents.provisioning.deprovisionFailed"),
+              );
+              invalidateAgent();
+              refresh();
+              return message;
+            }}
+          />
+        ) : null}
         <Field name="name" title />
         <Field name="status" widget="statusbar" />
         {/* Description then instructions lead the Overview tab as full-width
@@ -140,9 +296,9 @@ function agentDataPage(isTemplate: boolean, labels: AgentLabels): React.ReactEle
 }
 
 export function AgentsPage(): React.ReactElement {
-  return agentDataPage(false, useAgentLabels());
+  return <AgentDataPage isTemplate={false} />;
 }
 
 export function TemplatesPage(): React.ReactElement {
-  return agentDataPage(true, useAgentLabels());
+  return <AgentDataPage isTemplate />;
 }

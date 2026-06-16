@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
  * surfaced as a danger `Alert` above them.
  */
 export interface OperatorSectionProps {
-  title: string;
+  title?: ReactNode;
   /** True while the first snapshot is still loading (no data yet). */
   loading?: boolean;
   /** A load error shown in place of the body when no snapshot has arrived. */
@@ -37,7 +37,7 @@ export function OperatorSection({
 }: OperatorSectionProps): ReactNode {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold text-fg">{title}</h2>
+      {title ? <h2 className="text-lg font-semibold text-fg">{title}</h2> : null}
       {error ? (
         <Alert tone="danger">{error.message}</Alert>
       ) : loading ? (

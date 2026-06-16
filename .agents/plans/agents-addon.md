@@ -360,3 +360,11 @@ per-account join (per-account availability deferred).
   owner row — deferred, not added silently.
 - `mcp`/`fastmcp` stays out of the lock; MCP tools are hand-registered this milestone.
 - Operator provisioning pipeline is milestone 2.
+- No-poll rule landed (`docs/frontend/guidelines.md`): per-agent provisioning now
+  streams live (`onWorkspaceStatusChange`/`onServiceLogs`) and the agent record
+  auto-invalidates via the `agentChanged` subscription — the 2.5s record poll in
+  `AgentProvisioning` is gone. Remaining poll: `useOperatorSnapshot` (console
+  multi-root snapshot) has no daemon aggregate-change subscription; de-poll it by
+  adding one to the daemon SDL (Go) rather than from the client — proposed in
+  angee-operator `docs/proposals/console-snapshot-subscription.md`
+  (`onConsoleSnapshotChange`).

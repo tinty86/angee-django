@@ -14,14 +14,26 @@ competing ``staticfiles``/Daphne ``runserver``.
 
 from __future__ import annotations
 
+import contextlib
 import os
-from typing import Any
+import sys
+from typing import Any, NoReturn
 
 import uvicorn
 from django.conf import settings
 from django.core.management.commands.runserver import Command as RunserverCommand
 from django.utils import autoreload
 from django.utils.module_loading import import_string
+
+
+def _force_process_reload(filename: Any) -> NoReturn:
+    """Exit the autoreloader child even when runtime threads are still alive."""
+
+    autoreload.logger.info("%s changed, reloading.", filename)
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(Exception):
+            stream.flush()
+    os._exit(3)
 
 
 class Command(RunserverCommand):
@@ -38,6 +50,10 @@ class Command(RunserverCommand):
         """
 
         del args
+        # Django's default trigger uses sys.exit(3) in the reloader thread. That
+        # leaves a uvicorn/channels dev process wedged when a non-daemon runtime
+        # thread is active (for example an open GraphQL WebSocket subscription).
+        autoreload.trigger_reload = _force_process_reload
         autoreload.raise_last_exception()
         if not options.get("skip_checks"):
             self.stdout.write("Performing system checks...\n\n")

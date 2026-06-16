@@ -10,11 +10,14 @@ export {
   useOperatorClient,
   useOperatorSnapshot,
   useOperatorAction,
+  useOperatorSubscription,
 } from "./data/transport";
 export type {
   OperatorTransportProviderProps,
   OperatorSnapshotResult,
   OperatorActionHook,
+  OperatorSubscriptionOptions,
+  OperatorSubscriptionResult,
 } from "./data/transport";
 
 export type {
@@ -25,7 +28,9 @@ export type {
   ServiceState,
   JobState,
   SourceState,
+  WorkspaceSourceStatus,
   WorkspaceRef,
+  WorkspaceStatus,
   TemplateDescriptor,
   TemplateInputDescriptor,
   SecretRef,
@@ -58,8 +63,8 @@ export type { StateTagProps } from "./views/parts/StateTag";
 export { OperatorSection } from "./views/parts/OperatorSection";
 export type { OperatorSectionProps } from "./views/parts/OperatorSection";
 
-export { ServicesSection } from "./views/sections/ServicesSection";
-export type { ServicesSectionProps } from "./views/sections/ServicesSection";
+export { ServiceRow, ServicesSection } from "./views/sections/ServicesSection";
+export type { ServiceRowProps, ServicesSectionProps } from "./views/sections/ServicesSection";
 
-export { WorkspacesSection } from "./views/sections/WorkspacesSection";
-export type { WorkspacesSectionProps } from "./views/sections/WorkspacesSection";
+export { WorkspaceRow, WorkspacesSection } from "./views/sections/WorkspacesSection";
+export type { WorkspaceRowProps, WorkspacesSectionProps } from "./views/sections/WorkspacesSection";

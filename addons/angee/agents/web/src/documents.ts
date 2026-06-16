@@ -35,9 +35,7 @@ export interface RefreshSourceData {
   refreshSource: ActionResultData;
 }
 
-// Provision an agent end-to-end, server-side: the Django flow resolves the agent's
-// template inputs + credential, syncs the inference secret to the operator, and drives
-// the daemon's workspace/service render over its REST API. The console only triggers it.
+// Provision an agent through Django's server-side operator bridge.
 export const PROVISION_AGENT_MUTATION = `
   mutation ProvisionAgent($id: ID!) {
     provisionAgent(id: $id) {
@@ -51,7 +49,7 @@ export interface ProvisionAgentData {
   provisionAgent: ActionResultData;
 }
 
-// Tear down the agent's operator workspace (and its services) and clear the record.
+// Tear down the agent's operator workspace and services.
 export const DEPROVISION_AGENT_MUTATION = `
   mutation DeprovisionAgent($id: ID!) {
     deprovisionAgent(id: $id) {

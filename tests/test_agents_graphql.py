@@ -211,14 +211,12 @@ def test_create_mcp_server_keeps_defaults_for_omitted_optionals(agents_console_t
     assert created == {"name": "Local MCP", "placement": "EXTERNAL", "config": {}}
 
 
-def test_provision_agent_renders_via_daemon_and_is_admin_gated(
-    agents_console_tables: None, monkeypatch: Any
-) -> None:
-    """`provisionAgent` is one server-side flow: sync secret + drive the daemon render.
+def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_tables: None, monkeypatch: Any) -> None:
+    """`provisionAgent` syncs secrets, drives the daemon render, and records names.
 
     The daemon is mocked. Asserts the credential secret is synced, the workspace and
     service are rendered from the resolved refs (the service mounts the created
-    workspace), the agent records the daemon-returned instance, and it's admin-gated.
+    workspace), the agent records the daemon-returned instance, and it is admin-gated.
     """
 
     admin = _platform_admin("agt-render-admin")
@@ -236,9 +234,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(
             source=source, kind="service", name="claude-code", path="services/claude-code"
         )
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(
-                integration=integration, name="P", backend_class="manual"
-            ),
+            provider=InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual"),
             name="claude-opus-4-8",
         )
         agent = Agent.objects.create(
@@ -271,6 +267,9 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(
         def create_service(
             self, *, template: str, workspace: str, inputs: dict[str, str], start: bool = True, name: str = ""
         ) -> str:
+            with system_context(reason="test.agents.render.verify_workspace_recorded"):
+                agent.refresh_from_db()
+                calls.append(("recorded_workspace", agent.workspace, str(agent.status)))
             calls.append(("service", template, workspace, inputs))
             return "svc-bot"
 
@@ -281,26 +280,44 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(
             calls.append(("destroy", name))
 
     monkeypatch.setattr(agents_schema, "OperatorDaemon", _FakeDaemon)
+    original_mark_provisioned = Agent.mark_provisioned
+
+    def mark_provisioned_with_recorded_service(self: Agent, *, workspace: str, service: str = "") -> None:
+        with system_context(reason="test.agents.render.verify_service_recorded"):
+            persisted = Agent.objects.get(pk=self.pk)
+            calls.append(("recorded_service", persisted.service, str(persisted.status)))
+        original_mark_provisioned(self, workspace=workspace, service=service)
+
+    monkeypatch.setattr(Agent, "mark_provisioned", mark_provisioned_with_recorded_service)
 
     provision = "mutation($id: ID!){ provisionAgent(id: $id){ ok message } }"
     assert _execute(console := _schema(), provision, {"id": agent_id}, user=plain).errors is not None
-    assert _data(_execute(console, provision, {"id": agent_id}, user=admin))["provisionAgent"]["ok"] is True
-
-    with system_context(reason="test.agents.render.verify"):
+    result = _data(_execute(console, provision, {"id": agent_id}, user=admin))["provisionAgent"]
+    assert result == {"ok": True, "message": "Provisioned “svc-bot”."}
+    with system_context(reason="test.agents.render.verify_rendered"):
         agent.refresh_from_db()
         assert (agent.workspace, agent.service, str(agent.status)) == ("ws-bot", "svc-bot", "running")
 
-    assert [call[0] for call in calls] == ["secret", "workspace", "service"]
+    assert [call[0] for call in calls] == [
+        "secret",
+        "workspace",
+        "recorded_workspace",
+        "service",
+        "recorded_service",
+    ]
     assert calls[0] == ("secret", f"agent-{agent.sqid}-inference", "x")
     assert calls[1][1] == "ref:agent-default" and calls[1][2]["agent_name"] == "Bot"
-    assert calls[2][1] == "ref:claude-code"
-    assert calls[2][2] == "ws-bot" and calls[2][3]["auth_mode"] == "api_key"
+    assert calls[2] == ("recorded_workspace", "ws-bot", "provisioning")
+    assert calls[3][1] == "ref:claude-code"
+    assert calls[3][2] == "ws-bot" and calls[3][3]["auth_mode"] == "api_key"
+    assert calls[4] == ("recorded_service", "svc-bot", "provisioning")
 
     # Deprovision tears down the workspace via the daemon and clears the record.
-    deprovision = "mutation($id: ID!){ deprovisionAgent(id: $id){ ok } }"
+    deprovision = "mutation($id: ID!){ deprovisionAgent(id: $id){ ok message } }"
     assert _execute(console, deprovision, {"id": agent_id}, user=plain).errors is not None
-    _data(_execute(console, deprovision, {"id": agent_id}, user=admin))
-    with system_context(reason="test.agents.render.verify_cleared"):
+    result = _data(_execute(console, deprovision, {"id": agent_id}, user=admin))["deprovisionAgent"]
+    assert result == {"ok": True, "message": "Deprovisioned."}
+    with system_context(reason="test.agents.render.verify_deprovisioned"):
         agent.refresh_from_db()
         assert (agent.workspace, agent.service, str(agent.status)) == ("", "", "stopped")
     assert ("destroy", "ws-bot") in calls
@@ -309,7 +326,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(
 def test_provision_agent_failure_tears_down_workspace_and_records_error(
     agents_console_tables: None, monkeypatch: Any
 ) -> None:
-    """A service-render failure tears the orphaned workspace back down and marks error."""
+    """A service-render failure tears the orphaned workspace down and marks error."""
 
     admin = _platform_admin("agt-fail-admin")
     vcs = _vcs_integration("agt-fail-tpl", config={"stub_repos": REPOS})
@@ -330,6 +347,7 @@ def test_provision_agent_failure_tears_down_workspace_and_records_error(
     agent_id = _gid("AgentType", agent.sqid)
 
     destroyed: list[str] = []
+    recorded: list[tuple[str, str]] = []
 
     class _FailingDaemon:
         @classmethod
@@ -343,6 +361,9 @@ def test_provision_agent_failure_tears_down_workspace_and_records_error(
             return "ws-doomed"
 
         def create_service(self, *, template: str, workspace: str, inputs: dict[str, str]) -> str:
+            with system_context(reason="test.agents.fail.verify_workspace_recorded"):
+                agent.refresh_from_db()
+                recorded.append((agent.workspace, str(agent.status)))
             raise RuntimeError("image build failed")
 
         def destroy_workspace(self, name: str) -> None:
@@ -359,11 +380,156 @@ def test_provision_agent_failure_tears_down_workspace_and_records_error(
         )
     )["provisionAgent"]
     assert result["ok"] is False and "image build failed" in result["message"]
+    assert recorded == [("ws-doomed", "provisioning")]
     assert destroyed == ["ws-doomed"]  # the orphaned workspace was torn back down
     with system_context(reason="test.agents.fail.verify"):
         agent.refresh_from_db()
         assert str(agent.status) == "error"
         assert (agent.workspace, "image build failed" in agent.last_error) == ("", True)
+
+
+def test_provision_agent_records_error_when_plan_resolution_fails(
+    agents_console_tables: None, monkeypatch: Any
+) -> None:
+    """A plan-resolution failure records ERROR — the agent never strands in PROVISIONING.
+
+    `_render_plan` reads the credential chain and agent inputs before the daemon render; a
+    failure there (a missing/undecryptable credential, a bad MCP config) must route through
+    the same failure handler as a daemon render failure, not flip the agent to PROVISIONING
+    and then raise an unhandled 500 that leaves it stuck.
+    """
+
+    admin = _platform_admin("agt-planfail-admin")
+    agent = _provisionable_agent(admin, "PlanFail", slug="agt-planfail-tpl")
+    agent_id = _gid("AgentType", agent.sqid)
+
+    def _boom(_agent: Any) -> Any:
+        raise RuntimeError("credential is unreadable")
+
+    monkeypatch.setattr(agents_schema, "_render_plan", _boom)
+
+    result = _data(
+        _execute(
+            _schema(),
+            "mutation($id: ID!){ provisionAgent(id: $id){ ok message } }",
+            {"id": agent_id},
+            user=admin,
+        )
+    )["provisionAgent"]
+
+    assert result["ok"] is False and "credential is unreadable" in result["message"]
+    with system_context(reason="test.agents.planfail.verify"):
+        agent.refresh_from_db()
+        # ERROR, not a stranded PROVISIONING, and no instance names recorded.
+        assert str(agent.status) == "error"
+        assert (agent.workspace, agent.service) == ("", "")
+        assert "credential is unreadable" in agent.last_error
+
+
+def test_reprovision_agent_recreates_service_over_existing_workspace(
+    agents_console_tables: None, monkeypatch: Any
+) -> None:
+    """`reprovisionAgent` destroys the old service and recreates it over the kept workspace."""
+
+    admin = _platform_admin("agt-reprov-admin")
+    plain = User.objects.create_user(username="agt-reprov-plain", email="reprov@example.com")
+    agent = _provisionable_agent(
+        admin, "Rebot", slug="agt-reprov-tpl", workspace="ws-keep", service="svc-old", status="running"
+    )
+    agent_id = _gid("AgentType", agent.sqid)
+
+    calls: list[tuple[Any, ...]] = []
+
+    class _FakeDaemon:
+        @classmethod
+        def from_settings(cls) -> _FakeDaemon:
+            return cls()
+
+        def resolve_template_ref(self, *, name: str, kind: str) -> str:
+            return f"ref:{name}"
+
+        def set_secret(self, name: str, value: str) -> None:
+            calls.append(("secret", name))
+
+        def destroy_service(self, name: str) -> None:
+            calls.append(("destroy_service", name))
+
+        def create_service(
+            self, *, template: str, workspace: str, inputs: dict[str, str], start: bool = True, name: str = ""
+        ) -> str:
+            calls.append(("create_service", template, workspace))
+            return "svc-new"
+
+    monkeypatch.setattr(agents_schema, "OperatorDaemon", _FakeDaemon)
+
+    reprovision = "mutation($id: ID!){ reprovisionAgent(id: $id){ ok message } }"
+    assert _execute(console := _schema(), reprovision, {"id": agent_id}, user=plain).errors is not None
+    result = _data(_execute(console, reprovision, {"id": agent_id}, user=admin))["reprovisionAgent"]
+
+    assert result == {"ok": True, "message": "Recreated service “svc-new”."}
+    # The old service is torn down before the recreate over the preserved workspace.
+    assert ("destroy_service", "svc-old") in calls
+    assert ("create_service", "ref:claude-code", "ws-keep") in calls
+    with system_context(reason="test.agents.reprov.verify"):
+        agent.refresh_from_db()
+        assert (agent.workspace, agent.service, str(agent.status)) == ("ws-keep", "svc-new", "running")
+
+
+def test_reprovision_agent_failure_clears_destroyed_service_but_keeps_workspace(
+    agents_console_tables: None, monkeypatch: Any
+) -> None:
+    """When the old service is destroyed but the recreate fails, the stale name is cleared.
+
+    The workspace (and its files) is preserved; the service name is blanked so a later
+    deprovision doesn't try to tear down a service the daemon already removed (a 409).
+    """
+
+    admin = _platform_admin("agt-reprovfail-admin")
+    agent = _provisionable_agent(
+        admin, "ReDoomed", slug="agt-reprovfail-tpl", workspace="ws-keep", service="svc-old", status="running"
+    )
+    agent_id = _gid("AgentType", agent.sqid)
+
+    destroyed: list[str] = []
+
+    class _FailingDaemon:
+        @classmethod
+        def from_settings(cls) -> _FailingDaemon:
+            return cls()
+
+        def resolve_template_ref(self, *, name: str, kind: str) -> str:
+            return f"ref:{name}"
+
+        def set_secret(self, name: str, value: str) -> None:
+            pass
+
+        def destroy_service(self, name: str) -> None:
+            destroyed.append(name)
+
+        def create_service(
+            self, *, template: str, workspace: str, inputs: dict[str, str], start: bool = True, name: str = ""
+        ) -> str:
+            raise RuntimeError("service recreate failed")
+
+    monkeypatch.setattr(agents_schema, "OperatorDaemon", _FailingDaemon)
+
+    result = _data(
+        _execute(
+            _schema(),
+            "mutation($id: ID!){ reprovisionAgent(id: $id){ ok message } }",
+            {"id": agent_id},
+            user=admin,
+        )
+    )["reprovisionAgent"]
+
+    assert result["ok"] is False and "service recreate failed" in result["message"]
+    assert destroyed == ["svc-old"]  # destroyed before the recreate failed
+    with system_context(reason="test.agents.reprovfail.verify"):
+        agent.refresh_from_db()
+        assert str(agent.status) == "error"
+        # Workspace preserved; the destroyed service name is cleared, not left dangling.
+        assert (agent.workspace, agent.service) == ("ws-keep", "")
+        assert "service recreate failed" in agent.last_error
 
 
 def test_agent_chat_endpoint_mints_route_token_and_is_admin_gated(
@@ -518,9 +684,7 @@ def test_render_agent_prompt_builds_system_context_and_is_admin_gated(
     assert "MCP tool" in rendered
 
     # An empty envelope adds nothing.
-    empty = _data(
-        _execute(console, mutation, {"id": agent_id, "view": {}}, user=admin)
-    )["renderAgentPrompt"]
+    empty = _data(_execute(console, mutation, {"id": agent_id, "view": {}}, user=admin))["renderAgentPrompt"]
     assert empty == ""
 
 
@@ -617,18 +781,14 @@ def test_provision_service_inputs_credential_drives_auth_mode(agents_console_tab
     oauth_integration = make_integration("agt-svc-oauth", kind=CredentialKind.OAUTH)
     with system_context(reason="test.agents.provision_inputs.service"):
         static_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(
-                integration=static_integration, name="S", backend_class="manual"
-            ),
+            provider=InferenceProvider.objects.create(integration=static_integration, name="S", backend_class="manual"),
             name="claude-3",
         )
         static_agent = Agent.objects.create(name="Static", owner=owner, model=static_model)
         static_inputs = static_agent.provision_service_inputs()
 
         oauth_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(
-                integration=oauth_integration, name="O", backend_class="manual"
-            ),
+            provider=InferenceProvider.objects.create(integration=oauth_integration, name="O", backend_class="manual"),
             name="claude-opus-4-8",
         )
         oauth_agent = Agent.objects.create(name="OAuth", owner=owner, model=oauth_model)
@@ -641,6 +801,33 @@ def test_provision_service_inputs_credential_drives_auth_mode(agents_console_tab
     }
     assert oauth_inputs["auth_mode"] == "oauth"
     assert oauth_inputs["model"] == "claude-opus-4-8"
+
+
+def _provisionable_agent(owner: Any, name: str, *, slug: str, **agent_fields: Any) -> Any:
+    """Seed an agent with workspace + service templates for provisioning-flow tests.
+
+    ``agent_fields`` set the starting instance state (e.g. ``workspace``/``service``/
+    ``status``) so a reprovision/deprovision test can begin from an already-provisioned row.
+    """
+
+    vcs = _vcs_integration(slug, config={"stub_repos": REPOS})
+    vcs.discover_repositories()
+    with system_context(reason="test.agents.provisionable.seed"):
+        repository = Repository.objects.get(name="acme/widgets")
+        source = Source.objects.create(repository=repository, kind="template", path="templates")
+        workspace_template = Template.objects.create(
+            source=source, kind="workspace", name="agent-default", path="workspaces/agent-default"
+        )
+        service_template = Template.objects.create(
+            source=source, kind="service", name="claude-code", path="services/claude-code"
+        )
+        return Agent.objects.create(
+            name=name,
+            owner=owner,
+            workspace_template=workspace_template,
+            service_template=service_template,
+            **agent_fields,
+        )
 
 
 def _seed_agent_and_skills(owner: Any) -> tuple[Any, Any, Any]:
