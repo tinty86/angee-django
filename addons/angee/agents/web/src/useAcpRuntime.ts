@@ -24,6 +24,7 @@ import {
 import * as v from "valibot";
 import { useAuthoredMutation } from "@angee/sdk";
 
+import { messageOf } from "./acp-error";
 import { foldIntoLog, type ChatMessage } from "./acp-log";
 import { openAcpTransport, type AcpTransport } from "./acp-transport";
 import {
@@ -165,7 +166,7 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
       } catch (caught) {
         if (!active) return;
         setStatus("error");
-        setError(caught instanceof Error ? caught.message : "Failed to connect to the agent.");
+        setError(messageOf(caught, "Failed to connect to the agent."));
       }
     };
 
@@ -207,7 +208,7 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
           prompt: [{ type: "text", text: context === "" ? userText : `${context}\n\n${userText}` }],
         });
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "The agent did not respond.");
+        setError(messageOf(caught, "The agent did not respond."));
       } finally {
         setIsRunning(false);
       }
