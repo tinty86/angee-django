@@ -8,7 +8,11 @@ import {
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { WorkspaceRef } from "../../data/types";
-import { DaemonResourceTable, type DaemonResourceAction } from "../parts/DaemonResourceTable";
+import {
+  DaemonResourceTable,
+  DaemonResourceTableSkeleton,
+  type DaemonResourceAction,
+} from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -81,6 +85,7 @@ export function WorkspacesSection({ names, title }: WorkspacesSectionProps = {})
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.workspaces.loading")}
+      loadingContent={<DaemonResourceTableSkeleton columnCount={5} actions />}
       actionError={actionError}
     >
       <DaemonResourceTable

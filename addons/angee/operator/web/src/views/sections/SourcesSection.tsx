@@ -8,7 +8,11 @@ import {
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { SourceState } from "../../data/types";
-import { DaemonResourceTable, type DaemonResourceAction } from "../parts/DaemonResourceTable";
+import {
+  DaemonResourceTable,
+  DaemonResourceTableSkeleton,
+  type DaemonResourceAction,
+} from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { StateTag } from "../parts/StateTag";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
@@ -60,6 +64,7 @@ export function SourcesSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.sources.loading")}
+      loadingContent={<DaemonResourceTableSkeleton columnCount={6} actions />}
       actionError={actionError}
     >
       <DaemonResourceTable

@@ -408,6 +408,7 @@ function ListViewBody<TRow extends Row = Row>({
             dataView={dataView}
             selectedIds={surface.selectedIds}
             interactive={interactive}
+            fetching={surface.list.fetching}
             emptyMessage={emptyMessage}
             rowHref={rowHref}
             onRowClick={onRowClick}
@@ -458,7 +459,7 @@ function ListViewBody<TRow extends Row = Row>({
             fetching={surface.list.fetching}
           />
         )}
-        {!groupedListMode && surface.list.fetching ? (
+        {!groupedListMode && surface.list.fetching && surface.rowModels.length > 0 ? (
           <ListLoadingFooter />
         ) : null}
         {bulkDelete.isPreviewOpen && bulkDelete.previewState ? (

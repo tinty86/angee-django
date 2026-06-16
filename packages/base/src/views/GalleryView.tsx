@@ -1,10 +1,12 @@
 import type { ReactElement, ReactNode } from "react";
 import type { Row } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { dragSourceProps, type DndPayload } from "../lib/dnd";
 import { Card } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { ListEmpty } from "./ListInternals";
 
 /**
@@ -32,6 +34,8 @@ export interface GalleryViewProps<TRow extends Row = Row> {
   draggableRow?: (row: TRow) => DndPayload | null;
   selectedIds?: ReadonlySet<string>;
   onToggleSelected?: (id: string, selected: boolean) => void;
+  /** Draw card-shaped placeholders while the first page is loading. */
+  fetching?: boolean;
   /** Shown centered when `rows` is empty. */
   emptyMessage?: ReactNode;
   className?: string;
@@ -49,12 +53,19 @@ export function GalleryView<TRow extends Row = Row>({
   draggableRow,
   selectedIds,
   onToggleSelected,
+  fetching = false,
   emptyMessage = "No records.",
   className,
 }: GalleryViewProps<TRow>): ReactElement {
+  const t = useBaseT();
   return (
     <div className={cn("flex-1 overflow-y-auto bg-canvas p-4", className)}>
-      {rows.length === 0 ? (
+      {fetching && rows.length === 0 ? (
+        <GallerySkeleton
+          showImage={imageField !== undefined}
+          loadingLabel={t("list.loading")}
+        />
+      ) : rows.length === 0 ? (
         <ListEmpty>{emptyMessage}</ListEmpty>
       ) : (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
@@ -83,6 +94,43 @@ export function GalleryView<TRow extends Row = Row>({
       </div>
       )}
     </div>
+  );
+}
+
+function GallerySkeleton({
+  showImage,
+  loadingLabel,
+}: {
+  showImage: boolean;
+  loadingLabel: ReactNode;
+}): ReactElement {
+  return (
+    <SkeletonStatus
+      label={loadingLabel}
+      className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4"
+    >
+      {Array.from({ length: 8 }, (_, index) => (
+        <Card
+          key={index}
+          aria-hidden="true"
+          className="overflow-hidden p-0 shadow-none"
+        >
+          {showImage ? <Skeleton className="aspect-[4/3] rounded-none" /> : null}
+          <div className="grid gap-2 p-3">
+            <Skeleton
+              shape="text"
+              size="md"
+              className={index % 2 === 0 ? "w-4/5" : "w-2/3"}
+            />
+            <Skeleton
+              shape="text"
+              size="sm"
+              className={index % 3 === 0 ? "w-1/2" : "w-3/5"}
+            />
+          </div>
+        </Card>
+      ))}
+    </SkeletonStatus>
   );
 }
 

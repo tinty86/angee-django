@@ -90,6 +90,7 @@ export * from "./preview";
 // UI primitives — embeddable, SDK-agnostic atoms on base-ui.
 export * from "./ui/button";
 export * from "./ui/spinner";
+export * from "./ui/skeleton";
 export * from "./ui/field";
 export * from "./ui/form";
 export * from "./ui/label";

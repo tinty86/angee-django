@@ -7,8 +7,9 @@ import type { ReactNode } from "react";
  * snapshot) shows a contained danger `Alert` in place of the body — checked
  * ahead of loading so a continuously-failing daemon stays on the error rather
  * than flashing the spinner on each poll. While the first snapshot loads it
- * shows the framework `LoadingPanel`; once resolved it renders the children,
- * with a transient `actionError` surfaced as a danger `Alert` above them.
+ * shows a section-supplied skeleton (or the framework `LoadingPanel` fallback);
+ * once resolved it renders the children, with a transient `actionError`
+ * surfaced as a danger `Alert` above them.
  */
 export interface OperatorSectionProps {
   title: string;
@@ -18,6 +19,8 @@ export interface OperatorSectionProps {
   error?: Error | null;
   /** Message shown beside the loading spinner. */
   loadingMessage?: string;
+  /** Representative loading body for this section's loaded view. */
+  loadingContent?: ReactNode;
   /** A transient action error shown as a danger banner above the body. */
   actionError?: string | null;
   children: ReactNode;
@@ -28,6 +31,7 @@ export function OperatorSection({
   loading = false,
   error = null,
   loadingMessage,
+  loadingContent,
   actionError = null,
   children,
 }: OperatorSectionProps): ReactNode {
@@ -37,13 +41,34 @@ export function OperatorSection({
       {error ? (
         <Alert tone="danger">{error.message}</Alert>
       ) : loading ? (
-        <LoadingPanel message={loadingMessage} />
+        loadingContent ? (
+          <OperatorLoadingContent message={loadingMessage}>
+            {loadingContent}
+          </OperatorLoadingContent>
+        ) : (
+          <LoadingPanel message={loadingMessage} />
+        )
       ) : (
         <>
           {actionError ? <Alert tone="danger">{actionError}</Alert> : null}
           {children}
         </>
       )}
+    </div>
+  );
+}
+
+function OperatorLoadingContent({
+  message,
+  children,
+}: {
+  message?: string;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <div aria-busy="true" aria-live="polite" role="status">
+      {message ? <span className="sr-only">{message}</span> : null}
+      {children}
     </div>
   );
 }

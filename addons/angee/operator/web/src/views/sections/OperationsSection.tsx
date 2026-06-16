@@ -4,6 +4,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Skeleton,
   useConfirm,
 } from "@angee/base";
 import { useState, type ReactNode } from "react";
@@ -17,7 +18,10 @@ import {
 } from "../../data/documents";
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
-import { DaemonResourceTable } from "../parts/DaemonResourceTable";
+import {
+  DaemonResourceTable,
+  DaemonResourceTableSkeleton,
+} from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -97,6 +101,7 @@ export function OperationsSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.operations.loading")}
+      loadingContent={<OperationsLoading />}
       actionError={actionError}
     >
       <DaemonResourceTable
@@ -153,5 +158,25 @@ export function OperationsSection(): ReactNode {
         </CardContent>
       </Card>
     </OperatorSection>
+  );
+}
+
+function OperationsLoading(): ReactNode {
+  return (
+    <>
+      <DaemonResourceTableSkeleton columnCount={2} actions />
+      <Card>
+        <CardHeader>
+          <Skeleton shape="text" size="md" className="w-32" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="h-btn-sm w-20" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

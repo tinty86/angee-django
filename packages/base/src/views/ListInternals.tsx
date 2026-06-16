@@ -38,6 +38,7 @@ import { Checkbox, CheckboxVisual } from "../ui/checkbox";
 import { Chip } from "../ui/chip";
 import { DropdownMenu } from "../ui/dropdown-menu";
 import { SelectionBar as SelectionBarPrimitive } from "../ui/selection-bar";
+import { Skeleton } from "../ui/skeleton";
 import {
   Table,
   TableBody,
@@ -242,7 +243,13 @@ export function FlatListBody<TRow extends Row>({
           ))}
         </TableHeader>
         <TableBody>
-          {rowModels.length === 0 && !fetching ? (
+          {fetching && rowModels.length === 0 ? (
+            <ListSkeletonRows
+              table={table}
+              selectable={selectable}
+              loadingLabel={t("list.loading")}
+            />
+          ) : rowModels.length === 0 ? (
             <TableRow>
               <TableCell
                 colSpan={colSpan}
@@ -1189,15 +1196,67 @@ export function ListLoadingFooter(): React.ReactElement {
   );
 }
 
-/** Inline "Loading…" content (spinner + label) for a table-cell/status body. */
-export function ListLoadingInline(): React.ReactElement {
-  const t = useBaseT();
+/** Table-shaped loading body used while a list fetches its first page. */
+export function ListSkeletonRows<TRow extends Row>({
+  table,
+  selectable = true,
+  rowCount = 8,
+  loadingLabel,
+}: {
+  table: TableModel<TRow>;
+  selectable?: boolean;
+  rowCount?: number;
+  loadingLabel?: React.ReactNode;
+}): React.ReactElement {
+  const columns = table.getVisibleLeafColumns();
+  const colSpan = columns.length + (selectable ? 1 : 0);
   return (
-    <span className="inline-flex items-center gap-2">
-      <Spinner size="sm" />
-      {t("list.loading")}
-    </span>
+    <>
+      {loadingLabel ? (
+        <TableRow>
+          <TableCell
+            aria-busy="true"
+            aria-live="polite"
+            className="sr-only"
+            colSpan={colSpan}
+            role="status"
+          >
+            {loadingLabel}
+          </TableCell>
+        </TableRow>
+      ) : null}
+      {Array.from({ length: Math.max(1, rowCount) }, (_, rowIndex) => (
+        <TableRow key={rowIndex} aria-hidden="true">
+          {selectable ? (
+            <TableCell className="w-8">
+              <Skeleton className="size-3.5 rounded-[3px]" />
+            </TableCell>
+          ) : null}
+          {columns.map((column, columnIndex) => {
+            const align = alignOf(column.columnDef);
+            return (
+              <TableCell key={column.id} className={ALIGN_CLASS[align]}>
+                <Skeleton
+                  shape="text"
+                  size="sm"
+                  className={cn(
+                    skeletonCellWidth(rowIndex + columnIndex),
+                    align === "right" && "ml-auto",
+                    align === "center" && "mx-auto",
+                  )}
+                />
+              </TableCell>
+            );
+          })}
+        </TableRow>
+      ))}
+    </>
   );
+}
+
+function skeletonCellWidth(index: number): string {
+  const widths = ["w-4/5", "w-2/3", "w-1/2", "w-24", "w-32"] as const;
+  return widths[index % widths.length] ?? "w-2/3";
 }
 
 /** The centered, full-height empty body the non-table renderers (gallery,

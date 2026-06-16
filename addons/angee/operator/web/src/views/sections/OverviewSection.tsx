@@ -4,6 +4,7 @@ import {
   CardHeader,
   CardTitle,
   MetricGrid,
+  Skeleton,
   type MetricGridTile,
 } from "@angee/base";
 import type { ReactNode } from "react";
@@ -39,6 +40,7 @@ export function OverviewSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.overview.loading")}
+      loadingContent={<OverviewLoading />}
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
@@ -76,5 +78,36 @@ export function OverviewSection(): ReactNode {
 
       <MetricGrid className="grid-cols-2 sm:grid-cols-4" metrics={metrics} />
     </OperatorSection>
+  );
+}
+
+function OverviewLoading(): ReactNode {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }, (_, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <Skeleton shape="text" size="md" className="w-24" />
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              <Skeleton shape="text" size="sm" className="w-2/3" />
+              <Skeleton shape="text" size="sm" className="w-5/6" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card key={index} asChild className="px-4 py-3 shadow-none" density="sm">
+            <div aria-hidden="true">
+              <Skeleton shape="text" size="sm" className="mb-3 w-20" />
+              <Skeleton shape="text" size="lg" className="w-10" />
+            </div>
+          </Card>
+        ))}
+      </div>
+    </>
   );
 }

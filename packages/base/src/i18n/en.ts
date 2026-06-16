@@ -58,6 +58,7 @@ export const enBaseMessages: Record<string, string> = {
   "selection.delete": "Delete",
   "numberField.increment": "Increase value",
   "numberField.decrement": "Decrease value",
+  "loading.default": "Loading…",
   "list.loading": "Loading...",
   "list.selectAllOnPage": "Select all rows on this page",
   "list.selectRow": "Select row",
