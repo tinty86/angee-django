@@ -129,6 +129,7 @@ class User(SqidMixin, AbstractBaseUser, RebacPermissionsMixin, AngeeModel):
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(default=timezone.now)
+    preferences = models.JSONField(default=dict, blank=True)
 
     objects = UserManager()
 

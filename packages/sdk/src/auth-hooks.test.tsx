@@ -9,6 +9,7 @@ import {
   useLoginWithPassword,
   useLogout,
   useRuntimeAuthState,
+  useUpdatePreferences,
 } from "./auth-hooks";
 import { GraphQLClientProvider } from "./graphql-provider";
 
@@ -28,11 +29,24 @@ interface AuthResponses {
 function authFetch(responses: AuthResponses): typeof globalThis.fetch {
   const fetch = vi.fn(async (url: string, init: RequestInit) => {
     if (String(url).includes("/csrf/")) return json({ token: "t" });
-    const body = JSON.parse(String(init.body)) as { query: string };
+    const body = JSON.parse(String(init.body)) as {
+      query: string;
+      variables?: Record<string, unknown>;
+    };
     if (body.query.includes("currentUser"))
       return json({ data: { currentUser: responses.currentUser ?? null } });
     if (body.query.includes("login(")) return json({ data: { login: responses.login } });
     if (body.query.includes("logout")) return json({ data: { logout: responses.logout } });
+    if (body.query.includes("updatePreferences")) {
+      return json({
+        data: {
+          updatePreferences: {
+            ...USER,
+            preferences: body.variables?.preferences ?? {},
+          },
+        },
+      });
+    }
     return json({ data: {} });
   });
   return fetch as unknown as typeof globalThis.fetch;
@@ -55,6 +69,12 @@ const USER = {
   email: "ada@example.com",
   isStaff: true,
   isActive: true,
+  preferences: {
+    "chrome.rail": {
+      order: ["notes", "ops"],
+      defaultItemId: "notes",
+    },
+  },
 };
 
 describe("useRuntimeAuthState", () => {
@@ -124,6 +144,29 @@ describe("useLogout", () => {
     await act(async () => {
       await result.current.api.logout();
     });
+    expect(result.current.client).not.toBe(before);
+  });
+});
+
+describe("useUpdatePreferences", () => {
+  test("writes preferences and rebuilds the client on success", async () => {
+    const fetch = authFetch({});
+    const next = {
+      "chrome.rail": {
+        order: ["ops", "notes"],
+        defaultItemId: "ops",
+      },
+    };
+    const { result } = renderHook(
+      () => ({ client: useClient(), api: useUpdatePreferences() }),
+      { wrapper: wrapperWith(fetch) },
+    );
+    const before = result.current.client;
+    let payload: { preferences?: unknown } | null | undefined;
+    await act(async () => {
+      payload = await result.current.api.updatePreferences(next);
+    });
+    expect(payload?.preferences).toEqual(next);
     expect(result.current.client).not.toBe(before);
   });
 });

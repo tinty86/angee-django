@@ -7,6 +7,7 @@ import {
   CURRENT_USER_DOCUMENT,
   LOGIN_DOCUMENT,
   LOGOUT_DOCUMENT,
+  UPDATE_PREFERENCES_DOCUMENT,
 } from "./auth-hooks";
 
 const contract = buildSchema(
@@ -18,6 +19,7 @@ describe("auth documents", () => {
     ["currentUser", CURRENT_USER_DOCUMENT],
     ["login", LOGIN_DOCUMENT],
     ["logout", LOGOUT_DOCUMENT],
+    ["updatePreferences", UPDATE_PREFERENCES_DOCUMENT],
   ] as const) {
     test(`${name} validates against the contract`, () => {
       expect(validate(contract, parse(document)).map((e) => e.message)).toEqual([]);

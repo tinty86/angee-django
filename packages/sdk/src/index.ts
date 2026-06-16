@@ -166,17 +166,25 @@ export {
   type AuthState,
   type AuthUser,
   type CurrentUserPayload,
+  type UserPreferences,
 } from "./auth";
 export {
   useRuntimeAuthState,
   useLoginWithPassword,
   useLogout,
+  useUpdatePreferences,
   CURRENT_USER_DOCUMENT,
   LOGIN_DOCUMENT,
   LOGOUT_DOCUMENT,
+  UPDATE_PREFERENCES_DOCUMENT,
   type LoginCredentials,
   type LoginResult,
 } from "./auth-hooks";
+export {
+  UserPreferencesProvider,
+  useUserPreferences,
+  type UserPreferencesState,
+} from "./preferences";
 
 // i18n helpers.
 export {

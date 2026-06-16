@@ -1,11 +1,11 @@
 import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
 import { defineBaseAddon } from "@angee/base";
 import {
+  Cable,
   FolderGit2,
   GitBranch,
   GitFork,
   Link2,
-  Plug,
   Store,
   Webhook,
 } from "lucide-react";
@@ -209,7 +209,7 @@ const integrate = defineBaseAddon({
     Credential: credentialCreateForm,
   },
   icons: {
-    integrate: Plug,
+    integrate: Cable,
     integration: Link2,
     vendor: Store,
     webhook: Webhook,

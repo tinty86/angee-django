@@ -822,6 +822,43 @@ def test_user_crud_create_update_delete_are_admin_only(
         assert not User.objects.filter(pk=user.pk).exists()
 
 
+def test_current_user_preferences_default_to_empty_object(
+    iam_connection_tables: None,
+) -> None:
+    """User preference projections return an object even before a user customizes UI."""
+
+    user = User.objects.create_user(
+        username="prefs-user",
+        email="prefs-user@example.com",
+    )
+    public_schema = _schema("public")
+
+    data = _data(
+        _execute(
+            public_schema,
+            """
+            query {
+              currentUser {
+                username
+                preferences
+              }
+            }
+            """,
+            user=user,
+        )
+    )
+
+    assert data["currentUser"] == {
+        "username": "prefs-user",
+        "preferences": {},
+    }
+    assert "preferences" in _sdl_block(public_schema.as_str(), "type UserType")
+    assert "preferences" in _sdl_block(
+        public_schema.as_str(),
+        "type CurrentUserType",
+    )
+
+
 def test_external_account_update_delete_are_admin_only(
     iam_connection_tables: None,
 ) -> None:

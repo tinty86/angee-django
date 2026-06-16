@@ -12,8 +12,11 @@ export interface AuthUser {
   email?: string;
   isStaff?: boolean;
   isActive?: boolean;
+  preferences?: UserPreferences;
   roles?: readonly string[];
 }
+
+export type UserPreferences = Record<string, unknown>;
 
 /** Client-side auth state. Gating from it is UX only; the server authorizes. */
 export interface AuthState {
@@ -38,9 +41,16 @@ export interface CurrentUserPayload {
   email: string;
   isStaff: boolean;
   isActive: boolean;
+  preferences: UserPreferences;
 }
 
 const asString = (value: unknown): string => (typeof value === "string" ? value : "");
+
+function asPreferences(value: unknown): UserPreferences {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
 
 /**
  * Narrow an untrusted `currentUser` value to the payload, or null. A signed-in
@@ -61,6 +71,7 @@ export function parseCurrentUser(value: unknown): CurrentUserPayload | null {
     email: asString(record.email),
     isStaff: record.isStaff === true,
     isActive: record.isActive === true,
+    preferences: asPreferences(record.preferences),
   };
 }
 
@@ -83,6 +94,7 @@ export function currentUserToAuthState(
     email: payload.email || undefined,
     isStaff: payload.isStaff,
     isActive: payload.isActive,
+    preferences: payload.preferences,
     roles: [],
   };
   return { user, status: "authenticated", hasRole: () => false };

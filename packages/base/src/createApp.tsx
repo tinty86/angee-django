@@ -1,6 +1,7 @@
 import {
   StrictMode,
   useEffect,
+  useMemo,
   type ComponentType,
   type ReactNode,
 } from "react";
@@ -24,11 +25,14 @@ import {
   GraphQLClientProvider,
   GraphQLProvider,
   RelayInvalidationProvider,
+  UserPreferencesProvider,
   changeSubscriptionFields,
   composeAddons,
   mergeSlotContributions,
+  useMenus,
   useRuntimeAuthState,
   useSchemaClients,
+  useUserPreferences,
   type AddonManifest,
   type AddonRoute,
   type AngeeUrqlClientOptions,
@@ -39,6 +43,7 @@ import {
 } from "@angee/sdk";
 
 import { ModalsHost, ToastProvider } from "./feedback";
+import { readAppRailPreferences } from "./chrome/app-rail-preferences";
 import { baseIcons } from "./chrome/icon-registry";
 import {
   MenuTree,
@@ -195,7 +200,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: () => <Redirect to={home} />,
+    component: () => <HomeRedirect fallback={home} />,
   });
 
   const shellRoutes = createShellRoutes({
@@ -299,7 +304,9 @@ function AppFrame({
             client={clients[subscriptionSchema]}
             availableChangeFields={availableChangeFields}
           >
-            <AuthProvider auth={auth}>{children}</AuthProvider>
+            <AuthProvider auth={auth}>
+              <UserPreferencesProvider>{children}</UserPreferencesProvider>
+            </AuthProvider>
           </RelayInvalidationProvider>
         </ToastProvider>
       </ModalsHost>
@@ -313,6 +320,21 @@ function RootOutlet(): ReactNode {
       <Outlet />
     </NuqsAdapter>
   );
+}
+
+function HomeRedirect({ fallback }: { fallback: string }): ReactNode {
+  const menus = useMenus();
+  const { preferences } = useUserPreferences();
+  const target = useMemo(() => {
+    const defaultItemId = readAppRailPreferences(preferences).defaultItemId;
+    if (!defaultItemId) return fallback;
+    const item = MenuTree
+      .from(menus as readonly ChromeMenuItem[])
+      .railMenuItems()
+      .find((node) => node.id === defaultItemId);
+    return item?.target ?? fallback;
+  }, [fallback, menus, preferences]);
+  return <Redirect to={target} />;
 }
 
 function ShellLayoutRoute({

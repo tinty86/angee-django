@@ -44,6 +44,7 @@ from rebac.roles import (
 )
 from rebac.schema.ast import PermArrow, PermBinOp, PermNil, PermRef
 from strawberry import auto, relay
+from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import instance_from_public_id
@@ -85,6 +86,13 @@ _PERMISSION_HUB_LIST_CAP = 1000
 _ROLE_SUFFIX = "/role"
 
 
+def _preference_object(user: Any) -> JSON:
+    """Return a safe UI preference object for user projections."""
+
+    preferences = getattr(user, "preferences", {})
+    return cast(JSON, preferences if isinstance(preferences, dict) else {})
+
+
 @strawberry_django.type(User)
 class UserType(AngeeNode):
     """GraphQL projection of an Angee user for shared/admin lists."""
@@ -102,6 +110,12 @@ class UserType(AngeeNode):
 
         return str(cast(Any, self).get_full_name())
 
+    @strawberry_django.field
+    def preferences(self) -> JSON:
+        """Return the user's private UI preference object."""
+
+        return _preference_object(cast(Any, self))
+
 
 @strawberry_django.type(User)
 class CurrentUserType(AngeeNode):
@@ -113,6 +127,12 @@ class CurrentUserType(AngeeNode):
     email: auto
     is_staff: auto
     is_active: auto
+
+    @strawberry_django.field
+    def preferences(self) -> JSON:
+        """Return the current user's private UI preference object."""
+
+        return _preference_object(cast(Any, self))
 
     @strawberry_django.field
     def role_refs(self) -> list[str]:
@@ -666,6 +686,27 @@ class IAMMutation:
 
         auth_logout(_request(info))
         return True
+
+    @strawberry.mutation
+    def update_preferences(
+        self,
+        info: strawberry.Info,
+        preferences: JSON,
+    ) -> CurrentUserType:
+        """Replace the authenticated user's private UI preference object."""
+
+        request = _request(info)
+        user = getattr(request, "user", None)
+        if isinstance(user, AnonymousUser) or not getattr(user, "is_authenticated", False):
+            raise ValueError("Authentication required")
+        if not isinstance(preferences, dict):
+            raise ValueError("preferences must be a JSON object")
+        if not hasattr(user, "preferences"):
+            raise ValueError("The active user model does not support preferences")
+        with system_context(reason="iam.preferences.update"), transaction.atomic():
+            user.preferences = dict(preferences)
+            user.save(update_fields=["preferences"])
+        return cast(CurrentUserType, user)
 
 
 @strawberry.type

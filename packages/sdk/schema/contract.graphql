@@ -257,6 +257,7 @@ type Viewer implements Node {
   email: String!
   isStaff: Boolean!
   isActive: Boolean!
+  preferences: JSON!
 }
 
 type LoginPayload {
@@ -292,6 +293,7 @@ type Query {
 type Mutation {
   login(username: String!, password: String!): LoginPayload!
   logout: Boolean!
+  updatePreferences(preferences: JSON!): Viewer
   createSale(data: SaleInput!): Sale!
   updateSale(data: SalePatch!): Sale!
   deleteSale(id: ID!, confirm: Boolean! = false): DeletePreview!
