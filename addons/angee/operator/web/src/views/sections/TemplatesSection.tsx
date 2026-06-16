@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  Skeleton,
 } from "@angee/base";
 import type { ReactNode } from "react";
 
@@ -25,6 +26,7 @@ export function TemplatesSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.templates.loading")}
+      loadingContent={<TemplatesLoading />}
     >
       {templates.length === 0 ? (
         <EmptyState icon="columns" title={t("operator.templates.empty.title")} />
@@ -36,6 +38,37 @@ export function TemplatesSection(): ReactNode {
         </div>
       )}
     </OperatorSection>
+  );
+}
+
+function TemplatesLoading(): ReactNode {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {Array.from({ length: 3 }, (_, index) => (
+        <Card key={index}>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <Skeleton
+                shape="text"
+                size="md"
+                className={index % 2 === 0 ? "w-36" : "w-28"}
+              />
+              <Skeleton shape="text" size="sm" className="w-20" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="h-tag-h w-16 rounded-full" />
+              <Skeleton shape="text" size="sm" className="w-56" />
+            </div>
+            <div className="grid gap-1">
+              <Skeleton shape="text" size="sm" className="w-20" />
+              <Skeleton shape="text" size="sm" className="w-44" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 

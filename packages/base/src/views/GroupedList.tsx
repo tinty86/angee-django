@@ -22,10 +22,12 @@ import {
   type UseResourceListOptions,
 } from "@angee/sdk";
 import { Glyph } from "../chrome/Glyph";
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { titleCase } from "../lib/titleCase";
 import { CountBadge } from "../ui/badge";
 import { Pager } from "../ui/pager";
+import { Skeleton } from "../ui/skeleton";
 import {
   Table,
   TableBody,
@@ -48,7 +50,7 @@ import {
   ALIGN_CLASS,
   ListHeaderCell,
   ListLoadingFooter,
-  ListLoadingInline,
+  ListSkeletonRows,
   RecordRow,
   TABLE_SCROLL_STYLE,
   alignOf,
@@ -254,6 +256,7 @@ function GroupLevel<TRow extends Row>({
   onRowClick,
   modelMetadata = null,
 }: GroupLevelProps<TRow>): React.ReactElement | null {
+  const t = useBaseT();
   const axis = axes[0];
   const currentGroup = groups[0];
   const dimensions = React.useMemo(
@@ -346,16 +349,13 @@ function GroupLevel<TRow extends Row>({
     );
   }
   if (groupAggregation.buckets.length === 0 && groupAggregation.fetching) {
-    if (depth === 0) return null;
     return (
-      <GroupLevelStatusBody
+      <GroupLevelSkeletonBody
         id={regionId}
         colSpan={colSpan}
         depth={depth}
-        className="py-4 text-fg-muted"
-      >
-        <ListLoadingInline />
-      </GroupLevelStatusBody>
+        loadingLabel={t("list.loading")}
+      />
     );
   }
   if (groupAggregation.buckets.length === 0) {
@@ -452,6 +452,60 @@ function GroupLevelStatusBody({
           {children}
         </TableCell>
       </TableRow>
+    </TableBody>
+  );
+}
+
+function GroupLevelSkeletonBody({
+  id,
+  colSpan,
+  depth,
+  loadingLabel,
+}: {
+  id?: string;
+  colSpan: number;
+  depth: number;
+  loadingLabel: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <TableBody id={id}>
+      <TableRow>
+        <TableCell
+          aria-busy="true"
+          aria-live="polite"
+          className="sr-only"
+          colSpan={colSpan}
+          role="status"
+        >
+          {loadingLabel}
+        </TableCell>
+      </TableRow>
+      {Array.from({ length: 4 }, (_, index) => (
+        <TableRow key={index} aria-hidden="true">
+          <TableCell
+            colSpan={colSpan}
+            className="bg-canvas py-2"
+            style={depthIndentStyle(depth)}
+          >
+            <div className="flex h-8 items-center justify-between gap-3">
+              <span className="flex min-w-0 items-center gap-2">
+                <Skeleton className="size-3.5 shrink-0" />
+                <Skeleton
+                  shape="text"
+                  size="sm"
+                  className={index % 2 === 0 ? "w-28" : "w-20"}
+                />
+                <Skeleton shape="text" size="sm" className="w-5" />
+              </span>
+              <Skeleton
+                shape="text"
+                size="sm"
+                className={index % 2 === 0 ? "w-24" : "w-16"}
+              />
+            </div>
+          </TableCell>
+        </TableRow>
+      ))}
     </TableBody>
   );
 }
@@ -808,6 +862,7 @@ function LeafGroupSection<TRow extends Row>({
   onRowClick,
   onPageChange,
 }: LeafGroupSectionProps<TRow>): React.ReactElement | null {
+  const t = useBaseT();
   const pageCount = Math.max(
     1,
     Math.ceil(bucket.count / GROUPED_LIST_ITEM_PAGE_SIZE),
@@ -844,12 +899,12 @@ function LeafGroupSection<TRow extends Row>({
             {list.error.message}
           </TableCell>
         </TableRow>
-      ) : list.fetching ? (
-        <TableRow>
-          <TableCell colSpan={colSpan} className="py-4 text-fg-muted">
-            <ListLoadingInline />
-          </TableCell>
-        </TableRow>
+      ) : list.fetching && rowModels.length === 0 ? (
+        <ListSkeletonRows
+          table={table}
+          rowCount={Math.min(4, Math.max(1, bucket.count))}
+          loadingLabel={t("list.loading")}
+        />
       ) : rowModels.length === 0 ? (
         <TableRow>
           <TableCell

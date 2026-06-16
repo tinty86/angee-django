@@ -1,6 +1,8 @@
 import {
   EmptyState,
+  Card,
   MetricGrid,
+  Skeleton,
   type MetricGridTile,
 } from "@angee/base";
 import type { ReactNode } from "react";
@@ -8,7 +10,10 @@ import type { ReactNode } from "react";
 import { useOperatorT } from "../../i18n";
 import { useOperatorSnapshot } from "../../data/transport";
 import type { GitOpsLink, GitOpsSummary } from "../../data/types";
-import { DaemonResourceTable } from "../parts/DaemonResourceTable";
+import {
+  DaemonResourceTable,
+  DaemonResourceTableSkeleton,
+} from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { StateTag } from "../parts/StateTag";
 
@@ -39,6 +44,7 @@ export function GitOpsSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.gitops.loading")}
+      loadingContent={<GitOpsLoading />}
     >
       {gitOps ? (
         <GitOpsTopologyView summary={gitOps.summary} links={gitOps.links} />
@@ -46,6 +52,26 @@ export function GitOpsSection(): ReactNode {
         <EmptyState icon="activity" title={t("operator.gitops.empty.title")} />
       )}
     </OperatorSection>
+  );
+}
+
+function GitOpsLoading(): ReactNode {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: SUMMARY_TILES.length }, (_, index) => (
+          <Card key={index} asChild className="px-4 py-3 shadow-none" density="sm">
+            <div aria-hidden="true">
+              <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+                <Skeleton shape="text" size="sm" className="w-16" />
+              </div>
+              <Skeleton shape="text" size="lg" className="w-12" />
+            </div>
+          </Card>
+        ))}
+      </div>
+      <DaemonResourceTableSkeleton columnCount={7} />
+    </>
   );
 }
 

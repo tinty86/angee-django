@@ -8,6 +8,7 @@ import {
   FieldLabel,
   FieldRoot,
   Input,
+  Skeleton,
   useConfirm,
 } from "@angee/base";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
@@ -16,7 +17,10 @@ import { useOperatorT } from "../../i18n";
 import { SECRET_DELETE_MUTATION, SECRET_SET_MUTATION } from "../../data/documents";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { SecretRef } from "../../data/types";
-import { DaemonResourceTable } from "../parts/DaemonResourceTable";
+import {
+  DaemonResourceTable,
+  DaemonResourceTableSkeleton,
+} from "../parts/DaemonResourceTable";
 import { OperatorSection } from "../parts/OperatorSection";
 import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
 
@@ -89,6 +93,7 @@ export function SecretsSection(): ReactNode {
       loading={result.fetching && !snapshot}
       error={result.error && !snapshot ? result.error : null}
       loadingMessage={t("operator.secrets.loading")}
+      loadingContent={<SecretsLoading />}
       actionError={actionError}
     >
       <Card>
@@ -197,5 +202,31 @@ export function SecretsSection(): ReactNode {
         rows={secrets}
       />
     </OperatorSection>
+  );
+}
+
+function SecretsLoading(): ReactNode {
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <Skeleton shape="text" size="md" className="w-32" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grid gap-1.5">
+              <Skeleton shape="text" size="sm" className="w-16" />
+              <Skeleton className="h-input-h w-48" />
+            </div>
+            <div className="grid gap-1.5">
+              <Skeleton shape="text" size="sm" className="w-16" />
+              <Skeleton className="h-input-h w-48" />
+            </div>
+            <Skeleton className="h-btn-sm w-20" />
+          </div>
+        </CardContent>
+      </Card>
+      <DaemonResourceTableSkeleton columnCount={6} />
+    </>
   );
 }

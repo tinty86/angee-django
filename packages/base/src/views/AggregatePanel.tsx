@@ -8,7 +8,7 @@ import {
 
 import { useBaseT } from "../i18n";
 import { CountBadge } from "../ui/badge";
-import { Spinner } from "../ui/spinner";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 
 /** One grouped dimension plus how to label it in the panel header. */
 export interface AggregateDimension extends GroupByDimension {
@@ -73,16 +73,17 @@ export function AggregatePanel({
     >
       <div className="flex items-center justify-between text-13">
         <span className="font-semibold text-fg">{heading}</span>
-        <CountBadge value={total} />
+        {fetching ? (
+          <Skeleton shape="text" size="sm" className="w-8" />
+        ) : (
+          <CountBadge value={total} />
+        )}
       </div>
 
       {error ? (
         <p className="text-13 text-danger-text">{error.message}</p>
       ) : fetching ? (
-        <div className="flex items-center gap-2 py-2 text-13 text-fg-muted">
-          <Spinner size="sm" />
-          {t("aggregate.loading")}
-        </div>
+        <AggregateSkeleton grouped={grouped} loadingLabel={t("aggregate.loading")} />
       ) : !grouped ? null : group.buckets.length === 0 ? (
         <p className="py-1 text-13 text-fg-muted">{t("aggregate.noData")}</p>
       ) : (
@@ -110,5 +111,41 @@ export function AggregatePanel({
         </ul>
       )}
     </div>
+  );
+}
+
+function AggregateSkeleton({
+  grouped,
+  loadingLabel,
+}: {
+  grouped: boolean;
+  loadingLabel: React.ReactNode;
+}): React.ReactElement {
+  if (!grouped) {
+    return (
+      <SkeletonStatus label={loadingLabel} className="my-1">
+        <Skeleton shape="text" size="sm" className="w-2/3" />
+      </SkeletonStatus>
+    );
+  }
+
+  return (
+    <SkeletonStatus label={loadingLabel}>
+      <ul className="flex flex-col gap-2" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, index) => (
+          <li key={index} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-3">
+              <Skeleton
+                shape="text"
+                size="sm"
+                className={index % 2 === 0 ? "w-28" : "w-20"}
+              />
+              <Skeleton shape="text" size="sm" className="w-7" />
+            </div>
+            <Skeleton className={index % 2 === 0 ? "h-1.5 w-full" : "h-1.5 w-2/3"} />
+          </li>
+        ))}
+      </ul>
+    </SkeletonStatus>
   );
 }

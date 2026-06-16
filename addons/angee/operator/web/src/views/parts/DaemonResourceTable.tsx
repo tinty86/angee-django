@@ -1,5 +1,6 @@
 import {
   Button,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -62,17 +63,25 @@ export function DaemonResourceTable<Row>({
       <TableHeader>
         <TableRow>
           {columns.map((column, index) => (
-            <TableHead className={column.align === "end" ? "text-right" : undefined} key={index}>
+            <TableHead
+              className={column.align === "end" ? "text-right" : undefined}
+              key={index}
+            >
               {column.header}
             </TableHead>
           ))}
-          {actions ? <TableHead className="text-right">{actionsLabel}</TableHead> : null}
+          {actions ? (
+            <TableHead className="text-right">{actionsLabel}</TableHead>
+          ) : null}
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.length === 0 ? (
           <TableRow>
-            <TableCell className="text-center text-13 text-fg-muted" colSpan={colSpan}>
+            <TableCell
+              className="text-center text-13 text-fg-muted"
+              colSpan={colSpan}
+            >
               {emptyMessage}
             </TableCell>
           </TableRow>
@@ -110,4 +119,84 @@ export function DaemonResourceTable<Row>({
       </TableBody>
     </Table>
   );
+}
+
+export function DaemonResourceTableSkeleton({
+  columnCount,
+  actions = false,
+  rowCount = 5,
+}: {
+  columnCount: number;
+  actions?: boolean;
+  rowCount?: number;
+}): ReactNode {
+  const columns = Array.from({ length: Math.max(1, columnCount) });
+  const rows = Array.from({ length: Math.max(1, rowCount) });
+
+  return (
+    <Table aria-hidden="true">
+      <TableHeader>
+        <TableRow>
+          {columns.map((_, index) => (
+            <TableHead
+              key={index}
+              className={
+                index === columns.length - 1 && !actions ? "text-right" : undefined
+              }
+            >
+              <Skeleton
+                shape="text"
+                size="sm"
+                className={index % 2 === 0 ? "w-24" : "w-16"}
+              />
+            </TableHead>
+          ))}
+          {actions ? (
+            <TableHead className="text-right">
+              <Skeleton shape="text" size="sm" className="ml-auto w-16" />
+            </TableHead>
+          ) : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((_, rowIndex) => (
+          <TableRow key={rowIndex}>
+            {columns.map((__, columnIndex) => {
+              const isTrailing = columnIndex === columns.length - 1 && !actions;
+              return (
+                <TableCell
+                  key={columnIndex}
+                  className={isTrailing ? "text-right" : undefined}
+                >
+                  <Skeleton
+                    shape="text"
+                    size="sm"
+                    className={[
+                      skeletonCellWidth(rowIndex + columnIndex),
+                      isTrailing ? "ml-auto" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  />
+                </TableCell>
+              );
+            })}
+            {actions ? (
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Skeleton className="h-btn-sm w-14" />
+                  <Skeleton className="h-btn-sm w-14" />
+                </div>
+              </TableCell>
+            ) : null}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function skeletonCellWidth(index: number): string {
+  const widths = ["w-4/5", "w-2/3", "w-1/2", "w-24", "w-32"] as const;
+  return widths[index % widths.length] ?? "w-2/3";
 }

@@ -5,8 +5,10 @@ import type { Row as TableRowModel } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import type { Row } from "@angee/sdk";
 
+import { useBaseT } from "../i18n";
 import { type Tone } from "../lib/tones";
 import { CountBadge } from "../ui/badge";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { StatusDot } from "../ui/status-icon";
 import type { DataViewContextValue } from "./data-view-context";
 import type { DataViewGroup } from "./data-view-model";
@@ -32,6 +34,7 @@ export interface BoardViewProps<TRow extends Row = Row> {
   dataView: DataViewContextValue;
   selectedIds: ReadonlySet<string>;
   interactive: boolean;
+  fetching?: boolean;
   emptyMessage: React.ReactNode;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
@@ -44,6 +47,7 @@ export function BoardView<TRow extends Row = Row>(
     columns,
     groups,
     dataView,
+    fetching = false,
     emptyMessage,
     rowHref,
     onRowClick,
@@ -51,6 +55,7 @@ export function BoardView<TRow extends Row = Row>(
   return (
     <BoardRows
       columns={columns}
+      fetching={fetching}
       groups={groups}
       groupStack={dataView.state.groupStack}
       emptyMessage={emptyMessage}
@@ -62,6 +67,7 @@ export function BoardView<TRow extends Row = Row>(
 
 function BoardRows<TRow extends Row>({
   columns,
+  fetching,
   groups,
   groupStack,
   emptyMessage,
@@ -69,15 +75,25 @@ function BoardRows<TRow extends Row>({
   onRowClick,
 }: {
   columns: readonly ColumnDescriptor<TRow>[];
+  fetching: boolean;
   groups: readonly RowGroup<TRow>[];
   groupStack: readonly DataViewGroup[];
   emptyMessage: React.ReactNode;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
 }): React.ReactElement {
+  const t = useBaseT();
   const leaves = groups.flatMap(flattenLeaves);
   const groupFields = new Set(groupStack.map((group) => group.field));
   if (leaves.every((group) => group.rows.length === 0)) {
+    if (fetching) {
+      return (
+        <BoardSkeleton
+          laneCount={groupStack.length > 0 ? 3 : 1}
+          loadingLabel={t("list.loading")}
+        />
+      );
+    }
     return <div className="px-3 py-8 text-center text-fg-muted">{emptyMessage}</div>;
   }
   // Kanban is most useful with an active group axis; with no group-by applied a single lane is shown.
@@ -99,6 +115,64 @@ function BoardRows<TRow extends Row>({
         />
       ))}
     </div>
+  );
+}
+
+function BoardSkeleton({
+  laneCount,
+  loadingLabel,
+}: {
+  laneCount: number;
+  loadingLabel: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <SkeletonStatus
+      label={loadingLabel}
+      className="flex gap-3 overflow-x-auto overflow-y-hidden p-3"
+      style={BOARD_SCROLL_STYLE}
+    >
+      {Array.from({ length: Math.max(1, laneCount) }, (_, laneIndex) => (
+        <section
+          key={laneIndex}
+          aria-hidden="true"
+          className="flex max-h-full min-h-0 w-[300px] flex-none flex-col rounded-[10px] border border-border-subtle bg-inset"
+        >
+          <div className="sticky top-0 z-10 flex items-center gap-2 rounded-t-[10px] bg-inset px-3 pt-3 pb-2">
+            <Skeleton className="size-2.5 shrink-0 rounded-full" />
+            <Skeleton
+              shape="text"
+              size="sm"
+              className={laneIndex % 2 === 0 ? "w-28 flex-1" : "w-20 flex-1"}
+            />
+            <Skeleton shape="text" size="sm" className="w-5" />
+          </div>
+          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-2 pb-2">
+            {Array.from({ length: 3 }, (_, cardIndex) => (
+              <article
+                key={cardIndex}
+                className="grid gap-2 rounded-lg border border-border-subtle bg-sheet p-3 shadow-xs"
+              >
+                <Skeleton
+                  shape="text"
+                  size="md"
+                  className={cardIndex % 2 === 0 ? "w-5/6" : "w-2/3"}
+                />
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Skeleton shape="text" size="sm" className="w-16" />
+                    <Skeleton shape="text" size="sm" className="w-20" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Skeleton shape="text" size="sm" className="w-12" />
+                    <Skeleton shape="text" size="sm" className="w-24" />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </SkeletonStatus>
   );
 }
 

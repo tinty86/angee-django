@@ -299,6 +299,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
             onToggleSelected={
               selectable ? dataView.toggleSelectedId : undefined
             }
+            fetching={fetching}
             emptyMessage={emptyMessage}
           />
         ) : (
@@ -325,7 +326,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
             fetching={fetching}
           />
         )}
-        {fetching ? (
+        {fetching && surface.rowModels.length > 0 ? (
           <ListLoadingFooter />
         ) : null}
       </div>
