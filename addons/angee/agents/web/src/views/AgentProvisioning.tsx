@@ -111,8 +111,9 @@ export function AgentProvisioning({
   const hasWorkspaceTemplate = Boolean(agent?.workspaceTemplate?.path);
 
   // No poll: `agents.Agent` declares `changes(Agent, field="agentChanged")`, so the
-  // record auto-invalidates live through the relay subscription, and the operator
-  // workspace/service state streams in over `onWorkspaceStatusChange`/`onServiceLogs`.
+  // record auto-invalidates live through the relay subscription; workspace state
+  // streams over `onWorkspaceStatusChange` and service logs over the `ServiceLogs`
+  // socket.
 
   return (
     <div className="flex flex-col gap-5">

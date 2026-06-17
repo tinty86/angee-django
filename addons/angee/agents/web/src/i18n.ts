@@ -90,7 +90,6 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.provisioning.none": "None",
   "agents.provisioning.live": "Live",
   "agents.provisioning.logs": "Operator logs",
-  "agents.provisioning.logsWaiting": "Waiting for operator logs…",
   "agents.provisioning.actionFailed": "The action failed.",
   "agents.provisioning.provisionFailed": "Provisioning failed.",
   "agents.provisioning.deprovisionFailed": "Deprovisioning failed.",

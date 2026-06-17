@@ -63,7 +63,6 @@ export const enOperatorMessages: Record<string, string> = {
   "operator.services.detail.endpoint": "Endpoint",
   "operator.services.detail.internal": "Internal address",
   "operator.services.detail.logs": "Logs",
-  "operator.services.detail.logs.empty": "Waiting for log output…",
 
   // Workspaces.
   "operator.workspaces.loading": "Loading workspaces",
@@ -83,7 +82,6 @@ export const enOperatorMessages: Record<string, string> = {
   "operator.workspaces.detail.expiresAt": "Expires",
   "operator.workspaces.detail.mcp": "Playwright MCP",
   "operator.workspaces.detail.logs": "Logs",
-  "operator.workspaces.detail.logs.empty": "Waiting for log output…",
 
   // Sources.
   "operator.sources.loading": "Loading sources",

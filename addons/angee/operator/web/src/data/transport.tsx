@@ -155,6 +155,12 @@ export function OperatorTransportProvider({
     if (!endpoint || !token) return null;
     return createOperatorClient({ endpoint, token });
   }, [endpoint, token]);
+  // Stable connection value for non-GraphQL transports; non-null exactly when
+  // `daemonClient` is, so the `!daemonClient` guard below makes it present.
+  const connection = useMemo<OperatorConnection | null>(
+    () => (endpoint && token ? { endpoint, token } : null),
+    [endpoint, token],
+  );
 
   if (state.kind === "loading") {
     return <LoadingPanel message={t("operator.transport.connecting")} />;
@@ -176,9 +182,7 @@ export function OperatorTransportProvider({
 
   return (
     <OperatorClientContext.Provider value={daemonClient}>
-      <OperatorConnectionContext.Provider
-        value={{ endpoint: endpoint as string, token: token as string }}
-      >
+      <OperatorConnectionContext.Provider value={connection}>
         <UrqlProvider value={daemonClient}>{children}</UrqlProvider>
       </OperatorConnectionContext.Provider>
     </OperatorClientContext.Provider>

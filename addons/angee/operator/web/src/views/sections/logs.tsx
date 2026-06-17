@@ -7,7 +7,7 @@ import {
   CardTitle,
   LogStream,
 } from "@angee/base";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "urql";
 
 import { useOperatorT } from "../../i18n";
@@ -15,6 +15,12 @@ import { useOperatorConnection, useOperatorSubscription } from "../../data/trans
 
 const HISTORY_LIMIT = 500;
 const MAX_LIVE_LINES = 2000;
+
+/** Append a line to a live tail, keeping only the last {@link MAX_LIVE_LINES}. */
+function appendCapped(prev: readonly string[], line: string): readonly string[] {
+  const next = [...prev, line];
+  return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next;
+}
 
 export interface DaemonLogStream {
   lines: readonly string[];
@@ -57,10 +63,7 @@ export function useDaemonLogStream({
       onData: (value) => {
         const line = value[streamField];
         if (line == null) return;
-        setLive((prev) => {
-          const next = [...prev, line];
-          return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next;
-        });
+        setLive((prev) => appendCapped(prev, line));
       },
     },
   );
@@ -74,12 +77,21 @@ export function useDaemonLogStream({
   return {
     lines,
     error: stream.error ?? history.error ?? null,
-    streaming: stream.fetching && stream.error == null,
+    // "Live" means a frame has arrived — urql's `fetching` only means the
+    // subscription was requested, which would read Live before the socket connects.
+    streaming: stream.data != null && stream.error == null,
   };
 }
 
 const SERVICE_LOG_TAIL = 500;
-const RECONNECT_DELAY_MS = 2000;
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30_000;
+// Closes that won't recover by retrying (auth / policy / protocol). Everything
+// else — including a normal end-of-stream when a service stops — reconnects with
+// backoff so the tail resumes if the service comes back. Deliberately excludes the
+// normal 1000 close (graphql-ws treats it as terminal; a log follow wants to
+// re-follow).
+const TERMINAL_CLOSE_CODES = new Set([1008, 4400, 4401, 4403, 4406, 4409]);
 
 // Build the structured per-service log socket URL from the same-origin daemon
 // endpoint: swap the graphql path for the logs-stream path, http→ws, carrying the
@@ -114,56 +126,67 @@ function parseLogFrame(data: unknown): string | null {
 /**
  * A service's live logs over the v0.6 structured `/services/{name}/logs/stream`
  * WebSocket: the socket replays `tail` backlog then follows live, framing each
- * line as a `LogLine` (exact per-service attribution + best-effort level). It
- * reconnects after a drop without re-replaying the backlog and surfaces the
- * connection state through {@link DaemonLogStream}.
+ * line as a `LogLine` (exact per-service attribution + best-effort level). A
+ * transient drop reconnects with capped backoff (re-following without re-replaying
+ * the backlog); a fatal close is terminal. The connection token is read from a ref
+ * so its 15-minute rotation hot-swaps on the next reconnect rather than tearing
+ * down the live socket and wiping the on-screen buffer.
  */
 export function useServiceLogStream(name: string | undefined): DaemonLogStream {
   const { endpoint, token } = useOperatorConnection();
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
   const [lines, setLines] = useState<readonly string[]>([]);
-  const [streaming, setStreaming] = useState(false);
+  const [status, setStatus] = useState<"connecting" | "live" | "error">("connecting");
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!name) return;
     setLines([]);
-    setStreaming(false);
+    setStatus("connecting");
     setError(null);
 
     let disposed = false;
     let socket: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let connectedOnce = false;
+    let attempt = 0;
 
     const open = (): void => {
       if (disposed) return;
       const ws = new WebSocket(
-        serviceLogsSocketUrl(endpoint, token, name, connectedOnce ? 0 : SERVICE_LOG_TAIL),
+        serviceLogsSocketUrl(endpoint, tokenRef.current, name, connectedOnce ? 0 : SERVICE_LOG_TAIL),
       );
       socket = ws;
       ws.onopen = () => {
         if (disposed) return;
         connectedOnce = true;
-        setStreaming(true);
+        attempt = 0;
+        setStatus("live");
         setError(null);
       };
       ws.onmessage = (event: MessageEvent) => {
         if (disposed) return;
         const line = parseLogFrame(event.data);
-        if (line == null) return;
-        setLines((prev) => {
-          const next = [...prev, line];
-          return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next;
-        });
+        if (line != null) setLines((prev) => appendCapped(prev, line));
       };
-      ws.onerror = () => {
+      // An error is always followed by a close; `onclose` owns recovery, so there
+      // is no separate `onerror` (which would double-render the same failure).
+      ws.onclose = (event: CloseEvent) => {
         if (disposed) return;
-        setError(new Error("Log stream connection error"));
-      };
-      ws.onclose = () => {
-        if (disposed) return;
-        setStreaming(false);
-        timer = setTimeout(open, RECONNECT_DELAY_MS);
+        socket = null;
+        if (TERMINAL_CLOSE_CODES.has(event.code)) {
+          setStatus("error");
+          setError(new Error(`Log stream closed (${event.code})`));
+          return;
+        }
+        setStatus("connecting");
+        attempt += 1;
+        const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS);
+        timer = setTimeout(open, delay);
       };
     };
     open();
@@ -173,9 +196,9 @@ export function useServiceLogStream(name: string | undefined): DaemonLogStream {
       if (timer) clearTimeout(timer);
       socket?.close();
     };
-  }, [endpoint, token, name]);
+  }, [endpoint, name]);
 
-  return { lines, error, streaming };
+  return { lines, error, streaming: status === "live" };
 }
 
 /**
