@@ -1,0 +1,3 @@
+# The VCS bridge companion over the local-template integration.
+- xref: vcs_local_templates
+  integration: notes.integration_local_templates

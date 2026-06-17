@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.db import models
 
-from angee.integrate.models import Bridge, Capability, CapabilityStatus, IntegrationStatus
+from angee.integrate.models import Bridge, IntegrationCompanion, IntegrationStatus
 from tests.conftest import Integration
 
 
@@ -22,11 +22,11 @@ class ConcreteBridge(Bridge):
 
 
 def test_integrate_bases_are_abstract() -> None:
-    """Capability and Bridge are abstract inheritance bases only."""
+    """IntegrationCompanion and Bridge are abstract inheritance bases only."""
 
-    assert Capability._meta.abstract is True
+    assert IntegrationCompanion._meta.abstract is True
     assert Bridge._meta.abstract is True
-    assert issubclass(Bridge, Capability)
+    assert issubclass(Bridge, IntegrationCompanion)
 
 
 def test_bridge_declares_runtime_contract_methods() -> None:
@@ -44,45 +44,33 @@ def test_concrete_bridge_inherits_scheduler_field() -> None:
     assert isinstance(field, models.DateTimeField)
 
 
-def test_report_status_records_telemetry_and_pushes_rollup() -> None:
-    """report_status writes local telemetry and calls the integration rollup when present."""
+def test_report_status_records_integration_telemetry() -> None:
+    """report_status writes telemetry on the integration row itself."""
 
-    calls: list[tuple[object, object, str]] = []
     integration = Integration()
 
-    def note_capability_status(*, capability_key: object, status: object, error: str) -> None:
-        calls.append((capability_key, status, error))
+    integration.report_status(status=IntegrationStatus.ERROR, error="boom")
 
-    integration.note_capability_status = note_capability_status  # type: ignore[method-assign]
-    bridge = ConcreteBridge()
-    bridge.integration = integration
-
-    bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
-
-    assert bridge.status == CapabilityStatus.ERROR
-    assert bridge.last_used_status == "error"
-    assert bridge.last_error == "boom"
-    assert bridge.last_error_at is not None
-    assert bridge.last_used_at is not None
-    assert calls == [("tests.concretebridge:None", CapabilityStatus.ERROR, "boom")]
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_used_status == "error"
+    assert integration.last_error == "boom"
+    assert integration.last_error_at is not None
+    assert integration.last_used_at is not None
 
     # A bare-string status with no error clears the error timestamp.
-    bridge.report_status(status="active")
+    integration.report_status(status="active")
 
-    assert bridge.last_used_status == "active"
-    assert bridge.last_error == ""
-    assert bridge.last_error_at is None
+    assert integration.last_used_status == "active"
+    assert integration.last_error == ""
+    assert integration.last_error_at is None
 
 
-def test_report_status_updates_unsaved_integration_rollup_in_memory() -> None:
+def test_report_status_updates_unsaved_integration_in_memory() -> None:
     """report_status updates an unsaved integration without trying to persist it."""
 
-    bridge = ConcreteBridge()
-    bridge.integration = Integration()
+    integration = Integration()
 
-    bridge.report_status(status=CapabilityStatus.ERROR, error="boom")
+    integration.report_status(status=IntegrationStatus.ERROR, error="boom")
 
-    assert bridge.status == CapabilityStatus.ERROR
-    assert bridge.integration.status == IntegrationStatus.ERROR
-    assert bridge.integration.capability_statuses == {"tests.concretebridge:None": IntegrationStatus.ERROR.value}
-    assert bridge.integration.last_error == "boom"
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_error == "boom"

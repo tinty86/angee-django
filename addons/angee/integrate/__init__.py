@@ -1,4 +1,4 @@
-"""Thin runtime seam — abstract Capability/Bridge bases.
+"""Thin runtime seam — Integration plus abstract companion/Bridge bases.
 
-Owns no per-domain data; concrete capabilities live in domain addons.
+Owns shared integration substrate; concrete companions live in domain addons.
 """

@@ -4,9 +4,10 @@ This addon owns the integration layer end to end. The connection substrate — t
 ``OAuthClient`` registration, the user's ``ExternalAccount`` at a provider, and the
 per-user ``Credential`` material — authenticates everything above it. On top of
 that sit the third-party ``Vendor`` catalogue, the first-class ``Integration``
-an integration runs over, the abstract ``Capability``/``Bridge`` runtime, the
-host-agnostic VCS inventory (``VCSIntegration`` + ``Repository``/``Source``/
-``Template``), and outbound ``WebhookSubscription``.
+an integration runs over, optional companion rows (``VcsBridge``,
+``agents.InferenceProvider``), the host-agnostic VCS inventory
+(``VcsBridge`` + ``Repository``/``Source``/``Template``), and outbound
+``WebhookSubscription``.
 
 This addon is pure OAuth: it connects *out* to external systems and never
 authenticates a session, and it has no OpenID Connect of its own. OIDC — the
@@ -14,8 +15,8 @@ authenticates a session, and it has no OpenID Connect of its own. OIDC — the
 login flow that turns a verified identity into an Angee session — lives one level
 up in ``iam_integrate_oidc``, which extends this OAuth base and composes the
 ``iam`` user. Host-specific VCS backends live in their own addons
-(``integrate_github``) and are named per ``VCSIntegration`` row by
-``backend_class``; this addon never imports them.
+(``integrate_github``) and are named per ``Integration.impl_class`` row; this
+addon never imports them.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
 from angee.integrate.credentials import CredentialKind, handler_for
 from angee.integrate.events import EventKind
+from angee.integrate.impl import IntegrationImpl
 from angee.integrate.net import validate_public_url
 from angee.integrate.oauth.errors import OAuthFlowError
 from angee.integrate.vcs.backend import VCSBackend
@@ -957,15 +959,6 @@ def _validated_manager_values(
     return dict(values)
 
 
-class CapabilityStatus(models.TextChoices):
-    """Lifecycle state for a concrete integration capability."""
-
-    ACTIVE = "active", "Active"
-    PAUSED = "paused", "Paused"
-    ERROR = "error", "Error"
-    DISABLED = "disabled", "Disabled"
-
-
 class Vendor(SqidMixin, AuditMixin, AngeeModel):
     """Admin-managed third-party catalogue (GitHub, Google, Slack, …).
 
@@ -1000,14 +993,11 @@ class Vendor(SqidMixin, AuditMixin, AngeeModel):
 
 
 class IntegrationStatus(models.TextChoices):
-    """Aggregate health for an integration, rolled up from its capabilities.
+    """Lifecycle state for one integration implementation."""
 
-    Owns the rollup vocabulary, distinct from connection ``AccountStatus``: an
-    integration is the substrate capabilities run over, so it — not the identity
-    account — aggregates their health.
-    """
-
+    DRAFT = "draft", "Draft"
     ACTIVE = "active", "Active"
+    PAUSED = "paused", "Paused"
     DISABLED = "disabled", "Disabled"
     ERROR = "error", "Error"
 
@@ -1019,37 +1009,7 @@ class IntegrationStatus(models.TextChoices):
         try:
             return cast(IntegrationStatus, cls(raw))
         except ValueError as error:
-            raise ValueError(f"Unsupported integration status for rollup: {raw}") from error
-
-    @classmethod
-    def from_capability(cls, status: object) -> IntegrationStatus:
-        """Return the integration status one capability status contributes to the rollup."""
-
-        raw = str(getattr(status, "value", status))
-        mapping = {
-            "active": cls.from_value(cls.ACTIVE),
-            "paused": cls.from_value(cls.DISABLED),
-            "disabled": cls.from_value(cls.DISABLED),
-            "error": cls.from_value(cls.ERROR),
-        }
-        try:
-            return mapping[raw]
-        except KeyError as error:
-            raise ValueError(f"Unsupported capability status for integration rollup: {raw}") from error
-
-    @classmethod
-    def rollup(cls, statuses: Iterable[object]) -> IntegrationStatus:
-        """Return the most severe integration status across capability contributions."""
-
-        members = tuple(cls.from_value(status) for status in statuses)
-        return max(members, key=lambda member: member.precedence) if members else cls.from_value(cls.ACTIVE)
-
-    @property
-    def precedence(self) -> int:
-        """Return rollup precedence — the highest wins when statuses combine."""
-
-        order = (IntegrationStatus.ACTIVE, IntegrationStatus.DISABLED, IntegrationStatus.ERROR)
-        return order.index(self)
+            raise ValueError(f"Unsupported integration status: {raw}") from error
 
     @property
     def is_error(self) -> bool:
@@ -1063,19 +1023,32 @@ class Integration(SqidMixin, AuditMixin, AngeeModel):
 
     The first-class "what we're connected to and what runs over it": it draws a
     ``credential`` (and optionally an ``account``) from the connection substrate to
-    authenticate, points at a catalogue ``vendor``, and owns the capability-health
-    rollup. Its capabilities/bridges (``integrate.Capability``) point back at it.
+    authenticate, points at a catalogue ``vendor``, and stores the implementation
+    key that owns its behavior. Implementations that need extra persisted fields
+    attach one optional one-to-one companion row.
     """
 
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="int", min_length=8)
     vendor = models.ForeignKey("integrate.Vendor", on_delete=models.PROTECT, related_name="integrations")
-    # PROTECT: the credential is the integration's authentication. It may belong to
-    # a principal other than ``owner`` (an org/app-install credential), so deleting
-    # a credential still in use is refused rather than silently breaking the
-    # integration. The owner does not have to own the credential.
-    credential = models.ForeignKey("integrate.Credential", on_delete=models.PROTECT, related_name="integrations")
+    impl_class = ImplClassField(
+        base_class=IntegrationImpl,
+        registry_setting="ANGEE_INTEGRATION_IMPLS",
+        default="none",
+    )
+    """Registry key for the implementation this integration runs."""
+    # PROTECT: a present credential is the integration's authentication. It may
+    # belong to a principal other than ``owner`` (an org/app-install credential), so
+    # deleting a credential still in use is refused rather than silently breaking
+    # the integration. Draft integrations leave it empty.
+    credential = models.ForeignKey(
+        "integrate.Credential",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="integrations",
+    )
     account = models.ForeignKey(
         "integrate.ExternalAccount",
         on_delete=models.SET_NULL,
@@ -1085,10 +1058,12 @@ class Integration(SqidMixin, AuditMixin, AngeeModel):
     )
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="integrations")
     config = models.JSONField(default=dict, blank=True)
-    """Integration-scoped settings (endpoints, options); per-capability settings live on ``Capability.config``."""
-    status = StateField(choices_enum=IntegrationStatus, default=IntegrationStatus.ACTIVE)
-    capability_statuses = models.JSONField(default=dict, blank=True)
+    """Integration-scoped settings (endpoints, options)."""
+    status = StateField(choices_enum=IntegrationStatus, default=IntegrationStatus.DRAFT)
     last_used_at = models.DateTimeField(null=True, blank=True)
+    last_used_status = models.CharField(max_length=64, blank=True)
+    use_count_24h = models.PositiveIntegerField(default=0)
+    error_count_24h = models.PositiveIntegerField(default=0)
     last_error = models.TextField(blank=True)
     last_error_at = models.DateTimeField(null=True, blank=True)
 
@@ -1102,13 +1077,11 @@ class Integration(SqidMixin, AuditMixin, AngeeModel):
         rebac_resource_type = "integrate/integration"
         rebac_id_attr = "sqid"
         constraints = (
-            # One integration per (owner, vendor, credential): lets the
-            # self-service ``create_integration_from_credential`` upsert be a
-            # race-safe ``update_or_create`` instead of a get-then-insert that
-            # two concurrent calls both miss.
+            # One integration per (owner, vendor, implementation kind). A
+            # credential can be attached later, so it cannot identify the row.
             models.UniqueConstraint(
-                fields=("owner", "vendor", "credential"),
-                name="uniq_integrate_integration_owner_vendor_credential",
+                fields=("owner", "vendor", "impl_class"),
+                name="uniq_integrate_integration_owner_vendor_impl",
             ),
         )
 
@@ -1157,107 +1130,61 @@ class Integration(SqidMixin, AuditMixin, AngeeModel):
             return {}
         return {env_name: secret}
 
-    def note_capability_status(self, *, capability_key: Any, status: Any, error: str = "") -> None:
-        """Record one capability contribution, recompute this integration, and persist.
+    @property
+    def impl(self) -> IntegrationImpl:
+        """Return this row's implementation bound to its declared companion."""
 
-        The integration owns this write: direct callers do not need an ambient
-        ``system_context`` or transaction, and scheduler callers safely nest
-        inside their own framework operation context. Unsaved instances are
-        updated in memory only because there is no integration row to persist.
-        """
+        field = cast(ImplClassField, type(self)._meta.get_field("impl_class"))
+        impl_class = cast(type[IntegrationImpl], field.resolve_class(self.impl_class))
+        return impl_class(self, impl_class.companion_for(self))
 
+    def report_status(self, status: IntegrationStatus | str, error: str = "") -> None:
+        """Record implementation status telemetry and persist this integration."""
+
+        normalized = IntegrationStatus.from_value(status)
         reported_at = timezone.now()
-        incoming_status = IntegrationStatus.from_capability(status)
-        capability_statuses = dict(self.capability_statuses or {})
-        # Deleted capabilities can leave stale contributions until pruning has an owner.
-        capability_statuses[str(capability_key)] = incoming_status.value
-        rolled_status = IntegrationStatus.rollup(capability_statuses.values())
-
-        self.capability_statuses = capability_statuses
-        self.status = rolled_status
+        self.status = normalized
         self.last_used_at = reported_at
-        if rolled_status.is_error:
-            if error:
-                self.last_error = error
-            self.last_error_at = reported_at
-        else:
-            self.last_error = ""
-            self.last_error_at = None
+        self.last_used_status = normalized.value
+        self.last_error = error
+        self.last_error_at = reported_at if error else None
 
         if self.pk is None:
             return
 
-        with system_context(reason="integrate.integration.rollup"), transaction.atomic():
+        with system_context(reason="integrate.integration.status"), transaction.atomic():
             self.save(
                 update_fields=[
-                    "capability_statuses",
                     "last_error",
                     "last_error_at",
                     "last_used_at",
+                    "last_used_status",
                     "status",
                     "updated_at",
                 ]
             )
 
 
-class Capability(SqidMixin, AuditMixin, AngeeModel):
-    """Abstract base for domain-owned capabilities.
+class IntegrationCompanion(SqidMixin, AuditMixin, AngeeModel):
+    """Abstract base for optional one-to-one integration companions."""
 
-    The concrete domain subclass owns its ``rebac_resource_type``. This pure base
-    stays out of runtime emission by leaving ``runtime`` unset.
-    """
-
-    # ``%(app_label)s_%(class)s``: every concrete Capability/Bridge subclass gets a
-    # distinct reverse accessor on ``Integration`` (a literal ``capabilities`` would
-    # collide once a second concrete subclass loads — e.g. ``VCSIntegration`` beside
-    # the scheduler test bridge). The accessor has no readers; the scheduler
-    # discovers bridges via ``registry.bridge_models()``.
-    integration = models.ForeignKey(
+    # ``%(app_label)s_%(class)s``: every concrete companion gets a distinct reverse
+    # accessor on ``Integration``. ``Integration.impl`` resolves the declared
+    # companion model through this convention.
+    integration = models.OneToOneField(
         "integrate.Integration",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="%(app_label)s_%(class)s",
     )
-    config = models.JSONField(default=dict, blank=True)
-    status = StateField(choices_enum=CapabilityStatus, default=CapabilityStatus.ACTIVE)
-    last_used_at = models.DateTimeField(null=True, blank=True)
-    last_used_status = models.CharField(max_length=64, blank=True)
-    use_count_24h = models.PositiveIntegerField(default=0)
-    error_count_24h = models.PositiveIntegerField(default=0)
-    last_error = models.TextField(blank=True)
-    last_error_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        """Django model options for abstract capability inheritance."""
+        """Django model options for abstract companion inheritance."""
 
         abstract = True
 
-    def report_status(self, *, status: CapabilityStatus | str, error: str = "") -> None:
-        """Record local status telemetry and push this capability's integration contribution.
 
-        The caller owns persistence for this capability row. ``Integration`` owns
-        its rollup write and tracks each capability by a model-qualified key, so
-        concrete capability/bridge subclasses sharing one integration (their PK
-        sequences are independent) never collide in the rollup.
-        """
-
-        reported_at = timezone.now()
-        self.status = status  # type: ignore[assignment]  # StateField descriptor unmodeled by django-stubs
-        self.last_used_at = reported_at
-        self.last_used_status = str(status)
-        self.last_error = error
-        self.last_error_at = reported_at if error else None
-
-        self.integration.note_capability_status(capability_key=self._capability_key, status=status, error=error)
-
-    @property
-    def _capability_key(self) -> str:
-        """Return this capability's rollup key, qualified by concrete model label."""
-
-        return f"{self._meta.label_lower}:{self.pk}"
-
-
-class Bridge(Capability):
-    """Abstract base for capabilities that synchronize or subscribe to vendor data.
+class Bridge(IntegrationCompanion):
+    """Abstract base for companions that synchronize or subscribe to vendor data.
 
     Another pure base: a domain bridge that materializes declares
     ``runtime = True`` on that class.
@@ -1293,19 +1220,14 @@ class Bridge(Capability):
         self.last_sync_items = result
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
-            self.report_status(status="active")
+            self.integration.report_status(status=IntegrationStatus.ACTIVE)
             self.save(
                 update_fields=[
                     "cursor",
-                    "last_error",
-                    "last_error_at",
                     "last_sync_completed_at",
                     "last_sync_items",
                     "last_sync_status",
-                    "last_used_at",
-                    "last_used_status",
                     "next_sync_at",
-                    "status",
                     "updated_at",
                 ]
             )
@@ -1317,16 +1239,11 @@ class Bridge(Capability):
         self.last_sync_status = "error"
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
-            self.report_status(status="error", error=error_message)
+            self.integration.report_status(status=IntegrationStatus.ERROR, error=error_message)
             self.save(
                 update_fields=[
-                    "last_error",
-                    "last_error_at",
                     "last_sync_status",
-                    "last_used_at",
-                    "last_used_status",
                     "next_sync_at",
-                    "status",
                     "updated_at",
                 ]
             )
@@ -1378,14 +1295,14 @@ class RepoVisibility(models.TextChoices):
     INTERNAL = "internal", "Internal"
 
 
-class VCSIntegration(Bridge):
-    """The VCS capability over an ``Integration`` — one table for every git host.
+class VcsBridge(Bridge):
+    """The VCS sync companion over an ``Integration``.
 
     A :class:`Bridge`: the scheduler refreshes its repositories' sources over the
     host REST API and an inbound push webhook triggers the same refresh. The
-    host-specific wire format is a non-model :class:`~angee.integrate.vcs.backend.
-    VCSBackend` named per row by ``backend_class`` (e.g. a GitHub backend) — so
-    github/gitlab/bitbucket share this one table, differing only in behaviour.
+    host-specific wire format is the integration's non-model
+    :class:`~angee.integrate.vcs.backend.VCSBackend` implementation — so
+    github/gitlab/bitbucket share this one table, differing only in behavior.
     Django keeps the inventory only; the operator performs every git operation,
     consuming :meth:`Source.materialize_spec`.
     """
@@ -1393,14 +1310,6 @@ class VCSIntegration(Bridge):
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="vcs", min_length=8)
-    backend_class = ImplClassField(
-        base_class=VCSBackend,
-        registry_setting="ANGEE_VCS_BACKEND_CLASSES",
-        default="none",
-    )
-    """The host backend this integration resolves to — an explicit per-row key into
-    ``ANGEE_VCS_BACKEND_CLASSES`` (never derived from the vendor: one vendor can have
-    several accounts/backends). Defaults to the ``none`` null-object backend."""
     webhook_secret = EncryptedField(blank=True)
     """Shared secret for verifying inbound push webhooks (per account, not per repo)."""
 
@@ -1414,22 +1323,21 @@ class VCSIntegration(Bridge):
         rebac_id_attr = "sqid"
 
     def __str__(self) -> str:
-        """Return a stable VCS-integration label."""
+        """Return a stable VCS bridge label."""
 
         return f"vcs:{self.public_id}"
 
     @property
-    def backend(self) -> VCSBackend:
-        """Return the host backend bound to this integration's credential/config."""
+    def impl(self) -> VCSBackend:
+        """Return the host backend bound to this bridge's integration."""
 
-        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
-        return cast(VCSBackend, field.resolve_class(self.backend_class)(self.integration))
+        return cast(VCSBackend, self.integration.impl)
 
     def repositories_by_org(self) -> dict[str, list[Any]]:
         """Return every visible repository grouped and sorted by owning org."""
 
         groups: dict[str, list[Any]] = {}
-        for descriptor in self.backend.ls_repos():
+        for descriptor in self.impl.ls_repos():
             groups.setdefault(descriptor.org, []).append(descriptor)
         return {org: sorted(repos, key=lambda item: item.name) for org, repos in sorted(groups.items())}
 
@@ -1442,7 +1350,7 @@ class VCSIntegration(Bridge):
         manager supplies only its ``marker`` filename and ``parse`` function.
         """
 
-        backend = self.backend
+        backend = self.impl
         repository = source.repository
         ref = source.ref or repository.default_branch
         descriptors: list[dict[str, Any]] = []
@@ -1473,24 +1381,24 @@ class VCSIntegration(Bridge):
     def verify_webhook(self, request: Any) -> bool:
         """Return whether an inbound push webhook is authentic for this integration."""
 
-        return self.backend.verify_webhook(self, request)
+        return self.impl.verify_webhook(self, request)
 
     def search_repositories(self, query: str) -> list[Any]:
         """Return host repositories whose name matches ``query`` (the add typeahead)."""
 
-        return self.backend.search_repos(query, org=self._search_scope())
+        return self.impl.search_repos(query, org=self._search_scope())
 
     def import_repository(self, name: str) -> Any:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.add(self, self.backend.get_repo(name))
+        return repository_model.objects.add(self, self.impl.get_repo(name))
 
     def discover_repositories(self, *, org: str = "") -> int:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.reconcile(self, self.backend.ls_repos(org=org))
+        return repository_model.objects.reconcile(self, self.impl.ls_repos(org=org))
 
     def _search_scope(self) -> str:
         """Return the org/user the typeahead search scopes to (from ``config.github_org``)."""
@@ -1544,7 +1452,7 @@ class RepositoryManager(RebacManager):
 
 
 class Repository(SqidMixin, AuditMixin, AngeeModel):
-    """Inventory of one git remote, reached through its ``VCSIntegration``.
+    """Inventory of one git remote, reached through its ``VcsBridge``.
 
     A plain noun: Django records the remote; the operator clones it. ``org`` groups
     the account's repositories in the browse list.
@@ -1554,7 +1462,7 @@ class Repository(SqidMixin, AuditMixin, AngeeModel):
 
     sqid = SqidField(real_field_name="id", prefix="repo", min_length=8)
     vcs_integration = models.ForeignKey(
-        "integrate.VCSIntegration",
+        "integrate.VcsBridge",
         on_delete=models.CASCADE,
         related_name="repositories",
     )

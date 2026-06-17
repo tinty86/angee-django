@@ -1,19 +1,13 @@
-"""Model discovery for concrete integration capabilities."""
+"""Model discovery for concrete integration bridge companions."""
 
 from __future__ import annotations
 
 from django.apps import apps
 from django.db import models
 
-from angee.integrate.models import Bridge, Capability
+from angee.integrate.models import Bridge
 
 _Model = type[models.Model]
-
-
-def capability_models() -> tuple[_Model, ...]:
-    """Return loaded concrete ``Capability`` subclasses in deterministic order."""
-
-    return _models_for(Capability)
 
 
 def bridge_models() -> tuple[_Model, ...]:

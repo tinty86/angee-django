@@ -20,6 +20,7 @@ import strawberry
 import strawberry_django
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from rebac import current_actor, system_context
 from strawberry import auto, relay
@@ -33,6 +34,7 @@ from angee.base.mixins import actor_user_id
 from angee.base.models import instance_from_public_id
 from angee.graphql.actions import ActionResult
 from angee.graphql.crud import crud
+from angee.graphql.extension import extends_type
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
@@ -52,20 +54,34 @@ Skill = apps.get_model("agents", "Skill")
 MCPServer = apps.get_model("agents", "MCPServer")
 MCPTool = apps.get_model("agents", "MCPTool")
 Agent = apps.get_model("agents", "Agent")
+Integration = apps.get_model("integrate", "Integration")
 
 
 @strawberry_django.type(InferenceProvider)
 class InferenceProviderType(AngeeNode):
-    """Admin projection of an inference provider (a capability over an integration)."""
+    """Admin projection of an inference provider companion."""
 
     integration: IntegrationType
     name: auto
     base_url: auto
-    backend_class: auto
-    status: auto
     config: JSON
     created_at: auto
     updated_at: auto
+
+
+@extends_type(IntegrationType)
+@strawberry_django.type(Integration)
+class IntegrationInferenceProviderExtension:
+    """Contributes the inference provider companion onto integrate's IntegrationType."""
+
+    @strawberry_django.field(only=["id"])
+    def inference_provider(self) -> InferenceProviderType | None:
+        """Return this integration's inference provider companion when present."""
+
+        try:
+            return cast(InferenceProviderType, cast(Any, self).agents_inferenceprovider)
+        except ObjectDoesNotExist:
+            return None
 
 
 @strawberry_django.type(InferenceModel)
@@ -198,11 +214,9 @@ class InferenceProviderInput:
     integration: relay.GlobalID
     name: str
     base_url: str = ""
-    backend_class: str = "manual"
     # UNSET (not None): an omitted field must fall back to the model default, not
     # overwrite a non-null column with null (see docs/backend/guidelines.md Pitfalls).
     config: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -212,9 +226,7 @@ class InferenceProviderPatch:
     id: relay.GlobalID
     name: str | None = strawberry.UNSET
     base_url: str | None = strawberry.UNSET
-    backend_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -923,6 +935,7 @@ schemas = {
         ],
         "subscription": [changes(Agent, field="agentChanged")],
         "types": _CONSOLE_TYPES,
+        "type_extensions": [IntegrationInferenceProviderExtension],
     },
 }
 """GraphQL contributions installed by the agents addon."""

@@ -126,13 +126,10 @@ def test_integration_update_delete_are_admin_only(
         user=plain,
     ).errors is not None
 
-    # ``IntegrationPatch`` has no ``capability_statuses`` field, and the update's
-    # ``full_clean`` rejects an empty-default JSON dict; seed both JSON columns so
-    # the (separately verified) update write path is reachable.
+    # Seed a non-empty config so the update also proves unrelated JSON survives.
     with system_context(reason="test.integrate.integration_crud.seed"):
         conn.config = {"endpoint": "https://vendor.example"}
-        conn.capability_statuses = {"sync": "active"}
-        conn.save(update_fields=["config", "capability_statuses", "updated_at"])
+        conn.save(update_fields=["config", "updated_at"])
     integration_id = _integration_global_id(conn)
     update_integration = """
         mutation UpdateIntegration($id: ID!) {

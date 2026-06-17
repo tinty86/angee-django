@@ -7,12 +7,12 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from django.db import connection
+from django.db import connection, models
 from django.utils import timezone
 from rebac import system_context
 
-from angee.integrate.models import Bridge, CapabilityStatus, IntegrationStatus
-from angee.integrate.registry import bridge_models, capability_models
+from angee.integrate.models import Bridge, IntegrationStatus
+from angee.integrate.registry import bridge_models
 from angee.integrate.scheduler import run_due_bridges
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
@@ -24,6 +24,8 @@ from tests.conftest import (
 
 class SchedulerBridge(Bridge):
     """Concrete bridge fixture driven by the integrate scheduler tests."""
+
+    config = models.JSONField(default=dict, blank=True)
 
     class Meta(Bridge.Meta):
         """Django model options for the scheduler bridge fixture."""
@@ -91,20 +93,22 @@ def test_run_due_bridges_runs_only_due_rows(scheduler_tables: None) -> None:
 
     del scheduler_tables
     now = timezone.now()
-    integration = make_integration("due-only")
+    due_integration = make_integration("due-only")
+    future_integration = make_integration("future-only")
+    unscheduled_integration = make_integration("unscheduled-only")
     with system_context(reason="test integrate scheduler setup"):
         due = SchedulerBridge.objects.create(
-            integration=integration,
+            integration=due_integration,
             config={"items": 2},
             next_sync_at=now - timedelta(seconds=1),
         )
         future = SchedulerBridge.objects.create(
-            integration=integration,
+            integration=future_integration,
             config={"items": 3},
             next_sync_at=now + timedelta(seconds=1),
         )
         unscheduled = SchedulerBridge.objects.create(
-            integration=integration,
+            integration=unscheduled_integration,
             config={"items": 4},
             next_sync_at=None,
         )
@@ -139,16 +143,19 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
     assert result == {"ran": 1, "errors": 0}
     bridge.refresh_from_db()
+    integration.refresh_from_db()
     assert bridge.last_sync_started_at == now
     assert bridge.last_sync_completed_at == now
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 7
     assert bridge.cursor == {"seen": 7}
     assert bridge.next_sync_at == now + timedelta(seconds=42)
+    assert integration.status == IntegrationStatus.ACTIVE
+    assert integration.last_used_status == "active"
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_records_errors_and_rolls_up_integration_status(scheduler_tables: None) -> None:
+def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: None) -> None:
     """Failing syncs record bridge errors, reschedule, and push integration status."""
 
     del scheduler_tables
@@ -169,14 +176,9 @@ def test_run_due_bridges_records_errors_and_rolls_up_integration_status(schedule
     integration.refresh_from_db()
     assert bridge.last_sync_started_at == now
     assert bridge.last_sync_status == "error"
-    assert bridge.status == CapabilityStatus.ERROR
-    assert bridge.last_error == "RuntimeError: vendor unavailable"
-    assert bridge.last_error_at is not None
     assert bridge.next_sync_at == now + timedelta(seconds=17)
     assert integration.status == IntegrationStatus.ERROR
-    assert integration.capability_statuses == {
-        f"{SchedulerBridge._meta.label_lower}:{bridge.pk}": IntegrationStatus.ERROR.value
-    }
+    assert integration.last_used_status == "error"
     assert integration.last_error == "RuntimeError: vendor unavailable"
     assert integration.last_error_at is not None
     assert integration.last_used_at is not None
@@ -184,7 +186,7 @@ def test_run_due_bridges_records_errors_and_rolls_up_integration_status(schedule
 
 @pytest.mark.django_db(transaction=True)
 def test_run_due_bridges_success_recovers_bridge_and_integration_status(scheduler_tables: None) -> None:
-    """A healthy sync after an error clears the bridge and integration rollup."""
+    """A healthy sync after an error clears the integration status."""
 
     del scheduler_tables
     first_now = timezone.now()
@@ -202,7 +204,6 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
     assert error_result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
     integration.refresh_from_db()
-    assert bridge.status == CapabilityStatus.ERROR
     assert integration.status == IntegrationStatus.ERROR
 
     second_now = first_now + timedelta(minutes=1)
@@ -216,56 +217,11 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
     assert success_result == {"ran": 1, "errors": 0}
     bridge.refresh_from_db()
     integration.refresh_from_db()
-    assert bridge.status == CapabilityStatus.ACTIVE
-    assert bridge.last_error == ""
-    assert bridge.last_error_at is None
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 5
     assert bridge.next_sync_at == second_now + timedelta(seconds=23)
     assert integration.status == IntegrationStatus.ACTIVE
-    assert integration.capability_statuses == {
-        f"{SchedulerBridge._meta.label_lower}:{bridge.pk}": IntegrationStatus.ACTIVE.value
-    }
-    assert integration.last_error == ""
-    assert integration.last_error_at is None
-
-
-@pytest.mark.django_db(transaction=True)
-def test_integration_rollup_tracks_capability_contributions(scheduler_tables: None) -> None:
-    """One failing capability keeps the integration in error until that contribution recovers."""
-
-    del scheduler_tables
-    integration = make_integration("multi-capability")
-
-    integration.note_capability_status(
-        capability_key="bridge-a",
-        status=CapabilityStatus.ERROR,
-        error="bridge-a failed",
-    )
-    integration.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    integration.refresh_from_db()
-
-    assert integration.capability_statuses == {
-        "bridge-a": IntegrationStatus.ERROR.value,
-        "bridge-b": IntegrationStatus.ACTIVE.value,
-    }
-    assert integration.status == IntegrationStatus.ERROR
-    assert integration.last_error == "bridge-a failed"
-
-    integration.note_capability_status(capability_key="bridge-b", status=CapabilityStatus.ACTIVE)
-    integration.refresh_from_db()
-
-    assert integration.status == IntegrationStatus.ERROR
-    assert integration.last_error == "bridge-a failed"
-
-    integration.note_capability_status(capability_key="bridge-a", status=CapabilityStatus.ACTIVE)
-    integration.refresh_from_db()
-
-    assert integration.capability_statuses == {
-        "bridge-a": IntegrationStatus.ACTIVE.value,
-        "bridge-b": IntegrationStatus.ACTIVE.value,
-    }
-    assert integration.status == IntegrationStatus.ACTIVE
+    assert integration.last_used_status == "active"
     assert integration.last_error == ""
     assert integration.last_error_at is None
 
@@ -277,11 +233,7 @@ def test_integrate_registry_discovers_bridge_models_in_deterministic_order(sched
     del scheduler_tables
 
     discovered_bridge_models = bridge_models()
-    discovered_capability_models = capability_models()
     bridge_labels = tuple(model._meta.label_lower for model in discovered_bridge_models)
-    capability_labels = tuple(model._meta.label_lower for model in discovered_capability_models)
 
     assert SchedulerBridge in discovered_bridge_models
-    assert SchedulerBridge in discovered_capability_models
     assert bridge_labels == tuple(sorted(bridge_labels))
-    assert capability_labels == tuple(sorted(capability_labels))

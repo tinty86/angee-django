@@ -4,7 +4,9 @@
 - xref: integration_local_templates
   owner: notes.user_admin
   vendor: notes.vendor_local
+  impl_class: local
   credential: notes.cred_local_templates
+  status: active
   config:
     local_root: "../.."
     local_name: angee-django

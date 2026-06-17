@@ -1,12 +1,13 @@
-"""The host-agnostic git-backend contract.
+"""The host-agnostic git implementation contract.
 
-A :class:`VCSBackend` is bound to one ``Integration`` and reads a repository —
-either a host's remote over its REST API (``integrate_github.GitHubBackend``) or a
-local working tree (:class:`LocalVCSBackend`) — listing repositories, walking trees,
-reading blobs, and resolving refs. A host backend never clones (git transport
-belongs to the operator); the local backend reads files directly for dev/offline
-inventory. ``VCSIntegration`` owns the shared enumeration walk over the primitives.
-This module imports no models, so it breaks no import cycle.
+A :class:`VCSBackend` is an ``Integration`` implementation that reads a repository
+through a ``VcsBridge`` companion — either a host's remote over its REST API
+(``integrate_github.GitHubBackend``) or a local working tree
+(:class:`LocalVCSBackend`) — listing repositories, walking trees, reading blobs,
+and resolving refs. A host backend never clones (git transport belongs to the
+operator); the local backend reads files directly for dev/offline inventory.
+``VcsBridge`` owns the shared enumeration walk over the primitives. This module
+imports no models, so it breaks no import cycle.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.conf import settings
+
+from angee.integrate.impl import IntegrationImpl
 
 # Directories the local backend never treats as source — a broad ``Source.path`` on a
 # working tree would otherwise walk (and ingest stray ``copier.yml`` from) these.
@@ -62,18 +65,18 @@ class RepoDescriptor:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-class VCSBackend:
+class VCSBackend(IntegrationImpl):
     """Abstract REST backend for a git host, bound to one ``Integration``.
 
-    Concrete hosts implement the primitives below; ``VCSIntegration`` calls into
+    Concrete hosts implement the primitives below; ``VcsBridge`` calls into
     them. The constructor receives the integration so the backend can read its
     credential (``integration.credential.auth_headers()``) and config.
     """
 
-    def __init__(self, integration: Any) -> None:
-        """Bind this backend to the integration whose credential it authenticates with."""
-
-        self.integration = integration
+    category = "vcs"
+    companion_model = "integrate.VcsBridge"
+    label = "VCS"
+    icon = "git-branch"
 
     def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
         """List repositories visible to this integration, optionally within ``org``."""
@@ -111,65 +114,12 @@ class VCSBackend:
         raise NotImplementedError("VCSBackend subclasses must implement get_repo().")
 
 
-class NoopVCSBackend(VCSBackend):
-    """Null-object backend for a VCS integration with no real host provider.
-
-    ``integrate`` is host-agnostic and ships no host backend, but
-    ``ImplClassField`` requires a non-empty registry, so this is the ``none``
-    default in ``ANGEE_VCS_BACKEND_CLASSES``: it enumerates nothing and
-    authenticates no webhook. Installing a host provider addon (e.g.
-    ``integrate_github``) adds a real backend that a ``VCSIntegration`` row selects
-    instead.
-    """
-
-    def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
-        """Return no repositories."""
-
-        del org
-        return []
-
-    def ls_tree(self, repository: Any, *, ref: str, path: str, recursive: bool = False) -> list[TreeEntry]:
-        """Return an empty tree."""
-
-        del repository, ref, path, recursive
-        return []
-
-    def cat_file(self, repository: Any, *, ref: str, path: str) -> bytes:
-        """Raise: a noop backend has no blobs to read."""
-
-        del repository, ref
-        raise FileNotFoundError(path)
-
-    def rev_parse(self, repository: Any, ref: str) -> str:
-        """Return no resolved commit oid."""
-
-        del repository, ref
-        return ""
-
-    def verify_webhook(self, vcs_integration: Any, request: Any) -> bool:
-        """Reject every inbound webhook: a noop backend trusts nothing."""
-
-        del vcs_integration, request
-        return False
-
-    def search_repos(self, query: str, *, org: str = "") -> list[RepoDescriptor]:
-        """Return no candidates."""
-
-        del query, org
-        return []
-
-    def get_repo(self, name: str) -> RepoDescriptor:
-        """Raise: a noop backend resolves no repository."""
-
-        raise FileNotFoundError(name)
-
-
 class LocalVCSBackend(VCSBackend):
     """Reads a repository straight from a local working tree — for dev/offline inventory.
 
     Where a host backend reads a remote over REST, this walks the filesystem under
     ``integration.config["local_root"]``, so templates (or skills) committed in the
-    local checkout are inventoried through the same ``VCSIntegration → Source →
+    local checkout are inventoried through the same ``VcsBridge → Source →
     Template`` flow as a hosted remote, with no network. It reads the *working tree*;
     ``ref`` is informational — there is one repo and no commit to resolve.
     """
@@ -185,7 +135,7 @@ class LocalVCSBackend(VCSBackend):
 
         Prunes ``_LOCAL_SKIP_DIRS`` — a working-tree-only concern (a REST host returns
         committed tree entries and has no such noise), so the filter lives here, not in
-        the host-agnostic ``VCSIntegration.discover`` walk.
+        the host-agnostic ``VcsBridge.discover`` walk.
         """
 
         del repository, ref

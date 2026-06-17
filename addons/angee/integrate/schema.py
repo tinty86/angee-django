@@ -15,6 +15,7 @@ from typing import Any, cast
 import strawberry
 import strawberry_django
 from django.apps import apps
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.utils import timezone
 from rebac import PermissionDenied, system_context
@@ -45,7 +46,7 @@ OAuthClient = apps.get_model("integrate", "OAuthClient")
 ExternalAccount = apps.get_model("integrate", "ExternalAccount")
 Credential = apps.get_model("integrate", "Credential")
 WebhookSubscription = apps.get_model("integrate", "WebhookSubscription")
-VCSIntegration = apps.get_model("integrate", "VCSIntegration")
+VcsBridge = apps.get_model("integrate", "VcsBridge")
 Repository = apps.get_model("integrate", "Repository")
 Source = apps.get_model("integrate", "Source")
 Template = apps.get_model("integrate", "Template")
@@ -828,13 +829,25 @@ class IntegrationType(AngeeNode):
     credential: CredentialType | None
     account: ExternalAccountType | None
     owner: UserType
+    impl_class: auto
     status: auto
     config: JSON
-    capability_statuses: JSON
     last_used_at: auto
+    last_used_status: auto
+    use_count_24h: auto
+    error_count_24h: auto
     last_error: auto
     created_at: auto
     updated_at: auto
+
+    @strawberry_django.field(only=["id"])
+    def bridge(self) -> VcsBridgeType | None:
+        """Return this integration's VCS bridge companion when present."""
+
+        try:
+            return cast("VcsBridgeType", cast(Any, self).integrate_vcsbridge)
+        except ObjectDoesNotExist:
+            return None
 
     @strawberry_django.field(only=["vendor", "status"])
     def display_name(self) -> str:
@@ -930,11 +943,12 @@ class IntegrationInput:
     """
 
     vendor: relay.GlobalID
-    credential: relay.GlobalID
     owner: relay.GlobalID
+    credential: relay.GlobalID | None = None
     account: relay.GlobalID | None = strawberry.UNSET
     # UNSET (not None): an omitted field must fall back to the model default, not
     # overwrite it with null — `status`/`config` are non-null columns.
+    impl_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
 
@@ -948,6 +962,7 @@ class IntegrationPatch:
     credential: relay.GlobalID | None = strawberry.UNSET
     account: relay.GlobalID | None = strawberry.UNSET
     owner: relay.GlobalID | None = strawberry.UNSET
+    impl_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
 
@@ -1075,14 +1090,18 @@ class IntegrationCredentialMutation:
             raise PermissionDenied("Credential does not belong to the current user.")
         vendor = _vendor_by_slug(vendor_slug)
         with system_context(reason="integrate.graphql.integration_from_credential"), transaction.atomic():
-            # Race-safe upsert keyed by the (owner, vendor, credential) unique
+            # Race-safe upsert keyed by the (owner, vendor, impl_class) unique
             # constraint: two concurrent submits converge on the one row instead
             # of both missing a get-then-insert and creating duplicates.
             integration, _created = Integration.objects.update_or_create(
                 owner=user,
                 vendor=vendor,
-                credential=oauth_credential,
-                defaults={"account": oauth_credential.external_account},
+                impl_class="none",
+                defaults={
+                    "credential": oauth_credential,
+                    "account": oauth_credential.external_account,
+                    "status": "active",
+                },
             )
             if credential_env:
                 integration.set_credential_env(credential_env)
@@ -1176,32 +1195,29 @@ class WebhookActionMutation:
 # --- VCS inventory: integrations, repositories, sources, templates ----------
 
 
-@strawberry_django.type(VCSIntegration)
-class VCSIntegrationType(AngeeNode):
-    """Admin projection of a VCS integration (the git host capability)."""
+@strawberry_django.type(VcsBridge)
+class VcsBridgeType(AngeeNode):
+    """Admin projection of a VCS bridge companion."""
 
     integration: IntegrationType
-    backend_class: auto
-    status: auto
-    config: JSON
     last_sync_completed_at: auto
     last_sync_status: auto
-    last_error: auto
     created_at: auto
     updated_at: auto
 
-    @strawberry_django.field(only=["backend_class", "status"])
+    @strawberry_django.field(only=["integration"])
     def display_name(self) -> str:
         """Return a human label for the record header and relation pickers."""
 
-        return f"{cast(Any, self).backend_class} ({cast(Any, self).status})"
+        integration = cast(Any, self).integration
+        return f"{integration.impl_class} ({integration.status})"
 
 
 @strawberry_django.type(Repository)
 class RepositoryType(AngeeNode):
     """Admin projection of one inventoried repository."""
 
-    vcs_integration: VCSIntegrationType
+    vcs_integration: VcsBridgeType
     org: auto
     name: auto
     remote: auto
@@ -1270,29 +1286,18 @@ class RepoCandidate:
 
 @strawberry.input
 class VCSIntegrationInput:
-    """Fields accepted when creating a VCS integration.
-
-    ``backend_class`` is an ``ImplClassField`` enum key (e.g. ``github``);
-    ``webhook_secret`` is write-only (never read back).
-    """
+    """Fields accepted when creating a VCS bridge companion."""
 
     integration: relay.GlobalID
-    backend_class: str = "none"
-    # UNSET (not None): an omitted JSON config falls back to the non-null model
-    # default rather than overwriting it with null.
-    config: JSON | None = strawberry.UNSET
     webhook_secret: str = ""
 
 
 @strawberry.input
 class VCSIntegrationPatch:
-    """Fields accepted when updating a VCS integration."""
+    """Fields accepted when updating a VCS bridge companion."""
 
     id: relay.GlobalID
-    backend_class: str | None = strawberry.UNSET
-    config: JSON | None = strawberry.UNSET
     webhook_secret: str | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -1334,10 +1339,10 @@ def _repo_candidate(descriptor: Any) -> RepoCandidate:
 class VCSConsoleQuery:
     """Admin VCS inventory queries."""
 
-    vcs_integrations: OffsetPaginated[VCSIntegrationType] = strawberry_django.offset_paginated(
+    vcs_integrations: OffsetPaginated[VcsBridgeType] = strawberry_django.offset_paginated(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
-    vcs_integration: VCSIntegrationType | None = strawberry_django.node(
+    vcs_integration: VcsBridgeType | None = strawberry_django.node(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
     repositories: OffsetPaginated[RepositoryType] = strawberry_django.offset_paginated(
@@ -1364,13 +1369,13 @@ class VCSConsoleQuery:
     def search_repositories(self, vcs_integration_id: relay.GlobalID, query: str) -> list[RepoCandidate]:
         """Return host repositories matching ``query`` for the add typeahead."""
 
-        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.search_repositories")
+        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.search_repositories")
         with system_context(reason="integrate.graphql.search_repositories"):
             return [_repo_candidate(descriptor) for descriptor in vcs.search_repositories(query)]
 
 
 _VCS_INTEGRATION_MUTATION = crud(
-    VCSIntegrationType,
+    VcsBridgeType,
     create=VCSIntegrationInput,
     update=VCSIntegrationPatch,
     delete=True,
@@ -1409,7 +1414,7 @@ class VCSActionMutation:
     def add_repository(self, vcs_integration_id: relay.GlobalID, name: str) -> RepositoryType:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
-        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.add_repository")
+        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.add_repository")
         with system_context(reason="integrate.graphql.add_repository"):
             return cast(RepositoryType, vcs.import_repository(name))
 
@@ -1417,7 +1422,7 @@ class VCSActionMutation:
     def discover_repositories(self, vcs_integration_id: relay.GlobalID, org: str = "") -> ActionResult:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
-        vcs = _resolve(VCSIntegration, vcs_integration_id, reason="integrate.graphql.discover_repositories")
+        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.discover_repositories")
         with system_context(reason="integrate.graphql.discover_repositories"):
             count = vcs.discover_repositories(org=org)
         return ActionResult(ok=True, message=f"Inventoried {count} repository(ies).")
@@ -1426,7 +1431,7 @@ class VCSActionMutation:
     def sync_vcs_integration(self, id: relay.GlobalID) -> ActionResult:
         """Refresh every repository's sources for one VCS integration now."""
 
-        vcs = _resolve(VCSIntegration, id, reason="integrate.graphql.sync_vcs_integration")
+        vcs = _resolve(VcsBridge, id, reason="integrate.graphql.sync_vcs_integration")
         now = timezone.now()
         with system_context(reason="integrate.graphql.sync_vcs_integration"):
             vcs.mark_sync_started(now=now)
@@ -1465,7 +1470,7 @@ _CONSOLE_TYPES: list[type] = [
     VendorType,
     IntegrationType,
     WebhookSubscriptionType,
-    VCSIntegrationType,
+    VcsBridgeType,
     RepositoryType,
     SourceType,
     TemplateType,

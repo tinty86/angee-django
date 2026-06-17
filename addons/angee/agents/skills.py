@@ -2,7 +2,7 @@
 
 A skill is a directory bearing a ``SKILL.md`` whose YAML frontmatter declares the
 skill's ``name`` and ``description`` (the Agent Skills convention). Mirrors
-``integrate.vcs.templates.parse_template_meta``: ``VCSIntegration.discover`` does one
+``integrate.vcs.templates.parse_template_meta``: ``VcsBridge.discover`` does one
 recursive walk over a source's subtree and fills in the bearing directory as the
 ``path``; this parser owns only the frontmatter.
 """

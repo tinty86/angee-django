@@ -37,7 +37,7 @@ class NotesConfig(AppConfig):
             "resources/demo/080_integrate.credential.yaml",
             "resources/demo/081_integrate.vendor.yaml",
             "resources/demo/082_integrate.integration.yaml",
-            "resources/demo/083_integrate.vcsintegration.yaml",
+            "resources/demo/083_integrate.vcsbridge.yaml",
             "resources/demo/084_integrate.repository.yaml",
             "resources/demo/085_integrate.source.yaml",
             # A ready-to-provision demo agent and its inference chain (placeholder

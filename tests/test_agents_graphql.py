@@ -182,9 +182,9 @@ def test_refresh_provider_models_is_admin_gated(agents_console_tables: None) -> 
 
     admin = _platform_admin("agt-refresh-admin")
     plain = User.objects.create_user(username="agt-refresh-plain", email="plain@example.com")
-    integration = make_integration("agt-refresh")
+    integration = make_integration("agt-refresh", impl_class="manual")
     with system_context(reason="test.agents.refresh.seed"):
-        provider = InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual")
+        provider = InferenceProvider.objects.create(integration=integration, name="P")
     provider_id = _gid("InferenceProviderType", provider.sqid)
     query = "mutation($id: ID!){ refreshProviderModels(id: $id){ ok message } }"
 
@@ -222,7 +222,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
 
     admin = _platform_admin("agt-render-admin")
     plain = User.objects.create_user(username="agt-render-plain", email="render@example.com")
-    integration = make_integration("agt-render")
+    integration = make_integration("agt-render", impl_class="manual")
     vcs = _vcs_integration("agt-render-tpl", config={"stub_repos": REPOS})
     vcs.discover_repositories()
     with system_context(reason="test.agents.render.seed"):
@@ -235,7 +235,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
             source=source, kind="service", name="claude-code", path="services/claude-code"
         )
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=integration, name="P"),
             name="claude-opus-4-8",
         )
         agent = Agent.objects.create(
@@ -620,10 +620,10 @@ def test_provision_agent_refuses_when_inference_credential_has_no_secret(
     """
 
     admin = _platform_admin("agt-nokey-admin")
-    integration = make_integration("agt-nokey", material={"api_key": ""})
+    integration = make_integration("agt-nokey", material={"api_key": ""}, impl_class="manual")
     with system_context(reason="test.agents.nokey.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=integration, name="P"),
             name="claude-opus-4-8",
         )
     agent = _provisionable_agent(admin, "NoKey", slug="agt-nokey-tpl", model=model)
@@ -666,11 +666,11 @@ def test_agent_inference_credential_override_wins_over_model_chain(agents_consol
     """
 
     owner = User.objects.create_user(username="agt-ov-owner", email="ov@example.com")
-    model_integration = make_integration("agt-ov-model", material={"api_key": ""})
-    oauth_integration = make_integration("agt-ov-oauth", kind=CredentialKind.OAUTH)
+    model_integration = make_integration("agt-ov-model", material={"api_key": ""}, impl_class="manual")
+    oauth_integration = make_integration("agt-ov-oauth", kind=CredentialKind.OAUTH, impl_class="manual")
     with system_context(reason="test.agents.override.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=model_integration, name="P", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=model_integration, name="P"),
             name="claude-opus-4-8",
         )
         # Without an override the model's empty placeholder credential is unusable.
@@ -701,10 +701,10 @@ def test_agent_chat_endpoint_mints_route_token_and_is_admin_gated(
 
     admin = _platform_admin("agt-chat-admin")
     plain = User.objects.create_user(username="agt-chat-plain", email="chat@example.com")
-    integration = make_integration("agt-chat-provider")
+    integration = make_integration("agt-chat-provider", impl_class="manual")
     with system_context(reason="test.agents.chat.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=integration, name="P"),
             name="claude-opus-4-8",
         )
         agent = Agent.objects.create(name="Chatty", owner=admin, service="svc-chat", model=model)
@@ -942,18 +942,18 @@ def test_provision_service_inputs_credential_drives_auth_mode(agents_console_tab
     """The credential kind picks the auth mode (prefer OAuth) and the model rides along."""
 
     owner = User.objects.create_user(username="agt-svci-owner", email="svci@example.com")
-    static_integration = make_integration("agt-svc-static")
-    oauth_integration = make_integration("agt-svc-oauth", kind=CredentialKind.OAUTH)
+    static_integration = make_integration("agt-svc-static", impl_class="manual")
+    oauth_integration = make_integration("agt-svc-oauth", kind=CredentialKind.OAUTH, impl_class="manual")
     with system_context(reason="test.agents.provision_inputs.service"):
         static_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=static_integration, name="S", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=static_integration, name="S"),
             name="claude-3",
         )
         static_agent = Agent.objects.create(name="Static", owner=owner, model=static_model)
         static_inputs = static_agent.provision_service_inputs()
 
         oauth_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=oauth_integration, name="O", backend_class="manual"),
+            provider=InferenceProvider.objects.create(integration=oauth_integration, name="O"),
             name="claude-opus-4-8",
         )
         oauth_agent = Agent.objects.create(name="OAuth", owner=owner, model=oauth_model)

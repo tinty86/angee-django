@@ -32,14 +32,12 @@ ANGEE_RUNTIME_MODULE = "tests.runtime"
 # (normally supplied by each addon's autoconfig) are declared explicitly here;
 # the enum field requires each to be non-empty at model-import time.
 ANGEE_STORAGE_BACKEND_CLASSES = {"local": "angee.storage.backends.LocalBackend"}
-ANGEE_VCS_BACKEND_CLASSES = {
-    "none": "angee.integrate.vcs.backend.NoopVCSBackend",
+ANGEE_INTEGRATION_IMPLS = {
+    "none": "angee.integrate.impl.NullIntegrationImpl",
     "local": "angee.integrate.vcs.backend.LocalVCSBackend",
     "stub": "tests.conftest.StubVCSBackend",
-}
-ANGEE_INFERENCE_BACKEND_CLASSES = {
     "manual": "angee.agents.backends.ManualInferenceBackend",
-    "stub": "tests.conftest.StubInferenceBackend",
+    "stub_inference": "tests.conftest.StubInferenceBackend",
 }
 # The agents-supplied bearer→actor verifier is composer autoconfig (angee.agents); a
 # bare test settings module that skips the composer declares it so the verifier is
