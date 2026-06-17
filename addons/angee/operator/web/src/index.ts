@@ -23,6 +23,7 @@ import {
 import {
   ServicesSection,
 } from "./views/sections/ServicesSection";
+import { ServiceDetail } from "./views/sections/ServiceDetail";
 import {
   SourcesSection,
 } from "./views/sections/SourcesSection";
@@ -60,6 +61,13 @@ const operatorRoutes: readonly BaseAddonRoute[] = [
     path: "/operator/services",
     shell: "console",
     component: operatorSectionRoute(ServicesSection),
+  },
+  {
+    name: "operator.services.detail",
+    path: "/operator/services/$name",
+    shell: "console",
+    menu: "operator.services",
+    component: operatorSectionRoute(ServiceDetail),
   },
   {
     name: "operator.workspaces",

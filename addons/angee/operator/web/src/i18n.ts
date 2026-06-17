@@ -52,6 +52,12 @@ export const enOperatorMessages: Record<string, string> = {
   "operator.services.destroy.confirm.title": "Destroy service?",
   "operator.services.destroy.confirm.body":
     "“{name}” will be stopped and removed from the stack — the workspace it mounts is left intact.",
+  "operator.services.detail.notFound": "Service not found",
+  "operator.services.detail.overview": "Overview",
+  "operator.services.detail.endpoint": "Endpoint",
+  "operator.services.detail.internal": "Internal address",
+  "operator.services.detail.logs": "Logs",
+  "operator.services.detail.logs.empty": "Waiting for log output…",
 
   // Workspaces.
   "operator.workspaces.loading": "Loading workspaces",

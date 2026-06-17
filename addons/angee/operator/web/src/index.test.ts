@@ -17,13 +17,21 @@ const SECTION_PATHS = [
 ];
 
 describe("operator addon manifest", () => {
-  test("registers one console route per section, each with a component", () => {
+  test("registers a console route per section plus resource detail routes", () => {
     const routes = operator.routes ?? [];
-    expect(routes).toHaveLength(SECTION_PATHS.length);
-    expect(routes.map((route) => route.path)).toEqual(SECTION_PATHS);
+    // Section routes are the nav-level panes; detail routes carry a `$param` and
+    // point back to their section's menu for active-state rather than appearing
+    // as their own nav entry.
+    const sectionRoutes = routes.filter((route) => !route.path.includes("$"));
+    const detailRoutes = routes.filter((route) => route.path.includes("$"));
+    expect(sectionRoutes.map((route) => route.path)).toEqual(SECTION_PATHS);
     for (const route of routes) {
       expect(route.shell).toBe("console");
       expect(route.component).toBeTypeOf("function");
+    }
+    const sectionNames = new Set(sectionRoutes.map((route) => route.name));
+    for (const route of detailRoutes) {
+      expect(route.menu && sectionNames.has(route.menu)).toBe(true);
     }
   });
 
@@ -44,9 +52,10 @@ describe("operator addon manifest", () => {
     expect(menu?.parentId).toBe("platform");
     expect(menu?.group).toBeUndefined();
     expect(menu?.route).toBe("operator.overview");
-    expect(menu?.children?.map((child) => child.route)).toEqual(
-      operator.routes?.map((route) => route.name),
-    );
+    const sectionNames = (operator.routes ?? [])
+      .filter((route) => !route.path.includes("$"))
+      .map((route) => route.name);
+    expect(menu?.children?.map((child) => child.route)).toEqual(sectionNames);
     expect(menu?.children?.map((child) => child.to)).toEqual(
       SECTION_PATHS.map(() => undefined),
     );

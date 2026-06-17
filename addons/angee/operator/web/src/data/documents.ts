@@ -241,6 +241,33 @@ export const SERVICE_UP_MUTATION = `
   }
 `;
 
+// The recent log buffer (history) for first paint of the service detail logs.
+export const SERVICE_LOGS_QUERY = `
+  query OperatorServiceLogHistory($name: String!, $limit: Int) {
+    serviceLogs(name: $name, limit: $limit)
+  }
+`;
+
+// The live log tail (v0.6: this now actually streams line-by-line). Each emission
+// is one log line; the detail view accumulates them past the history.
+export const SERVICE_LOGS_SUBSCRIPTION = `
+  subscription OperatorServiceLogStream($name: String!) {
+    onServiceLogs(name: $name)
+  }
+`;
+
+// The service's resolved endpoint (routed URL + internal host/port) for detail.
+export const SERVICE_ENDPOINT_QUERY = `
+  query OperatorServiceEndpoint($name: String!) {
+    serviceEndpoint(name: $name) {
+      routed
+      url
+      internalHost
+      internalPort
+    }
+  }
+`;
+
 // Render a service template into an existing workspace. `input.template` is the
 // daemon's own template ref (from the `templates` listing) — the daemon owns its
 // format, so resolve it from there rather than constructing it.
