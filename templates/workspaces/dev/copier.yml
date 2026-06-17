@@ -43,6 +43,9 @@ _angee:
     operator.port_pool.operator:   { range: "9001-9099" }
     operator.port_pool.playwright: { range: "9224-9322" }
     operator.port_pool.process_compose: { range: "10000-10999" }
+    # Caddy edge host port — each workspace leases a distinct one so parallel
+    # workspace stacks (and the base stack on :80) don't all contend for :80.
+    operator.port_pool.edge:       { range: "7000-7099" }
   sources:
     repo:
       source: angee-django
@@ -65,6 +68,7 @@ _angee:
         ui_port:            "${alloc.ui}"
         storybook_port:     "${alloc.storybook}"
         operator_port:      "${alloc.operator}"
+        edge_port:          "${alloc.edge}"
         playwright_port:    "${alloc.playwright}"
         process_compose_port: "${alloc.process_compose}"
         playwright_user_data_dir: "${workspace.path}/.angee/data/chrome"

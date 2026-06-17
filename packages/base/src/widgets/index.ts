@@ -2,6 +2,7 @@ import { useWidget, type WidgetMap } from "@angee/sdk";
 
 import { booleanBadgeWidget } from "./booleanBadge";
 import { booleanWidget } from "./boolean";
+import { colorDotWidget } from "./colorDot";
 import { comboboxWidget } from "./combobox";
 import { dateWidget } from "./date";
 import { datetimeWidget } from "./datetime";
@@ -40,7 +41,7 @@ export type {
   WidgetRenderProps,
 } from "./types";
 export { widgetLabel } from "./label";
-export { STATUS_BADGE_TONES } from "./statusBadge";
+export { STATUS_TONES, statusTone } from "./status-tones";
 export {
   RelationField,
   type RelationFieldProps,
@@ -58,6 +59,7 @@ export const defaultWidgets = {
   boolean: booleanWidget,
   booleanBadge: booleanBadgeWidget,
   booleanToggle: booleanToggleWidget,
+  colorDot: colorDotWidget,
   date: dateWidget,
   json: jsonWidget,
   datetime: datetimeWidget,

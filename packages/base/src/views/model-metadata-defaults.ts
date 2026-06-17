@@ -118,6 +118,7 @@ const ENUM_OPTION_WIDGETS = new Set([
   "selection",
   "statusbar",
   "statusBadge",
+  "colorDot",
   "ribbon",
 ]);
 

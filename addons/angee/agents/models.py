@@ -65,16 +65,38 @@ class MCPTransport(models.TextChoices):
     SSE = "sse", "SSE"
 
 
-class AgentStatus(models.TextChoices):
-    """Provisioning state of an agent (set by the operator render pipeline)."""
+class AgentLifecycle(models.TextChoices):
+    """Where an agent sits in the operator provision pipeline.
+
+    The lifecycle axis: a forward journey the render pipeline drives, distinct from
+    the agent's observed run state (:class:`RuntimeStatus`). A provision moves it
+    ``DRAFT → PROVISIONING → READY``; a teardown moves it ``→ DEPROVISIONING →
+    DEPROVISIONED``. Whether the rendered agent is actually up — and whether the last
+    operation failed — is the orthogonal :attr:`Agent.runtime_status`, never folded
+    in here.
+    """
 
     DRAFT = "draft", "Draft"
     PROVISIONING = "provisioning", "Provisioning"
-    RUNNING = "running", "Running"
+    READY = "ready", "Ready"
     DEPROVISIONING = "deprovisioning", "Deprovisioning"
+    DEPROVISIONED = "deprovisioned", "Deprovisioned"
+
+
+class RuntimeStatus(models.TextChoices):
+    """The observed run state of a provisioned thing — the colored-dot axis.
+
+    Orthogonal to a provision lifecycle (:class:`AgentLifecycle`): stopped/running/
+    error/warning is "is it up right now, and is anything wrong", the grey/green/red/
+    amber dot the frontend renders through the ``colorDot`` widget. Reused for any
+    model that has a run state; the operator daemon reports the same vocabulary for
+    its services (see ``docs/frontend/guidelines.md`` for the shared tone mapping).
+    """
+
     STOPPED = "stopped", "Stopped"
+    RUNNING = "running", "Running"
     ERROR = "error", "Error"
-    ARCHIVED = "archived", "Archived"
+    WARNING = "warning", "Warning"
 
 
 class InferenceProvider(Capability):
@@ -411,6 +433,16 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         blank=True,
         related_name="agents",
     )
+    inference_credential = models.ForeignKey(
+        "integrate.Credential",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    """Per-agent inference credential override. When set, the agent authenticates inference
+    with this credential (e.g. a connected Anthropic OAuth account) instead of the one its
+    model's provider integration carries; unset falls back to that catalogue chain."""
     skills = models.ManyToManyField("agents.Skill", blank=True, related_name="agents")
     mcp_servers = models.ManyToManyField("agents.MCPServer", blank=True, related_name="agents")
     mcp_tools = models.ManyToManyField("agents.MCPTool", blank=True, related_name="agents")
@@ -434,8 +466,13 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
     """Operator service instance name, set when the agent is rendered."""
     workspace = models.CharField(max_length=128, blank=True)
     """Operator workspace instance name, set when the agent is rendered."""
-    status = StateField(choices_enum=AgentStatus, default=AgentStatus.DRAFT)
+    lifecycle = StateField(choices_enum=AgentLifecycle, default=AgentLifecycle.DRAFT)
+    """Provision-pipeline position (:class:`AgentLifecycle`), set by the render flow."""
+    runtime_status = StateField(choices_enum=RuntimeStatus, default=RuntimeStatus.STOPPED)
+    """Observed run state (:class:`RuntimeStatus`) — the colored dot; ``ERROR`` pairs
+    with ``last_error``. Set by the render flow; the daemon owns the live truth."""
     last_error = models.TextField(blank=True)
+    """The reason ``runtime_status`` is ``ERROR`` — the last failed operation."""
 
     objects = RebacManager()
 
@@ -453,71 +490,82 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         return self.name
 
     def mark_provisioning(self) -> None:
-        """Mark the agent as running through the operator provision flow."""
+        """Enter the provision flow: lifecycle provisioning, run state reset to stopped."""
 
-        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.PROVISIONING)
+        self.runtime_status = cast(RuntimeStatus, RuntimeStatus.STOPPED)
         self.last_error = ""
-        self.save(update_fields=["status", "last_error", "updated_at"])
+        self.save(update_fields=["lifecycle", "runtime_status", "last_error", "updated_at"])
 
     def mark_workspace_provisioned(self, *, workspace: str) -> None:
         """Record the workspace as soon as the operator creates it."""
 
         self.workspace = workspace
-        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.PROVISIONING)
         self.last_error = ""
-        self.save(update_fields=["workspace", "status", "last_error", "updated_at"])
+        self.save(update_fields=["workspace", "lifecycle", "last_error", "updated_at"])
 
     def mark_service_provisioned(self, *, service: str) -> None:
         """Record the service as soon as the operator creates it."""
 
         self.service = service
-        self.status = cast(AgentStatus, AgentStatus.PROVISIONING)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.PROVISIONING)
         self.last_error = ""
-        self.save(update_fields=["service", "status", "last_error", "updated_at"])
+        self.save(update_fields=["service", "lifecycle", "last_error", "updated_at"])
 
     def mark_provisioned(self, *, workspace: str, service: str = "") -> None:
         """Record the operator instance the provision flow rendered for this agent.
 
         The daemon owns the workspace/service lifecycle; the server-side provision
-        flow renders them and calls this to persist the resulting instance names and
-        flip the agent to running. Clears any prior provisioning error. ``service``
-        is optional — a workspace-only agent renders no service.
+        flow renders them and calls this to persist the resulting instance names, mark
+        the lifecycle ``READY`` and the run state ``RUNNING``. Clears any prior error.
+        ``service`` is optional — a workspace-only agent renders no service.
         """
 
         self.workspace = workspace
         self.service = service
-        self.status = cast(AgentStatus, AgentStatus.RUNNING)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.READY)
+        self.runtime_status = cast(RuntimeStatus, RuntimeStatus.RUNNING)
         self.last_error = ""
-        self.save(update_fields=["workspace", "service", "status", "last_error", "updated_at"])
+        self.save(
+            update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"]
+        )
 
     def mark_deprovisioned(self) -> None:
-        """Clear the operator instance after teardown and mark the agent stopped."""
+        """Clear the operator instance after teardown: lifecycle deprovisioned, run state stopped."""
 
         self.workspace = ""
         self.service = ""
-        self.status = cast(AgentStatus, AgentStatus.STOPPED)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.DEPROVISIONED)
+        self.runtime_status = cast(RuntimeStatus, RuntimeStatus.STOPPED)
         self.last_error = ""
-        self.save(update_fields=["workspace", "service", "status", "last_error", "updated_at"])
+        self.save(
+            update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"]
+        )
 
     def mark_deprovisioning(self) -> None:
         """Mark the agent as tearing down through the operator teardown flow."""
 
-        self.status = cast(AgentStatus, AgentStatus.DEPROVISIONING)
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.DEPROVISIONING)
         self.last_error = ""
-        self.save(update_fields=["status", "last_error", "updated_at"])
+        self.save(update_fields=["lifecycle", "last_error", "updated_at"])
 
     def mark_provision_failed(
         self, message: str, *, clear_instances: bool = False, clear_service: bool = False
     ) -> None:
-        """Record a provisioning failure: mark the agent errored, keeping the reason.
+        """Record a failed operation: run state ``ERROR`` (the red dot), reason kept.
 
-        ``clear_instances`` blanks both instance names when a provision rolled the
-        workspace back; ``clear_service`` blanks only the service, for a reprovision
-        that destroyed the old service before the recreate failed (the workspace is
-        preserved). Either way the persisted names never point at a torn-down instance.
+        The failure lands on the run-state axis: ``last_error`` holds the reason and the
+        dot turns red. ``clear_instances`` blanks both instance names (a provision rolled
+        the workspace back); ``clear_service`` blanks only the service (a reprovision
+        destroyed the old service before the recreate failed — the workspace is preserved).
+        The lifecycle then follows the workspace, never stranding mid-flow: an agent left
+        holding a workspace is still provisioned (``READY``), one rolled back to nothing is
+        a clean ``DRAFT`` retry. The red run-state dot carries the failure either way, and
+        the persisted names never point at a torn-down instance.
         """
 
-        update_fields = ["status", "last_error", "updated_at"]
+        update_fields = ["lifecycle", "runtime_status", "last_error", "updated_at"]
         if clear_instances:
             self.workspace = ""
             self.service = ""
@@ -525,7 +573,10 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         elif clear_service:
             self.service = ""
             update_fields = ["service", *update_fields]
-        self.status = cast(AgentStatus, AgentStatus.ERROR)
+        self.lifecycle = cast(
+            AgentLifecycle, AgentLifecycle.READY if self.workspace else AgentLifecycle.DRAFT
+        )
+        self.runtime_status = cast(RuntimeStatus, RuntimeStatus.ERROR)
         self.last_error = message[:2000]
         self.save(update_fields=update_fields)
 
@@ -687,12 +738,32 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         credential.ensure_fresh()
         return str(credential.secret_value())
 
-    def _inference_credential(self) -> Any:
-        """Return the ``integrate.Credential`` backing this agent's inference model, or ``None``.
+    def inference_credential_ready(self) -> bool:
+        """Whether this agent can be provisioned with working inference auth.
 
-        Asks the model for its credential (the catalogue owns the
-        model→provider→integration→credential chain) rather than walking it here.
+        A model-less agent needs no inference credential, so it is always ready. A
+        model-backed agent is ready only when its credential yields a usable secret — a
+        missing or placeholder credential (no key) would render a service that can never
+        authenticate, so the provision flow refuses it up front rather than bringing up a
+        broken agent. Connecting a real credential (e.g. an Anthropic OAuth account) makes
+        it ready.
         """
 
+        if self.model_id is None:
+            return True
+        return bool(self.inference_secret())
+
+    def _inference_credential(self) -> Any:
+        """Return the ``integrate.Credential`` backing this agent's inference, or ``None``.
+
+        A per-agent ``inference_credential`` override wins (e.g. a connected Anthropic OAuth
+        account the user pointed this agent at); otherwise the model's catalogue credential
+        (the model→provider→integration→credential chain the catalogue owns), asked of the
+        model rather than walked here.
+        """
+
+        override = getattr(self, "inference_credential", None)
+        if override is not None:
+            return override
         model = getattr(self, "model", None)
         return model.credential if model is not None else None

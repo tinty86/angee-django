@@ -16,7 +16,8 @@ const AGENT_MODEL = "agents.Agent";
 
 const PROVISION_FIELDS = [
   "id",
-  "status",
+  "lifecycle",
+  "runtimeStatus",
   "lastError",
   "workspace",
   "service",
@@ -25,7 +26,8 @@ const PROVISION_FIELDS = [
 ] as const;
 
 interface AgentProvisionRecord extends Row {
-  status?: string | null;
+  lifecycle?: string | null;
+  runtimeStatus?: string | null;
   lastError?: string | null;
   workspace?: string | null;
   service?: string | null;
@@ -109,11 +111,11 @@ export function AgentProvisioning({
   const agent = record as AgentProvisionRecord | null;
   const workspace = stringField(agent, "workspace");
   const service = stringField(agent, "service");
-  const status = agentStatus(agent);
-  const active = isLifecycleActive(status);
+  const lifecycle = agentLifecycle(agent);
+  const active = isLifecycleActive(lifecycle);
   const expectsService = Boolean(agent?.serviceTemplate);
   const missingRenderedInstances =
-    status === "RUNNING" && (!workspace || (expectsService && !service));
+    agentRuntime(agent) === "RUNNING" && (!workspace || (expectsService && !service));
   const showRuntime = active || Boolean(workspace) || missingRenderedInstances;
   const hasWorkspaceTemplate = Boolean(agent?.workspaceTemplate?.path);
 
@@ -140,7 +142,7 @@ export function AgentProvisioning({
                 expectsService={expectsService}
                 pane={pane}
                 service={service}
-                status={status}
+                lifecycle={lifecycle}
                 workspace={workspace}
               />
             </OperatorTransportProvider>
@@ -166,13 +168,13 @@ function AgentOperatorRuntime({
   expectsService,
   pane,
   service,
-  status,
+  lifecycle,
   workspace,
 }: {
   expectsService: boolean;
   pane: AgentProvisioningPane;
   service: string;
-  status: string;
+  lifecycle: string;
   workspace: string;
 }): React.ReactElement {
   const runtime = useProvisionRuntime(workspace, service);
@@ -189,7 +191,7 @@ function AgentOperatorRuntime({
       error={runtime.error}
       status={runtime.workspaceStatus}
       workspace={workspace}
-      lifecycleStatus={status}
+      lifecycleStatus={lifecycle}
     />
   );
 }
@@ -402,8 +404,12 @@ function isLifecycleActive(status: string | null | undefined): boolean {
   return ["PROVISIONING", "DEPROVISIONING"].includes((status ?? "").toUpperCase());
 }
 
-function agentStatus(record: Row | null): string {
-  return stringField(record, "status").toUpperCase();
+function agentLifecycle(record: Row | null): string {
+  return stringField(record, "lifecycle").toUpperCase();
+}
+
+function agentRuntime(record: Row | null): string {
+  return stringField(record, "runtimeStatus").toUpperCase();
 }
 
 function stringField(record: Row | null, key: string): string {

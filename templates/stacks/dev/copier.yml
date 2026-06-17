@@ -44,6 +44,13 @@ operator_port:
   type: int
   default: 9000
 
+# Host port the Caddy edge publishes (ws://localhost:<edge_port>/<service>/). Defaults
+# to 80 for the base stack; workspaces lease a distinct value from operator.port_pool.edge
+# so parallel stacks on one host don't all contend for :80.
+edge_port:
+  type: int
+  default: 80
+
 playwright_port:
   type: int
   default: 9223

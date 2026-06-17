@@ -132,7 +132,7 @@ class OAuthCredentialHandler(CredentialKindHandler):
 
         try:
             return now + timedelta(seconds=int(material["expires_in"]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return None
 
     def can_refresh(self, credential: Any) -> bool:
@@ -183,6 +183,18 @@ class StaticTokenCredentialHandler(CredentialKindHandler):
 
     kind = "static_token"
     material_field = "api_key"
+
+    def validate(self, material: dict[str, Any]) -> None:
+        """Allow an empty API key — unlike OAuth, a static token is optional.
+
+        A static-token credential may stand in for an integration that needs no key
+        yet: a placeholder whose value is filled in later (e.g. before real inference
+        is connected), or a vendor that authenticates by other means. ``secret_value``
+        returns ``""`` for an empty key, and consumers gate on a usable secret before
+        relying on it (e.g. agent provisioning refuses an empty inference credential).
+        """
+
+        del material
 
     def auth_headers(self, credential: Any) -> dict[str, str]:
         """Return static-token bearer authorization headers."""

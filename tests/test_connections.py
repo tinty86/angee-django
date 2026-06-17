@@ -204,9 +204,7 @@ def test_connection_managers_authorize_their_own_writes() -> None:
             )
 
         # No ambient system_context here: the managers authorize their own writes.
-        account = ExternalAccount.objects.link(
-            oauth_client, "ext-self", owner=user, email="bob@example.com"
-        )
+        account = ExternalAccount.objects.link(oauth_client, "ext-self", owner=user, email="bob@example.com")
         credential = Credential.objects.upsert_for_user(
             user,
             oauth_client,
@@ -243,9 +241,7 @@ def test_upsert_for_user_labels_the_credential_from_provider_and_subject() -> No
             oauth_client = OAuthClient.objects.create(
                 slug="example", display_name="Example prod", client_id="example-client"
             )
-            account = ExternalAccount.objects.link(
-                oauth_client, "ext-name", owner=user, email="picker@example.com"
-            )
+            account = ExternalAccount.objects.link(oauth_client, "ext-name", owner=user, email="picker@example.com")
             credential = Credential.objects.upsert_for_user(
                 user,
                 oauth_client,
@@ -315,6 +311,36 @@ def test_create_local_credential_needs_no_provider_and_keys_by_name() -> None:
                 name="oauth-x",
                 material={"access_token": "tok"},
             )
+    finally:
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_static_token_credential_allows_an_empty_api_key() -> None:
+    """A static-token credential may be minted with no key — a placeholder to fill later.
+
+    Unlike OAuth (whose identity is the token), a static token is optional: an integration
+    can be wired before its key is connected. ``secret_value`` is ``""`` so consumers gate
+    on a usable secret (e.g. agent provisioning refuses an empty inference credential).
+    """
+
+    created_models = _create_missing_tables()
+    try:
+        user = get_user_model().objects.create_user(username="empty-bob", email="b@example.com")
+        call_command("rebac", "sync", verbosity=0)
+
+        credential = Credential.objects.create_local_credential(
+            user,
+            kind=CredentialKind.STATIC_TOKEN,
+            name="anthropic-placeholder",
+            material={"api_key": ""},
+        )
+        assert credential.secret_value() == ""
+        with system_context(reason="test empty credential read"):
+            assert credential.reveal() == {"api_key": ""}
     finally:
         if created_models:
             with connection.schema_editor() as schema_editor:

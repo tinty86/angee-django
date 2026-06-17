@@ -167,8 +167,8 @@ export const INTENT_GLYPHS: Record<FeedbackIntent, string> = {
  * A `tone → values` map: which status-string values render in which tone. This is
  * the pure data shape; the vocabulary itself is a caller fact (the status names a
  * product uses), not a framework color fact — `tones.ts` owns the color mechanism,
- * never the domain values. See `statusBadge`'s `STATUS_BADGE_TONES` for the widget
- * convention, or pass an explicit `<Column tone>` map.
+ * never the domain values. See the shared `STATUS_TONES` (widgets/status-tones.ts)
+ * for the status convention, or pass an explicit `<Column tone>` map.
  */
 export type ToneValueBuckets = Partial<Record<Tone, readonly string[]>>;
 
