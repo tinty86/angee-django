@@ -1,19 +1,13 @@
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  FieldLabel,
-  FieldRoot,
-  Input,
   RowsListView,
   useConfirm,
+  usePrompt,
   useToast,
   type ListColumn,
 } from "@angee/base";
-import { useCallback, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 
 import { useOperatorT } from "../../i18n";
 import { SECRET_DELETE_MUTATION, SECRET_SET_MUTATION } from "../../data/documents";
@@ -32,32 +26,51 @@ interface SecretDeleteVars extends Record<string, unknown> {
 // RowsListView keys rows by `id`; the daemon identifies a secret by name.
 type SecretRowData = SecretRef & { id: string };
 
-/** Secrets pane: declared secrets (presence only) + set/delete. */
+/** Secrets pane: declared secrets (presence only) + set (via a prompt) / delete. */
 export function SecretsSection(): ReactNode {
   const t = useOperatorT();
+  const prompt = usePrompt();
   const { snapshot, result, refetch } = useOperatorSnapshot({ secrets: true });
   const { setSecret, deleteSecret, busy } = useSecretActions(refetch);
-  const [name, setName] = useState("");
-  const [value, setValue] = useState("");
-  const nameId = useId();
-  const valueId = useId();
-
-  const canSet = name.trim().length > 0 && value.length > 0 && !busy;
 
   const rows = useMemo<readonly SecretRowData[]>(
     () => (snapshot?.secrets ?? []).map((secret) => ({ ...secret, id: secret.name })),
     [snapshot],
   );
 
-  async function submitSet(event: FormEvent): Promise<void> {
-    event.preventDefault();
-    if (!canSet) return;
-    const succeeded = await setSecret(name.trim(), value);
-    // Keep the value on failure so the operator can retry without re-typing it.
-    if (succeeded) {
-      setValue("");
-    }
-  }
+  // The set form is a prompt (a form surface), not a panel crammed above the list.
+  // A row's name pre-fills it; the toolbar action collects an arbitrary name.
+  const promptSet = useCallback(
+    (presetName?: string): void => {
+      void (async () => {
+        const values = await prompt({
+          title: t("operator.secrets.form.title"),
+          confirm: t("operator.secrets.form.submit"),
+          fields: [
+            {
+              name: "name",
+              label: t("operator.secrets.form.name"),
+              placeholder: t("operator.secrets.form.namePlaceholder"),
+              defaultValue: presetName,
+              readOnly: presetName !== undefined,
+            },
+            {
+              name: "value",
+              label: t("operator.secrets.form.value"),
+              placeholder: t("operator.secrets.form.valuePlaceholder"),
+              type: "password",
+            },
+          ],
+        });
+        if (!values) return;
+        const name = (values.name ?? "").trim();
+        const value = values.value ?? "";
+        if (name.length === 0 || value.length === 0) return;
+        await setSecret(name, value);
+      })();
+    },
+    [prompt, setSecret, t],
+  );
 
   const columns = useMemo<readonly ListColumn<SecretRowData>[]>(
     () => [
@@ -110,85 +123,53 @@ export function SecretsSection(): ReactNode {
         align: "right",
         render: (secret) =>
           secret.required || secret.generated ? (
-            // Required/generated secrets are control-plane (e.g. the
-            // generated operator bearer shared by Django + the daemon);
-            // deleting one can brick minting, so the console withholds it.
-            <span
-              className="text-13 text-fg-muted"
-              title={t("operator.secrets.protected.hint")}
-            >
-              {t("operator.secrets.protected")}
-            </span>
+            // Required/generated secrets are control-plane (e.g. the generated
+            // operator bearer shared by Django + the daemon); deleting one can
+            // brick minting, so the console withholds it but still allows a re-set.
+            <div className="flex justify-end gap-1">
+              <Button disabled={busy} onClick={() => promptSet(secret.name)} size="sm" variant="ghost">
+                {t("operator.secrets.form.submit")}
+              </Button>
+              <span className="self-center text-13 text-fg-muted" title={t("operator.secrets.protected.hint")}>
+                {t("operator.secrets.protected")}
+              </span>
+            </div>
           ) : (
-            <Button
-              disabled={busy}
-              onClick={() => deleteSecret(secret)}
-              size="sm"
-              variant="ghost"
-            >
-              {t("operator.secrets.delete")}
-            </Button>
+            <div className="flex justify-end gap-1">
+              <Button disabled={busy} onClick={() => promptSet(secret.name)} size="sm" variant="ghost">
+                {t("operator.secrets.form.submit")}
+              </Button>
+              <Button disabled={busy} onClick={() => deleteSecret(secret)} size="sm" variant="ghost">
+                {t("operator.secrets.delete")}
+              </Button>
+            </div>
           ),
       },
     ],
-    [busy, deleteSecret, t],
+    [busy, deleteSecret, promptSet, t],
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("operator.secrets.form.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => void submitSet(event)}>
-            <FieldRoot>
-              <FieldLabel htmlFor={nameId} className="text-fg-muted">
-                {t("operator.secrets.form.name")}
-              </FieldLabel>
-              <Input
-                id={nameId}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={t("operator.secrets.form.namePlaceholder")}
-                value={name}
-              />
-            </FieldRoot>
-            <FieldRoot>
-              <FieldLabel htmlFor={valueId} className="text-fg-muted">
-                {t("operator.secrets.form.value")}
-              </FieldLabel>
-              <Input
-                id={valueId}
-                onChange={(event) => setValue(event.target.value)}
-                placeholder={t("operator.secrets.form.valuePlaceholder")}
-                type="password"
-                value={value}
-              />
-            </FieldRoot>
-            <Button disabled={!canSet} size="sm" type="submit" variant="secondary">
-              {t("operator.secrets.form.submit")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <RowsListView<SecretRowData>
-        rows={rows}
-        columns={columns}
-        fetching={result.fetching}
-        error={snapshot ? null : result.error}
-        emptyMessage={t("operator.secrets.empty")}
-      />
-    </div>
+    <RowsListView<SecretRowData>
+      rows={rows}
+      columns={columns}
+      toolbarActions={
+        <Button disabled={busy} onClick={() => promptSet()} size="sm" variant="secondary">
+          {t("operator.secrets.form.title")}
+        </Button>
+      }
+      fetching={result.fetching}
+      error={snapshot ? null : result.error}
+      emptyMessage={t("operator.secrets.empty")}
+    />
   );
 }
 
 /**
- * The two secret mutations — set (form-driven) and delete (per-row, confirmed)
+ * The two secret mutations — set (prompt-driven) and delete (per-row, confirmed)
  * — each run via {@link runDaemonAction} and surface a failure as a toast; the
  * live snapshot then reflects the new state, so neither needs a local result
- * store. `setSecret` returns whether it succeeded so the form can clear the
- * value only on success.
+ * store. `setSecret` returns whether it succeeded.
  */
 function useSecretActions(refetch: () => void): {
   setSecret: (name: string, value: string) => Promise<boolean>;
