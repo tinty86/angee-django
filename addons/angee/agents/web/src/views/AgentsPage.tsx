@@ -120,7 +120,13 @@ function AgentProvisionToolbarAction({
     if (status !== "PROVISIONING") setOptimisticProvisioning(false);
   }, [status]);
 
-  if (optimisticProvisioning || !recordId || !canProvisionAgent(record)) return null;
+  if (!recordId) return null;
+  // Keep the button mounted in its loading state while the mutation is in flight: the
+  // optimistic status patch has already flipped the record out of a provisionable state,
+  // so gating only on canProvisionAgent/optimistic would unmount it before the spinner shows.
+  if (!provisionState.fetching && (optimisticProvisioning || !canProvisionAgent(record))) {
+    return null;
+  }
 
   const handleProvision = async (): Promise<void> => {
     const previousStatus = stringField(record, "status");

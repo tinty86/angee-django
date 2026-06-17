@@ -532,6 +532,87 @@ def test_reprovision_agent_failure_clears_destroyed_service_but_keeps_workspace(
         assert "service recreate failed" in agent.last_error
 
 
+def test_provision_agent_refuses_when_inference_credential_has_no_secret(
+    agents_console_tables: None, monkeypatch: Any
+) -> None:
+    """A model-backed agent whose credential yields no secret is refused before any render.
+
+    A placeholder inference credential (empty api_key) would render a service with a bogus
+    key (the ANTHROPIC_API_KEY=REPLACE_ME footgun), so the flow refuses up front — no status
+    flip, no daemon work — rather than bringing up an agent that can never authenticate.
+    """
+
+    admin = _platform_admin("agt-nokey-admin")
+    integration = make_integration("agt-nokey", material={"api_key": ""})
+    with system_context(reason="test.agents.nokey.seed"):
+        model = InferenceModel.objects.create(
+            provider=InferenceProvider.objects.create(integration=integration, name="P", backend_class="manual"),
+            name="claude-opus-4-8",
+        )
+    agent = _provisionable_agent(admin, "NoKey", slug="agt-nokey-tpl", model=model)
+    agent_id = _gid("AgentType", agent.sqid)
+
+    called: list[str] = []
+
+    class _UnusedDaemon:
+        @classmethod
+        def from_settings(cls) -> _UnusedDaemon:
+            called.append("from_settings")
+            return cls()
+
+    monkeypatch.setattr(agents_schema, "OperatorDaemon", _UnusedDaemon)
+
+    result = _data(
+        _execute(
+            _schema(),
+            "mutation($id: ID!){ provisionAgent(id: $id){ ok message } }",
+            {"id": agent_id},
+            user=admin,
+        )
+    )["provisionAgent"]
+
+    assert result["ok"] is False and "inference credential" in result["message"]
+    assert called == []  # refused before constructing the daemon / any render
+    with system_context(reason="test.agents.nokey.verify"):
+        agent.refresh_from_db()
+        # Never flipped to PROVISIONING; nothing rendered.
+        assert (str(agent.status), agent.workspace, agent.service) != ("provisioning", "", "")
+        assert str(agent.status) != "provisioning"
+        assert (agent.workspace, agent.service) == ("", "")
+
+
+def test_agent_inference_credential_override_wins_over_model_chain(agents_console_tables: None) -> None:
+    """A per-agent ``inference_credential`` overrides the model's integration credential.
+
+    Pointing the agent at a connected OAuth credential makes inference authenticate with that
+    token (auth_mode ``oauth``) without touching the model's provider integration — whose own
+    credential here is an empty placeholder that otherwise refuses provisioning.
+    """
+
+    owner = User.objects.create_user(username="agt-ov-owner", email="ov@example.com")
+    model_integration = make_integration("agt-ov-model", material={"api_key": ""})
+    oauth_integration = make_integration("agt-ov-oauth", kind=CredentialKind.OAUTH)
+    with system_context(reason="test.agents.override.seed"):
+        model = InferenceModel.objects.create(
+            provider=InferenceProvider.objects.create(integration=model_integration, name="P", backend_class="manual"),
+            name="claude-opus-4-8",
+        )
+        # Without an override the model's empty placeholder credential is unusable.
+        plain = Agent.objects.create(name="Plain", owner=owner, model=model)
+        assert plain.inference_secret() == ""
+        assert plain.inference_credential_ready() is False
+
+        # The per-agent override points at the connected OAuth credential and wins.
+        agent = Agent.objects.create(
+            name="Override", owner=owner, model=model, inference_credential=oauth_integration.credential
+        )
+        assert agent.inference_secret() == "token"
+        assert agent.inference_credential_ready() is True
+        service_inputs = agent.provision_service_inputs()
+        assert service_inputs["auth_mode"] == "oauth"
+        assert service_inputs["model"] == "claude-opus-4-8"
+
+
 def test_agent_chat_endpoint_mints_route_token_and_is_admin_gated(
     agents_console_tables: None, monkeypatch: Any
 ) -> None:

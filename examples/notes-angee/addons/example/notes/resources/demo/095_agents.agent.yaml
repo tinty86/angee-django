@@ -1,8 +1,11 @@
 # A ready-to-provision demo agent, wired to the Anthropic provider/model (092/093) and the
 # agent-default workspace + claude-code service templates (094). After a fresh seed:
 #   1. connect "Anthropic Personal Plans" (Providers page) to mint a real OAuth credential,
-#   2. point integration 091 at that credential (the placeholder 090 cannot infer),
+#   2. set this agent's inference credential to that OAuth credential (Agents page) — the
+#      per-agent `inference_credential` overrides the seeded placeholder (090, no key),
 #   3. click Provision on this agent (Agents page) and watch the workspace + service come up.
+# Until step 2, provisioning is refused (the placeholder carries no usable secret) rather
+# than bringing up an agent that can't authenticate.
 #
 # Uses the nested `_meta`/`rows` form because Agent has a `model` field, which collides
 # with the flat format's reserved `model` (Django-model) key.

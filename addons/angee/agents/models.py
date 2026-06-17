@@ -411,6 +411,16 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         blank=True,
         related_name="agents",
     )
+    inference_credential = models.ForeignKey(
+        "integrate.Credential",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    """Per-agent inference credential override. When set, the agent authenticates inference
+    with this credential (e.g. a connected Anthropic OAuth account) instead of the one its
+    model's provider integration carries; unset falls back to that catalogue chain."""
     skills = models.ManyToManyField("agents.Skill", blank=True, related_name="agents")
     mcp_servers = models.ManyToManyField("agents.MCPServer", blank=True, related_name="agents")
     mcp_tools = models.ManyToManyField("agents.MCPTool", blank=True, related_name="agents")
@@ -687,12 +697,32 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         credential.ensure_fresh()
         return str(credential.secret_value())
 
-    def _inference_credential(self) -> Any:
-        """Return the ``integrate.Credential`` backing this agent's inference model, or ``None``.
+    def inference_credential_ready(self) -> bool:
+        """Whether this agent can be provisioned with working inference auth.
 
-        Asks the model for its credential (the catalogue owns the
-        model→provider→integration→credential chain) rather than walking it here.
+        A model-less agent needs no inference credential, so it is always ready. A
+        model-backed agent is ready only when its credential yields a usable secret — a
+        missing or placeholder credential (no key) would render a service that can never
+        authenticate, so the provision flow refuses it up front rather than bringing up a
+        broken agent. Connecting a real credential (e.g. an Anthropic OAuth account) makes
+        it ready.
         """
 
+        if self.model_id is None:
+            return True
+        return bool(self.inference_secret())
+
+    def _inference_credential(self) -> Any:
+        """Return the ``integrate.Credential`` backing this agent's inference, or ``None``.
+
+        A per-agent ``inference_credential`` override wins (e.g. a connected Anthropic OAuth
+        account the user pointed this agent at); otherwise the model's catalogue credential
+        (the model→provider→integration→credential chain the catalogue owns), asked of the
+        model rather than walked here.
+        """
+
+        override = getattr(self, "inference_credential", None)
+        if override is not None:
+            return override
         model = getattr(self, "model", None)
         return model.credential if model is not None else None

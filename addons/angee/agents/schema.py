@@ -139,6 +139,7 @@ class AgentType(AngeeNode):
     is_template: auto
     instructions: auto
     model: InferenceModelType | None
+    inference_credential: CredentialType | None
     skills: list[SkillType]
     mcp_servers: list[MCPServerType]
     mcp_tools: list[MCPToolType]
@@ -314,6 +315,7 @@ class AgentInput:
     is_template: bool = False
     instructions: str = ""
     model: relay.GlobalID | None = None
+    inference_credential: relay.GlobalID | None = None
     service_template: relay.GlobalID | None = None
     workspace_template: relay.GlobalID | None = None
     # UNSET over non-null columns (see InferenceProviderInput); the nullable FKs above keep None.
@@ -332,6 +334,7 @@ class AgentPatch:
     is_template: bool | None = strawberry.UNSET
     instructions: str | None = strawberry.UNSET
     model: relay.GlobalID | None = strawberry.UNSET
+    inference_credential: relay.GlobalID | None = strawberry.UNSET
     skills: list[relay.GlobalID] | None = strawberry.UNSET
     mcp_servers: list[relay.GlobalID] | None = strawberry.UNSET
     mcp_tools: list[relay.GlobalID] | None = strawberry.UNSET
@@ -488,10 +491,14 @@ def _resolve(
     return instance
 
 
-# The inference-credential chain ``_render_plan`` walks (``Agent.inference_secret`` →
-# model → provider → integration → credential); joined up front so provisioning reads
-# it in one query instead of four lazy FK fetches.
-_PROVISION_CHAIN = ("model__provider__integration__credential",)
+# The inference-credential chains ``_render_plan`` walks: the per-agent override
+# (``inference_credential``, with its ``oauth_client`` for an OAuth refresh) and the
+# model→provider→integration→credential fallback — joined up front so provisioning reads
+# the credential in one query instead of lazy FK fetches.
+_PROVISION_CHAIN = (
+    "model__provider__integration__credential",
+    "inference_credential__oauth_client",
+)
 
 
 def _mint_session(agent: Any) -> dict[str, Any]:
@@ -695,6 +702,11 @@ class AgentActionMutation:
                 return ActionResult(ok=False, message="Agent is already provisioned — deprovision it first.")
             if agent.workspace_template is None:
                 return ActionResult(ok=False, message="Set a workspace template on this agent first.")
+            if not agent.inference_credential_ready():
+                return ActionResult(
+                    ok=False,
+                    message="Connect a usable inference credential to this agent's provider before provisioning.",
+                )
             agent.mark_provisioning()
         created_workspace: list[str] = []
 
@@ -745,6 +757,11 @@ class AgentActionMutation:
                 return ActionResult(ok=False, message="Agent isn't provisioned — provision it first.")
             if agent.service_template is None:
                 return ActionResult(ok=False, message="Set a service template on this agent first.")
+            if not agent.inference_credential_ready():
+                return ActionResult(
+                    ok=False,
+                    message="Connect a usable inference credential to this agent's provider before reprovisioning.",
+                )
             agent.mark_provisioning()
         daemon = OperatorDaemon.from_settings()
         service_destroyed = False
