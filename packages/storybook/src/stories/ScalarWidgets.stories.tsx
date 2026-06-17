@@ -28,6 +28,13 @@ const stageOptions = [
   { value: "won", label: "Won" },
 ];
 
+const runtimeOptions = [
+  { value: "STOPPED", label: "Stopped" },
+  { value: "RUNNING", label: "Running" },
+  { value: "ERROR", label: "Error" },
+  { value: "WARNING", label: "Warning" },
+];
+
 const ownerOptions = [
   { value: "ada", label: "Ada Lovelace" },
   { value: "grace", label: "Grace Hopper" },
@@ -160,6 +167,12 @@ export const EditAndRead: Story = {
               widget={defaultWidgets.statusBadge}
               initialValue="IN_REVIEW"
               field={{ label: "Status", options: statusOptions }}
+            />
+            <WidgetExample
+              kind="colorDot"
+              widget={defaultWidgets.colorDot}
+              initialValue="RUNNING"
+              field={{ label: "Runtime", options: runtimeOptions }}
             />
             <WidgetExample<number | null>
               kind="progressBar"

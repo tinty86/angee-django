@@ -34,6 +34,16 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   (`solid`/`soft`/`surface`/`outline`/`ghost`). Drive recipe color through
   `toneClass(tone, fill)`; never hand-type a soft/solid tone triple, and never use
   the retired `default`/`error` names (they are `neutral`/`danger`).
+- **Status → tone is owned once** by the shared `STATUS_TONES` vocabulary
+  (`widgets/status-tones.ts`, the domain layer over the domain-free `lib/tones.ts`).
+  The `statusBadge` (pill) and `colorDot` (dot) widgets and every console status
+  surface (`StateTag`) resolve a value through `statusTone(value, override?)`: an
+  explicit `<Column tone>` map wins, then the shared convention, else `brand`. Never
+  add a private status→tone map (the operator console kept one and drifted). A run
+  state — stopped/running/error/warning — renders as `colorDot` (grey/green/red/amber);
+  a value the vocabulary doesn't know takes an explicit `<Column tone>` (e.g. a task's
+  `blocked`→`danger`). Keep the run state a separate field from a lifecycle/state enum
+  rather than overloading one column with both axes.
 - Route every user-facing string through i18n: `useBaseT()` in `@angee/base`,
   `use<Addon>T()` in an addon (both built on the SDK's `useNamespaceT(ns,
   fallback)`), with the English in the namespace bundle. A prop whose default is a

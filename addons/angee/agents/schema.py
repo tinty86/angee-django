@@ -28,7 +28,7 @@ from strawberry_django.pagination import OffsetPaginated
 
 from angee.agents.autoconfig import SETTINGS as _AGENTS_SETTINGS
 from angee.agents.context import render_view_context
-from angee.agents.models import AgentStatus
+from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
 from angee.base.models import instance_from_public_id
 from angee.graphql.actions import ActionResult
@@ -149,7 +149,8 @@ class AgentType(AngeeNode):
     workspace_inputs: JSON
     service: auto
     workspace: auto
-    status: auto
+    lifecycle: auto
+    runtime_status: auto
     last_error: auto
     created_at: auto
     updated_at: auto
@@ -321,7 +322,8 @@ class AgentInput:
     # UNSET over non-null columns (see InferenceProviderInput); the nullable FKs above keep None.
     service_inputs: JSON | None = strawberry.UNSET
     workspace_inputs: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
+    # Only the lifecycle is client-writable; ``runtime_status`` is operator-observed.
+    lifecycle: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -342,7 +344,7 @@ class AgentPatch:
     workspace_template: relay.GlobalID | None = strawberry.UNSET
     service_inputs: JSON | None = strawberry.UNSET
     workspace_inputs: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
+    lifecycle: str | None = strawberry.UNSET
 
 
 @strawberry_django.filter_type(Agent, lookups=True)
@@ -354,7 +356,8 @@ class AgentFilter:
 
     name: auto
     is_template: auto
-    status: auto
+    lifecycle: auto
+    runtime_status: auto
 
 
 @strawberry_django.order_type(Agent)
@@ -362,7 +365,8 @@ class AgentOrder:
     """Orderings accepted by the agents list."""
 
     name: auto
-    status: auto
+    lifecycle: auto
+    runtime_status: auto
     updated_at: auto
 
 
@@ -549,7 +553,7 @@ def _agent_for_view(view: dict[str, Any]) -> Any:
         return None
     with system_context(reason="agents.graphql.agent_for_view"):
         return (
-            Agent.objects.filter(owner_id=user_id, is_template=False, status=AgentStatus.RUNNING)
+            Agent.objects.filter(owner_id=user_id, is_template=False, runtime_status=RuntimeStatus.RUNNING)
             .exclude(service="")
             .order_by("-updated_at")
             .first()
@@ -690,10 +694,10 @@ class AgentActionMutation:
         """Render the agent into an operator workspace + service and record the instance.
 
         A render failure (including credential/plan resolution) records the reason and
-        moves the agent to ``ERROR``, rolling back and clearing any half-created
-        workspace so a retry starts clean. Blocks once a workspace is recorded — even
-        for an agent stranded mid-flow: :meth:`deprovision_agent` is the reset for any
-        stuck state, then provision again.
+        turns the run state ``ERROR``, rolling back and clearing any half-created
+        workspace (which resets the lifecycle to ``DRAFT``) so a retry starts clean.
+        Blocks once a workspace is recorded — even for an agent stranded mid-flow:
+        :meth:`deprovision_agent` is the reset for any stuck state, then provision again.
         """
 
         agent = _resolve(Agent, id, reason="agents.graphql.provision_agent", select_related=_PROVISION_CHAIN)
@@ -744,9 +748,10 @@ class AgentActionMutation:
         service — destroy + create over the same workspace, not a restart. The
         workspace (and its files) is preserved.
 
-        A failed recreate records the reason and moves the agent to ``ERROR``; the
-        preserved workspace stays, and the destroyed service name is cleared so a later
-        deprovision doesn't chase a service the daemon already removed. Re-run to retry.
+        A failed recreate records the reason and turns the run state ``ERROR``; the
+        preserved workspace (and so the ``READY`` lifecycle) stays, and the destroyed
+        service name is cleared so a later deprovision doesn't chase a service the
+        daemon already removed. Re-run to retry.
         """
 
         agent = _resolve(Agent, id, reason="agents.graphql.reprovision_agent", select_related=_PROVISION_CHAIN)
@@ -824,7 +829,7 @@ class AgentActionMutation:
         return AgentSession(
             agent_id=relay.GlobalID(type_name="AgentType", node_id=str(agent.sqid)),
             agent_name=str(agent.name),
-            status=str(agent.status),
+            status=str(agent.runtime_status),
             model_handle=str(model) if model is not None else "",
         )
 
@@ -847,10 +852,11 @@ class AgentActionMutation:
         """Tear down the agent's operator workspace and services, then clear the record.
 
         Also the reset for any stuck agent (stranded ``PROVISIONING``/``DEPROVISIONING``
-        or an ``ERROR`` with stale instance names): re-running tears down whatever names
-        the record holds and returns the agent to ``STOPPED``. An agent with no recorded
-        instances is marked stopped directly; a teardown failure records the reason and
-        moves it to ``ERROR``, preserving the names so the teardown can be retried.
+        or a run-state ``ERROR`` with stale instance names): re-running tears down
+        whatever names the record holds and returns the agent to ``DEPROVISIONED``
+        (run state stopped). An agent with no recorded instances is marked deprovisioned
+        directly; a teardown failure records the reason and turns the run state
+        ``ERROR``, preserving the names so the teardown can be retried.
         """
 
         agent = _resolve(Agent, id, reason="agents.graphql.deprovision_agent")

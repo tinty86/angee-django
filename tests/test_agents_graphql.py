@@ -269,7 +269,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
         ) -> str:
             with system_context(reason="test.agents.render.verify_workspace_recorded"):
                 agent.refresh_from_db()
-                calls.append(("recorded_workspace", agent.workspace, str(agent.status)))
+                calls.append(("recorded_workspace", agent.workspace, str(agent.lifecycle)))
             calls.append(("service", template, workspace, inputs))
             return "svc-bot"
 
@@ -285,7 +285,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
     def mark_provisioned_with_recorded_service(self: Agent, *, workspace: str, service: str = "") -> None:
         with system_context(reason="test.agents.render.verify_service_recorded"):
             persisted = Agent.objects.get(pk=self.pk)
-            calls.append(("recorded_service", persisted.service, str(persisted.status)))
+            calls.append(("recorded_service", persisted.service, str(persisted.lifecycle)))
         original_mark_provisioned(self, workspace=workspace, service=service)
 
     monkeypatch.setattr(Agent, "mark_provisioned", mark_provisioned_with_recorded_service)
@@ -296,7 +296,12 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
     assert result == {"ok": True, "message": "Provisioned “svc-bot”."}
     with system_context(reason="test.agents.render.verify_rendered"):
         agent.refresh_from_db()
-        assert (agent.workspace, agent.service, str(agent.status)) == ("ws-bot", "svc-bot", "running")
+        assert (agent.workspace, agent.service, str(agent.lifecycle), str(agent.runtime_status)) == (
+            "ws-bot",
+            "svc-bot",
+            "ready",
+            "running",
+        )
 
     assert [call[0] for call in calls] == [
         "secret",
@@ -319,7 +324,12 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
     assert result == {"ok": True, "message": "Deprovisioned."}
     with system_context(reason="test.agents.render.verify_deprovisioned"):
         agent.refresh_from_db()
-        assert (agent.workspace, agent.service, str(agent.status)) == ("", "", "stopped")
+        assert (agent.workspace, agent.service, str(agent.lifecycle), str(agent.runtime_status)) == (
+            "",
+            "",
+            "deprovisioned",
+            "stopped",
+        )
     assert ("destroy", "ws-bot") in calls
 
 
@@ -363,7 +373,7 @@ def test_provision_agent_failure_tears_down_workspace_and_records_error(
         def create_service(self, *, template: str, workspace: str, inputs: dict[str, str]) -> str:
             with system_context(reason="test.agents.fail.verify_workspace_recorded"):
                 agent.refresh_from_db()
-                recorded.append((agent.workspace, str(agent.status)))
+                recorded.append((agent.workspace, str(agent.lifecycle)))
             raise RuntimeError("image build failed")
 
         def destroy_workspace(self, name: str) -> None:
@@ -384,7 +394,8 @@ def test_provision_agent_failure_tears_down_workspace_and_records_error(
     assert destroyed == ["ws-doomed"]  # the orphaned workspace was torn back down
     with system_context(reason="test.agents.fail.verify"):
         agent.refresh_from_db()
-        assert str(agent.status) == "error"
+        # Run state errored; the rolled-back workspace leaves the lifecycle a clean DRAFT.
+        assert (str(agent.runtime_status), str(agent.lifecycle)) == ("error", "draft")
         assert (agent.workspace, "image build failed" in agent.last_error) == ("", True)
 
 
@@ -420,8 +431,9 @@ def test_provision_agent_records_error_when_plan_resolution_fails(
     assert result["ok"] is False and "credential is unreadable" in result["message"]
     with system_context(reason="test.agents.planfail.verify"):
         agent.refresh_from_db()
-        # ERROR, not a stranded PROVISIONING, and no instance names recorded.
-        assert str(agent.status) == "error"
+        # Run state ERROR with the lifecycle reset to DRAFT — not stranded in PROVISIONING
+        # — and no instance names recorded.
+        assert (str(agent.runtime_status), str(agent.lifecycle)) == ("error", "draft")
         assert (agent.workspace, agent.service) == ("", "")
         assert "credential is unreadable" in agent.last_error
 
@@ -434,7 +446,8 @@ def test_reprovision_agent_recreates_service_over_existing_workspace(
     admin = _platform_admin("agt-reprov-admin")
     plain = User.objects.create_user(username="agt-reprov-plain", email="reprov@example.com")
     agent = _provisionable_agent(
-        admin, "Rebot", slug="agt-reprov-tpl", workspace="ws-keep", service="svc-old", status="running"
+        admin, "Rebot", slug="agt-reprov-tpl", workspace="ws-keep", service="svc-old",
+        lifecycle="ready", runtime_status="running",
     )
     agent_id = _gid("AgentType", agent.sqid)
 
@@ -472,7 +485,12 @@ def test_reprovision_agent_recreates_service_over_existing_workspace(
     assert ("create_service", "ref:claude-code", "ws-keep") in calls
     with system_context(reason="test.agents.reprov.verify"):
         agent.refresh_from_db()
-        assert (agent.workspace, agent.service, str(agent.status)) == ("ws-keep", "svc-new", "running")
+        assert (agent.workspace, agent.service, str(agent.lifecycle), str(agent.runtime_status)) == (
+            "ws-keep",
+            "svc-new",
+            "ready",
+            "running",
+        )
 
 
 def test_reprovision_agent_failure_clears_destroyed_service_but_keeps_workspace(
@@ -486,7 +504,8 @@ def test_reprovision_agent_failure_clears_destroyed_service_but_keeps_workspace(
 
     admin = _platform_admin("agt-reprovfail-admin")
     agent = _provisionable_agent(
-        admin, "ReDoomed", slug="agt-reprovfail-tpl", workspace="ws-keep", service="svc-old", status="running"
+        admin, "ReDoomed", slug="agt-reprovfail-tpl", workspace="ws-keep", service="svc-old",
+        lifecycle="ready", runtime_status="running",
     )
     agent_id = _gid("AgentType", agent.sqid)
 
@@ -526,7 +545,8 @@ def test_reprovision_agent_failure_clears_destroyed_service_but_keeps_workspace(
     assert destroyed == ["svc-old"]  # destroyed before the recreate failed
     with system_context(reason="test.agents.reprovfail.verify"):
         agent.refresh_from_db()
-        assert str(agent.status) == "error"
+        # Run state errored; the preserved workspace keeps the lifecycle at READY.
+        assert (str(agent.runtime_status), str(agent.lifecycle)) == ("error", "ready")
         # Workspace preserved; the destroyed service name is cleared, not left dangling.
         assert (agent.workspace, agent.service) == ("ws-keep", "")
         assert "service recreate failed" in agent.last_error
@@ -538,8 +558,8 @@ def test_provision_agent_refuses_when_inference_credential_has_no_secret(
     """A model-backed agent whose credential yields no secret is refused before any render.
 
     A placeholder inference credential (empty api_key) would render a service with a bogus
-    key (the ANTHROPIC_API_KEY=REPLACE_ME footgun), so the flow refuses up front — no status
-    flip, no daemon work — rather than bringing up an agent that can never authenticate.
+    key (the ANTHROPIC_API_KEY=REPLACE_ME footgun), so the flow refuses up front — no
+    lifecycle flip, no daemon work — rather than bringing up an agent that can never authenticate.
     """
 
     admin = _platform_admin("agt-nokey-admin")
@@ -575,9 +595,8 @@ def test_provision_agent_refuses_when_inference_credential_has_no_secret(
     assert called == []  # refused before constructing the daemon / any render
     with system_context(reason="test.agents.nokey.verify"):
         agent.refresh_from_db()
-        # Never flipped to PROVISIONING; nothing rendered.
-        assert (str(agent.status), agent.workspace, agent.service) != ("provisioning", "", "")
-        assert str(agent.status) != "provisioning"
+        # Never flipped to PROVISIONING; the lifecycle stays a fresh DRAFT and nothing rendered.
+        assert str(agent.lifecycle) == "draft"
         assert (agent.workspace, agent.service) == ("", "")
 
 
@@ -697,7 +716,9 @@ def test_resolve_session_for_view_resolves_the_actors_running_agent(
 
     admin = _platform_admin("agt-session-admin")
     with system_context(reason="test.agents.session.seed"):
-        Agent.objects.create(name="Sidekick", owner=admin, service="svc-side", status="running")
+        Agent.objects.create(
+            name="Sidekick", owner=admin, service="svc-side", lifecycle="ready", runtime_status="running"
+        )
         # A draft agent for the same owner is not eligible (not running).
         Agent.objects.create(name="Draft", owner=admin)
 
@@ -888,7 +909,8 @@ def _provisionable_agent(owner: Any, name: str, *, slug: str, **agent_fields: An
     """Seed an agent with workspace + service templates for provisioning-flow tests.
 
     ``agent_fields`` set the starting instance state (e.g. ``workspace``/``service``/
-    ``status``) so a reprovision/deprovision test can begin from an already-provisioned row.
+    ``lifecycle``/``runtime_status``) so a reprovision/deprovision test can begin from an
+    already-provisioned row.
     """
 
     vcs = _vcs_integration(slug, config={"stub_repos": REPOS})

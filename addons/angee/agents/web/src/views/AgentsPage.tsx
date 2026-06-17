@@ -41,7 +41,7 @@ const MODEL = "agents.Agent";
 // Just what the chat gate needs: a running, service-backed agent gets the chat panel.
 // (`sqid` is not a GraphQL field — the agent's public id is recovered from the relay
 // `id` for the view envelope; see below.)
-const CHAT_FIELDS = ["id", "status", "service"] as const;
+const CHAT_FIELDS = ["id", "runtimeStatus", "service"] as const;
 
 /** Read a string field off the boundary record (`Record<string, unknown>`), or "". */
 function stringField(record: Row | null, key: string): string {
@@ -49,21 +49,32 @@ function stringField(record: Row | null, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-function agentStatus(record: Row | null): string {
-  return stringField(record, "status").toUpperCase();
+// The agent carries two state axes, each reading as its UPPERCASE enum name: `lifecycle`
+// is the provision journey (DRAFT→PROVISIONING→READY→DEPROVISIONING→DEPROVISIONED) and
+// `runtimeStatus` the observed run state (STOPPED/RUNNING/ERROR/WARNING — the colored dot).
+function agentLifecycle(record: Row | null): string {
+  return stringField(record, "lifecycle").toUpperCase();
+}
+
+function agentRuntime(record: Row | null): string {
+  return stringField(record, "runtimeStatus").toUpperCase();
 }
 
 function canProvisionAgent(record: Row | null): boolean {
-  return ["DRAFT", "STOPPED", "ERROR"].includes(agentStatus(record));
+  // Provision a fresh or torn-down agent, or retry one whose last operation errored.
+  return (
+    agentRuntime(record) === "ERROR" ||
+    ["DRAFT", "DEPROVISIONED"].includes(agentLifecycle(record))
+  );
 }
 
 function canDeprovisionAgent(record: Row | null): boolean {
-  return agentStatus(record) === "RUNNING";
+  return agentLifecycle(record) === "READY";
 }
 
 function canDeleteAgent(record: Row): boolean {
   return (
-    !["PROVISIONING", "RUNNING", "DEPROVISIONING"].includes(agentStatus(record)) &&
+    !["PROVISIONING", "READY", "DEPROVISIONING"].includes(agentLifecycle(record)) &&
     stringField(record, "workspace") === "" &&
     stringField(record, "service") === ""
   );
@@ -87,7 +98,7 @@ function AgentChatPanel({ agentId }: { agentId: string }): React.ReactElement {
   const t = useAgentsT();
   const { record } = useResourceRecord(MODEL, agentId, { fields: [...CHAT_FIELDS] });
   const running =
-    stringField(record, "status") === "RUNNING" && stringField(record, "service") !== "";
+    agentRuntime(record) === "RUNNING" && stringField(record, "service") !== "";
   if (!running) {
     return (
       <Card>
@@ -114,11 +125,11 @@ function AgentProvisionToolbarAction({
   const [provisionAgent, provisionState] = useAuthoredMutation<ProvisionAgentData, IdVariables>(
     PROVISION_AGENT_MUTATION,
   );
-  const status = agentStatus(record);
+  const lifecycle = agentLifecycle(record);
 
   React.useEffect(() => {
-    if (status !== "PROVISIONING") setOptimisticProvisioning(false);
-  }, [status]);
+    if (lifecycle !== "PROVISIONING") setOptimisticProvisioning(false);
+  }, [lifecycle]);
 
   if (!recordId) return null;
   // Keep the button mounted in its loading state while the mutation is in flight: the
@@ -129,9 +140,9 @@ function AgentProvisionToolbarAction({
   }
 
   const handleProvision = async (): Promise<void> => {
-    const previousStatus = stringField(record, "status");
+    const previousLifecycle = stringField(record, "lifecycle");
     setOptimisticProvisioning(true);
-    patchRecord({ status: "PROVISIONING" });
+    patchRecord({ lifecycle: "PROVISIONING" });
     try {
       const message = actionMessage(
         (await provisionAgent({ id: recordId }))?.provisionAgent,
@@ -142,7 +153,7 @@ function AgentProvisionToolbarAction({
       if (message) toast.success({ title: message });
     } catch (caught) {
       setOptimisticProvisioning(false);
-      if (previousStatus) patchRecord({ status: previousStatus });
+      if (previousLifecycle) patchRecord({ lifecycle: previousLifecycle });
       toast.danger({
         title: t("agents.provisioning.provisionFailed"),
         description:
@@ -231,11 +242,12 @@ function AgentDataPage({
       filter={{ isTemplate: { exact: isTemplate } }}
       createDefaults={{ isTemplate }}
       recordTabs={recordTabs}
-      returning={isTemplate ? undefined : ["status", "workspace", "service"]}
+      returning={isTemplate ? undefined : ["lifecycle", "runtimeStatus", "workspace", "service"]}
     >
       <List model={MODEL} pageSize={50}>
         <Column field="name" />
-        <Column field="status" widget="statusBadge" />
+        <Column field="lifecycle" widget="statusBadge" />
+        <Column field="runtimeStatus" widget="colorDot" />
         <Column field="updatedAt" />
       </List>
       <Form
@@ -273,7 +285,7 @@ function AgentDataPage({
           />
         ) : null}
         <Field name="name" title />
-        <Field name="status" widget="statusbar" />
+        <Field name="lifecycle" widget="statusbar" />
         {/* Description then instructions lead the Overview tab as full-width
             textareas; `body={false}` keeps `description` a normal field rather than
             the form's auto-detected body. */}

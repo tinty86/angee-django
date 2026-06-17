@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   record: {
     id: "agent-1",
-    status: "ERROR",
+    lifecycle: "DRAFT",
+    runtimeStatus: "ERROR",
     lastError: "operator POST workspaces: HTTP 409: workspace demo-agent conflicts: already exists",
     workspace: "",
     service: "",
@@ -69,7 +70,9 @@ vi.mock("@angee/operator/runtime", () => ({
 }));
 
 beforeEach(() => {
-  mocks.record.status = "ERROR";
+  // A failed provision that rolled back: lifecycle reset to DRAFT, run state ERROR.
+  mocks.record.lifecycle = "DRAFT";
+  mocks.record.runtimeStatus = "ERROR";
   mocks.record.lastError =
     "operator POST workspaces: HTTP 409: workspace demo-agent conflicts: already exists";
   mocks.record.workspace = "";
@@ -91,7 +94,8 @@ describe("AgentProvisioning", () => {
   });
 
   test("renders the service row first and service logs underneath", () => {
-    mocks.record.status = "RUNNING";
+    mocks.record.lifecycle = "READY";
+    mocks.record.runtimeStatus = "RUNNING";
     mocks.record.lastError = "";
     mocks.record.service = "agent-demo-agent";
     const logsTitle = enAgentsMessages["agents.provisioning.serviceLogs"] ?? "Service logs";
@@ -104,7 +108,8 @@ describe("AgentProvisioning", () => {
   });
 
   test("renders the workspace row and source git status without workspace logs", () => {
-    mocks.record.status = "RUNNING";
+    mocks.record.lifecycle = "READY";
+    mocks.record.runtimeStatus = "RUNNING";
     mocks.record.lastError = "";
     mocks.record.workspace = "agent-demo-workspace";
     mocks.workspaceStatus = {
