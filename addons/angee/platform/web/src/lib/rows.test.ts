@@ -22,24 +22,29 @@ const iamModel: PlatformModelData = {
 };
 
 describe("platform row projectors", () => {
-  test("addonRows maps counts and joins dependsOn", () => {
-    const addon: PlatformAddonData = {
-      id: "angee.iam",
-      label: "iam",
+  test("addonRows keeps known-addon deps and indexes reverse deps", () => {
+    const addon = (id: string, deps: readonly string[]): PlatformAddonData => ({
+      id,
+      label: id.split(".").pop() ?? id,
       namespace: "angee",
       kind: "required",
-      modelCount: 1,
-      fieldCount: 15,
+      modelCount: 0,
+      fieldCount: 0,
       resourceCount: 0,
-      dependsOn: ["angee.graphql", "angee.resources"],
-      modelLabels: ["iam.user"],
-    };
-    const [row] = addonRows([addon]);
-    expect(row?.id).toBe("angee.iam");
-    expect(row?.addon).toBe("iam");
-    expect(row?.models).toBe(1);
-    expect(row?.resources).toBe(0);
-    expect(row?.dependsOn).toBe("angee.graphql, angee.resources");
+      dependsOn: deps,
+      modelLabels: [],
+    });
+    const rows = addonRows([
+      addon("angee.iam", ["angee.resources", "angee.graphql", "django.contrib.auth"]),
+      addon("angee.graphql", []),
+      addon("angee.resources", []),
+    ]);
+    const iam = rows.find((row) => row.id === "angee.iam");
+    // Only addon-to-addon deps survive (the django app has no detail page); sorted.
+    expect(iam?.dependsOnList).toEqual(["angee.graphql", "angee.resources"]);
+    expect(iam?.dependsOn).toBe("angee.graphql, angee.resources");
+    // resources is depended on by iam (the reverse index).
+    expect(rows.find((row) => row.id === "angee.resources")?.dependedByList).toEqual(["angee.iam"]);
   });
 
   test("modelRows blanks a missing resource type", () => {

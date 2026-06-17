@@ -127,6 +127,18 @@ smaller native framework shape.
   duplication.
 - Make extension mechanical: named hooks, explicit owners, deterministic order,
   fail-fast collisions.
+- **Compose, never re-implement, at the addon level.** An addon composes the
+  framework's shared primitives (the data grid/list/group/board views, forms,
+  detail/record views, navigation, glyphs, state surfaces); it never hand-rolls
+  one. A hand-rolled copy is a bug — it drifts from the owner and silently drops
+  the affordances it never reproduced (a hand-rolled grid loses grouping,
+  group-collapse, the column show/hide chooser, selection, sort/filter, keyboard
+  nav). When you reach for a local component, first prove no shared primitive owns
+  it (`docs/stack.md`; the view/form/table/shell primitives). If a primitive is
+  missing, insufficient, or has a gap for your case, fix or extend it **at its
+  owning level** (a base addon or the framework core) so every addon inherits it,
+  then compose it; the gap is the signal the change belongs in the framework, not
+  a workaround in the addon.
 - Verify before claiming done. Drift is a bug, whether it is code, docs, schema,
   generated output, or tests.
 

@@ -1,9 +1,16 @@
 import { useMemo, type ReactElement } from "react";
+import { parseAsString, useQueryState } from "nuqs";
 
-import { Code, RowsListView, type ListColumn } from "@angee/base";
+import {
+  RowsListView,
+  type DataToolbarGroupOption,
+  type ListColumn,
+} from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { TextRouteLink } from "../lib/cells";
+import { addonDetailPath, modelDetailPath } from "../lib/paths";
 import { fieldRows, type FieldRow } from "../lib/rows";
 
 const columns: readonly ListColumn<FieldRow>[] = [
@@ -15,32 +22,56 @@ const columns: readonly ListColumn<FieldRow>[] = [
   {
     field: "model",
     header: "Model",
-    render: (row) => <Code truncate>{row.model}</Code>,
+    render: (row) => (
+      <TextRouteLink href={modelDetailPath(row.model)}>{row.model}</TextRouteLink>
+    ),
   },
-  { field: "addon", header: "Addon" },
+  {
+    field: "addon",
+    header: "Addon",
+    render: (row) => (
+      <TextRouteLink href={addonDetailPath(row.addonId)}>{row.addon}</TextRouteLink>
+    ),
+  },
   { field: "kind", header: "Type" },
   {
     field: "relationTarget",
     header: "Relation target",
     render: (row) =>
-      row.relationTarget ? <Code truncate>{row.relationTarget}</Code> : null,
+      row.relationTarget ? (
+        <TextRouteLink href={modelDetailPath(row.relationTarget)}>
+          {row.relationTarget}
+        </TextRouteLink>
+      ) : null,
   },
+];
+
+const groupOptions: readonly DataToolbarGroupOption[] = [
+  { id: "addon", label: "Addon", group: { field: "addon" }, type: "value" },
+  { id: "model", label: "Model", group: { field: "model" }, type: "value" },
+  { id: "kind", label: "Type", group: { field: "kind" }, type: "value" },
+  { id: "relationTarget", label: "Relation target", group: { field: "relationTarget" }, type: "value" },
 ];
 
 export function FieldsPage(): ReactElement {
   const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
-  const rows = useMemo(
-    () => fieldRows(query.data?.platformExplorer?.models ?? []),
-    [query.data],
-  );
+  const [modelScope] = useQueryState("model", parseAsString);
+  const [addonScope] = useQueryState("addon", parseAsString);
+  const rows = useMemo(() => {
+    let all = fieldRows(query.data?.platformExplorer?.models ?? []);
+    if (modelScope) all = all.filter((row) => row.model === modelScope);
+    if (addonScope) all = all.filter((row) => row.addonId === addonScope);
+    return all;
+  }, [query.data, modelScope, addonScope]);
 
   return (
     <RowsListView
       rows={rows}
       columns={columns}
+      groupOptions={groupOptions}
       fetching={query.fetching}
       error={query.error}
-      defaultGroup={{ field: "model" }}
+      defaultGroup={modelScope ? null : { field: "model" }}
       pageSize={100}
       emptyMessage="No fields."
     />

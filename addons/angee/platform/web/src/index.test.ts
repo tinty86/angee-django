@@ -4,13 +4,15 @@ import { describe, expect, test } from "vitest";
 import platform from "./index";
 
 describe("platform addon manifest", () => {
-  test("registers one console route per explorer section", () => {
+  test("registers a console route per section plus model/addon detail routes", () => {
     const routes = platform.routes ?? [];
     expect(routes.map((route) => route.path)).toEqual([
       "/platform",
       "/platform/models",
+      "/platform/models/$id",
       "/platform/fields",
       "/platform/addons",
+      "/platform/addons/$id",
     ]);
     for (const route of routes) {
       expect(route.shell).toBe("console");

@@ -49,7 +49,14 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   own lucide components through the manifest `icons:` field (the registry seam), not
   by rendering them.
 - Use shared page, view, form, table, widget, and shell primitives before adding
-  new local state.
+  new local state. Never hand-roll a data view (grid/list/group/board), form, or
+  detail in an addon — compose the shared views (`ListView`/`RowsListView`/
+  `DataPage`/`RecordView`) and record fragments (`RecordHeader`/`MetaGrid`/
+  `MetricStrip`); for a linked cell, compose `TextLink`/`Chip`/`MetricTile`, never
+  a bespoke link class. If a shared view lacks what your case needs, extend it in
+  `@angee/base` (the owner) so every addon gets it. The principle and what a
+  hand-rolled copy silently drops live in `AGENTS.md` → "Compose, never
+  re-implement, at the addon level".
 - A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
   across recipes). A default `size` is a visual contract — do not flip it without a
   requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`

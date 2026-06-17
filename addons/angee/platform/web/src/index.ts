@@ -5,9 +5,11 @@ import {
 } from "@angee/base";
 
 import { PlatformGlyph } from "./PlatformGlyph";
+import { AddonDetail } from "./views/AddonDetail";
 import { AddonsPage } from "./views/AddonsPage";
 import { FieldsPage } from "./views/FieldsPage";
 import { GraphPage } from "./views/GraphPage";
+import { ModelDetail } from "./views/ModelDetail";
 import { ModelsPage } from "./views/ModelsPage";
 
 // The platform app: a route-less rail root in the bottom platform cluster
@@ -42,8 +44,10 @@ const platformMenu: readonly BaseMenuItem[] = [
 const platformRoutes: readonly BaseAddonRoute[] = [
   { name: "platform.graph", path: "/platform", shell: "console", component: GraphPage },
   { name: "platform.models", path: "/platform/models", shell: "console", component: ModelsPage },
+  { name: "platform.models.record", path: "/platform/models/$id", shell: "console", menu: "platform.models", component: ModelDetail },
   { name: "platform.fields", path: "/platform/fields", shell: "console", component: FieldsPage },
   { name: "platform.addons", path: "/platform/addons", shell: "console", component: AddonsPage },
+  { name: "platform.addons.record", path: "/platform/addons/$id", shell: "console", menu: "platform.addons", component: AddonDetail },
 ];
 
 const platform = defineBaseAddon({

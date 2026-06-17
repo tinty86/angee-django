@@ -1,9 +1,16 @@
 import { useMemo, type ReactElement } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { parseAsString, useQueryState } from "nuqs";
 
-import { GraphView, type GraphViewNodeStyle } from "@angee/base";
+import {
+  GraphView,
+  type GraphViewNode,
+  type GraphViewNodeStyle,
+} from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { modelDetailPath } from "../lib/paths";
 import { modelGraphEdges, modelGraphNodes } from "../lib/rows";
 
 const NODE_STYLES: Record<"model", GraphViewNodeStyle> = {
@@ -17,10 +24,12 @@ const NODE_STYLES: Record<"model", GraphViewNodeStyle> = {
 
 export function GraphPage(): ReactElement {
   const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const navigate = useNavigate();
+  const [modelScope] = useQueryState("model", parseAsString);
   const explorer = query.data?.platformExplorer;
   const nodes = useMemo(
-    () => modelGraphNodes(explorer?.models ?? []),
-    [explorer],
+    () => modelGraphNodes(explorer?.models ?? [], modelScope),
+    [explorer, modelScope],
   );
   const edges = useMemo(
     () => modelGraphEdges(explorer?.edges ?? []),
@@ -43,6 +52,9 @@ export function GraphPage(): ReactElement {
         nodeStyles={NODE_STYLES}
         layout={{ rankdir: "LR" }}
         className="h-full"
+        onNodeClick={(node: GraphViewNode<"model">) =>
+          navigate({ to: modelDetailPath(node.id) })
+        }
       />
     </div>
   );
