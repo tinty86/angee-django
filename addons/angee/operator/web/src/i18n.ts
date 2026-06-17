@@ -23,6 +23,12 @@ export const enOperatorMessages: Record<string, string> = {
   // Shared table chrome.
   "operator.table.actions": "Actions",
 
+  // Shared live-log panel.
+  "operator.logs.live": "Live",
+  "operator.logs.connecting": "Connecting",
+  "operator.logs.error": "Disconnected",
+  "operator.logs.empty": "Waiting for log output…",
+
   // Transport / connection states.
   "operator.transport.connecting": "Connecting to operator",
   "operator.transport.unavailable.title": "Operator daemon unavailable",

@@ -5,59 +5,21 @@ import {
   CardTitle,
   EmptyState,
   LoadingPanel,
-  LogStream,
   MetaGrid,
   RecordHeader,
   TextLink,
 } from "@angee/base";
-import { useMemo, useState, type ReactElement } from "react";
+import { type ReactElement } from "react";
 import { useParams } from "@tanstack/react-router";
-import { useQuery } from "urql";
 
 import {
   WORKSPACE_LOGS_QUERY,
   WORKSPACE_LOGS_SUBSCRIPTION,
 } from "../../data/documents";
 import { useOperatorT } from "../../i18n";
-import { useOperatorSnapshot, useOperatorSubscription } from "../../data/transport";
+import { useOperatorSnapshot } from "../../data/transport";
+import { LogPanel, useDaemonLogStream } from "./logs";
 import { WorkspaceActions, useWorkspaceActions } from "./workspace-actions";
-
-const HISTORY_LIMIT = 500;
-const MAX_LIVE_LINES = 2000;
-
-/**
- * The workspace's log buffer (one-shot history query) followed by the live tail
- * (`onWorkspaceLogs` streams line-by-line). The subscription's `onData`
- * accumulates each emission, so no line is dropped between renders.
- */
-function useWorkspaceLogs(name: string | undefined): readonly string[] {
-  const [history] = useQuery<{ workspaceLogs: string }>({
-    query: WORKSPACE_LOGS_QUERY,
-    variables: { name: name ?? "", limit: HISTORY_LIMIT },
-    pause: !name,
-  });
-  const [live, setLive] = useState<readonly string[]>([]);
-  useOperatorSubscription<{ onWorkspaceLogs: string }, { name: string }>(
-    WORKSPACE_LOGS_SUBSCRIPTION,
-    { name: name ?? "" },
-    {
-      enabled: Boolean(name),
-      onData: (value) => {
-        const line = value.onWorkspaceLogs;
-        if (line == null) return;
-        setLive((prev) => {
-          const next = [...prev, line];
-          return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next;
-        });
-      },
-    },
-  );
-  return useMemo(() => {
-    const text = history.data?.workspaceLogs ?? "";
-    const historyLines = text === "" ? [] : text.replace(/\n$/, "").split("\n");
-    return [...historyLines, ...live];
-  }, [history.data, live]);
-}
 
 /** Workspace detail: overview + lifecycle actions + the live log tail. */
 export function WorkspaceDetail(): ReactElement {
@@ -66,7 +28,13 @@ export function WorkspaceDetail(): ReactElement {
   const name = "name" in params && typeof params.name === "string" ? params.name : undefined;
   const { snapshot, result, refetch } = useOperatorSnapshot({ workspaces: true });
   const { actions, busy } = useWorkspaceActions(refetch);
-  const logs = useWorkspaceLogs(name);
+  const logs = useDaemonLogStream({
+    name,
+    historyQuery: WORKSPACE_LOGS_QUERY,
+    historyField: "workspaceLogs",
+    streamSubscription: WORKSPACE_LOGS_SUBSCRIPTION,
+    streamField: "onWorkspaceLogs",
+  });
 
   const workspace =
     (snapshot?.workspaces ?? []).find((candidate) => candidate.name === name) ?? null;
@@ -126,18 +94,7 @@ export function WorkspaceDetail(): ReactElement {
         </CardContent>
       </Card>
 
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader>
-          <CardTitle>{t("operator.workspaces.detail.logs")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col">
-          <LogStream
-            lines={logs}
-            className="min-h-64 flex-1"
-            emptyMessage={t("operator.workspaces.detail.logs.empty")}
-          />
-        </CardContent>
-      </Card>
+      <LogPanel logs={logs} title={t("operator.workspaces.detail.logs")} />
     </div>
   );
 }

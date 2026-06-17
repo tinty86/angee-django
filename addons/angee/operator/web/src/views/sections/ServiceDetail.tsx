@@ -6,12 +6,11 @@ import {
   Code,
   EmptyState,
   LoadingPanel,
-  LogStream,
   MetaGrid,
   RecordHeader,
   TextLink,
 } from "@angee/base";
-import { useMemo, useState, type ReactElement } from "react";
+import { type ReactElement } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useQuery } from "urql";
 
@@ -21,12 +20,10 @@ import {
   SERVICE_LOGS_SUBSCRIPTION,
 } from "../../data/documents";
 import { useOperatorT } from "../../i18n";
-import { useOperatorSnapshot, useOperatorSubscription } from "../../data/transport";
+import { useOperatorSnapshot } from "../../data/transport";
 import { StateTag } from "../parts/StateTag";
+import { LogPanel, useDaemonLogStream } from "./logs";
 import { ServiceActions, useServiceActions } from "./service-actions";
-
-const HISTORY_LIMIT = 500;
-const MAX_LIVE_LINES = 2000;
 
 interface ServiceEndpointData {
   serviceEndpoint: {
@@ -35,40 +32,6 @@ interface ServiceEndpointData {
     internalHost: string;
     internalPort: number;
   } | null;
-}
-
-/**
- * The service's log buffer (one-shot history query) followed by the live tail
- * (v0.6 streams `onServiceLogs` line-by-line). The subscription's `onData`
- * accumulates each emission, so no line is dropped between renders.
- */
-function useServiceLogs(name: string | undefined): readonly string[] {
-  const [history] = useQuery<{ serviceLogs: string }>({
-    query: SERVICE_LOGS_QUERY,
-    variables: { name: name ?? "", limit: HISTORY_LIMIT },
-    pause: !name,
-  });
-  const [live, setLive] = useState<readonly string[]>([]);
-  useOperatorSubscription<{ onServiceLogs: string }, { name: string }>(
-    SERVICE_LOGS_SUBSCRIPTION,
-    { name: name ?? "" },
-    {
-      enabled: Boolean(name),
-      onData: (value) => {
-        const line = value.onServiceLogs;
-        if (line == null) return;
-        setLive((prev) => {
-          const next = [...prev, line];
-          return next.length > MAX_LIVE_LINES ? next.slice(-MAX_LIVE_LINES) : next;
-        });
-      },
-    },
-  );
-  return useMemo(() => {
-    const text = history.data?.serviceLogs ?? "";
-    const historyLines = text === "" ? [] : text.replace(/\n$/, "").split("\n");
-    return [...historyLines, ...live];
-  }, [history.data, live]);
 }
 
 /** Service detail: state + lifecycle actions + the live log tail. */
@@ -83,7 +46,13 @@ export function ServiceDetail(): ReactElement {
     variables: { name: name ?? "" },
     pause: !name,
   });
-  const logs = useServiceLogs(name);
+  const logs = useDaemonLogStream({
+    name,
+    historyQuery: SERVICE_LOGS_QUERY,
+    historyField: "serviceLogs",
+    streamSubscription: SERVICE_LOGS_SUBSCRIPTION,
+    streamField: "onServiceLogs",
+  });
 
   const service = (snapshot?.services ?? []).find((candidate) => candidate.name === name) ?? null;
   const resolved = endpoint.data?.serviceEndpoint ?? null;
@@ -152,18 +121,7 @@ export function ServiceDetail(): ReactElement {
         </CardContent>
       </Card>
 
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader>
-          <CardTitle>{t("operator.services.detail.logs")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col">
-          <LogStream
-            lines={logs}
-            className="min-h-64 flex-1"
-            emptyMessage={t("operator.services.detail.logs.empty")}
-          />
-        </CardContent>
-      </Card>
+      <LogPanel logs={logs} title={t("operator.services.detail.logs")} />
     </div>
   );
 }
