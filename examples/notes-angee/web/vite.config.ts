@@ -34,6 +34,16 @@ export default defineConfig({
         ws: true,
         rewrite: (path) => path.replace(/^\/operator/, ""),
       },
+      // The daemon's structured per-service log socket (v0.6). A `^`-anchored regex
+      // key proxies only `/operator/services/<name>/logs/stream` (the WebSocket) and
+      // strips the prefix to the daemon's own `/services/<name>/logs/stream` — the
+      // `/operator/services/<name>` SPA detail route still hard-reloads to index.html.
+      "^/operator/services/[^/]+/logs/stream": {
+        target: operator,
+        changeOrigin: false,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/operator/, ""),
+      },
     },
   },
 });
