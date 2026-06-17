@@ -1,6 +1,6 @@
-import { Chip, MetricTile, TextLink } from "@angee/base";
-import { Link } from "@tanstack/react-router";
-import type { ReactElement, ReactNode } from "react";
+import { Chip, TextLink } from "@angee/base";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useCallback, type ReactElement, type ReactNode } from "react";
 
 // In-app SPA navigation for a string href that may carry a `?model=`/`?addon=`
 // scope. TanStack `<Link>` owns client navigation; splitting the query out of the
@@ -13,6 +13,22 @@ function parseHref(href: string): { to: string; search: Record<string, string> }
     search[key] = value;
   }
   return { to: href.slice(0, cut), search };
+}
+
+/**
+ * A scope-aware in-app navigate that splits the `?model=`/`?addon=` query the
+ * same way the linked cells do — for navigable base surfaces that take an
+ * `onNavigate(href)` callback (e.g. a `MetricStrip` tile's `href`).
+ */
+export function useRouteNavigate(): (href: string) => void {
+  const navigate = useNavigate();
+  return useCallback(
+    (href: string) => {
+      const { to, search } = parseHref(href);
+      void navigate({ to, search });
+    },
+    [navigate],
+  );
 }
 
 /**
@@ -94,31 +110,3 @@ export function LinkedChips({
   );
 }
 
-/**
- * A metric tile that navigates on click when `href` is set — the linked-stat
- * affordance p1 called a "smart button", composed from `RouterLink` + `MetricTile`.
- */
-export function StatTile({
-  label,
-  value,
-  icon,
-  detail,
-  href,
-}: {
-  label: ReactNode;
-  value: ReactNode;
-  icon?: string;
-  detail?: ReactNode;
-  href?: string;
-}): ReactElement {
-  const tile = <MetricTile label={label} value={value} icon={icon} detail={detail} />;
-  if (!href) return tile;
-  return (
-    <RouterLink
-      href={href}
-      className="block rounded-lg outline-none transition hover:ring-2 hover:ring-border-focus focus-visible:ring-2 focus-visible:ring-border-focus"
-    >
-      {tile}
-    </RouterLink>
-  );
-}

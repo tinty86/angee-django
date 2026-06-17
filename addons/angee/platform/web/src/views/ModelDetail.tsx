@@ -11,6 +11,7 @@ import {
   EmptyState,
   LoadingPanel,
   MetaGrid,
+  MetricStrip,
   RecordHeader,
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
@@ -22,7 +23,7 @@ import {
   graphPath,
   modelDetailPath,
 } from "../lib/paths";
-import { LinkedChips, RouterLink, StatTile } from "../lib/cells";
+import { LinkedChips, RouterLink, useRouteNavigate } from "../lib/cells";
 
 export function ModelDetail(): ReactElement {
   const params = useParams({ strict: false });
@@ -34,6 +35,7 @@ export function ModelDetail(): ReactElement {
     () => models.filter((m) => m.dependsOn.includes(id ?? "")).map((m) => m.label).sort(),
     [models, id],
   );
+  const go = useRouteNavigate();
 
   if (query.fetching && !model) return <LoadingPanel message="Loading model…" />;
   if (!model) {
@@ -54,12 +56,14 @@ export function ModelDetail(): ReactElement {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Fields" value={model.fieldCount} icon="columns" href={fieldsPath({ model: model.label })} />
-        <StatTile label="Relations" value={model.relationCount} icon="share" />
-        <StatTile label="Addon" value={model.addonLabel} icon="grid" href={addonDetailPath(model.addonId)} />
-        <StatTile label="Graph" value="Open" icon="share" href={graphPath(model.label)} />
-      </div>
+      <MetricStrip
+        metrics={[
+          { label: "Fields", value: model.fieldCount, icon: "columns", href: fieldsPath({ model: model.label }), onNavigate: go },
+          { label: "Relations", value: model.relationCount, icon: "share" },
+          { label: "Addon", value: model.addonLabel, icon: "grid", href: addonDetailPath(model.addonId), onNavigate: go },
+          { label: "Graph", value: "Open", icon: "share", href: graphPath(model.label), onNavigate: go },
+        ]}
+      />
 
       <Card>
         <CardHeader><CardTitle>Definition</CardTitle></CardHeader>

@@ -11,6 +11,7 @@ import {
   EmptyState,
   LoadingPanel,
   MetaGrid,
+  MetricStrip,
   RecordHeader,
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
@@ -22,7 +23,7 @@ import {
   modelDetailPath,
   modelsPath,
 } from "../lib/paths";
-import { LinkedChips, StatTile } from "../lib/cells";
+import { LinkedChips, useRouteNavigate } from "../lib/cells";
 
 const shortName = (dep: string): string => dep.split(".").pop() ?? dep;
 
@@ -45,6 +46,7 @@ export function AddonDetail(): ReactElement {
     () => [...new Set(addon?.modelLabels ?? [])].sort(),
     [addon],
   );
+  const go = useRouteNavigate();
 
   if (query.fetching && !addon) return <LoadingPanel message="Loading addon…" />;
   if (!addon) {
@@ -64,21 +66,25 @@ export function AddonDetail(): ReactElement {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Models"
-          value={addon.modelCount}
-          icon="grid"
-          href={addon.modelCount ? modelsPath({ addon: addon.id }) : undefined}
-        />
-        <StatTile
-          label="Fields"
-          value={addon.fieldCount}
-          icon="columns"
-          href={addon.fieldCount ? fieldsPath({ addon: addon.id }) : undefined}
-        />
-        <StatTile label="Resources" value={addon.resourceCount} icon="files" />
-      </div>
+      <MetricStrip
+        metrics={[
+          {
+            label: "Models",
+            value: addon.modelCount,
+            icon: "grid",
+            href: addon.modelCount ? modelsPath({ addon: addon.id }) : undefined,
+            onNavigate: go,
+          },
+          {
+            label: "Fields",
+            value: addon.fieldCount,
+            icon: "columns",
+            href: addon.fieldCount ? fieldsPath({ addon: addon.id }) : undefined,
+            onNavigate: go,
+          },
+          { label: "Resources", value: addon.resourceCount, icon: "files" },
+        ]}
+      />
 
       <Card>
         <CardHeader><CardTitle>Dependencies</CardTitle></CardHeader>
