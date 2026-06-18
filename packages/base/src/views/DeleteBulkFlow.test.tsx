@@ -27,6 +27,7 @@ import {
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   AppRuntimeProvider,
+  ModelMetadataProvider,
   type DeletePreview,
   type Row,
   type UseResourceListResult,
@@ -103,6 +104,22 @@ describe("bulk delete flow", () => {
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     expect(deleteButton).toBeTruthy();
     expect(deleteButton.querySelector("svg")).toBeTruthy();
+  });
+
+  test("SelectionBar omits Delete when the model exposes no delete root", async () => {
+    render(
+      <TestUrlState>
+        <NoDeleteMetadata>
+          <ListView model="sales.Sale" columns={columns} />
+        </NoDeleteMetadata>
+      </TestUrlState>,
+    );
+
+    fireEvent.click((await screen.findAllByRole("checkbox", { name: "Select row" }))[0]!);
+
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(sdkMocks.mutate).not.toHaveBeenCalled();
   });
 
   test("clicking Delete runs dry-run preview and opens the tree dialog", async () => {
@@ -252,5 +269,26 @@ function TestShell({ children }: { children: ReactNode }): ReactElement {
     <AppRuntimeProvider runtime={{ icons: baseIcons }}>
       <ToastProvider>{children}</ToastProvider>
     </AppRuntimeProvider>
+  );
+}
+
+function NoDeleteMetadata({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <ModelMetadataProvider
+      metadata={{
+        types: {
+          SaleType: {
+            typeName: "SaleType",
+            fields: {},
+            rootFields: {
+              detail: "sale",
+              list: "sales",
+            },
+          },
+        },
+      }}
+    >
+      {children}
+    </ModelMetadataProvider>
   );
 }

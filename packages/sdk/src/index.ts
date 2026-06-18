@@ -56,6 +56,7 @@ export {
   fieldMetadataFromSDL,
   modelMetadataForLabel,
   useModelMetadata,
+  useModelRootFields,
   useSchemaFieldMetadata,
   type ModelEnumValueMetadata,
   type ModelFieldKind,

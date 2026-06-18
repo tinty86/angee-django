@@ -42,6 +42,14 @@ export const enIntegrateMessages: Record<string, string> = {
   // Sources page detail group.
   "integrate.sources.pointer": "Pointer",
 
+  // Templates page detail groups.
+  "integrate.templates.title": "Templates",
+  "integrate.templates.template": "Template",
+  "integrate.templates.source": "Source",
+  "integrate.templateSources.title": "Template sources",
+  "integrate.templateSources.pointer": "Pointer",
+  "integrate.templateSources.sync": "Sync templates",
+
   // Webhooks page.
   "integrate.webhooks.filters": "Filters",
   "integrate.webhooks.sendTest": "Send test event",

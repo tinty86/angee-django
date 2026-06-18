@@ -31,6 +31,7 @@ const ROUTES: readonly AddonRouteCase[] = [
   { addon: "integrate", path: "/integrate/vcs", expectText: "github (active)" },
   { addon: "integrate", path: "/integrate/repositories", expectText: "ang-ee/angee-django" },
   { addon: "integrate", path: "/integrate/sources", expectText: "template" },
+  { addon: "integrate", path: "/integrate/templates", expectText: "workspace" },
   { addon: "integrate", path: "/integrate/providers", expectText: "Apexive SSO" },
   { addon: "integrate", path: "/integrate/accounts", expectText: "Provider Label" },
   { addon: "integrate", path: "/integrate/credentials", expectText: "Github Token" },
@@ -91,6 +92,35 @@ test.describe("addon route smoke", () => {
     });
     await expect(page.getByText("VCS INTEGRATION")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Save$/ })).toHaveCount(0);
+    await issues.settled();
+    expect(issues.messages()).toEqual([]);
+  });
+
+  test("integrate template sources sync discovered templates", async ({ page }) => {
+    const issues = captureBrowserIssues(page);
+
+    await gotoAuthenticatedRoute(page, "/integrate/templates");
+
+    await expect(page.getByRole("heading", { name: "Template sources" })).toBeVisible({
+      timeout: 20_000,
+    });
+    const templateSources = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Template sources" }),
+    });
+    const sourceRow = templateSources.getByRole("row").filter({ hasText: "templates" }).first();
+    await sourceRow.click();
+    await page.getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("menuitem", { name: "Sync templates" }).click();
+
+    await expect(page.getByText("LAST SYNCED AT").last().locator("xpath=..")).toContainText(
+      /[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} (AM|PM)/,
+      {
+        timeout: 20_000,
+      },
+    );
+    await expect(page.locator("body")).toContainText("agent-default", {
+      timeout: 20_000,
+    });
     await issues.settled();
     expect(issues.messages()).toEqual([]);
   });

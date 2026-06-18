@@ -11,7 +11,7 @@ and an :class:`InferenceProvider` related model over an ``Integration`` with its
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, cast
 
 from django.apps import apps
@@ -21,7 +21,7 @@ from django.utils import timezone
 from rebac import system_context
 from rebac.managers import RebacManager
 
-from angee.agents.backends import InferenceBackend
+from angee.agents.backends import InferenceBackend, InferenceRequest, InferenceResponse
 from angee.agents.skills import parse_skill_meta
 from angee.base.fields import SqidField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
@@ -154,6 +154,30 @@ class InferenceProvider(IntegrationMixin):
         model = apps.get_model("agents", "InferenceModel")
         return int(model.objects.sync_from_provider(self))
 
+    def chat(
+        self,
+        *,
+        model: str,
+        messages: Sequence[Mapping[str, Any]],
+        system: str = "",
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        tools: Sequence[Mapping[str, Any]] = (),
+        options: Mapping[str, Any] | None = None,
+    ) -> InferenceResponse:
+        """Send one non-streaming chat request through this provider."""
+
+        request = InferenceRequest(
+            model=model,
+            messages=messages,
+            system=system,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=tools,
+            options={} if options is None else dict(options),
+        )
+        return self.impl.chat(request)
+
     def service_environment(self) -> dict[str, str]:
         """Return credential-backed environment variables for rendered services."""
 
@@ -238,6 +262,28 @@ class InferenceModel(SqidMixin, AuditMixin, AngeeModel):
         """Return the API credential for this model, via its provider's integration."""
 
         return self.provider.credential
+
+    def chat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        system: str = "",
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        tools: Sequence[Mapping[str, Any]] = (),
+        options: Mapping[str, Any] | None = None,
+    ) -> InferenceResponse:
+        """Send one non-streaming chat request through this catalogue model."""
+
+        return self.provider.chat(
+            model=self.name,
+            messages=messages,
+            system=system,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=tools,
+            options=options,
+        )
 
 
 class SkillManager(RebacManager):

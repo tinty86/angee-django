@@ -11,13 +11,11 @@ from the integration and endpoint from the provider related model it is bound to
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from angee.integrate.impl import IntegrationImpl
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +56,29 @@ class InferenceModelSpec:
         return defaults
 
 
+@dataclass(frozen=True, slots=True)
+class InferenceRequest:
+    """Provider-neutral request for one non-streaming chat completion."""
+
+    model: str
+    messages: Sequence[Mapping[str, Any]]
+    system: str = ""
+    max_tokens: int = 1024
+    temperature: float | None = None
+    tools: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
+    options: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceResponse:
+    """Provider-neutral response returned by a backend chat call."""
+
+    text: str
+    content: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
 class InferenceBackend(IntegrationImpl):
     """The strategy one inference integration resolves to.
 
@@ -85,6 +106,12 @@ class InferenceBackend(IntegrationImpl):
         """Return the provider's advertised models for catalogue upsert."""
 
         raise NotImplementedError("InferenceBackend subclasses must implement list_models().")
+
+    def chat(self, request: InferenceRequest) -> InferenceResponse:
+        """Send one non-streaming chat request through this provider."""
+
+        del request
+        raise NotImplementedError("InferenceBackend subclasses must implement chat().")
 
     @classmethod
     def related_create_values(cls, integration: Any, values: dict[str, Any]) -> dict[str, Any]:

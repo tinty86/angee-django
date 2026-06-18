@@ -5,6 +5,7 @@ import {
   FolderGit2,
   GitBranch,
   GitFork,
+  LayoutTemplate,
   Link2,
   Store,
   Webhook,
@@ -23,6 +24,7 @@ import { enIntegrateMessages } from "./i18n";
 import { IntegrationsPage } from "./views/IntegrationsPage";
 import { RepositoriesPage } from "./views/RepositoriesPage";
 import { SourcesPage } from "./views/SourcesPage";
+import { TemplatesPage } from "./views/TemplatesPage";
 import { VcsBridgesPage } from "./views/VcsBridgesPage";
 import { VendorsPage } from "./views/VendorsPage";
 import { WebhooksPage } from "./views/WebhooksPage";
@@ -115,6 +117,19 @@ const integrateRoutes: readonly BaseAddonRoute[] = [
     shell: "console",
     parent: "integrate.sources",
   },
+  {
+    name: "integrate.templates",
+    path: "/integrate/templates",
+    shell: "console",
+    component: TemplatesPage,
+    model: "Template",
+  },
+  {
+    name: "integrate.template",
+    path: "/integrate/templates/$id",
+    shell: "console",
+    parent: "integrate.templates",
+  },
 
   // --- Connect surface (outbound OAuth) -----------------------------------
   // The account-connect callback: the provider redirects back here after the user
@@ -185,24 +200,40 @@ const integrateMenu: readonly BaseMenuItem[] = [
     icon: "integrate",
     group: "platform",
     children: [
-      { id: "integrate.integrations", label: "Integrations", icon: "integration", route: "integrate.integrations" },
-      { id: "integrate.vendors", label: "Vendors", icon: "vendor", route: "integrate.vendors" },
-      { id: "integrate.webhooks", label: "Webhooks", icon: "webhook", route: "integrate.webhooks" },
-      { id: "integrate.vcs", label: "VCS", icon: "vcs", route: "integrate.vcs" },
-      { id: "integrate.repositories", label: "Repositories", icon: "repository", route: "integrate.repositories" },
-      { id: "integrate.sources", label: "Sources", icon: "source", route: "integrate.sources" },
       {
-        // The outbound connect surface (OAuth providers + the accounts/credentials
-        // they mint). Grouped under one dropdown; deliberately not "Federation".
-        id: "integrate.connections",
-        label: "Connections",
-        icon: "grid",
+        // Product connection records and their supporting catalogue.
+        id: "integrate.integrations.group",
+        label: "Integrations",
+        icon: "integration",
+        children: [
+          { id: "integrate.integrations", label: "Integrations", icon: "integration", route: "integrate.integrations" },
+          { id: "integrate.vendors", label: "Vendors", icon: "vendor", route: "integrate.vendors" },
+          { id: "integrate.webhooks", label: "Webhooks", icon: "webhook", route: "integrate.webhooks" },
+        ],
+      },
+      {
+        // Repository/source inventory hangs off VCS-capable integrations.
+        id: "integrate.sources.group",
+        label: "Sources",
+        icon: "source",
+        children: [
+          { id: "integrate.sources", label: "Sources", icon: "source", route: "integrate.sources" },
+          { id: "integrate.templates", label: "Templates", icon: "integrateTemplate", route: "integrate.templates" },
+          { id: "integrate.repositories", label: "Repositories", icon: "repository", route: "integrate.repositories" },
+          { id: "integrate.vcs", label: "VCS Integrations", icon: "vcs", route: "integrate.vcs" },
+        ],
+      },
+      {
+        // OAuth client setup and the external identities those clients discover.
+        id: "integrate.oauth.group",
+        label: "OAuth",
+        icon: "auth",
         children: [
           { id: "integrate.providers", label: "OAuth Providers", route: "integrate.providers", icon: "auth" },
           { id: "integrate.accounts", label: "External Accounts", route: "integrate.accounts", icon: "users" },
-          { id: "integrate.credentials", label: "Credentials", route: "integrate.credentials", icon: "check" },
         ],
       },
+      { id: "integrate.credentials", label: "Credentials", route: "integrate.credentials", icon: "check" },
     ],
   },
 ];
@@ -225,6 +256,7 @@ const integrate = defineBaseAddon({
     vcs: GitFork,
     repository: FolderGit2,
     source: GitBranch,
+    integrateTemplate: LayoutTemplate,
   },
 });
 

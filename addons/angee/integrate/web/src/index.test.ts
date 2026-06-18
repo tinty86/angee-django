@@ -24,6 +24,7 @@ describe("integrate addon manifest", () => {
       ["integrate.vcsIntegration", "integrate.vcs"],
       ["integrate.repository", "integrate.repositories"],
       ["integrate.source", "integrate.sources"],
+      ["integrate.template", "integrate.templates"],
     ] as const) {
       const record = (integrate.routes ?? []).find((route) => route.name === name);
       expect(record?.path).toContain("/$id");
@@ -39,6 +40,7 @@ describe("integrate addon manifest", () => {
       ["integrate.vcs", "/integrate/vcs"],
       ["integrate.repositories", "/integrate/repositories"],
       ["integrate.sources", "/integrate/sources"],
+      ["integrate.templates", "/integrate/templates"],
     ] as const) {
       const route = (integrate.routes ?? []).find((entry) => entry.name === name);
       expect(route?.path).toBe(path);
@@ -46,7 +48,7 @@ describe("integrate addon manifest", () => {
     }
   });
 
-  test("exposes an Integrations menu with every list as a child", () => {
+  test("exposes an Integrations menu grouped by integration, source, OAuth, and credentials concern", () => {
     expect(integrate.menus).toHaveLength(1);
     const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
     expect(menu?.id).toBe("integrate");
@@ -54,28 +56,63 @@ describe("integrate addon manifest", () => {
     expect(menu?.route).toBeUndefined();
     expect(menu?.group).toBe("platform");
     expect(menu?.children?.map((child) => child.id)).toEqual([
-      "integrate.integrations",
-      "integrate.vendors",
-      "integrate.webhooks",
-      "integrate.vcs",
-      "integrate.repositories",
-      "integrate.sources",
-      "integrate.connections",
+      "integrate.integrations.group",
+      "integrate.sources.group",
+      "integrate.oauth.group",
+      "integrate.credentials",
     ]);
   });
 
-  test("groups the outbound connect surface under a route-less Connections dropdown", () => {
+  test("groups integration records with vendors and webhooks", () => {
     const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
-    const connections = menu?.children?.find(
-      (child) => child.id === "integrate.connections",
+    const group = menu?.children?.find(
+      (child) => child.id === "integrate.integrations.group",
     );
-    // Route-less group → renders as a dropdown of its children.
-    expect(connections?.route).toBeUndefined();
-    expect(connections?.children?.map((child) => child.route)).toEqual([
+    expect(group?.label).toBe("Integrations");
+    expect(group?.route).toBeUndefined();
+    expect(group?.children?.map((child) => child.id)).toEqual([
+      "integrate.integrations",
+      "integrate.vendors",
+      "integrate.webhooks",
+    ]);
+  });
+
+  test("groups repository inventory under Sources with VCS integrations", () => {
+    const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
+    const sources = menu?.children?.find(
+      (child) => child.id === "integrate.sources.group",
+    );
+    expect(sources?.label).toBe("Sources");
+    expect(sources?.route).toBeUndefined();
+    expect(sources?.children?.map((child) => [child.label, child.route])).toEqual([
+      ["Sources", "integrate.sources"],
+      ["Templates", "integrate.templates"],
+      ["Repositories", "integrate.repositories"],
+      ["VCS Integrations", "integrate.vcs"],
+    ]);
+  });
+
+  test("groups OAuth setup with external accounts", () => {
+    const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
+    const oauth = menu?.children?.find(
+      (child) => child.id === "integrate.oauth.group",
+    );
+    expect(oauth?.label).toBe("OAuth");
+    expect(oauth?.route).toBeUndefined();
+    expect(oauth?.children?.map((child) => child.route)).toEqual([
       "integrate.providers",
       "integrate.accounts",
-      "integrate.credentials",
     ]);
+  });
+
+  test("keeps credentials as a top-level integration section", () => {
+    const menu = integrate.menus?.[0] as BaseMenuItem | undefined;
+    const credentials = menu?.children?.find(
+      (child) => child.id === "integrate.credentials",
+    );
+    expect(credentials?.label).toBe("Credentials");
+    expect(credentials?.route).toBe("integrate.credentials");
+    expect(credentials?.children).toBeUndefined();
   });
 
   test("registers the account-connect callback on the console shell", () => {
@@ -123,6 +160,7 @@ describe("integrate addon manifest", () => {
       "vcs",
       "repository",
       "source",
+      "integrateTemplate",
     ] as const) {
       expect(integrate.icons?.[name]).toBeDefined();
     }

@@ -387,7 +387,7 @@ function DataPageBody<TRow extends Row = Row>({
     handleCloseRecord?.();
   }, [handleCloseRecord]);
   const recordDelete = useBulkDelete(model, recordDeleteIds, handleRecordDeleted);
-  const recordDeleteAction = open
+  const recordDeleteAction = open && recordDelete.canDelete
     ? {
         canDelete: recordDeleteIds.size > 0,
         isPending: recordDelete.isPending,

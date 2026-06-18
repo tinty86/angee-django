@@ -382,7 +382,9 @@ function ListViewBody<TRow extends Row = Row>({
           <SelectionBar
             count={surface.selectedIds.size}
             onClear={dataView.clearSelectedIds}
-            onDelete={bulkDelete.deleteInitiate}
+            onDelete={
+              bulkDelete.canDelete ? bulkDelete.deleteInitiate : undefined
+            }
             deletePending={bulkDelete.isPending}
           />
         ) : null}

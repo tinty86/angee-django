@@ -50,15 +50,16 @@ import {
   Field,
   Group,
 } from "./page";
-import type {
-  AggregateBucket,
-  GroupByDimension,
-  ResourceTypeName,
-  UseAggregateOptions,
-  Row,
-  UseGroupByOptions,
-  UseResourceListOptions,
-  UseResourceListResult,
+import {
+  ModelMetadataProvider,
+  type AggregateBucket,
+  type GroupByDimension,
+  type ResourceTypeName,
+  type UseAggregateOptions,
+  type Row,
+  type UseGroupByOptions,
+  type UseResourceListOptions,
+  type UseResourceListResult,
 } from "@angee/sdk";
 
 const sdkMocks = vi.hoisted(() => ({
@@ -763,6 +764,28 @@ describe("DataPage", () => {
     expect(screen.getByRole("menuitem", { name: "Archive" })).toBeTruthy();
   });
 
+  test("omits record Delete when the model exposes no delete root", async () => {
+    render(
+      <TestUrlState>
+        <NoDeleteMetadata>
+          <DataPage
+            model="sales.Sale"
+            columns={columns}
+            recordId="note-2"
+            placement="inline"
+          >
+            <Form>
+              <Field name="title" label="Title" title />
+            </Form>
+          </DataPage>
+        </NoDeleteMetadata>
+      </TestUrlState>,
+    );
+
+    await screen.findByLabelText("Title");
+    expect(screen.queryByRole("button", { name: "Actions" })).toBeNull();
+  });
+
   test("reads board state from Router search and writes view changes", async () => {
     const onSelect = vi.fn();
     const onUrlUpdate = vi.fn();
@@ -1372,6 +1395,27 @@ function TestUrlStateScreen(): ReactElement {
       <TestUrlStateObserver onUrlUpdate={context?.onUrlUpdate} />
       {context?.children}
     </>
+  );
+}
+
+function NoDeleteMetadata({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <ModelMetadataProvider
+      metadata={{
+        types: {
+          SaleType: {
+            typeName: "SaleType",
+            fields: {},
+            rootFields: {
+              detail: "sale",
+              list: "sales",
+            },
+          },
+        },
+      }}
+    >
+      {children}
+    </ModelMetadataProvider>
   );
 }
 

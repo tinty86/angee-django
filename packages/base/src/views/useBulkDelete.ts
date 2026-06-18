@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  useModelRootFields,
   useResourceMutation,
   type DeletePreview,
   type DeletePreviewGroup,
@@ -29,6 +30,7 @@ export interface UseBulkDeleteResult {
   previewBlockedRecordCount: number;
   isPreviewOpen: boolean;
   isPending: boolean;
+  canDelete: boolean;
   deleteInitiate: () => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -40,7 +42,11 @@ export function useBulkDelete(
   clearSelectedIds: () => void,
 ): UseBulkDeleteResult {
   const toast = useToast();
-  const [mutate] = useResourceMutation(model, "delete");
+  const rootFields = useModelRootFields(model);
+  const canDelete = rootFields === null || Boolean(rootFields.delete);
+  const [mutate] = useResourceMutation(model, "delete", {
+    enabled: canDelete,
+  });
   const selectedIdList = React.useMemo(
     () => [...selectedIds],
     [selectedIds],
@@ -58,7 +64,7 @@ export function useBulkDelete(
   }, []);
 
   const deleteInitiate = React.useCallback(() => {
-    if (selectedIdList.length === 0) return;
+    if (!canDelete || selectedIdList.length === 0) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     const previewedIds = selectedIdList.slice(0, BULK_DELETE_PREVIEW_LIMIT);
@@ -104,7 +110,7 @@ export function useBulkDelete(
       .finally(() => {
         if (requestIdRef.current === requestId) setPreviewPending(false);
       });
-  }, [mutate, selectedIdList, toast]);
+  }, [canDelete, mutate, selectedIdList, toast]);
 
   const onCancel = React.useCallback(() => {
     if (deletePending) return;
@@ -115,7 +121,7 @@ export function useBulkDelete(
 
   const onConfirm = React.useCallback(() => {
     const state = previewState;
-    if (!state || deletePending) return;
+    if (!canDelete || !state || deletePending) return;
     const blocked = new Set(state.blockedIds);
     const idsToDelete = state.selectedIds.filter((id) => !blocked.has(id));
     if (idsToDelete.length === 0) return;
@@ -152,7 +158,7 @@ export function useBulkDelete(
       .finally(() => {
         if (requestIdRef.current === requestId) setDeletePending(false);
       });
-  }, [clearSelectedIds, deletePending, mutate, previewState, toast]);
+  }, [canDelete, clearSelectedIds, deletePending, mutate, previewState, toast]);
 
   return {
     previewState: previewState?.preview ?? null,
@@ -161,6 +167,7 @@ export function useBulkDelete(
     previewBlockedRecordCount: previewState?.blockedIds.length ?? 0,
     isPreviewOpen: previewState !== null,
     isPending: previewPending || deletePending,
+    canDelete,
     deleteInitiate,
     onConfirm,
     onCancel,

@@ -26,6 +26,7 @@ from angee.agents.models import InferenceModel as AbstractInferenceModel
 from angee.agents.models import InferenceProvider as AbstractInferenceProvider
 from angee.agents.models import Skill as AbstractSkill
 from angee.agents.skills import parse_skill_meta
+from angee.agents_integrate_anthropic.backend import AnthropicInferenceBackend
 from angee.integrate.credentials import CredentialKind
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
@@ -260,3 +261,183 @@ def test_inference_provider_service_environment_reads_integration_credential_env
         provider.refresh_from_db()
 
     assert provider.service_environment() == {}
+
+
+class _FakeAnthropicModels:
+    """Small fake for the Anthropic SDK models resource."""
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+        self.calls: list[dict[str, Any]] = []
+
+    def list(self, **kwargs: Any) -> list[Any]:
+        """Return one SDK-shaped model row."""
+
+        self.calls.append(kwargs)
+        return [
+            SimpleNamespace(
+                id="claude-sonnet-4-6",
+                display_name="Claude Sonnet 4.6",
+                max_input_tokens=200000,
+                max_tokens=64000,
+                capabilities={"vision": True},
+            )
+        ]
+
+
+class _FakeAnthropicMessages:
+    """Small fake for the Anthropic SDK messages resource."""
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        """Record a message request and return an SDK-shaped response."""
+
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            id="msg_1",
+            type="message",
+            content=[SimpleNamespace(type="text", text="pong")],
+            usage=SimpleNamespace(input_tokens=3, output_tokens=1),
+        )
+
+
+class _FakeAnthropicClient:
+    """Small fake for ``anthropic.Anthropic``."""
+
+    instances: list[Any] = []
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+        self.models = _FakeAnthropicModels(self)
+        self.messages = _FakeAnthropicMessages(self)
+        self.instances.append(self)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_anthropic_backend_refresh_syncs_native_and_broker_models(
+    agents_tables: None,
+    monkeypatch: Any,
+) -> None:
+    """Anthropic model sync emits native and broker-prefixed handles from the SDK."""
+
+    del agents_tables
+    _FakeAnthropicClient.instances.clear()
+    monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
+    integration = make_integration(
+        "anthropic-sdk",
+        impl_class="anthropic",
+        material={"api_key": "api-key"},
+    )
+    with system_context(reason="test anthropic provider"):
+        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
+
+    assert provider.refresh_models() == 2
+
+    client = _FakeAnthropicClient.instances[-1]
+    assert client.kwargs == {"api_key": "api-key"}
+    assert client.models.calls == [{"limit": 1000}]
+    with system_context(reason="test read"):
+        models = {model.name: model for model in InferenceModel.objects.filter(provider=provider)}
+    assert set(models) == {"claude-sonnet-4-6", "anthropic/claude-sonnet-4-6"}
+    assert models["claude-sonnet-4-6"].display_name == "Claude Sonnet 4.6"
+    assert models["claude-sonnet-4-6"].context_window == 200000
+    assert models["claude-sonnet-4-6"].max_output_tokens == 64000
+    assert models["anthropic/claude-sonnet-4-6"].display_name == "Claude Sonnet 4.6 (anthropic)"
+    assert models["anthropic/claude-sonnet-4-6"].config["provider_model"] == "claude-sonnet-4-6"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_anthropic_model_chat_uses_sdk_messages_and_strips_broker_prefix(
+    agents_tables: None,
+    monkeypatch: Any,
+) -> None:
+    """Direct model chat uses the Anthropic SDK without provisioning an agent."""
+
+    del agents_tables
+    _FakeAnthropicClient.instances.clear()
+    monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
+    integration = make_integration(
+        "anthropic-chat",
+        impl_class="anthropic",
+        material={"api_key": "api-key"},
+    )
+    with system_context(reason="test anthropic chat"):
+        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
+        model = InferenceModel.objects.create(provider=provider, name="anthropic/claude-sonnet-4-6")
+
+    response = model.chat(
+        [
+            {"role": "system", "content": "Be brief."},
+            {"role": "user", "content": "Ping"},
+        ],
+        system="Policy",
+        max_tokens=12,
+        temperature=0.2,
+        options={"top_p": 0.9},
+    )
+
+    client = _FakeAnthropicClient.instances[-1]
+    assert client.kwargs == {"api_key": "api-key"}
+    assert client.messages.calls == [
+        {
+            "model": "claude-sonnet-4-6",
+            "messages": [{"role": "user", "content": "Ping"}],
+            "max_tokens": 12,
+            "system": "Policy\n\nBe brief.",
+            "temperature": 0.2,
+            "top_p": 0.9,
+        }
+    ]
+    assert response.text == "pong"
+    assert response.content == [{"type": "text", "text": "pong"}]
+    assert response.usage == {"input_tokens": 3, "output_tokens": 1}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_anthropic_backend_uses_auth_token_for_oauth_credentials(
+    agents_tables: None,
+    monkeypatch: Any,
+) -> None:
+    """OAuth Anthropic credentials bind as bearer auth, not API-key auth."""
+
+    del agents_tables
+    _FakeAnthropicClient.instances.clear()
+    monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
+    integration = make_integration(
+        "anthropic-oauth-chat",
+        kind=CredentialKind.OAUTH,
+        impl_class="anthropic",
+        material={"access_token": "oauth-token"},
+    )
+    with system_context(reason="test anthropic oauth chat"):
+        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
+        model = InferenceModel.objects.create(provider=provider, name="claude-sonnet-4-6")
+
+    assert model.chat([{"role": "user", "content": "Ping"}]).text == "pong"
+    assert _FakeAnthropicClient.instances[-1].kwargs == {"auth_token": "oauth-token"}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_anthropic_chat_rejects_options_that_override_owned_request_fields(
+    agents_tables: None,
+    monkeypatch: Any,
+) -> None:
+    """Provider-specific options cannot replace the selected catalogue model."""
+
+    del agents_tables
+    _FakeAnthropicClient.instances.clear()
+    monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
+    integration = make_integration(
+        "anthropic-owned-options",
+        impl_class="anthropic",
+        material={"api_key": "api-key"},
+    )
+    with system_context(reason="test anthropic options guard"):
+        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
+        model = InferenceModel.objects.create(provider=provider, name="claude-sonnet-4-6")
+
+    with pytest.raises(ValueError, match="model"):
+        model.chat([{"role": "user", "content": "Ping"}], options={"model": "other"})

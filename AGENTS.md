@@ -55,6 +55,7 @@ on top.
 │   ├── storage/            # storage base addon — drives, folders, content-addressed files, uploads
 │   ├── operator/           # operator base addon — bridge to the local operator daemon + admin console
 │   ├── integrate/          # integration base addon — the OAuth connection substrate + capability/bridge runtime seam
+│   ├── agents_integrate_anthropic/ # Anthropic inference backend addon — SDK client + model sync
 │   └── iam_integrate_oidc/ # OIDC login addon — extends integrate's OAuthClient with login fields + composes iam
 │       └── …               # an addon may carry a co-located `web/` (e.g. `iam/web` = `@angee/iam`)
 ├── packages/               # frontend workspace (pnpm) — the shared React layer (`angee-react`)
