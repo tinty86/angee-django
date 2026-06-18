@@ -8,11 +8,16 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "codegen": "pnpm -C examples/notes-angee/web codegen",
+    "pretypecheck": "pnpm codegen",
     "typecheck": "pnpm -r typecheck",
+    "pretest": "pnpm codegen",
     "test": "pnpm -r test",
+    "prebuild": "pnpm codegen",
     "build": "pnpm -r build"
   },
   "devDependencies": {
+    "@graphql-typed-document-node/core": "^3.2.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { AnyVariables, DocumentInput } from "@urql/core";
 import { useMutation as useUrqlMutation } from "urql";
 
 export interface DocumentMutationRun<TData, TVariables> {
@@ -16,11 +17,15 @@ export interface DocumentMutationRun<TData, TVariables> {
  * place — the write counterpart of `useDocumentQuery`. Callers layer their own
  * post-success side effects (cache invalidation, client reset) and data shaping
  * on top of `execute`.
+ *
+ * `document` is urql's `DocumentInput`: a runtime-built query string (resource
+ * CRUD, auth) or a generated `TypedDocumentNode` (authored operations) that
+ * carries its own data/variables types — urql infers them either way.
  */
 export function useDocumentMutation<
   TData = unknown,
-  TVariables extends object = Record<string, unknown>,
->(document: string): DocumentMutationRun<TData, TVariables> {
+  TVariables extends AnyVariables = Record<string, unknown>,
+>(document: DocumentInput<TData, TVariables>): DocumentMutationRun<TData, TVariables> {
   const [state, run] = useUrqlMutation<TData, TVariables>(document);
   const execute = useCallback(
     async (variables: TVariables): Promise<TData | undefined> => {

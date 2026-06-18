@@ -3,14 +3,7 @@ import { useCallback, useState } from "react";
 import { errorMessage, useAuthoredMutation } from "@angee/sdk";
 
 import { useStorageT } from "../i18n";
-import {
-  FILE_UPLOAD_BEGIN_MUTATION,
-  FILE_UPLOAD_FINALIZE_MUTATION,
-  type FileUploadBeginData,
-  type FileUploadBeginVariables,
-  type FileUploadFinalizeData,
-  type FileUploadFinalizeVariables,
-} from "./documents";
+import { StorageFileUploadBegin, StorageFileUploadFinalize } from "./documents";
 
 const DEFAULT_MIME = "application/octet-stream";
 
@@ -68,14 +61,8 @@ export function useStorageUpload(
 ): StorageUpload {
   const { onUploaded } = options;
   const t = useStorageT();
-  const [beginUpload] = useAuthoredMutation<
-    FileUploadBeginData,
-    FileUploadBeginVariables
-  >(FILE_UPLOAD_BEGIN_MUTATION);
-  const [finalizeUpload] = useAuthoredMutation<
-    FileUploadFinalizeData,
-    FileUploadFinalizeVariables
-  >(FILE_UPLOAD_FINALIZE_MUTATION);
+  const [beginUpload] = useAuthoredMutation(StorageFileUploadBegin);
+  const [finalizeUpload] = useAuthoredMutation(StorageFileUploadFinalize);
   const [tasks, setTasks] = useState<readonly UploadTask[]>([]);
 
   const patch = useCallback((id: string, next: Partial<UploadTask>) => {

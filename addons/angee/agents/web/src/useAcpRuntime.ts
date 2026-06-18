@@ -28,16 +28,14 @@ import { useAuthoredMutation } from "@angee/sdk";
 import { messageOf } from "./acp-error";
 import { foldIntoLog, type ChatMessage } from "./acp-log";
 import { openAcpTransport, type AcpTransport } from "./acp-transport";
+import { type DocumentType } from "@angee/gql/console";
 import {
-  AGENT_CHAT_ENDPOINT_MUTATION,
+  AgentChatEndpointMutation,
   AgentChatEndpointSchema,
-  RENDER_AGENT_PROMPT_MUTATION,
+  RenderAgentPrompt,
   type AgentChatEndpoint,
-  type AgentChatEndpointData,
   type AgentChatView,
-  type IdVariables,
   type McpServerConfig,
-  type RenderAgentPromptData,
   type RenderAgentPromptVariables,
 } from "./documents";
 
@@ -88,12 +86,8 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
   const viewRef = React.useRef(view);
   viewRef.current = view;
 
-  const [mintEndpoint] = useAuthoredMutation<AgentChatEndpointData, IdVariables>(
-    AGENT_CHAT_ENDPOINT_MUTATION,
-  );
-  const [renderPrompt] = useAuthoredMutation<RenderAgentPromptData, RenderAgentPromptVariables>(
-    RENDER_AGENT_PROMPT_MUTATION,
-  );
+  const [mintEndpoint] = useAuthoredMutation(AgentChatEndpointMutation);
+  const [renderPrompt] = useAuthoredMutation(RenderAgentPrompt);
 
   // Fold one `session/update` into the log as a NEW object: assistant-ui caches converted
   // messages by source identity, so a fresh object per chunk is what makes streamed text
@@ -305,7 +299,9 @@ function makeClient(
 /** Validate the minted endpoint payload at the network boundary (its `mcpServers` map
  * rides the GraphQL `JSON` scalar, so its shape is opaque on the wire and must be parsed,
  * not asserted). Throws on a missing or malformed payload — the caller shows the error. */
-function parseEndpoint(data: AgentChatEndpointData | undefined): AgentChatEndpoint {
+function parseEndpoint(
+  data: DocumentType<typeof AgentChatEndpointMutation> | undefined,
+): AgentChatEndpoint {
   if (data === undefined) throw new Error("The agent chat endpoint is unavailable.");
   return v.parse(AgentChatEndpointSchema, data.agentChatEndpoint);
 }
@@ -314,7 +310,7 @@ function parseEndpoint(data: AgentChatEndpointData | undefined): AgentChatEndpoi
 async function fetchSystemContext(
   renderPrompt: (
     variables: RenderAgentPromptVariables,
-  ) => Promise<RenderAgentPromptData | undefined>,
+  ) => Promise<DocumentType<typeof RenderAgentPrompt> | undefined>,
   agentId: string,
   view: AgentChatView,
 ): Promise<string> {

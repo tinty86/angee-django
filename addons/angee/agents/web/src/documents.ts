@@ -1,8 +1,18 @@
 // Non-CRUD console operations the agents pages invoke. Model CRUD is derived from
 // the SDL by the DataPage; only bespoke action mutations are authored here.
+//
+// This file mixes two states on purpose: the custom operations below are typed
+// `graphql()` documents (the target pattern — no hand-written result types), while
+// the single-id `{ ok, message }` ACTION mutations are still raw strings + hand
+// types, deferred to the Phase 4 `action()`/`useActionMutation` helper that will
+// derive them from the SDL (see .agents/plans/typed-graphql-operations.md). Author
+// any new custom operation as a `graphql()` document; do not add hand-typed strings.
 
+import { graphql, type DocumentType } from "@angee/gql/console";
 import type { ActionOutcome, ByIdVariables } from "@angee/sdk";
 import * as v from "valibot";
+
+// --- Action-shaped mutations (single id → `{ ok, message }`): pending Phase 4 ---
 
 export const REFRESH_PROVIDER_MODELS_MUTATION = `
   mutation RefreshProviderModels($id: ID!) {
@@ -71,7 +81,7 @@ export type IdVariables = ByIdVariables;
 // to apply via ACP `session/set_model`, and the agent's rendered MCP server map to
 // advertise on the ACP session. A mutation, not a query: each call mints a fresh,
 // short-lived route token server-side (a side effect).
-export const AGENT_CHAT_ENDPOINT_MUTATION = `
+export const AgentChatEndpointMutation = graphql(`
   mutation AgentChatEndpoint($id: ID!) {
     agentChatEndpoint(id: $id) {
       url
@@ -81,7 +91,7 @@ export const AGENT_CHAT_ENDPOINT_MUTATION = `
       modelHandle
     }
   }
-`;
+`);
 
 // One MCP server entry inside the endpoint's `mcpServers` map. The map crosses the
 // GraphQL `JSON` scalar, so its shape is opaque on the wire and must be parsed (not
@@ -107,21 +117,13 @@ export const AgentChatEndpointSchema = v.object({
 
 export type AgentChatEndpoint = v.InferOutput<typeof AgentChatEndpointSchema>;
 
-export interface AgentChatEndpointData {
-  agentChatEndpoint: AgentChatEndpoint;
-}
-
 // Render the `<system_context>` block for the agent and the user's open view. Called
 // each send and prefixed to the user's text, so the agent reads what the user sees.
-export const RENDER_AGENT_PROMPT_MUTATION = `
+export const RenderAgentPrompt = graphql(`
   mutation RenderAgentPrompt($id: ID!, $view: JSON!) {
     renderAgentPrompt(id: $id, view: $view)
   }
-`;
-
-export interface RenderAgentPromptData {
-  renderAgentPrompt: string;
-}
+`);
 
 // The view envelope the chat sends to `renderAgentPrompt`: what the user is looking at.
 export interface AgentChatView extends Record<string, unknown> {
@@ -140,7 +142,7 @@ export interface RenderAgentPromptVariables extends Record<string, unknown> {
 // Resolve which agent serves the user's current view (the side chatter). Returns the
 // agent identity only — the client then mints its chat endpoint with `agentChatEndpoint`;
 // `null` means the user has no running agent (the chatter shows a call-to-action).
-export const RESOLVE_SESSION_FOR_VIEW_MUTATION = `
+export const ResolveSessionForView = graphql(`
   mutation ResolveSessionForView($view: JSON!) {
     resolveSessionForView(view: $view) {
       agentId
@@ -149,19 +151,9 @@ export const RESOLVE_SESSION_FOR_VIEW_MUTATION = `
       modelHandle
     }
   }
-`;
+`);
 
-export interface AgentSession {
-  agentId: string;
-  agentName: string;
-  status: string;
-  modelHandle: string;
-}
-
-export interface AgentSessionData {
-  resolveSessionForView: AgentSession | null;
-}
-
-export interface ResolveSessionVariables extends Record<string, unknown> {
-  view: AgentChatView;
-}
+/** The resolved running-agent identity for a view; `null` when none runs. */
+export type AgentSession = NonNullable<
+  DocumentType<typeof ResolveSessionForView>["resolveSessionForView"]
+>;

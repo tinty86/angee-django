@@ -8,7 +8,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import { TextRouteLink } from "../lib/cells";
 import { addonDetailPath, modelDetailPath } from "../lib/paths";
 import { fieldRows, type FieldRow } from "../lib/rows";
@@ -54,7 +54,7 @@ const groupOptions: readonly DataToolbarGroupOption[] = [
 ];
 
 export function FieldsPage(): ReactElement {
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const [modelScope] = useQueryState("model", parseAsString);
   const [addonScope] = useQueryState("addon", parseAsString);
   const rows = useMemo(() => {

@@ -1,49 +1,12 @@
-export const AVAILABLE_CONNECTIONS_QUERY = `
-  query IamAvailableConnections {
-    availableConnections {
-      results {
-        oauthClientSqid
-        oauthClientDisplayName
-        oauthClientSlug
-        oauthClientIcon
-        isOidc
-      }
-    }
-  }
-`;
+// Console-schema operations for the IAM admin surface: the identity overview,
+// users, roles, grants, relationships, the REBAC schema, and the grant/revoke
+// writes. These root fields live in the `console` runtime schema, so this file is
+// globbed against it by the per-schema codegen. The unauthenticated login surface
+// (available connections, login start/complete) lives in `./documents.public`.
 
-export const LOGIN_START_MUTATION = `
-  mutation IamLoginStart(
-    $oauthClientSqid: String!
-    $redirectUri: String!
-    $next: String!
-  ) {
-    loginStart(
-      oauthClientSqid: $oauthClientSqid
-      redirectUri: $redirectUri
-      next: $next
-    ) {
-      authorizeUrl
-      error
-    }
-  }
-`;
+import { graphql, type DocumentType } from "@angee/gql/console";
 
-export const LOGIN_COMPLETE_MUTATION = `
-  mutation IamLoginComplete(
-    $code: String!
-    $state: String!
-    $redirectUri: String!
-  ) {
-    loginComplete(code: $code, state: $state, redirectUri: $redirectUri) {
-      ok
-      next
-      error
-    }
-  }
-`;
-
-export const IAM_ROLES_QUERY = `
+export const IamRoles = graphql(`
   query IamRoles {
     roles {
       id
@@ -52,9 +15,9 @@ export const IAM_ROLES_QUERY = `
       description
     }
   }
-`;
+`);
 
-export const IAM_OVERVIEW_QUERY = `
+export const IamOverview = graphql(`
   query IamOverview($pagination: OffsetPaginationInput) {
     users(pagination: $pagination) {
       totalCount
@@ -72,9 +35,9 @@ export const IAM_OVERVIEW_QUERY = `
       totalCount
     }
   }
-`;
+`);
 
-export const IAM_USERS_QUERY = `
+export const IamUsers = graphql(`
   query IamUsers($pagination: OffsetPaginationInput) {
     users(pagination: $pagination) {
       totalCount
@@ -89,9 +52,9 @@ export const IAM_USERS_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const IAM_GRANTS_QUERY = `
+export const IamGrants = graphql(`
   query IamGrants($pagination: OffsetPaginationInput) {
     grants(pagination: $pagination) {
       totalCount
@@ -103,9 +66,9 @@ export const IAM_GRANTS_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const IAM_RELATIONSHIPS_QUERY = `
+export const IamRelationships = graphql(`
   query IamRelationships(
     $resourceType: String
     $subjectType: String
@@ -130,9 +93,9 @@ export const IAM_RELATIONSHIPS_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const IAM_REBAC_SCHEMA_QUERY = `
+export const IamRebacSchema = graphql(`
   query IamRebacSchema {
     rebacSchema {
       resourceType
@@ -148,20 +111,22 @@ export const IAM_REBAC_SCHEMA_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const IAM_REVOKE_ROLE_MUTATION = `
+export const IamRevokeRole = graphql(`
   mutation IamRevokeRole($principalId: String!, $role: String!) {
     revokeRole(principalId: $principalId, role: $role)
   }
-`;
+`);
 
-export const IAM_GRANT_ROLE_MUTATION = `
+export const IamGrantRole = graphql(`
   mutation IamGrantRole($principalId: String!, $role: String!) {
     grantRole(principalId: $principalId, role: $role)
   }
-`;
+`);
 
+// Action-shaped single-id mutation (`{ ok, message }`); left as a raw string until
+// the later phase migrates the trivial id actions.
 export const IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION = `
   mutation IamDiscoverOidcEndpoints($id: ID!) {
     discoverOidcEndpoints(id: $id) { ok message }
@@ -178,57 +143,7 @@ export interface IamIdVariables extends Record<string, unknown> {
   id: string;
 }
 
-/** Selection result for an `availableConnections.results` item. */
-export interface AvailableConnection {
-  oauthClientSqid: string;
-  oauthClientDisplayName: string;
-  oauthClientSlug: string;
-  oauthClientIcon: string;
-  isOidc: boolean;
-}
-
-/** Selection result for `IamAvailableConnections`. */
-export interface AvailableConnectionsData {
-  availableConnections: {
-    results: AvailableConnection[];
-  };
-}
-
-/** Selection result for SDL `OAuthStartPayload` in `IamLoginStart` (login subset). */
-export interface OAuthStartPayload {
-  authorizeUrl: string;
-  error: string | null;
-}
-
-/** Selection result for `IamLoginStart`. */
-export interface LoginStartData {
-  loginStart: OAuthStartPayload;
-}
-
-export type LoginStartVariables = Record<string, unknown> & {
-  oauthClientSqid: string;
-  redirectUri: string;
-  next: string;
-};
-
-/** Selection result for SDL `LoginCompletePayload` in `IamLoginComplete`. */
-export interface LoginCompletePayload {
-  ok: boolean;
-  next: string;
-  error: string | null;
-}
-
-/** Selection result for `IamLoginComplete`. */
-export interface LoginCompleteData {
-  loginComplete: LoginCompletePayload;
-}
-
-export type LoginCompleteVariables = Record<string, unknown> & {
-  code: string;
-  state: string;
-  redirectUri: string;
-};
-
+/** Offset-pagination input shared by the IAM list reads. */
 export interface IAMPaginationVariables extends Record<string, unknown> {
   pagination: {
     offset: number;
@@ -236,92 +151,21 @@ export interface IAMPaginationVariables extends Record<string, unknown> {
   };
 }
 
-/** Selection result for SDL `IAMRoleType` in `IamRoles`. */
-export interface IAMRole {
-  id: string;
-  namespace: string;
-  label: string;
-  description: string;
-}
-
-/** Selection result for `IamRoles`. */
-export interface IAMRolesData {
-  roles: IAMRole[];
-}
-
-/** Selection result for `IamOverview`. */
-export interface IAMOverviewData {
-  users: {
-    totalCount: number;
-  };
-  roles: IAMRole[];
-  grants: {
-    totalCount: number;
-  };
-  relationships: {
-    totalCount: number;
-  };
-}
+/** One `roles` row, derived from the `IamRoles` selection. */
+export type IAMRole = DocumentType<typeof IamRoles>["roles"][number];
 
 export type IAMOverviewVariables = IAMPaginationVariables;
 
-/** Selection result for SDL `UserType` in `IamUsers`. */
-export interface IAMUser extends Record<string, unknown> {
-  id: string;
-  username: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  isStaff: boolean;
-  isActive: boolean;
-}
-
-/** Selection result for `IamUsers`. */
-export interface IAMUsersData {
-  users: {
-    totalCount: number;
-    results: IAMUser[];
-  };
-}
-
 export type IAMUsersVariables = IAMPaginationVariables;
 
-/** Selection result for SDL `IAMGrantType` in `IamGrants`. */
-export interface IAMGrant {
-  principalId: string;
-  principalType: string;
-  principalLabel: string | null;
-  role: string;
-}
-
-/** Selection result for `IamGrants`. */
-export interface IAMGrantsData {
-  grants: {
-    totalCount: number;
-    results: IAMGrant[];
-  };
-}
+/** One `grants.results` row, derived from the `IamGrants` selection. */
+export type IAMGrant = DocumentType<typeof IamGrants>["grants"]["results"][number];
 
 export type IAMGrantsVariables = IAMPaginationVariables;
 
-/** Selection result for SDL `IAMRelationshipType` in `IamRelationships`. */
-export interface IAMRelationship {
-  resourceType: string;
-  resourceId: string;
-  relation: string;
-  subjectType: string;
-  subjectId: string;
-  subjectRelation: string;
-  caveatName: string;
-}
-
-/** Selection result for `IamRelationships`. */
-export interface IAMRelationshipsData {
-  relationships: {
-    totalCount: number;
-    results: IAMRelationship[];
-  };
-}
+/** One `relationships.results` row, derived from the `IamRelationships` selection. */
+export type IAMRelationship =
+  DocumentType<typeof IamRelationships>["relationships"]["results"][number];
 
 export interface IAMRelationshipsVariables extends IAMPaginationVariables {
   resourceType?: string | null;
@@ -329,48 +173,19 @@ export interface IAMRelationshipsVariables extends IAMPaginationVariables {
   relation?: string | null;
 }
 
-/** Selection result for SDL `IAMRelationType` in `IamRebacSchema`. */
-export interface IAMRelationSchema {
-  name: string;
-  allowedSubjectTypes: string[];
-}
+/** One `rebacSchema` resource entry, derived from the `IamRebacSchema` selection. */
+export type IAMResourceSchema =
+  DocumentType<typeof IamRebacSchema>["rebacSchema"][number];
 
-/** Selection result for SDL `IAMPermCondition` in `IamRebacSchema`. */
-export interface IAMPermissionCondition {
-  name: string;
-}
+/** A relation within a `rebacSchema` resource. */
+export type IAMRelationSchema = IAMResourceSchema["relations"][number];
 
-/** Selection result for SDL `IAMPermissionType` in `IamRebacSchema`. */
-export interface IAMPermissionSchema {
-  name: string;
-  conditions: IAMPermissionCondition[];
-}
-
-/** Selection result for SDL `IAMResourceSchemaType` in `IamRebacSchema`. */
-export interface IAMResourceSchema {
-  resourceType: string;
-  relations: IAMRelationSchema[];
-  permissions: IAMPermissionSchema[];
-}
-
-/** Selection result for `IamRebacSchema`. */
-export interface IAMRebacSchemaData {
-  rebacSchema: IAMResourceSchema[];
-}
-
-/** Selection result for `IamRevokeRole`. */
-export interface IAMRevokeRoleData {
-  revokeRole: boolean;
-}
+/** A permission within a `rebacSchema` resource. */
+export type IAMPermissionSchema = IAMResourceSchema["permissions"][number];
 
 export interface IAMRevokeRoleVariables extends Record<string, unknown> {
   principalId: string;
   role: string;
-}
-
-/** Selection result for `IamGrantRole`. */
-export interface IAMGrantRoleData {
-  grantRole: boolean;
 }
 
 export interface IAMGrantRoleVariables extends Record<string, unknown> {

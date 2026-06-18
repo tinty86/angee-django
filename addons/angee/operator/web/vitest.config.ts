@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
+import { gqlAlias } from "../../../../vitest.shared";
 
 export default defineConfig({
+  resolve: { alias: gqlAlias },
   test: {
     // Pure modules run under node; component suites opt into a DOM environment
     // per-file with a `// @vitest-environment happy-dom` pragma.

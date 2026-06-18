@@ -3,15 +3,13 @@ import { defineConfig } from "vitest/config";
 import { gqlAlias } from "../../../../vitest.shared";
 
 export default defineConfig({
+  // `@angee/gql/*` resolves via tsconfig `paths` for tsc; vitest needs it as an
+  // explicit alias (shared with the other addon test configs).
   resolve: { alias: gqlAlias },
   test: {
-    // Pure projectors run under node; component suites opt into a DOM environment
-    // per-file with a `// @vitest-environment happy-dom` pragma.
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     server: {
-      // The chrome barrel pulls in the logo's stylesheet; inline that dep so
-      // Vite resolves its `.css` import instead of Node's ESM loader rejecting it.
       deps: { inline: ["@angee/logo-react"] },
     },
   },

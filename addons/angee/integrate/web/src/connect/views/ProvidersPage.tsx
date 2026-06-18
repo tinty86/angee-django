@@ -13,13 +13,9 @@ import { useAuthoredMutation } from "@angee/sdk";
 
 import { useIntegrateT } from "../../i18n";
 import {
-  CONNECT_ACCOUNT_COMPLETE_MUTATION,
-  CONNECT_ACCOUNT_START_MUTATION,
-  type ConnectAccountCompleteData,
-  type ConnectAccountCompleteVariables,
-  type ConnectAccountStartData,
-  type ConnectAccountStartVariables,
-} from "../documents";
+  IntegrateConnectAccountComplete,
+  IntegrateConnectAccountStart,
+} from "../documents.public";
 import { connectCallbackRedirectUri } from "../redirects";
 
 const MODEL = "OAuthClient";
@@ -52,14 +48,10 @@ function fieldString(value: unknown): string {
 /** OAuth connect providers (full CRUD plus enable/disable and account connect). */
 export function ProvidersPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [connectAccountStart] = useAuthoredMutation<
-    ConnectAccountStartData,
-    ConnectAccountStartVariables
-  >(CONNECT_ACCOUNT_START_MUTATION);
-  const [connectAccountComplete] = useAuthoredMutation<
-    ConnectAccountCompleteData,
-    ConnectAccountCompleteVariables
-  >(CONNECT_ACCOUNT_COMPLETE_MUTATION);
+  const [connectAccountStart] = useAuthoredMutation(IntegrateConnectAccountStart);
+  const [connectAccountComplete] = useAuthoredMutation(
+    IntegrateConnectAccountComplete,
+  );
 
   const connect = React.useCallback(
     async (ctx: ActionContext) => {

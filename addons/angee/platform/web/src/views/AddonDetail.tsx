@@ -16,7 +16,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import {
   addonDetailPath,
   fieldsPath,
@@ -30,7 +30,7 @@ const shortName = (dep: string): string => dep.split(".").pop() ?? dep;
 export function AddonDetail(): ReactElement {
   const params = useParams({ strict: false });
   const id = "id" in params && typeof params.id === "string" ? params.id : undefined;
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const addons = query.data?.platformExplorer?.addons ?? [];
   const addon = useMemo(() => addons.find((a) => a.id === id), [addons, id]);
   const ids = useMemo(() => new Set(addons.map((a) => a.id)), [addons]);

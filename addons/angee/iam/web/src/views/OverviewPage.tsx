@@ -23,20 +23,13 @@ import {
 import { errorMessage, useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
 
 import {
-  IAM_GRANTS_QUERY,
-  IAM_GRANT_ROLE_MUTATION,
-  IAM_OVERVIEW_QUERY,
-  IAM_REVOKE_ROLE_MUTATION,
-  IAM_USERS_QUERY,
-  type IAMGrantRoleData,
-  type IAMGrantRoleVariables,
-  type IAMGrantsData,
+  IamGrantRole,
+  IamGrants,
+  IamOverview,
+  IamRevokeRole,
+  IamUsers,
   type IAMGrantsVariables,
-  type IAMOverviewData,
   type IAMOverviewVariables,
-  type IAMRevokeRoleData,
-  type IAMRevokeRoleVariables,
-  type IAMUsersData,
   type IAMUsersVariables,
 } from "../documents";
 import { titleLabel, userLabel } from "../identity-labels";
@@ -63,22 +56,10 @@ export function OverviewPage(): ReactElement {
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const overview = useAuthoredQuery<IAMOverviewData, IAMOverviewVariables>(
-    IAM_OVERVIEW_QUERY,
-    countVars,
-  );
-  const usersQuery = useAuthoredQuery<IAMUsersData, IAMUsersVariables>(
-    IAM_USERS_QUERY,
-    listVars,
-  );
-  const grantsQuery = useAuthoredQuery<IAMGrantsData, IAMGrantsVariables>(
-    IAM_GRANTS_QUERY,
-    listVars,
-  );
-  const [grantRole, grantState] = useAuthoredMutation<
-    IAMGrantRoleData,
-    IAMGrantRoleVariables
-  >(IAM_GRANT_ROLE_MUTATION);
+  const overview = useAuthoredQuery(IamOverview, countVars);
+  const usersQuery = useAuthoredQuery(IamUsers, listVars);
+  const grantsQuery = useAuthoredQuery(IamGrants, listVars);
+  const [grantRole, grantState] = useAuthoredMutation(IamGrantRole);
 
   const roles = useMemo(() => roleRows(overview.data?.roles ?? []), [overview.data]);
   const users = useMemo(
@@ -307,10 +288,7 @@ function PrivilegedGrantRow({
   onRevoked: () => void;
 }): ReactElement {
   const t = useIamT();
-  const [revoke, state] = useAuthoredMutation<
-    IAMRevokeRoleData,
-    IAMRevokeRoleVariables
-  >(IAM_REVOKE_ROLE_MUTATION);
+  const [revoke, state] = useAuthoredMutation(IamRevokeRole);
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">

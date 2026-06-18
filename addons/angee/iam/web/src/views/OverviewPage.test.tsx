@@ -27,6 +27,7 @@ import { AppRuntimeProvider } from "@angee/sdk";
 import { ModalsHost, baseIcons } from "@angee/base";
 
 import { OverviewPage } from "./OverviewPage";
+import { documentName } from "./test-documents";
 
 const ALICE_RELAY_ID = "VXNlclR5cGU6dXNyXzE=";
 const STALE_RELAY_ID = "VXNlclR5cGU6dXNyXzI=";
@@ -55,9 +56,10 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   return {
     ...actual,
-    useAuthoredQuery: (document: string) => {
-      if (document.includes("IamOverview")) return sdkMocks.overview;
-      if (document.includes("IamUsers")) return sdkMocks.users;
+    useAuthoredQuery: (document: unknown) => {
+      const name = documentName(document);
+      if (name === "IamOverview") return sdkMocks.overview;
+      if (name === "IamUsers") return sdkMocks.users;
       return {
         data: undefined,
         fetching: false,

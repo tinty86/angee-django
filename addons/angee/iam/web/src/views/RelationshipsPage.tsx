@@ -10,8 +10,7 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import {
-  IAM_RELATIONSHIPS_QUERY,
-  type IAMRelationshipsData,
+  IamRelationships,
   type IAMRelationshipsVariables,
 } from "../documents";
 import {
@@ -84,10 +83,7 @@ export function RelationshipsPage(): ReactElement {
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const query = useAuthoredQuery<
-    IAMRelationshipsData,
-    IAMRelationshipsVariables
-  >(IAM_RELATIONSHIPS_QUERY, variables);
+  const query = useAuthoredQuery(IamRelationships, variables);
   const rows = useMemo(
     () => relationshipRows(query.data?.relationships.results ?? []),
     [query.data],

@@ -12,11 +12,7 @@ import {
 import { useAuthoredMutation } from "@angee/sdk";
 
 import { useIntegrateT } from "../../i18n";
-import {
-  REVEAL_CREDENTIAL_MUTATION,
-  type RevealCredentialData,
-  type RevealCredentialVariables,
-} from "../documents";
+import { IntegrateRevealCredential } from "../documents.console";
 
 const MODEL = "Credential";
 
@@ -33,10 +29,7 @@ const credentialList = (
 /** Per-user credential health (list / status / revoke / reveal); create via the form override. */
 export function CredentialsPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [revealCredential] = useAuthoredMutation<
-    RevealCredentialData,
-    RevealCredentialVariables
-  >(REVEAL_CREDENTIAL_MUTATION);
+  const [revealCredential] = useAuthoredMutation(IntegrateRevealCredential);
 
   // The secret is never in the credential's read projection; this fetches and
   // decrypts it server-side on explicit admin request, then shows it once for copy.

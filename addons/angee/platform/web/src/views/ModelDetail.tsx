@@ -16,7 +16,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import {
   addonDetailPath,
   fieldsPath,
@@ -28,7 +28,7 @@ import { LinkedChips, RouterLink, useRouteNavigate } from "../lib/cells";
 export function ModelDetail(): ReactElement {
   const params = useParams({ strict: false });
   const id = "id" in params && typeof params.id === "string" ? params.id : undefined;
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const models = query.data?.platformExplorer?.models ?? [];
   const model = useMemo(() => models.find((m) => m.label === id), [models, id]);
   const dependedBy = useMemo(

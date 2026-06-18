@@ -1,15 +1,9 @@
 import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
-  CREATE_FOLDER_MUTATION,
-  DELETE_FOLDER_MUTATION,
-  UPDATE_FOLDER_MUTATION,
-  type CreateFolderData,
-  type CreateFolderVariables,
-  type DeleteFolderData,
-  type DeleteFolderVariables,
-  type UpdateFolderData,
-  type UpdateFolderVariables,
+  StorageCreateFolder,
+  StorageDeleteFolder,
+  StorageUpdateFolder,
 } from "./documents";
 
 export interface FolderActions {
@@ -34,18 +28,9 @@ export function useFolderActions(
   options: { onChanged?: () => void } = {},
 ): FolderActions {
   const { onChanged } = options;
-  const [createFolder] = useAuthoredMutation<
-    CreateFolderData,
-    CreateFolderVariables
-  >(CREATE_FOLDER_MUTATION);
-  const [updateFolder] = useAuthoredMutation<
-    UpdateFolderData,
-    UpdateFolderVariables
-  >(UPDATE_FOLDER_MUTATION);
-  const [deleteFolder] = useAuthoredMutation<
-    DeleteFolderData,
-    DeleteFolderVariables
-  >(DELETE_FOLDER_MUTATION);
+  const [createFolder] = useAuthoredMutation(StorageCreateFolder);
+  const [updateFolder] = useAuthoredMutation(StorageUpdateFolder);
+  const [deleteFolder] = useAuthoredMutation(StorageDeleteFolder);
   const { busy, run } = useBusyRun(onChanged);
 
   return {

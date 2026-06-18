@@ -2,14 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuthoredMutation } from "@angee/sdk";
 
-import {
-  UPDATE_PAGE_BODY_MUTATION,
-  UPDATE_PAGE_MUTATION,
-  type UpdatePageBodyData,
-  type UpdatePageBodyVariables,
-  type UpdatePageData,
-  type UpdatePageVariables,
-} from "./documents";
+import { KnowledgeUpdatePage, KnowledgeUpdatePageBody } from "./documents";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -54,13 +47,8 @@ export function usePageEditor(
     onSavedRef.current = onSaved;
   }, [onSaved]);
 
-  const [updatePage] = useAuthoredMutation<UpdatePageData, UpdatePageVariables>(
-    UPDATE_PAGE_MUTATION,
-  );
-  const [updateBody] = useAuthoredMutation<
-    UpdatePageBodyData,
-    UpdatePageBodyVariables
-  >(UPDATE_PAGE_BODY_MUTATION);
+  const [updatePage] = useAuthoredMutation(KnowledgeUpdatePage);
+  const [updateBody] = useAuthoredMutation(KnowledgeUpdatePageBody);
 
   const setSafeStatus = useCallback((next: SaveStatus) => {
     if (mountedRef.current) setStatus(next);

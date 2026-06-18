@@ -51,8 +51,9 @@ Dependency changes must update this file in the same change.
 |---|---|---|
 | React 19 | View library | Component conventions |
 | TypeScript >= 6 | Language and type system | Branded boundary types |
-| urql React 5 + @urql/core 6 | GraphQL client, normalized cache, subscriptions | Provider stack and invalidation wiring |
+| urql React 5 + @urql/core 6 | GraphQL client, normalized cache, subscriptions | Provider stack and invalidation wiring; consumes generated `TypedDocumentNode`s |
 | graphql-ws 6 | GraphQL WebSocket lifecycle | Connection params and retry policy |
+| GraphQL Code Generator (client-preset) + @graphql-typed-document-node/core | Generated TypeScript schema and operation types from the emitted SDL, as `TypedDocumentNode` documents | Per-project codegen into `runtime/gql/<schema>` from `runtime/schemas/<schema>.graphql`, routed to a schema by document filename (`documents.ts`/`documents.console.ts` → console, `documents.public.ts` → public); authored operations carry no hand-written result/variables types |
 | TanStack Router | Type-safe routing and search params | `defineAddon` to `createApp` route composition and flat URL search codec |
 | TanStack Form | Form state | `FormView` binding |
 | TanStack Table | Columns, sort, filter, grouping, selection | `ListView` and `BoardView` bindings |

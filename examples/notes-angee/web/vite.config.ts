@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -12,6 +13,21 @@ const uiPort = Number(process.env.ANGEE_UI_PORT ?? 5173);
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // The alias for this project's generated typed operations. Mirrors the
+  // `@angee/gql/*` paths in `tsconfig.base.json` and `vitest.shared.ts` so Vite
+  // resolves the same per-schema `runtime/gql/<name>/` the type checker does.
+  // (Framework-repo dev wiring; a rendered downstream project gets this emitted
+  // per-project by the composer/template — see the plan note.)
+  resolve: {
+    alias: {
+      "@angee/gql/public": fileURLToPath(
+        new URL("../runtime/gql/public", import.meta.url),
+      ),
+      "@angee/gql/console": fileURLToPath(
+        new URL("../runtime/gql/console", import.meta.url),
+      ),
+    },
+  },
   server: {
     host: true,
     port: uiPort,

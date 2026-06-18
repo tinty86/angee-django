@@ -9,7 +9,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import { LinkedChips, TextRouteLink } from "../lib/cells";
 import { addonDetailPath, fieldsPath, modelsPath } from "../lib/paths";
 import { addonRows, type AddonRow } from "../lib/rows";
@@ -84,7 +84,7 @@ const groupOptions: readonly DataToolbarGroupOption[] = [
 ];
 
 export function AddonsPage(): ReactElement {
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const rows = useMemo(
     () => addonRows(query.data?.platformExplorer?.addons ?? []),
     [query.data],

@@ -20,12 +20,9 @@ import {
 } from "@angee/sdk";
 
 import {
-  IAM_GRANTS_QUERY,
-  IAM_REVOKE_ROLE_MUTATION,
-  type IAMGrantsData,
+  IamGrants,
+  IamRevokeRole,
   type IAMGrantsVariables,
-  type IAMRevokeRoleData,
-  type IAMRevokeRoleVariables,
 } from "../documents";
 import {
   grantRows,
@@ -52,14 +49,8 @@ export function GrantsPage(): ReactElement {
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const query = useAuthoredQuery<IAMGrantsData, IAMGrantsVariables>(
-    IAM_GRANTS_QUERY,
-    variables,
-  );
-  const [revokeRole, revokeState] = useAuthoredMutation<
-    IAMRevokeRoleData,
-    IAMRevokeRoleVariables
-  >(IAM_REVOKE_ROLE_MUTATION);
+  const query = useAuthoredQuery(IamGrants, variables);
+  const [revokeRole, revokeState] = useAuthoredMutation(IamRevokeRole);
   const [pendingGrantId, setPendingGrantId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const rows = useMemo(

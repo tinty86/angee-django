@@ -9,7 +9,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import { modelDetailPath } from "../lib/paths";
 import { modelGraphEdges, modelGraphNodes } from "../lib/rows";
 
@@ -23,7 +23,7 @@ const NODE_STYLES: Record<"model", GraphViewNodeStyle> = {
 };
 
 export function GraphPage(): ReactElement {
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const navigate = useNavigate();
   const [modelScope] = useQueryState("model", parseAsString);
   const explorer = query.data?.platformExplorer;

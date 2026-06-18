@@ -3,56 +3,9 @@
 // and scopes client-side (see `file-rows.ts`). Mutations (upload, folders) land
 // in a later slice.
 
-// A `type` alias (not an `interface`) so it carries an implicit index signature
-// and satisfies the authored-hook `Variables` (`Record<string, unknown>`) bound.
-export type OffsetPaginationVariables = {
-  pagination: { offset: number; limit: number };
-};
+import { graphql, type DocumentType } from "@angee/gql/console";
 
-/** One step of the upload protocol's file projection. */
-export interface UploadedFile {
-  id: string;
-  filename: string;
-  uploadState: string;
-}
-
-export type FileUploadBeginInput = {
-  filename: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  drive?: string | null;
-  driveSlug?: string;
-  folder?: string | null;
-  contentHash?: string;
-};
-
-export type FileUploadBeginVariables = { input: FileUploadBeginInput };
-
-export interface FileUploadBeginData {
-  fileUploadBegin: {
-    /** `"proxy"` (PUT the bytes), `"deduped"` (already stored), or empty on error. */
-    method: string;
-    uploadUrl: string;
-    uploadToken: string;
-    error: string | null;
-    errorCode: string | null;
-    file: UploadedFile | null;
-  };
-}
-
-export type FileUploadFinalizeVariables = {
-  input: { file: string; contentHash: string; sizeBytes: number };
-};
-
-export interface FileUploadFinalizeData {
-  fileUploadFinalize: {
-    error: string | null;
-    errorCode: string | null;
-    file: UploadedFile | null;
-  };
-}
-
-export const FILE_UPLOAD_BEGIN_MUTATION = `
+export const StorageFileUploadBegin = graphql(`
   mutation StorageFileUploadBegin($input: FileUploadBeginInput!) {
     fileUploadBegin(input: $input) {
       method
@@ -67,9 +20,9 @@ export const FILE_UPLOAD_BEGIN_MUTATION = `
       }
     }
   }
-`;
+`);
 
-export const FILE_UPLOAD_FINALIZE_MUTATION = `
+export const StorageFileUploadFinalize = graphql(`
   mutation StorageFileUploadFinalize($input: FileUploadFinalizeInput!) {
     fileUploadFinalize(input: $input) {
       error
@@ -81,165 +34,62 @@ export const FILE_UPLOAD_FINALIZE_MUTATION = `
       }
     }
   }
-`;
+`);
 
-/** Patch a file — used here for moves (`folder`: a folder GlobalID, or null for
- * the drive root). Renames go through the record form's own resource mutation. */
-export type FileUpdateVariables = {
-  data: { id: string; folder?: string | null };
-};
-export interface FileUpdateData {
-  updateFile: { id: string };
-}
-
-export const FILE_UPDATE_MUTATION = `
+export const StorageUpdateFile = graphql(`
   mutation StorageUpdateFile($data: FilePatch!) {
     updateFile(data: $data) {
       id
     }
   }
-`;
+`);
 
-export type CreateFolderVariables = {
-  data: { drive: string; name: string; parent?: string | null };
-};
-export interface CreateFolderData {
-  createFolder: { id: string; name: string };
-}
-
-export const CREATE_FOLDER_MUTATION = `
+export const StorageCreateFolder = graphql(`
   mutation StorageCreateFolder($data: FolderInput!) {
     createFolder(data: $data) {
       id
       name
     }
   }
-`;
+`);
 
-export type UpdateFolderVariables = { data: { id: string; name?: string } };
-export interface UpdateFolderData {
-  updateFolder: { id: string; name: string };
-}
-
-export const UPDATE_FOLDER_MUTATION = `
+export const StorageUpdateFolder = graphql(`
   mutation StorageUpdateFolder($data: FolderPatch!) {
     updateFolder(data: $data) {
       id
       name
     }
   }
-`;
+`);
 
 /** Delete a folder; its files fall back to the drive root (FK SET_NULL). */
-export type DeleteFolderVariables = { id: string };
-export interface DeleteFolderData {
-  deleteFolder: { totalDeletedCount: number; hasBlockers: boolean };
-}
-
-export const DELETE_FOLDER_MUTATION = `
+export const StorageDeleteFolder = graphql(`
   mutation StorageDeleteFolder($id: ID!) {
     deleteFolder(id: $id, confirm: true) {
       totalDeletedCount
       hasBlockers
     }
   }
-`;
+`);
 
-/** `id` for the trash/restore mutations; the relay GlobalID of the file. */
-export type FileIdVariables = { id: string };
-export interface FileDeleteData {
-  deleteFile: { totalDeletedCount: number; hasBlockers: boolean };
-}
-export interface FileRestoreData {
-  restoreFile: { id: string } | null;
-}
-
-export const FILE_DELETE_MUTATION = `
+export const StorageDeleteFile = graphql(`
   mutation StorageDeleteFile($id: ID!) {
     deleteFile(id: $id, confirm: true) {
       totalDeletedCount
       hasBlockers
     }
   }
-`;
+`);
 
-export const FILE_RESTORE_MUTATION = `
+export const StorageRestoreFile = graphql(`
   mutation StorageRestoreFile($id: ID!) {
     restoreFile(id: $id) {
       id
     }
   }
-`;
+`);
 
-/** One MIME taxonomy row, as projected on a file. */
-export interface StorageMimeType {
-  mimeType: string;
-  category: string;
-  label: string;
-  iconKey: string;
-}
-
-/** A drive — the unit of access control and key namespace. */
-export interface StorageDrive {
-  id: string;
-  slug: string;
-  name: string;
-  description: string;
-  isArchived: boolean;
-}
-
-/** A folder (tree node) or smart folder (e.g. Trash); ids are public sqids. */
-export interface StorageFolder {
-  id: string;
-  name: string;
-  description: string;
-  isVirtual: boolean;
-  smartKind: string;
-  drive: string | null;
-  parent: string | null;
-}
-
-/** A stored file row. `drive`/`folder` are the parents' public ids. */
-export interface StorageFile {
-  id: string;
-  filename: string;
-  title: string;
-  sizeBytes: number;
-  contentHash: string;
-  uploadState: string;
-  isTrashed: boolean;
-  updatedAt: string;
-  createdByLabel: string | null;
-  url: string;
-  drive: string;
-  folder: string | null;
-  mimeType: StorageMimeType | null;
-}
-
-/** A storage backend — admin infrastructure a drive is created against. */
-export interface StorageBackend {
-  id: string;
-  slug: string;
-  label: string;
-}
-
-export interface StorageDrivesData {
-  drives: { results: StorageDrive[] };
-}
-
-export interface StorageBackendsData {
-  backends: { results: StorageBackend[] };
-}
-
-export interface StorageFoldersData {
-  folders: { results: StorageFolder[] };
-}
-
-export interface StorageFilesData {
-  files: { results: StorageFile[] };
-}
-
-export const STORAGE_DRIVES_QUERY = `
+export const StorageDrives = graphql(`
   query StorageDrives($pagination: OffsetPaginationInput) {
     drives(pagination: $pagination) {
       results {
@@ -251,12 +101,12 @@ export const STORAGE_DRIVES_QUERY = `
       }
     }
   }
-`;
+`);
 
 // Admin-only: the backend catalogue, for the inline drive-create form's backend
 // picker. Non-admins get a denied result and an empty list (drive create is
 // storage-admin-gated server-side anyway).
-export const STORAGE_BACKENDS_QUERY = `
+export const StorageBackends = graphql(`
   query StorageBackends($pagination: OffsetPaginationInput) {
     backends(pagination: $pagination) {
       results {
@@ -266,9 +116,9 @@ export const STORAGE_BACKENDS_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const STORAGE_FOLDERS_QUERY = `
+export const StorageFolders = graphql(`
   query StorageFolders($pagination: OffsetPaginationInput) {
     folders(pagination: $pagination) {
       results {
@@ -282,9 +132,9 @@ export const STORAGE_FOLDERS_QUERY = `
       }
     }
   }
-`;
+`);
 
-export const STORAGE_FILES_QUERY = `
+export const StorageFiles = graphql(`
   query StorageFiles($pagination: OffsetPaginationInput) {
     files(pagination: $pagination) {
       results {
@@ -309,4 +159,16 @@ export const STORAGE_FILES_QUERY = `
       }
     }
   }
-`;
+`);
+
+/** A stored file row, as projected by `StorageFiles`. `drive`/`folder` are the
+ * parents' public ids. */
+export type StorageFile = NonNullable<
+  DocumentType<typeof StorageFiles>["files"]
+>["results"][number];
+
+/** A folder (tree node) or smart folder, as projected by `StorageFolders`; ids
+ * are public sqids. */
+export type StorageFolder = NonNullable<
+  DocumentType<typeof StorageFolders>["folders"]
+>["results"][number];

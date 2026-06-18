@@ -3,23 +3,18 @@ import { errorMessage, useAuthoredMutation, useAuthoredQuery } from "@angee/sdk"
 import { useState, type ReactNode } from "react";
 
 import {
-  AVAILABLE_CONNECTIONS_QUERY,
-  LOGIN_START_MUTATION,
+  IamAvailableConnections,
+  IamLoginStart,
   type AvailableConnection,
-  type AvailableConnectionsData,
-  type LoginStartData,
-  type LoginStartVariables,
-} from "./documents";
+} from "./documents.public";
 import { loginCallbackRedirectUri, loginNextFromLocation } from "./redirects";
 import { useIamT } from "./i18n";
 
 export function OAuthLoginMethods(): ReactNode {
   const t = useIamT();
   const { data, fetching, error: queryError } =
-    useAuthoredQuery<AvailableConnectionsData>(AVAILABLE_CONNECTIONS_QUERY);
-  const [loginStart] = useAuthoredMutation<LoginStartData, LoginStartVariables>(
-    LOGIN_START_MUTATION,
-  );
+    useAuthoredQuery(IamAvailableConnections);
+  const [loginStart] = useAuthoredMutation(IamLoginStart);
   const [startingSqid, setStartingSqid] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
 

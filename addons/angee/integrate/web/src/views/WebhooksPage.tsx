@@ -13,10 +13,9 @@ import { runActionResult, useAuthoredMutation } from "@angee/sdk";
 
 import { useIntegrateT } from "../i18n";
 import {
-  ROTATE_WEBHOOK_SECRET_MUTATION,
+  RotateWebhookSecret,
   TEST_WEBHOOK_DELIVERY_MUTATION,
   type IdVariables,
-  type RotateWebhookSecretData,
   type TestWebhookDeliveryData,
 } from "../documents";
 
@@ -36,9 +35,7 @@ export function WebhooksPage(): React.ReactElement {
   const [testDelivery] = useAuthoredMutation<TestWebhookDeliveryData, IdVariables>(
     TEST_WEBHOOK_DELIVERY_MUTATION,
   );
-  const [rotateSecret] = useAuthoredMutation<RotateWebhookSecretData, IdVariables>(
-    ROTATE_WEBHOOK_SECRET_MUTATION,
-  );
+  const [rotateSecret] = useAuthoredMutation(RotateWebhookSecret);
 
   const sendTest = React.useCallback(
     async (ctx: ActionContext) => {

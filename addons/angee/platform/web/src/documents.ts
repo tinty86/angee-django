@@ -1,9 +1,12 @@
 // Hand-authored console query against the platform introspection surface. The
 // platform backend owns the schema (`addons/angee/platform/schema.py`); this
-// string and its result types mirror it, the same no-codegen pattern IAM uses.
-// The resource ledger listing is owned by the `resources` addon, not here.
+// document mirrors it and the result types are derived from it, the same
+// no-codegen pattern IAM uses. The resource ledger listing is owned by the
+// `resources` addon, not here.
 
-export const PLATFORM_EXPLORER_QUERY = `
+import { graphql, type DocumentType } from "@angee/gql/console";
+
+export const PlatformExplorer = graphql(`
   query PlatformExplorer {
     platformExplorer {
       addons {
@@ -47,56 +50,14 @@ export const PLATFORM_EXPLORER_QUERY = `
       }
     }
   }
-`;
+`);
 
-export interface PlatformFieldData {
-  name: string;
-  attname: string;
-  kind: string;
-  isRelation: boolean;
-  relationTarget: string | null;
-  addon: string;
-}
+/** The `platformExplorer` payload; `null` when the surface is unavailable. */
+type PlatformExplorerData = NonNullable<
+  DocumentType<typeof PlatformExplorer>["platformExplorer"]
+>;
 
-export interface PlatformModelData {
-  label: string;
-  appLabel: string;
-  modelName: string;
-  verboseName: string;
-  dbTable: string;
-  addonId: string;
-  addonLabel: string;
-  resourceType: string | null;
-  fieldCount: number;
-  relationCount: number;
-  dependsOn: readonly string[];
-  fields: readonly PlatformFieldData[];
-}
-
-export interface PlatformEdgeData {
-  id: string;
-  source: string;
-  target: string;
-  kind: string;
-  fieldName: string;
-}
-
-export interface PlatformAddonData {
-  id: string;
-  label: string;
-  namespace: string;
-  kind: string;
-  modelCount: number;
-  fieldCount: number;
-  resourceCount: number;
-  dependsOn: readonly string[];
-  modelLabels: readonly string[];
-}
-
-export interface PlatformExplorerResult {
-  platformExplorer: {
-    addons: readonly PlatformAddonData[];
-    models: readonly PlatformModelData[];
-    edges: readonly PlatformEdgeData[];
-  } | null;
-}
+export type PlatformAddonData = PlatformExplorerData["addons"][number];
+export type PlatformModelData = PlatformExplorerData["models"][number];
+export type PlatformEdgeData = PlatformExplorerData["edges"][number];
+export type PlatformFieldData = PlatformModelData["fields"][number];

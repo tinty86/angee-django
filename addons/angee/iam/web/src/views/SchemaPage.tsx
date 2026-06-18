@@ -26,9 +26,8 @@ import {
 import { useAuthoredQuery, type MessageVars } from "@angee/sdk";
 
 import {
-  IAM_REBAC_SCHEMA_QUERY,
+  IamRebacSchema,
   type IAMPermissionSchema,
-  type IAMRebacSchemaData,
   type IAMRelationSchema,
   type IAMResourceSchema,
 } from "../documents";
@@ -89,7 +88,7 @@ type Translate = (key: string, vars?: MessageVars) => string;
 
 export function SchemaPage(): ReactElement {
   const t = useIamT();
-  const query = useAuthoredQuery<IAMRebacSchemaData>(IAM_REBAC_SCHEMA_QUERY);
+  const query = useAuthoredQuery(IamRebacSchema);
   const [search, setSearch] = useState("");
   const resources = useMemo(
     () => normalizeResources(query.data?.rebacSchema ?? []),

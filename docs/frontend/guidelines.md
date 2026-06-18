@@ -17,6 +17,17 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
 ## Rules
 
 - Python ships schema and operations. TypeScript ships UX.
+- **Authored operations are typed, never hand-mirrored.** A bespoke (non-CRUD)
+  operation is a `graphql()` document imported from `@angee/gql/<schema>`; its
+  result/variables types come from the generated `TypedDocumentNode` (use
+  `DocumentType<typeof Doc>` when a named result type is still needed) — never a
+  hand-written `…Data`/`…Variables` interface, and never call-site `<TData,TVars>`
+  generics on the `useAuthored*` hooks. The operation's **file name picks its
+  schema**: `documents.ts`/`documents.console.ts` → console, `documents.public.ts`
+  → public. An op must live in a `documents*.ts` file (the codegen glob does not
+  scan inline ops), and a console op placed in a `documents.public.ts` (or vice
+  versa) fails codegen loudly against the wrong schema. Keep valibot only to narrow
+  a `JSON`-scalar field the schema leaves opaque (parse, do not assert).
 - React does not own business logic, permissions, models, or persistence.
 - Use `defineAddon` (headless, `@angee/sdk`) or `defineBaseAddon` (rendered,
   `@angee/base`, routes carry React components) to declare an addon, and

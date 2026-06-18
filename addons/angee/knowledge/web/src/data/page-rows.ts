@@ -1,7 +1,7 @@
 import type { DndPayload } from "@angee/base";
 
 import { PAGE_TYPE, VAULT_TYPE, relationGlobalId, toGlobalId } from "../lib/global-id";
-import type { KnowledgePage } from "./documents";
+import type { KnowledgePageRow } from "./documents";
 
 // The browser fetches every vault/page once and scopes client-side, so this
 // transform owns the projection: a vault's pages → navigator tree rows, folded
@@ -44,7 +44,7 @@ export function pageIcon(kind: string): string {
 
 /** Build the navigator rows for one vault's pages, folders before notes. */
 export function pageTreeRows(
-  pages: readonly KnowledgePage[],
+  pages: readonly KnowledgePageRow[],
   vaultId: string,
 ): KnowledgeTreeRow[] {
   return pages
@@ -59,7 +59,7 @@ export function pageTreeRows(
     }));
 }
 
-function comparePages(left: KnowledgePage, right: KnowledgePage): number {
+function comparePages(left: KnowledgePageRow, right: KnowledgePageRow): number {
   const leftFolder = left.kind === "folder" ? 0 : 1;
   const rightFolder = right.kind === "folder" ? 0 : 1;
   if (leftFolder !== rightFolder) return leftFolder - rightFolder;
@@ -69,7 +69,7 @@ function comparePages(left: KnowledgePage, right: KnowledgePage): number {
 /** Resolve a `[[wikilink]]` title to a page id within a vault (case-insensitive),
  * mirroring how the backend indexer resolves links against the vault. */
 export function pageIdByTitle(
-  pages: readonly KnowledgePage[],
+  pages: readonly KnowledgePageRow[],
   vaultId: string,
   title: string,
 ): string | null {
@@ -84,9 +84,9 @@ export function pageIdByTitle(
 
 /** The selected page's list record, by its node id. */
 export function pageById(
-  pages: readonly KnowledgePage[],
+  pages: readonly KnowledgePageRow[],
   id: string | null,
-): KnowledgePage | null {
+): KnowledgePageRow | null {
   if (!id) return null;
   return pages.find((page) => page.id === id) ?? null;
 }
@@ -96,7 +96,7 @@ export function pageById(
  * that stops a drag-move from reparenting a page under its own subtree.
  */
 export function isSelfOrAncestor(
-  pages: readonly KnowledgePage[],
+  pages: readonly KnowledgePageRow[],
   ancestorId: string,
   nodeId: string,
 ): boolean {

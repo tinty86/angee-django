@@ -23,7 +23,7 @@ const iamModel: PlatformModelData = {
 
 describe("platform row projectors", () => {
   test("addonRows keeps known-addon deps and indexes reverse deps", () => {
-    const addon = (id: string, deps: readonly string[]): PlatformAddonData => ({
+    const addon = (id: string, deps: string[]): PlatformAddonData => ({
       id,
       label: id.split(".").pop() ?? id,
       namespace: "angee",

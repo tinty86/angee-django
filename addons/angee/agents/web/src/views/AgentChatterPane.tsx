@@ -5,11 +5,9 @@ import { Link } from "@tanstack/react-router";
 
 import { useAgentsT } from "../i18n";
 import {
-  RESOLVE_SESSION_FOR_VIEW_MUTATION,
+  ResolveSessionForView,
   type AgentChatView,
   type AgentSession,
-  type AgentSessionData,
-  type ResolveSessionVariables,
 } from "../documents";
 import { AgentChat } from "./AgentChat";
 
@@ -32,9 +30,7 @@ export function AgentChatterPane({
   recordId?: string;
 }): React.ReactElement {
   const t = useAgentsT();
-  const [resolveSession] = useAuthoredMutation<AgentSessionData, ResolveSessionVariables>(
-    RESOLVE_SESSION_FOR_VIEW_MUTATION,
-  );
+  const [resolveSession] = useAuthoredMutation(ResolveSessionForView);
 
   // Resolved per model only — the agent doesn't depend on the open record in v1.
   const resolveView = React.useMemo<AgentChatView>(

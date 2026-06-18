@@ -17,16 +17,11 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import {
-  STORAGE_BACKENDS_QUERY,
-  STORAGE_DRIVES_QUERY,
-  STORAGE_FILES_QUERY,
-  STORAGE_FOLDERS_QUERY,
-  type OffsetPaginationVariables,
-  type StorageBackendsData,
-  type StorageDrivesData,
+  StorageBackends,
+  StorageDrives,
+  StorageFiles,
+  StorageFolders,
   type StorageFile,
-  type StorageFilesData,
-  type StorageFoldersData,
 } from "../data/documents";
 import {
   ALL_SCOPE,
@@ -64,27 +59,15 @@ const STORAGE_LIST_LIMIT = 500;
  */
 export function StoragePage(): ReactElement {
   const t = useStorageT();
-  const variables = useMemo<OffsetPaginationVariables>(
+  const variables = useMemo(
     () => ({ pagination: { offset: 0, limit: STORAGE_LIST_LIMIT } }),
     [],
   );
-  const drivesQuery = useAuthoredQuery<StorageDrivesData, OffsetPaginationVariables>(
-    STORAGE_DRIVES_QUERY,
-    variables,
-  );
-  const foldersQuery = useAuthoredQuery<StorageFoldersData, OffsetPaginationVariables>(
-    STORAGE_FOLDERS_QUERY,
-    variables,
-  );
-  const filesQuery = useAuthoredQuery<StorageFilesData, OffsetPaginationVariables>(
-    STORAGE_FILES_QUERY,
-    variables,
-  );
+  const drivesQuery = useAuthoredQuery(StorageDrives, variables);
+  const foldersQuery = useAuthoredQuery(StorageFolders, variables);
+  const filesQuery = useAuthoredQuery(StorageFiles, variables);
   // Admin-only catalogue for the inline drive-create form's backend picker.
-  const backendsQuery = useAuthoredQuery<StorageBackendsData, OffsetPaginationVariables>(
-    STORAGE_BACKENDS_QUERY,
-    variables,
-  );
+  const backendsQuery = useAuthoredQuery(StorageBackends, variables);
 
   const drives = drivesQuery.data?.drives.results ?? [];
   const folders = foldersQuery.data?.folders.results ?? [];

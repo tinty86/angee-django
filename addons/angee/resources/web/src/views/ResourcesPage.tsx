@@ -3,7 +3,7 @@ import { useMemo, type ReactElement } from "react";
 import { Code, RowsListView, type ListColumn } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { RESOURCE_LEDGER_QUERY, type ResourceLedgerResult } from "../documents";
+import { ResourceLedger } from "../documents";
 import { resourceRows, type ResourceRow } from "../lib/rows";
 
 const columns: readonly ListColumn<ResourceRow>[] = [
@@ -40,7 +40,7 @@ const columns: readonly ListColumn<ResourceRow>[] = [
 ];
 
 export function ResourcesPage(): ReactElement {
-  const query = useAuthoredQuery<ResourceLedgerResult>(RESOURCE_LEDGER_QUERY);
+  const query = useAuthoredQuery(ResourceLedger);
   const rows = useMemo(
     () => resourceRows(query.data?.resourceLedger ?? []),
     [query.data],

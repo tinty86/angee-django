@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@graphql-typed-document-node/core':
+        specifier: ^3.2.0
+        version: 3.2.0(graphql@16.14.0)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -462,6 +465,9 @@ importers:
       '@angee/storage':
         specifier: workspace:*
         version: link:../../../addons/angee/storage/web
+      '@graphql-typed-document-node/core':
+        specifier: ^3.2.0
+        version: 3.2.0(graphql@16.14.0)
       '@tanstack/react-router':
         specifier: ^1.170.8
         version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -472,6 +478,12 @@ importers:
         specifier: ^19.2.0
         version: 19.2.6(react@19.2.6)
     devDependencies:
+      '@graphql-codegen/cli':
+        specifier: ^7.1.1
+        version: 7.1.1(@types/node@25.9.1)(graphql@16.14.0)(typescript@6.0.3)
+      '@graphql-codegen/client-preset':
+        specifier: ^6.0.1
+        version: 6.0.1(graphql@16.14.0)
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.3.0(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))

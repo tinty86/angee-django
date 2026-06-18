@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { DocumentInput } from "@urql/core";
 import { useQuery as useUrqlQuery } from "urql";
 
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
@@ -15,9 +16,12 @@ export interface DocumentQueryRun {
  * enabled, exposing a uniform `{ data, fetching, error, refetch }`. Every read
  * hook (resource list/record, aggregates, authored queries) routes through this
  * so the run / pause / error-normalize / refetch logic lives in one place.
+ *
+ * `document` is urql's `DocumentInput`: a runtime-built query string (resource
+ * list/record, aggregates) or a generated `TypedDocumentNode` (authored reads).
  */
 export function useDocumentQuery(
-  document: string,
+  document: DocumentInput,
   variables: Record<string, unknown>,
   enabled: boolean,
 ): DocumentQueryRun {

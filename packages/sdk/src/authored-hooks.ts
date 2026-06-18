@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import type { TypedDocumentNode } from "@urql/core";
 import { useSubscription as useUrqlSubscription } from "urql";
 
 import { DISABLED_DOCUMENTS } from "./disabled-documents";
@@ -19,9 +20,15 @@ export interface AuthoredQueryResult<TData> {
   refetch: () => void;
 }
 
-/** Run a hand-authored query document — the escape hatch for bespoke reads. */
+/**
+ * Run a hand-authored query document — the escape hatch for bespoke reads.
+ *
+ * Pass a generated `TypedDocumentNode` (from `@angee/gql/<schema>`) to infer
+ * `TData`/`TVariables` from the document; a raw string still works with explicit
+ * type params.
+ */
 export function useAuthoredQuery<TData = Variables, TVariables extends Variables = Variables>(
-  document: string,
+  document: string | TypedDocumentNode<TData, TVariables>,
   variables?: TVariables,
   options: AuthoredQueryOptions = {},
 ): AuthoredQueryResult<TData> {
@@ -39,9 +46,15 @@ export type AuthoredMutate<TData, TVariables> = (
   variables?: TVariables,
 ) => Promise<TData | undefined>;
 
-/** Run a hand-authored mutation document; the runner throws on GraphQL error. */
+/**
+ * Run a hand-authored mutation document; the runner throws on GraphQL error.
+ *
+ * Pass a generated `TypedDocumentNode` (from `@angee/gql/<schema>`) to infer
+ * `TData`/`TVariables` from the document; a raw string still works with explicit
+ * type params.
+ */
 export function useAuthoredMutation<TData = Variables, TVariables extends Variables = Variables>(
-  document: string,
+  document: string | TypedDocumentNode<TData, TVariables>,
 ): [AuthoredMutate<TData, TVariables>, { fetching: boolean; error: Error | null }] {
   const { execute, fetching, error } = useDocumentMutation<TData, TVariables>(document);
   const mutate = useCallback<AuthoredMutate<TData, TVariables>>(
@@ -61,9 +74,15 @@ interface SubscriptionEvent<TData> {
   version: number;
 }
 
-/** Subscribe to a hand-authored subscription document, firing `onData` per push. */
+/**
+ * Subscribe to a hand-authored subscription document, firing `onData` per push.
+ *
+ * Pass a generated `TypedDocumentNode` (from `@angee/gql/<schema>`) to infer
+ * `TData`/`TVariables` from the document; a raw string still works with explicit
+ * type params.
+ */
 export function useAuthoredSubscription<TData = Variables, TVariables extends Variables = Variables>(
-  document: string,
+  document: string | TypedDocumentNode<TData, TVariables>,
   variables?: TVariables,
   options: AuthoredSubscriptionOptions<TData> = {},
 ): { data: TData | undefined; fetching: boolean; error: Error | null } {

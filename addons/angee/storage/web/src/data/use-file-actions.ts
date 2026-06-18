@@ -1,14 +1,9 @@
 import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
-  FILE_DELETE_MUTATION,
-  FILE_RESTORE_MUTATION,
-  FILE_UPDATE_MUTATION,
-  type FileDeleteData,
-  type FileIdVariables,
-  type FileRestoreData,
-  type FileUpdateData,
-  type FileUpdateVariables,
+  StorageDeleteFile,
+  StorageRestoreFile,
+  StorageUpdateFile,
 } from "./documents";
 
 export interface FileActions {
@@ -34,15 +29,9 @@ export function useFileActions(
   options: { onChanged?: () => void } = {},
 ): FileActions {
   const { onChanged } = options;
-  const [deleteFile] = useAuthoredMutation<FileDeleteData, FileIdVariables>(
-    FILE_DELETE_MUTATION,
-  );
-  const [restoreFile] = useAuthoredMutation<FileRestoreData, FileIdVariables>(
-    FILE_RESTORE_MUTATION,
-  );
-  const [updateFile] = useAuthoredMutation<FileUpdateData, FileUpdateVariables>(
-    FILE_UPDATE_MUTATION,
-  );
+  const [deleteFile] = useAuthoredMutation(StorageDeleteFile);
+  const [restoreFile] = useAuthoredMutation(StorageRestoreFile);
+  const [updateFile] = useAuthoredMutation(StorageUpdateFile);
   const { busy, run } = useBusyRun(onChanged);
 
   return {

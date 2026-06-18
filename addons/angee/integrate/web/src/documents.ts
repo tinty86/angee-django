@@ -2,6 +2,7 @@
 // (DataPage reads the SDL); these are the non-CRUD operations a DataPage `<Action>`
 // invokes, typed the same way as other authored ops (e.g. iam's grant/revoke).
 
+import { graphql, type DocumentType } from "@angee/gql/console";
 import type { ActionOutcome, ByIdVariables } from "@angee/sdk";
 
 export const SYNC_INTEGRATION_MUTATION = `
@@ -36,18 +37,14 @@ export const TEST_WEBHOOK_DELIVERY_MUTATION = `
   }
 `;
 
-export const ROTATE_WEBHOOK_SECRET_MUTATION = `
+export const RotateWebhookSecret = graphql(`
   mutation RotateWebhookSecret($id: ID!) {
     rotateWebhookSecret(id: $id) { ok secret }
   }
-`;
+`);
 
 export interface TestWebhookDeliveryData {
   testWebhookDelivery: ActionResultData;
-}
-
-export interface RotateWebhookSecretData {
-  rotateWebhookSecret: { ok: boolean; secret: string };
 }
 
 // --- VCS console: integration picker, repo typeahead, and inventory actions --
@@ -57,7 +54,7 @@ export interface RotateWebhookSecretData {
 // non-CRUD action mutations a button invokes.
 
 /** VCS integrations for the add-repository dialog's integration picker. */
-export const VCS_INTEGRATIONS_QUERY = `
+export const IntegrateVcsIntegrations = graphql(`
   query IntegrateVcsIntegrations($pagination: OffsetPaginationInput) {
     vcsIntegrations(pagination: $pagination) {
       results {
@@ -66,10 +63,10 @@ export const VCS_INTEGRATIONS_QUERY = `
       }
     }
   }
-`;
+`);
 
 /** The add typeahead: host repositories matching a typed query, not yet inventoried. */
-export const SEARCH_REPOSITORIES_QUERY = `
+export const IntegrateSearchRepositories = graphql(`
   query IntegrateSearchRepositories($vcsIntegrationId: ID!, $query: String!) {
     searchRepositories(vcsIntegrationId: $vcsIntegrationId, query: $query) {
       name
@@ -79,10 +76,10 @@ export const SEARCH_REPOSITORIES_QUERY = `
       webUrl
     }
   }
-`;
+`);
 
 /** Inventory one picked repository; returns the created row. */
-export const ADD_REPOSITORY_MUTATION = `
+export const IntegrateAddRepository = graphql(`
   mutation IntegrateAddRepository($vcsIntegrationId: ID!, $name: String!) {
     addRepository(vcsIntegrationId: $vcsIntegrationId, name: $name) {
       id
@@ -90,14 +87,14 @@ export const ADD_REPOSITORY_MUTATION = `
       name
     }
   }
-`;
+`);
 
 /** Bulk-inventory every repository an account exposes. */
-export const DISCOVER_REPOSITORIES_MUTATION = `
+export const IntegrateDiscoverRepositories = graphql(`
   mutation IntegrateDiscoverRepositories($vcsIntegrationId: ID!, $org: String!) {
     discoverRepositories(vcsIntegrationId: $vcsIntegrationId, org: $org) { ok message }
   }
-`;
+`);
 
 /** Refresh every repository's sources for one VCS integration. */
 export const SYNC_VCS_INTEGRATION_MUTATION = `
@@ -113,69 +110,6 @@ export const REFRESH_SOURCE_MUTATION = `
   }
 `;
 
-/** Selection result for one `vcsIntegrations.results` item (the picker option). */
-export interface VcsIntegrationOption {
-  id: string;
-  displayName: string;
-}
-
-/** Selection result for `IntegrateVcsIntegrations`. */
-export interface VcsIntegrationsData {
-  vcsIntegrations: {
-    results: VcsIntegrationOption[];
-  };
-}
-
-export interface VcsIntegrationsVariables extends Record<string, unknown> {
-  pagination?: {
-    offset: number;
-    limit: number;
-  };
-}
-
-/** Selection result for one SDL `RepoCandidate` returned by the typeahead. */
-export interface RepoCandidate {
-  name: string;
-  org: string;
-  defaultBranch: string;
-  visibility: string;
-  webUrl: string;
-}
-
-/** Selection result for `IntegrateSearchRepositories`. */
-export interface SearchRepositoriesData {
-  searchRepositories: RepoCandidate[];
-}
-
-export interface SearchRepositoriesVariables extends Record<string, unknown> {
-  vcsIntegrationId: string;
-  query: string;
-}
-
-/** Selection result for `IntegrateAddRepository` (the created row). */
-export interface AddRepositoryData {
-  addRepository: {
-    id: string;
-    org: string;
-    name: string;
-  };
-}
-
-export interface AddRepositoryVariables extends Record<string, unknown> {
-  vcsIntegrationId: string;
-  name: string;
-}
-
-/** Selection result for `IntegrateDiscoverRepositories`. */
-export interface DiscoverRepositoriesData {
-  discoverRepositories: ActionResultData;
-}
-
-export interface DiscoverRepositoriesVariables extends Record<string, unknown> {
-  vcsIntegrationId: string;
-  org: string;
-}
-
 /** Selection result for `IntegrateSyncVcsIntegration`. */
 export interface SyncVcsIntegrationData {
   syncVcsIntegration: ActionResultData;
@@ -185,3 +119,8 @@ export interface SyncVcsIntegrationData {
 export interface RefreshSourceData {
   refreshSource: ActionResultData;
 }
+
+/** One host repository candidate the add typeahead lists (the SDL `RepoCandidate`). */
+export type RepoCandidate = DocumentType<
+  typeof IntegrateSearchRepositories
+>["searchRepositories"][number];

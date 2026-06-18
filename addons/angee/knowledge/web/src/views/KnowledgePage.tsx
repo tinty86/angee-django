@@ -19,14 +19,9 @@ import {
 import { useAuthoredQuery, useResourceRecord } from "@angee/sdk";
 
 import {
-  KNOWLEDGE_PAGES_QUERY,
-  KNOWLEDGE_PAGE_QUERY,
-  KNOWLEDGE_VAULTS_QUERY,
-  type KnowledgePageData,
-  type KnowledgePagesData,
-  type KnowledgeVaultsData,
-  type OffsetPaginationVariables,
-  type PageIdVariables,
+  KnowledgePage as KnowledgePageQuery,
+  KnowledgePages,
+  KnowledgeVaults,
 } from "../data/documents";
 import {
   KNOWLEDGE_PAGE_DND,
@@ -62,18 +57,12 @@ function pageDetailPath(id: string): string {
  */
 export function KnowledgePage(): ReactElement {
   const t = useKnowledgeT();
-  const variables = useMemo<OffsetPaginationVariables>(
+  const variables = useMemo(
     () => ({ pagination: { offset: 0, limit: KNOWLEDGE_LIST_LIMIT } }),
     [],
   );
-  const vaultsQuery = useAuthoredQuery<KnowledgeVaultsData, OffsetPaginationVariables>(
-    KNOWLEDGE_VAULTS_QUERY,
-    variables,
-  );
-  const pagesQuery = useAuthoredQuery<KnowledgePagesData, OffsetPaginationVariables>(
-    KNOWLEDGE_PAGES_QUERY,
-    variables,
-  );
+  const vaultsQuery = useAuthoredQuery(KnowledgeVaults, variables);
+  const pagesQuery = useAuthoredQuery(KnowledgePages, variables);
 
   const vaults = vaultsQuery.data?.vaults.results ?? [];
   const pages = pagesQuery.data?.pages.results ?? [];
@@ -94,15 +83,13 @@ export function KnowledgePage(): ReactElement {
     void navigate({ to: "/knowledge" });
   }, [navigate]);
 
-  const detailVariables = useMemo<PageIdVariables>(
+  const detailVariables = useMemo(
     () => ({ id: openPageId ?? "" }),
     [openPageId],
   );
-  const detailQuery = useAuthoredQuery<KnowledgePageData, PageIdVariables>(
-    KNOWLEDGE_PAGE_QUERY,
-    detailVariables,
-    { enabled: openPageId !== null },
-  );
+  const detailQuery = useAuthoredQuery(KnowledgePageQuery, detailVariables, {
+    enabled: openPageId !== null,
+  });
   const detail = detailQuery.data?.page ?? null;
 
   const [pinnedVaultId, setPinnedVaultId] = useState<string | null>(null);

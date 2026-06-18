@@ -34,13 +34,22 @@ const sdkMocks = vi.hoisted(() => ({
   invalidate: vi.fn(),
 }));
 
+// The hooks now receive a typed `graphql()` document (a parsed `DocumentNode`),
+// not a raw query string, so the mock routes on the operation name in its AST.
+function operationName(document: unknown): string {
+  const definition = (document as { definitions?: ReadonlyArray<unknown> })
+    ?.definitions?.[0];
+  return (definition as { name?: { value?: string } })?.name?.value ?? "";
+}
+
 vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   return {
     ...actual,
-    useAuthoredQuery: (document: string, variables: unknown) => {
-      if (document.includes("IntegrateVcsIntegrations")) return sdkMocks.integrations;
-      if (document.includes("IntegrateSearchRepositories")) {
+    useAuthoredQuery: (document: unknown, variables: unknown) => {
+      const name = operationName(document);
+      if (name === "IntegrateVcsIntegrations") return sdkMocks.integrations;
+      if (name === "IntegrateSearchRepositories") {
         sdkMocks.lastSearchVars = variables;
         return sdkMocks.search;
       }

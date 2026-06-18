@@ -9,7 +9,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import { PLATFORM_EXPLORER_QUERY, type PlatformExplorerResult } from "../documents";
+import { PlatformExplorer } from "../documents";
 import { LinkedChips, TextRouteLink } from "../lib/cells";
 import { addonDetailPath, fieldsPath, modelDetailPath } from "../lib/paths";
 import { modelRows, type ModelRow } from "../lib/rows";
@@ -69,7 +69,7 @@ const groupOptions: readonly DataToolbarGroupOption[] = [
 ];
 
 export function ModelsPage(): ReactElement {
-  const query = useAuthoredQuery<PlatformExplorerResult>(PLATFORM_EXPLORER_QUERY);
+  const query = useAuthoredQuery(PlatformExplorer);
   const [addonScope] = useQueryState("addon", parseAsString);
   const rows = useMemo(() => {
     const all = modelRows(query.data?.platformExplorer?.models ?? []);

@@ -6,11 +6,7 @@ import {
 import { useAuthoredMutation } from "@angee/sdk";
 import { useCallback, useMemo, type ReactNode } from "react";
 
-import {
-  LOGIN_COMPLETE_MUTATION,
-  type LoginCompleteData,
-  type LoginCompleteVariables,
-} from "./documents";
+import { IamLoginComplete } from "./documents.public";
 import { useIamT } from "./i18n";
 import { loginCallbackRedirectUri } from "./redirects";
 
@@ -30,10 +26,7 @@ export function OAuthCallbackPage(): ReactNode {
     }),
     [t],
   );
-  const [loginComplete] = useAuthoredMutation<
-    LoginCompleteData,
-    LoginCompleteVariables
-  >(LOGIN_COMPLETE_MUTATION);
+  const [loginComplete] = useAuthoredMutation(IamLoginComplete);
 
   const complete = useCallback<CallbackExchange>(
     async (args) => {

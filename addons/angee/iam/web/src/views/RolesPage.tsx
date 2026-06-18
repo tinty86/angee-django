@@ -7,10 +7,7 @@ import {
 } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
-import {
-  IAM_ROLES_QUERY,
-  type IAMRolesData,
-} from "../documents";
+import { IamRoles } from "../documents";
 import {
   roleRows,
   type IAMRoleRow,
@@ -31,7 +28,7 @@ const roleColumns: readonly ListColumn<IAMRoleRow>[] = [
 ];
 
 export function RolesPage(): ReactElement {
-  const query = useAuthoredQuery<IAMRolesData>(IAM_ROLES_QUERY);
+  const query = useAuthoredQuery(IamRoles);
   const rows = useMemo(() => roleRows(query.data?.roles ?? []), [query.data]);
 
   return (

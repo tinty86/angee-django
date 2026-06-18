@@ -22,7 +22,7 @@ import {
 
 import { useOperatorT } from "../i18n";
 import {
-  OPERATOR_CONNECTION_QUERY,
+  OperatorConnectionQuery,
   SNAPSHOT_QUERY,
   STACK_SNAPSHOT_SUBSCRIPTION,
 } from "./documents";
@@ -68,10 +68,6 @@ function wantVariable(section: keyof OperatorSnapshotSections): WantVariable {
 /** The snapshot query's `@include` toggles — one per pane (`$wantOverview`…). */
 type SnapshotVariables = Record<WantVariable, boolean>;
 
-interface OperatorConnectionQueryData {
-  operatorConnection?: unknown;
-}
-
 type ConnectionState =
   | { kind: "loading" }
   | { kind: "not-configured" }
@@ -112,11 +108,7 @@ export function OperatorTransportProvider({
       }
       try {
         const result = await consoleClient
-          .query<OperatorConnectionQueryData, EmptyVariables>(
-            OPERATOR_CONNECTION_QUERY,
-            {},
-            { requestPolicy: "network-only" },
-          )
+          .query(OperatorConnectionQuery, {}, { requestPolicy: "network-only" })
           .toPromise();
         if (!signal.active) return;
         if (result.error) {

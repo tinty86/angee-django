@@ -3,17 +3,26 @@
 // authenticated connection); the generated types in __generated__/operator.ts
 // describe their results.
 
+import { graphql } from "@angee/gql/console";
+
 // The Django console field that hands the browser the daemon endpoint + a
 // short-lived scoped token. This one targets Django's console schema, not the
-// daemon.
-export const OPERATOR_CONNECTION_QUERY = `
+// daemon, so it is typed against the generated console documents.
+//
+// CONVENTION NOTE: the daemon operations below stay raw template strings on
+// purpose. This file is named `documents.ts`, which the example's *console*
+// codegen run globs — a daemon op tagged `graphql()` here would be plucked and
+// fail against the console schema. Migrating the daemon ops to typed documents is
+// a deferred follow-up that needs its own client-preset run over
+// `schema/operator.graphql` and a non-`documents.ts` filename.
+export const OperatorConnectionQuery = graphql(`
   query OperatorConnection {
     operatorConnection {
       endpoint
       token
     }
   }
-`;
+`);
 
 // The per-root field selections the console reads — the single source of truth
 // for "what the snapshot is" (the field body of each root). The polling

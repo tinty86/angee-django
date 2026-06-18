@@ -19,16 +19,10 @@ import {
 
 import { useIntegrateT } from "../i18n";
 import {
-  ADD_REPOSITORY_MUTATION,
-  SEARCH_REPOSITORIES_QUERY,
-  VCS_INTEGRATIONS_QUERY,
-  type AddRepositoryData,
-  type AddRepositoryVariables,
+  IntegrateAddRepository,
+  IntegrateSearchRepositories,
+  IntegrateVcsIntegrations,
   type RepoCandidate,
-  type SearchRepositoriesData,
-  type SearchRepositoriesVariables,
-  type VcsIntegrationsData,
-  type VcsIntegrationsVariables,
 } from "../documents";
 
 /** The repository model whose list refetches after an add. */
@@ -59,7 +53,7 @@ export function AddRepositoryControl(): React.ReactElement {
   );
 }
 
-const INTEGRATION_VARS: VcsIntegrationsVariables = {
+const INTEGRATION_VARS = {
   pagination: { offset: 0, limit: INTEGRATION_LIMIT },
 };
 
@@ -71,10 +65,11 @@ function AddRepositoryDialog({
   onOpenChange: (open: boolean) => void;
 }): React.ReactElement {
   const t = useIntegrateT();
-  const integrationsQuery = useAuthoredQuery<
-    VcsIntegrationsData,
-    VcsIntegrationsVariables
-  >(VCS_INTEGRATIONS_QUERY, INTEGRATION_VARS, { enabled: open });
+  const integrationsQuery = useAuthoredQuery(
+    IntegrateVcsIntegrations,
+    INTEGRATION_VARS,
+    { enabled: open },
+  );
   const integrationOptions = React.useMemo<readonly RelationOption[]>(
     () =>
       (integrationsQuery.data?.vcsIntegrations.results ?? []).map(
@@ -96,20 +91,16 @@ function AddRepositoryDialog({
   const [query, setQuery] = React.useState("");
   const [debouncedQuery] = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS);
   const searchEnabled = open && vcsIntegrationId !== "" && debouncedQuery !== "";
-  const searchVars = React.useMemo<SearchRepositoriesVariables>(
+  const searchVars = React.useMemo(
     () => ({ vcsIntegrationId, query: debouncedQuery }),
     [vcsIntegrationId, debouncedQuery],
   );
-  const searchQuery = useAuthoredQuery<
-    SearchRepositoriesData,
-    SearchRepositoriesVariables
-  >(SEARCH_REPOSITORIES_QUERY, searchVars, { enabled: searchEnabled });
+  const searchQuery = useAuthoredQuery(IntegrateSearchRepositories, searchVars, {
+    enabled: searchEnabled,
+  });
   const candidates = searchQuery.data?.searchRepositories ?? [];
 
-  const [addRepository] = useAuthoredMutation<
-    AddRepositoryData,
-    AddRepositoryVariables
-  >(ADD_REPOSITORY_MUTATION);
+  const [addRepository] = useAuthoredMutation(IntegrateAddRepository);
   const refreshRepositories = useModelInvalidation(REPOSITORY_MODEL);
 
   // The repo currently being inventoried, the set already added this session, and

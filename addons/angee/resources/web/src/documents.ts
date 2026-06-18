@@ -1,8 +1,10 @@
 // Hand-authored console query for the resource import ledger. The resources
-// backend owns the schema (`addons/angee/resources/schema.py`); this string and
-// its types mirror it, the same no-codegen pattern IAM uses.
+// backend owns the schema (`addons/angee/resources/schema.py`); this document
+// mirrors it, the same no-codegen pattern IAM uses.
 
-export const RESOURCE_LEDGER_QUERY = `
+import { graphql, type DocumentType } from "@angee/gql/console";
+
+export const ResourceLedger = graphql(`
   query ResourceLedger {
     resourceLedger {
       id
@@ -15,19 +17,8 @@ export const RESOURCE_LEDGER_QUERY = `
       loadedAt
     }
   }
-`;
+`);
 
-export interface ResourceLedgerRowData {
-  id: string;
-  sourceAddon: string;
-  sourcePath: string;
-  tier: string;
-  contentHash: string;
-  targetModel: string;
-  targetId: string;
-  loadedAt: string;
-}
-
-export interface ResourceLedgerResult {
-  resourceLedger: readonly ResourceLedgerRowData[];
-}
+/** One ledger row, derived from the `ResourceLedger` query result. */
+export type ResourceLedgerRowData =
+  DocumentType<typeof ResourceLedger>["resourceLedger"][number];

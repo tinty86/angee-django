@@ -27,6 +27,7 @@ import { AppRuntimeProvider } from "@angee/sdk";
 import { ModalsHost, ToastProvider, baseIcons, defaultWidgets } from "@angee/base";
 
 import { GrantsPage } from "./GrantsPage";
+import { documentName } from "./test-documents";
 
 // The model-driven pages (Users / OIDC Providers) are exercised end-to-end (they
 // carry no bespoke logic to unit-test, like the notes/storage DataPages).
@@ -49,8 +50,8 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   return {
     ...actual,
-    useAuthoredQuery: (document: string) => {
-      if (document.includes("IamGrants")) return sdkMocks.grants;
+    useAuthoredQuery: (document: unknown) => {
+      if (documentName(document) === "IamGrants") return sdkMocks.grants;
       return { data: undefined, fetching: false, error: null, refetch: vi.fn() };
     },
     useAuthoredMutation: () => [sdkMocks.revokeRole, sdkMocks.revokeState],

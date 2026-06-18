@@ -1,18 +1,10 @@
 import { useAuthoredMutation, useBusyRun } from "@angee/sdk";
 
 import {
-  CREATE_PAGE_MUTATION,
-  CREATE_VAULT_MUTATION,
-  DELETE_PAGE_MUTATION,
-  UPDATE_PAGE_MUTATION,
-  type CreatePageData,
-  type CreatePageVariables,
-  type CreateVaultData,
-  type CreateVaultVariables,
-  type DeletePageData,
-  type DeletePageVariables,
-  type UpdatePageData,
-  type UpdatePageVariables,
+  KnowledgeCreatePage,
+  KnowledgeCreateVault,
+  KnowledgeDeletePage,
+  KnowledgeUpdatePage,
 } from "./documents";
 
 export interface PageActions {
@@ -41,22 +33,10 @@ export function usePageActions(
   options: { onChanged?: () => void } = {},
 ): PageActions {
   const { onChanged } = options;
-  const [createPageMutation] = useAuthoredMutation<
-    CreatePageData,
-    CreatePageVariables
-  >(CREATE_PAGE_MUTATION);
-  const [createVaultMutation] = useAuthoredMutation<
-    CreateVaultData,
-    CreateVaultVariables
-  >(CREATE_VAULT_MUTATION);
-  const [deletePageMutation] = useAuthoredMutation<
-    DeletePageData,
-    DeletePageVariables
-  >(DELETE_PAGE_MUTATION);
-  const [updatePageMutation] = useAuthoredMutation<
-    UpdatePageData,
-    UpdatePageVariables
-  >(UPDATE_PAGE_MUTATION);
+  const [createPageMutation] = useAuthoredMutation(KnowledgeCreatePage);
+  const [createVaultMutation] = useAuthoredMutation(KnowledgeCreateVault);
+  const [deletePageMutation] = useAuthoredMutation(KnowledgeDeletePage);
+  const [updatePageMutation] = useAuthoredMutation(KnowledgeUpdatePage);
   const { busy, run } = useBusyRun(onChanged);
 
   return {

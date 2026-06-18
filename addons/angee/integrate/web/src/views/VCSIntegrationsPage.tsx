@@ -13,10 +13,8 @@ import { runActionResult, useAuthoredMutation } from "@angee/sdk";
 
 import { useIntegrateT } from "../i18n";
 import {
-  DISCOVER_REPOSITORIES_MUTATION,
+  IntegrateDiscoverRepositories,
   SYNC_VCS_INTEGRATION_MUTATION,
-  type DiscoverRepositoriesData,
-  type DiscoverRepositoriesVariables,
   type IdVariables,
   type SyncVcsIntegrationData,
 } from "../documents";
@@ -42,10 +40,7 @@ export function VCSIntegrationsPage(): React.ReactElement {
   const [syncVcs] = useAuthoredMutation<SyncVcsIntegrationData, IdVariables>(
     SYNC_VCS_INTEGRATION_MUTATION,
   );
-  const [discover] = useAuthoredMutation<
-    DiscoverRepositoriesData,
-    DiscoverRepositoriesVariables
-  >(DISCOVER_REPOSITORIES_MUTATION);
+  const [discover] = useAuthoredMutation(IntegrateDiscoverRepositories);
 
   // `backendClass` reads as the UPPERCASE enum member but its create input is a
   // lowercase String key; `useEnumOptions` lower-cases the option values, and
