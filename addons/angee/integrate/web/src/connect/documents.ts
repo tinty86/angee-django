@@ -97,3 +97,19 @@ export interface RevealCredentialData {
 }
 
 export type RevealCredentialVariables = ByIdVariables;
+
+export const DISCOVER_OAUTH_ENDPOINTS_MUTATION = `
+  mutation IntegrateDiscoverOauthEndpoints($id: ID!) {
+    discoverOauthEndpoints(id: $id) {
+      ok
+      message
+    }
+  }
+`;
+
+/** Selection result for SDL `ActionResult` (discover endpoints). */
+export interface DiscoverOauthEndpointsData {
+  discoverOauthEndpoints: { ok: boolean; message: string };
+}
+
+export type DiscoverOauthEndpointsVariables = ByIdVariables;

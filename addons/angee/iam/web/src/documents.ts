@@ -162,16 +162,6 @@ export const IAM_GRANT_ROLE_MUTATION = `
   }
 `;
 
-export const IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION = `
-  mutation IamDiscoverOidcEndpoints($id: ID!) {
-    discoverOidcEndpoints(id: $id) { ok message }
-  }
-`;
-
-/** Selection result for `IamDiscoverOidcEndpoints`. */
-export interface DiscoverOidcEndpointsData {
-  discoverOidcEndpoints: { ok: boolean; message: string };
-}
 
 /** Variables addressing one record by global id. */
 export interface IamIdVariables extends Record<string, unknown> {

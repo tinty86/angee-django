@@ -28,6 +28,7 @@ from angee.graphql.actions import ActionResult
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
 from angee.graphql.deletion import DeletePreview
+from angee.graphql.impl import ImplChoicesQuery
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
@@ -36,6 +37,7 @@ from angee.iam.permissions import session_user as _session_user
 from angee.iam.schema import UserType
 from angee.integrate import connect as _connect
 from angee.integrate.credentials import handler_for
+from angee.integrate.impl import IntegrationImpl
 from angee.integrate.oauth import flow, state
 from angee.integrate.oauth.client import OAuthClientProtocol
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, INVALID_STATE, OAuthFlowError
@@ -255,12 +257,6 @@ class OAuthClientInput:
     email_claim: str = "email"
     display_name_claim: str = ""
     avatar_url_claim: str = ""
-    issuer: str = ""
-    jwks_uri: str = ""
-    login_enabled: bool = False
-    link_on_email_match: bool = False
-    create_on_login: bool = False
-    allowed_email_domains: list[str] = strawberry.field(default_factory=list)
 
 
 @strawberry.input
@@ -295,12 +291,6 @@ class OAuthClientPatch:
     email_claim: str | None = strawberry.UNSET
     display_name_claim: str | None = strawberry.UNSET
     avatar_url_claim: str | None = strawberry.UNSET
-    issuer: str | None = strawberry.UNSET
-    jwks_uri: str | None = strawberry.UNSET
-    login_enabled: bool | None = strawberry.UNSET
-    link_on_email_match: bool | None = strawberry.UNSET
-    create_on_login: bool | None = strawberry.UNSET
-    allowed_email_domains: list[str] | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -532,11 +522,11 @@ def _flow_error_message(error: OAuthFlowError) -> str:
     return error.provider_message or str(error)
 
 
-def _integration_impl_class(impl_class: str) -> type:
+def _integration_impl_class(impl_class: str) -> type[IntegrationImpl]:
     """Return the configured implementation class for one integration key."""
 
     field = cast(Any, Integration._meta.get_field("impl_class"))
-    return cast(type, field.resolve_class(impl_class))
+    return cast(type[IntegrationImpl], field.resolve_class(impl_class))
 
 
 def _oauth_client_for_integration(integration: Any) -> Any:
@@ -688,6 +678,31 @@ class ConnectionMutation:
             mode=mode,
             redirect_uri=effective_redirect_uri,
         )
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def discover_oauth_endpoints(self, id: relay.GlobalID) -> ActionResult:
+        """Fetch the provider's discovery document and fill this client's blank endpoints.
+
+        The resolved authorize/token/userinfo endpoints (and any composed extension
+        endpoints, e.g. OIDC issuer/JWKS) are persisted on the OAuth client row, so
+        the operator never types them by hand. Requires a discovery URL on the row.
+        """
+
+        with system_context(reason="integrate.graphql.discover_oauth_endpoints"):
+            oauth_client = instance_from_public_id(
+                OAuthClient, id.node_id, queryset=OAuthClient._default_manager.all()
+            )
+            if oauth_client is None:
+                raise ValueError(f"OAuth client {id!s} was not found")
+            if not str(getattr(oauth_client, "discovery_url", "") or ""):
+                return ActionResult(ok=False, message="Set a discovery URL first.")
+            try:
+                discovery = oauth_client.discover_endpoints()
+            except Exception as error:  # noqa: BLE001 — surface discovery failure to the operator
+                return ActionResult(ok=False, message=f"Discovery failed: {error}")
+            oauth_client.save()
+        issuer = discovery.get("issuer") if isinstance(discovery, dict) else None
+        return ActionResult(ok=True, message=f"Discovered endpoints for {issuer or 'provider'}.")
 
     @strawberry.mutation
     def connect_integration(
@@ -1265,7 +1280,7 @@ class IntegrationCreateMutation:
         owner = _user_from_global_id(data.owner)
         impl_key = _create_impl_key(data.impl_class)
         impl_class = _integration_impl_class(impl_key)
-        integration_config = {} if data.config in (strawberry.UNSET, None) else data.config
+        integration_config: Any = {} if data.config in (strawberry.UNSET, None) else data.config
         companion_values = _companion_create_values(data)
         with system_context(reason="integrate.graphql.integration.create"), transaction.atomic():
             integration = Integration.objects.create(
@@ -1800,7 +1815,9 @@ schemas = {
         ],
     },
     "console": {
-        "query": [IntegrateConnectionConsoleQuery, IntegrateConsoleQuery, VCSConsoleQuery],
+        # The impl-picker lookup (Integration.impl_class / OAuthClient.provider_type
+        # live here); a generic framework query contributed where its models do.
+        "query": [ImplChoicesQuery, IntegrateConnectionConsoleQuery, IntegrateConsoleQuery, VCSConsoleQuery],
         "mutation": [
             _OAUTH_CLIENT_MUTATION,
             IntegrateExternalAccountMutation,

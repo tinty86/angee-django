@@ -1354,7 +1354,7 @@ def _create_auth_app_tables() -> list[Any]:
     return _create_connection_tables(auth_models)
 
 
-def test_discover_oidc_endpoints_is_admin_gated_and_validates_discovery_url(
+def test_discover_oauth_endpoints_is_admin_gated_and_validates_discovery_url(
     iam_connection_tables: None,
 ) -> None:
     """Discover is admin-gated and reports when no discovery URL is configured."""
@@ -1366,13 +1366,13 @@ def test_discover_oidc_endpoints_is_admin_gated_and_validates_discovery_url(
     client = _oauth_client("discoverable", discovery_url="")
     oauth_client_id = relay.to_base64("OAuthClientType", client.sqid)
     console_schema = _schema("console")
-    discover = "mutation($id: ID!){ discoverOidcEndpoints(id: $id){ ok message } }"
+    discover = "mutation($id: ID!){ discoverOauthEndpoints(id: $id){ ok message } }"
 
     assert _execute(console_schema, discover, {"id": oauth_client_id}, user=plain).errors is not None
 
     result = _data(
         _execute(console_schema, discover, {"id": oauth_client_id}, user=admin)
-    )["discoverOidcEndpoints"]
+    )["discoverOauthEndpoints"]
     assert result["ok"] is False
     assert "discovery url" in result["message"].lower()
 

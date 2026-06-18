@@ -16,11 +16,6 @@ from typing import Any, ClassVar
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 
-# A field value counts as "blank" (eligible for a default) when it is one of
-# these — never ``0``/``False``, which are meaningful explicit values.
-_BLANK_VALUES: tuple[Any, ...] = (None, "", [], {}, ())
-
-
 class ImplBase:
     """Base for an implementation selectable by an ``ImplClassField`` key.
 
@@ -80,7 +75,8 @@ class ImplBase:
         — defaults are a starting point, not a live binding. A foreign-key default
         given as a string is resolved against the related model's ``slug`` natural
         key; a missing target leaves the FK unset. ``blank_only`` (the default)
-        never overwrites a value the row already has.
+        seeds only fields still at their declared default, the create-time "unset"
+        signal — so it never overwrites a value the caller set.
         """
 
         for field_name, value in cls.effective_defaults().items():
@@ -91,7 +87,10 @@ class ImplBase:
             if field.many_to_one and isinstance(value, str):
                 cls._materialize_fk(instance, field, value, blank_only=blank_only)
                 continue
-            if blank_only and getattr(instance, field_name) not in _BLANK_VALUES:
+            # Compare to the field's declared default — not a fixed blank set — so a
+            # boolean impl default (e.g. ``login_enabled=True`` over a model default
+            # of ``False``) is seeded too, while a value the caller set is kept.
+            if blank_only and getattr(instance, field_name) != field.get_default():
                 continue
             setattr(instance, field_name, value)
 

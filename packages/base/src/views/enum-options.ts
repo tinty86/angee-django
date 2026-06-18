@@ -44,8 +44,8 @@ interface ImplChoicesData {
  * returns that impl's defaults keyed by *camelCase form field name*, ready to pass
  * to a `<Field prefill>`. The server (`implChoices`) owns the per-impl defaults
  * (merged along the impl MRO); this only re-keys snake_case model fields to the
- * camelCase the form uses. Defaults seed *blank* siblings, so the user can still
- * override before saving (the backend also materialises them on create).
+ * camelCase the form uses. Picking an impl loads its full preset (overwriting those
+ * fields, so boolean defaults land too); the backend also materialises them on create.
  */
 export function useImplPrefill(
   model: string,

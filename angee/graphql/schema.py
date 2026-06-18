@@ -23,7 +23,6 @@ from strawberry.utils.str_converters import to_camel_case
 
 from angee.addons import resolve_addon_reference
 from angee.graphql.extension import extension_target
-from angee.graphql.impl import ImplChoice, ImplChoicesQuery
 from angee.graphql.introspection import (
     django_model,
     surface_field_names,
@@ -41,13 +40,15 @@ SCHEMA_PART_KEYS: tuple[str, ...] = (
     "types",
     "extensions",
     "type_extensions",
+    "input_extensions",
 )
 """GraphQL merge buckets accepted from addon schema declarations."""
 
-_NON_ROOT_KEYS = {"types", "extensions", "type_extensions"}
+_NON_ROOT_KEYS = {"types", "extensions", "type_extensions", "input_extensions"}
 _ROOT_TYPE_NAMES = {key: key.title() for key in SCHEMA_PART_KEYS if key not in _NON_ROOT_KEYS}
 
 _APPLIED_EXTENSIONS_ATTR = "__angee_applied_type_extensions__"
+_INPUT_OVERRIDE_ATTR = "__angee_input_override__"
 """Marker on a target Strawberry type recording which extensions are already merged."""
 
 
@@ -144,6 +145,10 @@ class SchemaParts:
     """Strawberry types (marked with ``extends_type``) whose fields are merged onto
     an upstream type at build — the GraphQL parallel to a model ``extends``."""
 
+    input_extensions: tuple[object, ...] = ()
+    """Strawberry inputs (marked with ``extends_input``) whose fields are merged onto
+    an upstream hand-written crud input at build — the write-side parallel."""
+
     @classmethod
     def from_mapping(
         cls,
@@ -169,6 +174,7 @@ class SchemaParts:
             types=self._dedupe_by_identity(self.types + other.types),
             extensions=self._dedupe_by_identity(self.extensions + other.extensions),
             type_extensions=self._dedupe_by_identity(self.type_extensions + other.type_extensions),
+            input_extensions=self._dedupe_by_identity(self.input_extensions + other.input_extensions),
         )
 
     @staticmethod
@@ -199,6 +205,7 @@ class GraphQLSchemas:
         self.addons = tuple(addons)
         self._builds: dict[str, strawberry.Schema] = {}
         self._type_extensions_applied = False
+        self._input_extensions_applied = False
 
     @classmethod
     def from_discovery(cls) -> GraphQLSchemas:
@@ -265,15 +272,27 @@ class GraphQLSchemas:
                 applied.add(id(extension))
                 self._apply_type_extension(extension)
 
-    def _apply_type_extension(self, extension: object) -> None:
-        """Append one ``extends_type`` donor's fields onto its target's definition.
+    def _ensure_input_extensions_applied(self) -> None:
+        """Merge every contributed ``input_extensions`` field onto its target input.
 
-        Idempotent across schema collections: the target is a global Strawberry type
-        object shared by every build, so each extension is recorded on the target and
-        applied at most once (a second collection skips it rather than re-adding the
-        field). A field name already present from a *different* source is a genuine
-        collision and fails fast.
+        The write-side parallel of ``_ensure_type_extensions_applied``: applied once,
+        before any schema builds, so an upstream hand-written crud input carries its
+        downstream-contributed fields wherever the create/update mutation reads it.
         """
+
+        if self._input_extensions_applied:
+            return
+        self._input_extensions_applied = True
+        applied: set[int] = set()
+        for parts in self.parts.values():
+            for extension in parts.input_extensions:
+                if id(extension) in applied:
+                    continue
+                applied.add(id(extension))
+                self._apply_input_extension(extension)
+
+    def _apply_type_extension(self, extension: object) -> None:
+        """Append one ``extends_type`` donor's fields onto its target type's definition."""
 
         target = extension_target(extension)
         if target is None:
@@ -281,6 +300,62 @@ class GraphQLSchemas:
                 f"{surface_name(extension)} is listed in type_extensions but is not "
                 "marked with @extends_type(TargetType)"
             )
+        self._merge_extension_fields(extension, target)
+
+    def _apply_input_extension(self, extension: object) -> None:
+        """Override a crud input in place with a downstream subclass's combined shape.
+
+        The donor is a ``@strawberry.input`` subclass of the upstream crud input it
+        extends (e.g. ``OAuthClientOidcInput(OAuthClientInput)``) — the write-side
+        parallel of ``extends_type``. Dataclass inheritance already gave the subclass a
+        combined ``__init__`` over the base + added fields; ``crud`` captured the base
+        input eagerly, so we merge the donor's *added* fields onto the base's object
+        definition (the SDL) and adopt the subclass's ``__init__`` on the base, so the
+        instance the crud mutation builds accepts them. One override per base input — a
+        second, different donor for the same base fails fast.
+        """
+
+        target = self._input_extension_base(extension)
+        overriding = getattr(target, _INPUT_OVERRIDE_ATTR, None)
+        if overriding is extension:
+            return
+        if overriding is not None:
+            raise ImproperlyConfigured(
+                f"crud input {surface_name(target)} is already extended by "
+                f"{surface_name(overriding)}; {surface_name(extension)} cannot also extend it"
+            )
+        setattr(target, _INPUT_OVERRIDE_ATTR, extension)
+        target_def = get_object_definition(target, strict=True)
+        donor_def = get_object_definition(cast(type, extension), strict=True)
+        existing = {field.name for field in target_def.fields}
+        for field in donor_def.fields:
+            if field.name in existing:
+                continue  # an inherited base field — already on the target
+            target_def.fields.append(copy.copy(field))
+            existing.add(field.name)
+        setattr(target, "__init__", cast(Any, extension).__init__)
+
+    def _input_extension_base(self, extension: object) -> object:
+        """Return the upstream crud input a donor subclasses (its nearest Strawberry base)."""
+
+        for base in type.mro(cast(type, extension))[1:]:
+            if get_object_definition(base, strict=False) is not None:
+                return base
+        raise ImproperlyConfigured(
+            f"{surface_name(extension)} in input_extensions must subclass the crud "
+            "input it extends"
+        )
+
+    def _merge_extension_fields(self, extension: object, target: object) -> None:
+        """Append a donor's fields onto a target type/input definition, once per target.
+
+        Idempotent across schema collections: the target is a global Strawberry object
+        shared by every build, so each donor is recorded on the target and applied at
+        most once (a second collection skips it rather than re-adding the field). The
+        field objects are copied so donor and target never share one. A field name
+        already present from a *different* source is a genuine collision and fails fast.
+        """
+
         applied = cast(set, getattr(target, _APPLIED_EXTENSIONS_ATTR, None) or set())
         setattr(target, _APPLIED_EXTENSIONS_ATTR, applied)
         if id(extension) in applied:
@@ -291,7 +366,7 @@ class GraphQLSchemas:
         for field in donor_def.fields:
             if field.name in existing:
                 raise ImproperlyConfigured(
-                    f"type extension {surface_name(extension)} adds field {field.name!r} "
+                    f"extension {surface_name(extension)} adds field {field.name!r} "
                     f"already declared on {target_def.name}"
                 )
             target_def.fields.append(copy.copy(field))
@@ -305,6 +380,7 @@ class GraphQLSchemas:
         """Build the merged live Strawberry schema named ``name``."""
 
         self._ensure_type_extensions_applied()
+        self._ensure_input_extensions_applied()
         try:
             parts = self.parts[name]
         except KeyError as error:
@@ -313,7 +389,7 @@ class GraphQLSchemas:
                 f"GraphQL schema {name!r} has no contributions; available schemas: {available}"
             ) from error
 
-        query = self._merge_root(name, "query", (ImplChoicesQuery, *parts.query))
+        query = self._merge_root(name, "query", parts.query)
         if query is None:
             raise ImproperlyConfigured(f"GraphQL schema {name!r} has no query root")
         self._assert_rebac_managers(name, parts.types)
@@ -326,7 +402,7 @@ class GraphQLSchemas:
                 "subscription",
                 parts.subscription,
             ),
-            types=cast(list[Any], [ImplChoice, *parts.types]),
+            types=cast(list[Any], list(parts.types)),
             extensions=cast(
                 list[Any],
                 [

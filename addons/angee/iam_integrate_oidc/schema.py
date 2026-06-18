@@ -17,14 +17,11 @@ from django.conf import settings
 from django.contrib.auth import login as auth_login
 from django.db.models import Q
 from rebac import system_context
-from strawberry import auto, relay
+from strawberry import auto
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.base.models import instance_from_public_id
-from angee.graphql.actions import ActionResult
 from angee.graphql.extension import extends_type
-from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.permissions import request_from_info as _request
 from angee.iam.permissions import session_user as _session_user
 from angee.iam.schema import UserType
@@ -33,7 +30,13 @@ from angee.iam_integrate_oidc.protocol import OAuthClientOidcProtocol
 from angee.integrate.oauth import flow as oauth_flow
 from angee.integrate.oauth import state as oauth_state
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, OAuthFlowError
-from angee.integrate.schema import ExternalAccountType, OAuthClientType, OAuthStartPayload
+from angee.integrate.schema import (
+    ExternalAccountType,
+    OAuthClientInput,
+    OAuthClientPatch,
+    OAuthClientType,
+    OAuthStartPayload,
+)
 
 OAuthClient = apps.get_model("integrate", "OAuthClient")
 
@@ -317,35 +320,6 @@ class OidcLoginMutation:
 # --- Admin: direct OAuth-client OIDC fields -------------------------------------
 
 
-@strawberry.type
-class OAuthClientOidcActionMutation:
-    """Operational actions on an OIDC login provider."""
-
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
-    def discover_oidc_endpoints(self, id: relay.GlobalID) -> ActionResult:
-        """Fetch the provider's OIDC discovery document and fill blank endpoints.
-
-        Addressed by the OAuth client id; the resolved endpoints are persisted on
-        the single OAuth client row.
-        """
-
-        with system_context(reason="iam_integrate_oidc.graphql.discover_oidc_endpoints"):
-            oauth_client = instance_from_public_id(
-                OAuthClient, id.node_id, queryset=OAuthClient._default_manager.all()
-            )
-            if oauth_client is None:
-                raise ValueError(f"OAuth client {id!s} was not found")
-            if not str(getattr(oauth_client, "discovery_url", "") or ""):
-                return ActionResult(ok=False, message="Set a discovery URL first.")
-            try:
-                discovery = oauth_client.discover_endpoints()
-            except Exception as error:  # noqa: BLE001 — surface discovery failure to the operator
-                return ActionResult(ok=False, message=f"Discovery failed: {error}")
-            oauth_client.save()
-        issuer = discovery.get("issuer") if isinstance(discovery, dict) else None
-        return ActionResult(ok=True, message=f"Discovered endpoints for {issuer or 'provider'}.")
-
-
 @extends_type(OAuthClientType)
 @strawberry_django.type(OAuthClient)
 class OAuthClientOidcExtension:
@@ -368,6 +342,37 @@ class OAuthClientOidcExtension:
         return cast(list[str], cast(Any, self).allowed_email_domain_values)
 
 
+@strawberry.input
+class OAuthClientOidcInput(OAuthClientInput):
+    """OIDC login write fields added to integrate's OAuth client create input.
+
+    A ``@strawberry.input`` subclass of ``OAuthClientInput``: dataclass inheritance
+    gives it the base OAuth fields plus these, and ``input_extensions`` folds the
+    combination onto the base input that integrate's ``crud`` instantiates — the
+    write-side parallel of ``OAuthClientOidcExtension``, so ``integrate`` stays
+    OIDC-agnostic and a project without this addon keeps an OAuth-only input.
+    """
+
+    issuer: str = ""
+    jwks_uri: str = ""
+    login_enabled: bool = False
+    link_on_email_match: bool = False
+    create_on_login: bool = False
+    allowed_email_domains: list[str] = strawberry.field(default_factory=list)
+
+
+@strawberry.input
+class OAuthClientOidcPatch(OAuthClientPatch):
+    """OIDC login write fields added to integrate's OAuth client update input."""
+
+    issuer: str | None = strawberry.UNSET
+    jwks_uri: str | None = strawberry.UNSET
+    login_enabled: bool | None = strawberry.UNSET
+    link_on_email_match: bool | None = strawberry.UNSET
+    create_on_login: bool | None = strawberry.UNSET
+    allowed_email_domains: list[str] | None = strawberry.UNSET
+
+
 _PUBLIC_TYPES: list[type] = [
     AvailableConnection,
     LoginCompletePayload,
@@ -387,9 +392,10 @@ schemas = {
     },
     "console": {
         "query": [OidcLoginQuery],
-        "mutation": [OidcLoginMutation, OAuthClientOidcActionMutation],
+        "mutation": [OidcLoginMutation],
         "types": _CONSOLE_TYPES,
         "type_extensions": [OAuthClientOidcExtension],
+        "input_extensions": [OAuthClientOidcInput, OAuthClientOidcPatch],
     },
 }
 """GraphQL contributions installed by the OIDC login addon."""

@@ -12,6 +12,7 @@ from typing import Any
 
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
 
 from angee.base.impl import ImplBase
 
@@ -33,7 +34,7 @@ class IntegrationImpl(ImplBase):
         self.companion = companion
 
     @classmethod
-    def companion_model_class(cls) -> type | None:
+    def companion_model_class(cls) -> type[models.Model] | None:
         """Return this implementation's companion model class, when declared."""
 
         if not cls.companion_model:

@@ -17,10 +17,13 @@ import { useIntegrateT } from "../../i18n";
 import {
   CONNECT_ACCOUNT_COMPLETE_MUTATION,
   CONNECT_ACCOUNT_START_MUTATION,
+  DISCOVER_OAUTH_ENDPOINTS_MUTATION,
   type ConnectAccountCompleteData,
   type ConnectAccountCompleteVariables,
   type ConnectAccountStartData,
   type ConnectAccountStartVariables,
+  type DiscoverOauthEndpointsData,
+  type DiscoverOauthEndpointsVariables,
 } from "../documents";
 import { connectCallbackRedirectUri } from "../redirects";
 
@@ -62,6 +65,27 @@ export function ProvidersPage(): React.ReactElement {
     ConnectAccountCompleteData,
     ConnectAccountCompleteVariables
   >(CONNECT_ACCOUNT_COMPLETE_MUTATION);
+  const [discoverEndpoints] = useAuthoredMutation<
+    DiscoverOauthEndpointsData,
+    DiscoverOauthEndpointsVariables
+  >(DISCOVER_OAUTH_ENDPOINTS_MUTATION);
+
+  // Fill the transport endpoints from the client's discovery URL (no manual entry).
+  // Persists onto the saved row and re-pulls it, so the form shows the resolved
+  // endpoints; available once a discovery URL is set.
+  const discover = React.useCallback(
+    async (ctx: ActionContext) => {
+      if (typeof ctx.record?.id !== "string") return;
+      const result = await discoverEndpoints({ id: ctx.record.id });
+      const payload = result?.discoverOauthEndpoints;
+      if (payload && !payload.ok) {
+        throw new Error(payload.message || t("integrate.providers.discover.failed"));
+      }
+      ctx.refresh();
+      return payload?.message ?? t("integrate.providers.discover.done");
+    },
+    [discoverEndpoints, t],
+  );
 
   const connect = React.useCallback(
     async (ctx: ActionContext) => {
@@ -158,8 +182,9 @@ export function ProvidersPage(): React.ReactElement {
             prefill={providerTypePrefill}
             createOnly
           />
-          {/* Slug auto-derives from the name (SlugFromNameMixin); editable on edit only. */}
-          <Field name="slug" editOnly />
+          {/* Slug widget: derives live from the display name (the `title` field)
+              while creating, until edited. Editable on its own afterwards. */}
+          <Field name="slug" widget="slug" />
           <Field name="icon" />
           <Field name="environment" />
           <Field name="clientId" />
@@ -195,6 +220,12 @@ export function ProvidersPage(): React.ReactElement {
           <Field name="authorizeParams" />
           <Field name="tokenParams" />
         </Group>
+        <Action
+          id="discover"
+          label={t("integrate.providers.action.discover")}
+          run={discover}
+          visibleWhen={(record) => fieldString(record.discoveryUrl) !== ""}
+        />
         <Action
           id="connect"
           label={t("integrate.providers.action.connect")}

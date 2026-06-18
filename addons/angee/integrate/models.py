@@ -55,8 +55,8 @@ from angee.integrate.events import EventKind
 from angee.integrate.impl import IntegrationImpl
 from angee.integrate.net import validate_public_url
 from angee.integrate.oauth.discovery import discovery_document
-from angee.integrate.oauth.providers import OAuthProviderType
 from angee.integrate.oauth.errors import OAuthFlowError
+from angee.integrate.oauth.providers import OAuthProviderType
 from angee.integrate.vcs.backend import VCSBackend
 from angee.integrate.vcs.templates import parse_template_meta
 from angee.integrate.webhooks import PinnedWebhookClient, WebhookDeliveryError
@@ -303,7 +303,9 @@ class OAuthClient(SqidMixin, SlugFromNameMixin, ImplDefaultsMixin, AuditMixin, A
             return "disabled"
         if not self.client_id:
             return "needs_client"
-        if not (self.authorize_endpoint and self.token_endpoint):
+        # A discovery URL resolves the transport endpoints at flow time
+        # (``discover_endpoints``), so it satisfies the endpoint requirement.
+        if not self.discovery_url and not (self.authorize_endpoint and self.token_endpoint):
             return "needs_endpoints"
         return "ready"
 
@@ -1210,7 +1212,7 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
         self.credential = credential
         self.account = getattr(credential, "external_account", None)
         if self.status == IntegrationStatus.DRAFT:
-            self.status = IntegrationStatus.ACTIVE
+            self.status = IntegrationStatus.ACTIVE  # type: ignore[assignment]  # StateField descriptor unmodeled by django-stubs
         if self.pk is None:
             return
         with system_context(reason="integrate.integration.attach_credential"), transaction.atomic():
