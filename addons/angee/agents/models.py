@@ -3,8 +3,8 @@
 An :class:`Agent` is a definition the operator later renders into a workspace and
 service. It draws on three catalogues this addon also owns: :class:`Skill` rows
 discovered from an ``integrate.Source``, :class:`MCPServer`/:class:`MCPTool` rows,
-and an :class:`InferenceProvider` (an ``integrate.Capability`` over an
-``Integration``) with its :class:`InferenceModel` rows. Templates are agents with
+and an :class:`InferenceProvider` related model over an ``Integration`` with its
+:class:`InferenceModel` rows. Templates are agents with
 ``is_template`` set. This addon keeps definitions only; the operator owns lifecycle.
 """
 
@@ -23,11 +23,11 @@ from rebac.managers import RebacManager
 
 from angee.agents.backends import InferenceBackend
 from angee.agents.skills import parse_skill_meta
-from angee.base.fields import ImplClassField, SqidField, StateField
+from angee.base.fields import SqidField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
 from angee.integrate.credentials import CredentialKind
-from angee.integrate.models import Capability
+from angee.integrate.models import IntegrationMixin
 
 
 class InferenceModelUse(models.TextChoices):
@@ -99,15 +99,13 @@ class RuntimeStatus(models.TextChoices):
     WARNING = "warning", "Warning"
 
 
-class InferenceProvider(Capability):
-    """The inference capability over an ``Integration`` — an LLM provider account.
+class InferenceProvider(IntegrationMixin):
+    """The inference related model over an ``Integration`` — an LLM provider account.
 
-    A concrete :class:`~angee.integrate.models.Capability`: it draws its API
-    credential from ``self.integration.credential`` and resolves a per-row
-    :class:`~angee.agents.backends.InferenceBackend` named by ``backend_class``
-    (anthropic/openai/…), the same shape as ``storage.Backend``. Django keeps the
-    catalogue; the backend lists the provider's models into :class:`InferenceModel`
-    rows.
+    It draws its API credential from ``self.integration.credential`` and resolves
+    the row-selected :class:`~angee.agents.backends.InferenceBackend` from
+    ``self.integration.impl``. Django keeps the catalogue; the backend lists the
+    provider's models into :class:`InferenceModel` rows.
     """
 
     runtime = True
@@ -116,19 +114,13 @@ class InferenceProvider(Capability):
     name = models.CharField(max_length=128)
     base_url = models.URLField(blank=True)
     """Base endpoint for OpenAI-compatible providers; blank uses the backend default."""
-    backend_class = ImplClassField(
-        base_class=InferenceBackend,
-        registry_setting="ANGEE_INFERENCE_BACKEND_CLASSES",
-        default="manual",
-    )
-    """The backend this provider resolves to — an explicit per-row key into
-    ``ANGEE_INFERENCE_BACKEND_CLASSES`` (never derived from the vendor). Defaults to the
-    built-in ``manual`` backend whose catalogue is hand-curated."""
+    config = models.JSONField(default=dict, blank=True)
+    """Provider-scoped settings used by inference implementations."""
 
     objects = RebacManager()
 
     class Meta:
-        """Django model options for the inference provider capability."""
+        """Django model options for the inference provider related model."""
 
         abstract = True
         ordering = ("name",)
@@ -141,17 +133,16 @@ class InferenceProvider(Capability):
         return self.name or f"provider:{self.public_id}"
 
     @property
-    def backend(self) -> InferenceBackend:
-        """Return the backend bound to this provider's credential and endpoint.
+    def impl(self) -> InferenceBackend:
+        """Return the implementation bound to this provider's credential and endpoint.
 
         Resolved fresh per access (unlike ``storage.Backend.storage``, which caches):
-        the built-in ``manual`` backend holds no client, and a vendor backend reads the
-        live credential off the provider each call, so a rotated key takes effect at
-        once and the backend owns any client lifetime it needs.
+        the built-in ``manual`` backend holds no client, and a vendor backend reads
+        the live credential off the integration each call, so a rotated key takes
+        effect at once and the backend owns any client lifetime it needs.
         """
 
-        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
-        return cast(InferenceBackend, field.resolve_class(self.backend_class)(self))
+        return cast(InferenceBackend, self.integration.impl)
 
     def refresh_models(self) -> int:
         """Re-list this provider's models into :class:`InferenceModel` rows."""
@@ -184,7 +175,7 @@ class InferenceModelManager(RebacManager):
         never broken by a transient provider response; deprecation is a status edit.
         """
 
-        specs = list(provider.backend.list_models())
+        specs = list(provider.impl.list_models())
         with system_context(reason="agents.inference_model.sync"), transaction.atomic():
             for spec in specs:
                 self.update_or_create(provider=provider, name=spec.handle, defaults=spec.upsert_defaults())

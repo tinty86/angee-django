@@ -22,6 +22,8 @@ from django.utils.module_loading import import_string
 from django_choices_field import TextChoicesField
 from django_sqids import SqidsField
 
+from angee.base.impl import ImplBase
+
 
 def _derive_fernet(label: str) -> Fernet:
     """Return the Fernet instance for one model column label."""
@@ -176,8 +178,8 @@ class ImplClassField(TextChoicesField):
     from the registered keys, and ``strawberry-django`` renders the GraphQL enum
     natively (this is a ``TextChoicesField``, exactly like ``StateField``). The
     registry must be **non-empty** — an addon whose impl set could otherwise be
-    empty registers a noop/null-object default (storage's ``local``; a VCS noop
-    client) so a composition always has at least one selectable impl. The field
+    empty registers a noop/null-object default (storage's ``local``; integrate's
+    ``none``) so a composition always has at least one selectable impl. The field
     resolves a row's key against the mapping and ``import_string``s the
     **composed, trusted** path (never row text), checking it is a ``base_class``
     subclass — the shape Angee already uses to resolve an addon's declared
@@ -196,6 +198,7 @@ class ImplClassField(TextChoicesField):
             raise ImproperlyConfigured("ImplClassField base_class must be a type.")
         self.base_class = base_class
         self.registry_setting = registry_setting
+        self._fallback_default = kwargs.get("default", models.NOT_PROVIDED)
         kwargs.setdefault("max_length", 100)
         super().__init__(choices_enum=self._build_enum(), **kwargs)
 
@@ -293,6 +296,13 @@ class ImplClassField(TextChoicesField):
 
         keys = sorted(self._registry())
         if not keys:
+            if self.base_class is None:
+                default = self._fallback_default
+                fallback = "none" if default is models.NOT_PROVIDED else str(default)
+                return cast(
+                    "type[models.TextChoices]",
+                    models.TextChoices(self._enum_name(), [(fallback.upper(), (fallback, fallback))]),
+                )
             raise ImproperlyConfigured(
                 f"ImplClassField registry settings.{self.registry_setting} is empty; an addon must "
                 "contribute at least one impl (e.g. a noop/null-object default) before the field is built."
@@ -306,6 +316,23 @@ class ImplClassField(TextChoicesField):
         core = self.registry_setting.removeprefix("ANGEE_").removesuffix("_CLASSES")
         camel = "".join(part.capitalize() for part in core.split("_") if part)
         return f"{camel or 'Impl'}Impl"
+
+    def impl_choices(self) -> list[dict[str, Any]]:
+        """Return pickable choices (``key``/``label``/``icon``/``category``/``defaults``) for the registry.
+
+        The registry key is authoritative — it is the enum value the column stores;
+        the rest comes from the resolved ``ImplBase`` subclass. A non-``ImplBase``
+        impl (a bare behaviour class) degrades to a label-only choice.
+        """
+
+        choices: list[dict[str, Any]] = []
+        for key in sorted(self._registry()):
+            impl = self.resolve_class(key)
+            if isinstance(impl, type) and issubclass(impl, ImplBase):
+                choices.append({**impl.choice(), "key": key})
+            else:
+                choices.append({"key": key, "label": key, "icon": "", "category": "", "defaults": {}})
+        return choices
 
     def _registry(self) -> dict[str, str]:
         """Return the configured ``key → dotted path`` mapping for this field."""

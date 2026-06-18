@@ -17,7 +17,7 @@ import yaml
 def parse_template_meta(blob: bytes) -> dict[str, Any]:
     """Return a template descriptor parsed from one ``copier.yml`` blob.
 
-    The descriptor's ``path`` is filled in by ``VCSIntegration.discover`` from the
+    The descriptor's ``path`` is filled in by ``VcsBridge.discover`` from the
     bearing directory; this parser owns only the manifest's ``_angee`` block.
     """
 

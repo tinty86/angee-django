@@ -1,19 +1,20 @@
-"""Inference backend protocol and the bundled built-in backend.
+"""Inference implementation protocol and the bundled built-in backend.
 
-A backend is the per-provider strategy an ``InferenceProvider`` row names by a key
-in ``ANGEE_INFERENCE_BACKEND_CLASSES`` (mirrors ``storage.Backend`` /
-``ANGEE_STORAGE_BACKEND_CLASSES``). A vendor backend (openai, anthropic, …) wraps an
+An inference backend is an ``Integration`` implementation with an
+``InferenceProvider`` related model. A vendor backend (openai, anthropic, …) wraps an
 HTTP client and lists the provider's models live; it ships in its own addon and
-registers its key, the way a storage backend addon adds ``s3``. The bundled
+registers its key in ``ANGEE_INTEGRATION_IMPLS``. The bundled
 :class:`ManualInferenceBackend` is built in and uses no client — its catalogue is
-curated by hand. This module stays ORM-free; the backend reads its credential and
-endpoint from the provider it is bound to.
+curated by hand. This module stays ORM-free; the backend reads its credential
+from the integration and endpoint from the provider related model it is bound to.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+from angee.integrate.impl import IntegrationImpl
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -57,22 +58,46 @@ class InferenceModelSpec:
         return defaults
 
 
-class InferenceBackend:
-    """The strategy one inference provider resolves to, bound to its capability row.
+class InferenceBackend(IntegrationImpl):
+    """The strategy one inference integration resolves to.
 
-    Subclasses read the API credential from ``provider.integration.credential`` and
-    the endpoint from ``provider.base_url``, and list the provider's catalogue.
+    Subclasses read the API credential from ``integration.credential`` and the
+    endpoint from the ``provider`` related model's ``base_url``.
     """
 
-    def __init__(self, provider: Any) -> None:
-        """Bind the backend to its ``InferenceProvider`` (for credential and endpoint)."""
+    category = "inference"
+    related_model = "agents.InferenceProvider"
+    related_create_fields = ("name", "base_url", "config")
+    related_create_input_fields = {"config": "related_config"}
+    label = "Inference"
+    icon = "sparkles"
+    defaults = {
+        "status": "draft",
+    }
 
-        self.provider = provider
+    def __init__(self, integration: Any, related: Any | None = None) -> None:
+        """Bind this backend to its integration and provider related model."""
+
+        super().__init__(integration, related)
+        self.provider = related
 
     def list_models(self) -> Sequence[InferenceModelSpec]:
         """Return the provider's advertised models for catalogue upsert."""
 
         raise NotImplementedError("InferenceBackend subclasses must implement list_models().")
+
+    @classmethod
+    def related_create_values(cls, integration: Any, values: dict[str, Any]) -> dict[str, Any]:
+        """Return inference-provider fields, defaulting the required display name."""
+
+        attrs = super().related_create_values(integration, values)
+        name = str(attrs.get("name") or "").strip()
+        if not name:
+            vendor = getattr(integration, "vendor", None)
+            vendor_label = str(getattr(vendor, "display_name", "") or getattr(vendor, "slug", "") or "").strip()
+            name = f"{vendor_label} {cls.label}".strip() or cls.label
+            attrs["name"] = name
+        return attrs
 
 
 class ManualInferenceBackend(InferenceBackend):
@@ -82,6 +107,13 @@ class ManualInferenceBackend(InferenceBackend):
     so its :class:`InferenceModel` rows are entered through the console. A vendor
     backend addon supplies the live-listing alternative.
     """
+
+    # Vendor-neutral: a base addon never pins a product OAuth client. The connect
+    # flow falls back to the integration's vendor slug
+    # (see ``_oauth_client_for_integration``); a vendor backend addon sets its own.
+    key = "manual"
+    label = "Manual inference"
+    oauth_client = ""
 
     def list_models(self) -> Sequence[InferenceModelSpec]:
         """Return no models; the catalogue is maintained by hand on this backend."""

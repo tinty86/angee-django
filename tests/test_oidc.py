@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterator
 from datetime import timedelta
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from typing import Any
 from urllib import parse
 
@@ -22,10 +22,12 @@ from strawberry_django_aggregates import AggregateOp, compute_aggregation
 from angee.iam_integrate_oidc import identity
 from angee.iam_integrate_oidc import protocol as oidc_protocol
 from angee.iam_integrate_oidc.identity import IDENTITY_RESOLUTION_FAILED
-from angee.iam_integrate_oidc.protocol import OidcClientProtocol
+from angee.iam_integrate_oidc.models import OAuthClientOidc
+from angee.iam_integrate_oidc.protocol import OAuthClientOidcProtocol
 from angee.integrate.connect import complete_account_connect
 from angee.integrate.models import AccountStatus, CredentialStatus
 from angee.integrate.oauth import client as oauth_protocol
+from angee.integrate.oauth import discovery as oauth_discovery
 from angee.integrate.oauth import state as oauth_state
 from angee.integrate.oauth.client import OAuthClientProtocol
 from angee.integrate.oauth.errors import (
@@ -39,7 +41,6 @@ from tests.conftest import (
     Credential,
     ExternalAccount,
     OAuthClient,
-    OidcClient,
     _create_missing_tables,
 )
 
@@ -49,7 +50,7 @@ def test_discovery_fallback_fills_blank_authorize_endpoint(monkeypatch: pytest.M
 
     calls: list[str] = []
     oauth_client = _stub_oauth_client(authorize_endpoint="")
-    oidc = _stub_oidc_client(
+    oidc = _stub_login_oauth_client(
         oauth_client=oauth_client,
         discovery_url="https://issuer.example/.well-known/openid-configuration",
     )
@@ -59,9 +60,9 @@ def test_discovery_fallback_fills_blank_authorize_endpoint(monkeypatch: pytest.M
         calls.append(url)
         return {"authorization_endpoint": "https://issuer.example/oauth/authorize"}
 
-    monkeypatch.setattr(oidc_protocol, "_get_json", get_json)
+    monkeypatch.setattr(oauth_discovery, "_get_json", get_json)
 
-    url = OidcClientProtocol(oidc).authorize_url(
+    url = OAuthClientOidcProtocol(oidc).authorize_url(
         state="state-token",
         nonce="nonce-token",
         redirect_uri="https://app.example/callback",
@@ -78,7 +79,7 @@ def test_ensure_endpoints_caches_document_by_discovery_url(monkeypatch: pytest.M
 
     discovery_url = "https://cached.example/.well-known/openid-configuration"
     oauth_client = _stub_oauth_client(authorize_endpoint="", token_endpoint="", userinfo_endpoint="")
-    oidc = _stub_oidc_client(oauth_client=oauth_client, issuer="", jwks_uri="", discovery_url=discovery_url)
+    oidc = _stub_login_oauth_client(oauth_client=oauth_client, issuer="", jwks_uri="", discovery_url=discovery_url)
     cached_documents: dict[str, dict[str, Any]] = {}
     cache_gets: list[str] = []
     cache_sets: list[tuple[str, int | None]] = []
@@ -103,11 +104,11 @@ def test_ensure_endpoints_caches_document_by_discovery_url(monkeypatch: pytest.M
             "jwks_uri": "https://cached.example/oauth/jwks",
         }
 
-    monkeypatch.setattr(oidc_protocol.cache, "get", cache_get)
-    monkeypatch.setattr(oidc_protocol.cache, "set", cache_set)
-    monkeypatch.setattr(oidc_protocol, "_get_json", get_json)
+    monkeypatch.setattr(oauth_discovery.cache, "get", cache_get)
+    monkeypatch.setattr(oauth_discovery.cache, "set", cache_set)
+    monkeypatch.setattr(oauth_discovery, "_get_json", get_json)
 
-    protocol = OidcClientProtocol(oidc)
+    protocol = OAuthClientOidcProtocol(oidc)
     first = protocol.ensure_endpoints()
     second = protocol.ensure_endpoints()
 
@@ -159,9 +160,9 @@ def test_authorize_url_contains_state_nonce_and_pkce() -> None:
     """OIDC authorize URL includes state, nonce, and PKCE parameters when supported."""
 
     oauth_client = _stub_oauth_client(supports_pkce=True)
-    oidc = _stub_oidc_client(oauth_client=oauth_client)
+    oidc = _stub_login_oauth_client(oauth_client=oauth_client)
     state_token, record = oauth_state.issue(oauth_client, "https://app.example/callback")
-    url = OidcClientProtocol(oidc).authorize_url(
+    url = OAuthClientOidcProtocol(oidc).authorize_url(
         state=state_token,
         nonce=record.nonce,
         redirect_uri="https://app.example/callback",
@@ -180,7 +181,7 @@ def test_authorize_url_contains_state_nonce_and_pkce() -> None:
 def test_authorize_url_prepends_openid_when_scope_is_absent() -> None:
     """OIDC authorize URL adds the required scope when configured scopes omit it."""
 
-    url = OidcClientProtocol(_stub_oidc_client()).authorize_url(
+    url = OAuthClientOidcProtocol(_stub_login_oauth_client()).authorize_url(
         state="state-token",
         nonce="nonce-token",
         redirect_uri="https://app.example/callback",
@@ -298,7 +299,7 @@ def test_refresh_token_posts_refresh_grant(monkeypatch: pytest.MonkeyPatch) -> N
 def test_verify_id_token_rejects_bad_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
     """ID token verification rejects a mismatched issuer claim."""
 
-    oidc = _stub_oidc_client()
+    oidc = _stub_login_oauth_client()
     monkeypatch.setattr(
         oidc_protocol.jwt,
         "decode",
@@ -310,7 +311,7 @@ def test_verify_id_token_rejects_bad_issuer(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     with pytest.raises(OAuthFlowError) as exc_info:
-        OidcClientProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
+        OAuthClientOidcProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
 
     assert exc_info.value.code == INVALID_ID_TOKEN
 
@@ -318,7 +319,7 @@ def test_verify_id_token_rejects_bad_issuer(monkeypatch: pytest.MonkeyPatch) -> 
 def test_verify_id_token_rejects_bad_audience(monkeypatch: pytest.MonkeyPatch) -> None:
     """ID token verification rejects a mismatched audience claim."""
 
-    oidc = _stub_oidc_client()
+    oidc = _stub_login_oauth_client()
     monkeypatch.setattr(
         oidc_protocol.jwt,
         "decode",
@@ -326,7 +327,7 @@ def test_verify_id_token_rejects_bad_audience(monkeypatch: pytest.MonkeyPatch) -
     )
 
     with pytest.raises(OAuthFlowError) as exc_info:
-        OidcClientProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
+        OAuthClientOidcProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
 
     assert exc_info.value.code == INVALID_ID_TOKEN
 
@@ -334,7 +335,7 @@ def test_verify_id_token_rejects_bad_audience(monkeypatch: pytest.MonkeyPatch) -
 def test_verify_id_token_rejects_bad_nonce(monkeypatch: pytest.MonkeyPatch) -> None:
     """ID token verification rejects a mismatched nonce claim."""
 
-    oidc = _stub_oidc_client()
+    oidc = _stub_login_oauth_client()
     monkeypatch.setattr(
         oidc_protocol.jwt,
         "decode",
@@ -342,7 +343,7 @@ def test_verify_id_token_rejects_bad_nonce(monkeypatch: pytest.MonkeyPatch) -> N
     )
 
     with pytest.raises(OAuthFlowError) as exc_info:
-        OidcClientProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
+        OAuthClientOidcProtocol(oidc).verify_id_token("token", nonce="nonce", _jwks_client=_FakeJwksClient())
 
     assert exc_info.value.code == INVALID_ID_TOKEN
 
@@ -351,7 +352,7 @@ def test_verify_id_token_accepts_rs256_and_rejects_ps256() -> None:
     """ID token verification accepts only the configured asymmetric algorithms."""
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    oidc = _stub_oidc_client()
+    oidc = _stub_login_oauth_client()
     now = int(time.time())
     claims = {
         "aud": oidc.oauth_client.client_id,
@@ -365,11 +366,11 @@ def test_verify_id_token_accepts_rs256_and_rejects_ps256() -> None:
     ps256_token = oidc_protocol.jwt.encode(claims, private_key, algorithm="PS256", headers={"kid": "kid"})
     jwks_client = _FakeJwksClient(private_key.public_key())
 
-    verified = OidcClientProtocol(oidc).verify_id_token(rs256_token, nonce="nonce", _jwks_client=jwks_client)
+    verified = OAuthClientOidcProtocol(oidc).verify_id_token(rs256_token, nonce="nonce", _jwks_client=jwks_client)
 
     assert verified["sub"] == "sub-alg"
     with pytest.raises(OAuthFlowError) as exc_info:
-        OidcClientProtocol(oidc).verify_id_token(ps256_token, nonce="nonce", _jwks_client=jwks_client)
+        OAuthClientOidcProtocol(oidc).verify_id_token(ps256_token, nonce="nonce", _jwks_client=jwks_client)
     assert exc_info.value.code == INVALID_ID_TOKEN
 
 
@@ -616,13 +617,13 @@ def test_complete_link_populates_credential_token_fields(
         "expires_in": "120",
         "scope": "openid email profile",
     }
-    monkeypatch.setattr(OidcClientProtocol, "exchange_code", lambda self, **kwargs: tokens)
+    monkeypatch.setattr(OAuthClientOidcProtocol, "exchange_code", lambda self, **kwargs: tokens)
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "verify_id_token",
         lambda self, id_token, **kwargs: {"sub": "sub-token-fields", "email": "tokens@example.com"},
     )
-    monkeypatch.setattr(OidcClientProtocol, "fetch_userinfo", lambda self, access_token: {})
+    monkeypatch.setattr(OAuthClientOidcProtocol, "fetch_userinfo", lambda self, access_token: {})
 
     before = timezone.now()
     result = identity.complete_link(
@@ -687,7 +688,7 @@ def test_complete_account_connect_links_oauth_userinfo_claims_and_credential(
     monkeypatch.setattr(OAuthClientProtocol, "exchange_code", exchange_code)
     monkeypatch.setattr(OAuthClientProtocol, "fetch_userinfo", lambda self, access_token: claims)
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "verify_id_token",
         lambda self, id_token, **kwargs: pytest.fail("plain OAuth connect must not verify an ID token"),
     )
@@ -813,9 +814,9 @@ def test_userinfo_claims_merge_into_login_and_link_claims(
         captured["claims"] = claims
         return link_user
 
-    monkeypatch.setattr(OidcClientProtocol, "exchange_code", lambda self, **kwargs: token_response)
-    monkeypatch.setattr(OidcClientProtocol, "verify_id_token", lambda self, id_token, **kwargs: id_claims)
-    monkeypatch.setattr(OidcClientProtocol, "fetch_userinfo", lambda self, access_token: userinfo_claims)
+    monkeypatch.setattr(OAuthClientOidcProtocol, "exchange_code", lambda self, **kwargs: token_response)
+    monkeypatch.setattr(OAuthClientOidcProtocol, "verify_id_token", lambda self, id_token, **kwargs: id_claims)
+    monkeypatch.setattr(OAuthClientOidcProtocol, "fetch_userinfo", lambda self, access_token: userinfo_claims)
     monkeypatch.setattr(identity, "resolve", resolve_user)
 
     login_state, _login_record = oauth_state.issue(
@@ -884,16 +885,16 @@ def test_complete_link_rejects_account_owned_by_another_user(
         flow="link",
     )
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "exchange_code",
         lambda self, **kwargs: {"access_token": "access", "id_token": "id-token"},
     )
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "verify_id_token",
         lambda self, id_token, **kwargs: {"sub": "sub-linked", "email": "other@example.com"},
     )
-    monkeypatch.setattr(OidcClientProtocol, "fetch_userinfo", lambda self, access_token: {})
+    monkeypatch.setattr(OAuthClientOidcProtocol, "fetch_userinfo", lambda self, access_token: {})
 
     with pytest.raises(OAuthFlowError) as exc_info:
         identity.complete_link(
@@ -924,16 +925,16 @@ def test_complete_link_binds_to_state_user_after_session_swap(
         flow="link",
     )
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "exchange_code",
         lambda self, **kwargs: {"access_token": "access", "id_token": "id-token"},
     )
     monkeypatch.setattr(
-        OidcClientProtocol,
+        OAuthClientOidcProtocol,
         "verify_id_token",
         lambda self, id_token, **kwargs: {"sub": "sub-swapped", "email": "start@example.com"},
     )
-    monkeypatch.setattr(OidcClientProtocol, "fetch_userinfo", lambda self, access_token: {})
+    monkeypatch.setattr(OAuthClientOidcProtocol, "fetch_userinfo", lambda self, access_token: {})
 
     result = identity.complete_link(
         oauth_client,
@@ -971,10 +972,7 @@ def test_state_records_are_single_use() -> None:
 def test_state_flow_binding_rejects_cross_flow_completion() -> None:
     """A login token cannot complete a link, and a link token cannot complete a login."""
 
-    oauth_client = SimpleNamespace(sqid="clt_flow", pk=7, supports_pkce=False)
-    # A circular OIDC refinement so completion reaches the flow-binding check (which
-    # is what this test exercises) rather than the "no OIDC refinement" guard.
-    oauth_client.oidc = SimpleNamespace(oauth_client=oauth_client)
+    oauth_client = SimpleNamespace(sqid="clt_flow", pk=7, supports_pkce=False, login_enabled=True)
 
     login_token, _login = oauth_state.issue(oauth_client, "https://app.example/callback", flow="login")
     with pytest.raises(OAuthFlowError) as link_exc:
@@ -1012,85 +1010,81 @@ def oidc_tables() -> Iterator[None]:
                     schema_editor.delete_model(model)
 
 
-_OIDC_REFINEMENT_FIELDS = frozenset(
-    {"issuer", "jwks_uri", "discovery_url", "link_on_email_match", "create_on_login", "allowed_email_domains"}
-)
-
-
 def _oauth_client(slug: str = "oidc", *, oidc: bool = True, **overrides: Any) -> OAuthClient:
-    """Create one enabled OAuth client (with an OIDC refinement unless ``oidc=False``).
+    """Create one enabled OAuth client, setting OIDC login fields on the same row."""
 
-    OIDC refinement fields (issuer/jwks/discovery + login policy) are routed to a
-    linked ``OidcClient``; everything else stays on the base ``OAuthClient``.
-    """
-
-    base_defaults: dict[str, Any] = {
+    defaults: dict[str, Any] = {
         "display_name": "OIDC test",
         "client_id": "oidc-client",
         "client_secret": "secret",
+        "discovery_url": "",
         "authorize_endpoint": "https://issuer.example/oauth/authorize",
         "token_endpoint": "https://issuer.example/oauth/token",
         "userinfo_endpoint": "https://issuer.example/oauth/userinfo",
         "is_enabled": True,
         "supports_pkce": True,
-    }
-    oidc_defaults: dict[str, Any] = {
-        "issuer": "https://issuer.example",
-        "jwks_uri": "https://issuer.example/oauth/jwks",
-        "discovery_url": "",
+        "issuer": "https://issuer.example" if oidc else "",
+        "jwks_uri": "https://issuer.example/oauth/jwks" if oidc else "",
+        "login_enabled": oidc,
         "link_on_email_match": False,
         "create_on_login": False,
         "allowed_email_domains": [],
     }
-    for key, value in overrides.items():
-        if key in _OIDC_REFINEMENT_FIELDS:
-            oidc_defaults[key] = value
-        else:
-            base_defaults[key] = value
+    defaults.update(overrides)
     with system_context(reason="test oidc setup"):
-        client = OAuthClient.objects.create(slug=slug, **base_defaults)
-        if oidc:
-            OidcClient.objects.create(oauth_client=client, **oidc_defaults)
+        client = OAuthClient.objects.create(slug=slug, **defaults)
     return client
 
 
-def _stub_oauth_client(**overrides: Any) -> SimpleNamespace:
+def _stub_oauth_client(**overrides: Any) -> OAuthClient:
     """Return an OAuth-client-like object for OAuth-protocol tests."""
 
+    authorize_param_values = overrides.pop("authorize_param_values", None)
+    token_param_values = overrides.pop("token_param_values", None)
     defaults: dict[str, Any] = {
+        "slug": "stub",
+        "display_name": "Stub",
         "client_id": "oidc-client",
         "client_secret": "secret",
+        "discovery_url": "",
         "authorize_endpoint": "https://issuer.example/oauth/authorize",
         "token_endpoint": "https://issuer.example/oauth/token",
         "revoke_endpoint": "",
         "userinfo_endpoint": "https://issuer.example/oauth/userinfo",
         "supports_pkce": False,
         "token_request_format": "form",
-        "authorize_param_values": {},
-        "token_param_values": {},
+        "authorize_params": {},
+        "token_params": {},
     }
+    if authorize_param_values is not None:
+        defaults["authorize_params"] = authorize_param_values
+    if token_param_values is not None:
+        defaults["token_params"] = token_param_values
     defaults.update(overrides)
-    # Mirror OAuthClient.token_request_format_value (the property exchange_code reads).
-    token_format = str(defaults["token_request_format"] or "form").strip().lower()
-    defaults.setdefault(
-        "token_request_format_value",
-        token_format if token_format in {"form", "json"} else "form",
-    )
-    return SimpleNamespace(**defaults)
+    return OAuthClient(**defaults)
 
 
-def _stub_oidc_client(*, oauth_client: SimpleNamespace | None = None, **overrides: Any) -> SimpleNamespace:
-    """Return an OidcClient-like object (with ``.oauth_client``) for OIDC-protocol tests."""
+def _stub_login_oauth_client(*, oauth_client: OAuthClient | None = None, **overrides: Any) -> OAuthClient:
+    """Return an OAuth-client-like object carrying OAuth and OIDC login fields."""
 
-    base = oauth_client if oauth_client is not None else _stub_oauth_client()
+    client = oauth_client if oauth_client is not None else _stub_oauth_client()
     defaults: dict[str, Any] = {
         "issuer": "https://issuer.example",
         "jwks_uri": "https://issuer.example/oauth/jwks",
         "discovery_url": "",
+        "login_enabled": True,
+        "link_on_email_match": False,
+        "create_on_login": False,
+        "allowed_email_domains": [],
     }
     defaults.update(overrides)
-    defaults["oauth_client"] = base
-    return SimpleNamespace(**defaults)
+    for key, value in defaults.items():
+        setattr(client, key, value)
+    client.oauth_client = client
+    client.fill_extension_fields_from_discovery = MethodType(
+        OAuthClientOidc.fill_extension_fields_from_discovery, client
+    )
+    return client
 
 
 class _FakeJwksClient:
@@ -1107,14 +1101,11 @@ class _FakeJwksClient:
 
 
 @pytest.mark.django_db
-def test_oidc_group_by_oauth_enabled() -> None:
-    """OIDC providers group by their OAuth client's enabled flag (to-one axis).
+def test_oidc_group_by_login_enabled() -> None:
+    """OAuth clients group directly by the login-enabled OIDC discriminator.
 
-    Exercises the resolver path behind ``oidcClientGroups``: ``OidcClient`` must
-    use an Angee-backed manager (so ``scoped_for_aggregate`` exists — a bare
-    ``RebacManager`` queryset lacks it), and the to-one relation axis
-    ``oauth_client__is_enabled`` must fold correctly. Build-only coverage cannot
-    catch a missing ``scoped_for_aggregate``; this runs the aggregation.
+    Exercises the one-model shape: OIDC login is represented directly by
+    ``OAuthClient.login_enabled``.
     """
 
     created_models = _create_missing_tables()
@@ -1127,20 +1118,21 @@ def test_oidc_group_by_oauth_enabled() -> None:
                 client_id="c1",
                 is_enabled=True,
             )
-            disabled = OAuthClient.objects.create(
+            OAuthClient.objects.create(
                 slug="disabled-client",
                 display_name="Disabled",
                 client_id="c2",
                 is_enabled=False,
+                login_enabled=False,
             )
-            OidcClient.objects.create(oauth_client=enabled)
-            OidcClient.objects.create(oauth_client=disabled)
+            enabled.login_enabled = True
+            enabled.save(update_fields=["login_enabled"])
             rows = compute_aggregation(
-                OidcClient.objects.all().scoped_for_aggregate(),
-                group_by=[("oauth_client__is_enabled", None)],
+                OAuthClient.objects.all(),
+                group_by=[("login_enabled", None)],
                 aggregates=[(AggregateOp.COUNT, None)],
             )
-        by_enabled = {row["oauth_client__is_enabled"]: row["count"] for row in rows}
+        by_enabled = {row["login_enabled"]: row["count"] for row in rows}
         assert by_enabled == {True: 1, False: 1}
     finally:
         if created_models:

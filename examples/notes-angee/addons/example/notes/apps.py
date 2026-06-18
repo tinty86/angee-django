@@ -28,7 +28,6 @@ class NotesConfig(AppConfig):
             "resources/demo/010_iam.user.yaml",
             "resources/demo/020_notes.note.yaml",
             "resources/demo/030_integrate.oauthclient.yaml",
-            "resources/demo/031_iam_integrate_oidc.oidcclient.yaml",
             "resources/demo/050_knowledge.vault.yaml",
             "resources/demo/060_knowledge.page.yaml",
             "resources/demo/070_knowledge.markdown_page.yaml",
@@ -37,7 +36,7 @@ class NotesConfig(AppConfig):
             "resources/demo/080_integrate.credential.yaml",
             "resources/demo/081_integrate.vendor.yaml",
             "resources/demo/082_integrate.integration.yaml",
-            "resources/demo/083_integrate.vcsintegration.yaml",
+            "resources/demo/083_integrate.vcsbridge.yaml",
             "resources/demo/084_integrate.repository.yaml",
             "resources/demo/085_integrate.source.yaml",
             # A ready-to-provision demo agent and its inference chain (placeholder

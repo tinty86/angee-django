@@ -30,7 +30,7 @@ export {
   type RelationPickerProps,
   type RelationCreateConfig,
 } from "./RelationPicker";
-export { useEnumOptions } from "./enum-options";
+export { useEnumOptions, useImplCategory, useImplChoices, useImplPrefill } from "./enum-options";
 export {
   GraphView,
   type GraphViewEdge,
@@ -79,6 +79,8 @@ export {
 export {
   FormView,
   FORM_VIEW_RECORD_CHROME_SLOT,
+  FORM_VIEW_SECTIONS_SLOT,
+  formViewSectionsSlot,
   type FormViewProps,
   type FormField,
   type FieldKind,

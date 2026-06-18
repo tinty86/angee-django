@@ -10,15 +10,19 @@ SETTINGS = {
     # discovery TTL belongs to the ``iam_integrate_oidc`` addon.
     "ANGEE_INTEGRATE_OAUTH_CLIENTS": (),
     "ANGEE_INTEGRATE_OAUTH_STATE_TTL": 600,
-    # The ``VCSIntegration.backend_class`` registry: each key a ``VCSIntegration``
-    # row may name → the dotted path of the ``VCSBackend`` it resolves to. ``integrate``
-    # is host-agnostic, so its built-ins are the ``none`` null-object (``ImplClassField``
-    # requires a non-empty registry) and ``local``, which inventories a local working
-    # tree with no network (dev/offline template + skill discovery); a host addon adds
-    # its own impl with a yamlconf dotted key (``"ANGEE_VCS_BACKEND_CLASSES.github": "…"``).
+    "ANGEE_OAUTH_PROVIDER_TYPES": {
+        "generic_oauth2": "angee.integrate.oauth.providers.GenericOAuth2",
+    },
+    # The ``Integration.impl_class`` registry: each key an ``Integration`` row may
+    # name → the dotted path of the ``IntegrationImpl`` it resolves to. ``none`` is
+    # the neutral draft/null-object implementation (``ImplClassField`` requires a
+    # non-empty registry), and ``local`` inventories a local working tree with no
+    # network (dev/offline template + skill discovery); host/domain addons add
+    # their own impls with yamlconf dotted keys
+    # (``"ANGEE_INTEGRATION_IMPLS.github": "…"``).
     # See ``angee.base.fields.ImplClassField``.
-    "ANGEE_VCS_BACKEND_CLASSES": {
-        "none": "angee.integrate.vcs.backend.NoopVCSBackend",
+    "ANGEE_INTEGRATION_IMPLS": {
+        "none": "angee.integrate.impl.NullIntegrationImpl",
         "local": "angee.integrate.vcs.backend.LocalVCSBackend",
     },
 }

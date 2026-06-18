@@ -699,6 +699,7 @@ class IAMMutation:
         user = getattr(request, "user", None)
         if isinstance(user, AnonymousUser) or not getattr(user, "is_authenticated", False):
             raise ValueError("Authentication required")
+        user = cast(Any, user)
         if not isinstance(preferences, dict):
             raise ValueError("preferences must be a JSON object")
         if not hasattr(user, "preferences"):

@@ -31,6 +31,7 @@ import { ControlBand } from "../shell/ControlBand";
 import { cn } from "../lib/cn";
 import { SlotOutlet } from "../lib/slot-outlet";
 import {
+  slugify,
   useResolvedWidget,
   type WidgetDefinition,
   type WidgetField,
@@ -175,6 +176,22 @@ export interface FormViewProps {
  */
 export const FORM_VIEW_RECORD_CHROME_SLOT = "form-view.record-chrome";
 
+/**
+ * Model-scoped slot for addon-contributed form sections. The addon that owns a
+ * model's `ImplClassField` impls contributes the section that impl enables (e.g.
+ * the OIDC login tab the iam addon adds to integrate's OAuth client form), gating
+ * its fields with `showWhen` keyed on the impl value — so the base form stays
+ * agnostic to the contributing addon's fields and a project without that addon
+ * composes cleanly. Contributed `<Group>`/`<Action>` content parses like declared
+ * children, so the fields join the form's values, selection, and submit.
+ */
+export const FORM_VIEW_SECTIONS_SLOT = "form-view.sections";
+
+/** The model-scoped section-slot name an addon contributes form groups/actions to. */
+export function formViewSectionsSlot(model: string): string {
+  return `${FORM_VIEW_SECTIONS_SLOT}:${model}`;
+}
+
 type Values = Record<string, unknown>;
 
 const TITLE_TEXT_CLASS =
@@ -246,6 +263,25 @@ export function FormView({
   const formOverride = useFormOverride(model);
   // Host/addon-contributed record chrome (star/share/…); base ships none.
   const recordChrome = useSlot(FORM_VIEW_RECORD_CHROME_SLOT);
+  // Addon-contributed form sections for this model (e.g. the OIDC login tab the
+  // iam addon adds to the OAuth client form). Parsed like declared children so
+  // their fields join the form's values/selection/submit; each contribution gates
+  // its own fields with `showWhen` keyed on the impl value.
+  const sectionEntries = useSlot(formViewSectionsSlot(model));
+  const slotGroups = React.useMemo(
+    () =>
+      sectionEntries.flatMap((entry) =>
+        parsePageGroups(entry.content as React.ReactNode),
+      ),
+    [sectionEntries],
+  );
+  const slotActions = React.useMemo(
+    () =>
+      sectionEntries.flatMap((entry) =>
+        parsePageActions(entry.content as React.ReactNode),
+      ),
+    [sectionEntries],
+  );
   const isCreate = id == null;
   // An addon may register a declarative create form for a model (composed into the
   // runtime). On create it replaces the declared/metadata fields, so DataPage "New"
@@ -255,10 +291,14 @@ export function FormView({
     isCreate && React.isValidElement(formOverride) ? formOverride : null;
   const declaredFields =
     overrideNode != null ? parsePageFields(overrideNode) : fields ?? childFields;
-  const declaredGroups =
-    overrideNode != null ? parsePageGroups(overrideNode) : groups ?? childGroups;
-  const declaredActions =
-    overrideNode != null ? parsePageActions(overrideNode) : actions ?? childActions;
+  const declaredGroups = [
+    ...(overrideNode != null ? parsePageGroups(overrideNode) : groups ?? childGroups),
+    ...slotGroups,
+  ];
+  const declaredActions = [
+    ...(overrideNode != null ? parsePageActions(overrideNode) : actions ?? childActions),
+    ...slotActions,
+  ];
   const resolvedFields = React.useMemo(
     () =>
       withModeLockedFields(
@@ -281,6 +321,12 @@ export function FormView({
   const formFields = React.useMemo(
     () => flattenedFormFields(resolvedFields, resolvedGroups),
     [resolvedFields, resolvedGroups],
+  );
+  // A `widget="slug"` field with no explicit `slugFrom` derives from the record's
+  // title field.
+  const defaultSlugSource = React.useMemo(
+    () => formFields.find((field) => field.title)?.name,
+    [formFields],
   );
   const fieldByName = React.useMemo(
     () => new Map(formFields.map((field) => [field.name, field])),
@@ -347,6 +393,9 @@ export function FormView({
   // post-save reset, and create reset) so a post-save re-render carrying new
   // field-descriptor identities can't re-seed and blank the just-saved values.
   const baselineValuesRef = React.useRef<Values>(emptyValues);
+  // Slug fields that auto-derive until the user edits them; a manual edit lands the
+  // field's name here and stops the derive for this form instance.
+  const manualSlugFieldsRef = React.useRef<Set<string>>(new Set());
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [serverFieldErrors, setServerFieldErrors] = React.useState<
     Record<string, readonly string[]>
@@ -400,6 +449,9 @@ export function FormView({
           baselineValuesRef.current = savedValues;
           setPatchedRecord(saved);
           form.reset(savedValues);
+          // A reused, still-mounted create form starts each new record with a clean
+          // slug-derive state (no `id` change fires the create-reset effect here).
+          if (isCreate) manualSlugFieldsRef.current = new Set();
           onSaved?.(saved);
         }
       } catch (error) {
@@ -420,6 +472,7 @@ export function FormView({
   const formIsDirty = useStore(form.store, (state) => state.isDirty);
   useUnsavedChangesNavigationGuard({
     isDirty: formIsDirty,
+    isDirtyNow: () => form.store.state.isDirty,
     readOnly: formReadOnly,
   });
 
@@ -485,6 +538,7 @@ export function FormView({
         seededIdRef.current = null;
         seededRecordRef.current = null;
         baselineValuesRef.current = emptyValues;
+        manualSlugFieldsRef.current = new Set();
         form.reset(emptyValues);
         setSaveError(null);
       }
@@ -560,11 +614,52 @@ export function FormView({
           onChange={(next) => {
             clearServerFieldError(field.name);
             api.handleChange(next);
+            afterFieldChange(field, next);
           }}
         />
       )}
     </form.Field>
   );
+
+  // Apply a field's `prefill` seeds (the impl-defaults mechanism): picking an impl
+  // loads its full preset, so every declared default lands — including booleans the
+  // model leaves `false` (e.g. `login_enabled`), which a blank-only merge would skip.
+  // The impl field is create-only, so this fires only while the row is new and never
+  // overwrites a saved record's edits.
+  function applyFieldPrefill(field: FieldDescriptor, value: unknown): void {
+    if (!isCreate) return;
+    const seeds = field.prefill?.(value);
+    if (!seeds) return;
+    for (const [name, seed] of Object.entries(seeds)) {
+      form.setFieldValue(name, seed);
+    }
+  }
+
+  // Auto-derive `widget="slug"` fields from their source (the record title by
+  // default) while creating. A direct edit to a slug field switches it to manual
+  // and stops the derive; the programmatic `setFieldValue` here never marks manual.
+  function applySlugDerivation(field: FieldDescriptor, value: unknown): void {
+    if (fieldWidgetId(field) === "slug") {
+      manualSlugFieldsRef.current.add(field.name);
+      return;
+    }
+    if (!isCreate) return;
+    for (const slugField of formFields) {
+      if (fieldWidgetId(slugField) !== "slug") continue;
+      if (manualSlugFieldsRef.current.has(slugField.name)) continue;
+      if ((slugField.slugFrom ?? defaultSlugSource) !== field.name) continue;
+      form.setFieldValue(slugField.name, slugify(value));
+    }
+  }
+
+  // The onChange pipeline shared by every editable field — grid (`renderField`) and
+  // the header title/body/status fields. Routing them all here keeps onChange-driven
+  // behavior (impl prefill, slug derivation) from silently skipping the header fields
+  // — which is how the title-source slug derive was lost.
+  function afterFieldChange(field: FieldDescriptor, value: unknown): void {
+    applyFieldPrefill(field, value);
+    applySlugDerivation(field, value);
+  }
 
   const recordPanelContext: RecordPanelContext | null =
     !isCreate && id != null ? { recordId: id, reload } : null;
@@ -645,6 +740,7 @@ export function FormView({
                 onChange={(next) => {
                   clearServerFieldError(bodyField.name);
                   api.handleChange(next);
+                  afterFieldChange(bodyField, next);
                 }}
               />
             )}
@@ -764,6 +860,7 @@ export function FormView({
                         onChange={(event) => {
                           clearServerFieldError(titleField.name);
                           api.handleChange(event.currentTarget.value);
+                          afterFieldChange(titleField, event.currentTarget.value);
                         }}
                       />
                     )
@@ -791,7 +888,10 @@ export function FormView({
                       field={statusField}
                       value={api.state.value}
                       readOnly={statusField.readOnly}
-                      onChange={(next) => api.handleChange(next)}
+                      onChange={(next) => {
+                        api.handleChange(next);
+                        afterFieldChange(statusField, next);
+                      }}
                     />
                   )}
                 </form.Field>
@@ -873,14 +973,20 @@ function hasPageField(children: React.ReactNode): boolean {
 
 function useUnsavedChangesNavigationGuard({
   isDirty,
+  isDirtyNow,
   readOnly,
 }: {
   isDirty: boolean;
+  isDirtyNow: () => boolean;
   readOnly: boolean;
 }): void {
   const confirm = useConfirm();
   const shouldBlockFn = React.useCallback(async () => {
-    if (readOnly || !isDirty) return false;
+    // Read the live store, not the captured render value. A successful save resets
+    // the form (isDirty → false) and navigates in the same tick, before the React
+    // re-render flushes — a stale `true` here would wrongly block the post-save
+    // redirect with a phantom "unsaved changes" prompt.
+    if (readOnly || !isDirtyNow()) return false;
     const leave = await confirm({
       title: "Unsaved changes — leave without saving?",
       cancel: "Stay",
@@ -888,7 +994,7 @@ function useUnsavedChangesNavigationGuard({
       danger: true,
     });
     return !leave;
-  }, [confirm, isDirty, readOnly]);
+  }, [confirm, isDirtyNow, readOnly]);
 
   useBlocker({
     shouldBlockFn,

@@ -1,7 +1,8 @@
 import * as React from "react";
-import { useModelMetadata } from "@angee/sdk";
+import { useAuthoredQuery, useModelMetadata } from "@angee/sdk";
 
 import type { WidgetOption } from "../widgets";
+import { BaseImplChoices, type ImplChoice } from "./documents";
 import { enumValueLabel } from "./ListInternals";
 
 /**
@@ -24,4 +25,51 @@ export function useEnumOptions(model: string, field: string): readonly WidgetOpt
       })),
     [metadata, field],
   );
+}
+
+export function useImplChoices(model: string, field: string): readonly ImplChoice[] {
+  const { data } = useAuthoredQuery(BaseImplChoices, {
+    model,
+    field,
+  });
+  return data?.implChoices ?? [];
+}
+
+export function useImplCategory(model: string, field: string): (value: unknown) => string {
+  const choices = useImplChoices(model, field);
+  return React.useMemo(() => {
+    const byKey = new Map(choices.map((choice) => [choice.key, choice.category]));
+    return (value: unknown) => byKey.get(String(value)) ?? "";
+  }, [choices]);
+}
+
+/**
+ * A prefill function for an `ImplClassField` select: given the chosen impl key,
+ * returns that impl's defaults keyed by *camelCase form field name*, ready to pass
+ * to a `<Field prefill>`. The server (`implChoices`) owns the per-impl defaults
+ * (merged along the impl MRO); this only re-keys snake_case model fields to the
+ * camelCase the form uses. Picking an impl loads its full preset (overwriting those
+ * fields, so boolean defaults land too); the backend also materialises them on create.
+ */
+export function useImplPrefill(
+  model: string,
+  field: string,
+): (value: unknown) => Record<string, unknown> | undefined {
+  const choices = useImplChoices(model, field);
+  return React.useMemo(() => {
+    const byKey = new Map(
+      choices.map((choice) => [choice.key, choice.defaults]),
+    );
+    return (value: unknown) => {
+      const defaults = byKey.get(String(value));
+      if (!defaults) return undefined;
+      return Object.fromEntries(
+        Object.entries(defaults).map(([name, seed]) => [snakeToCamel(name), seed]),
+      );
+    };
+  }, [choices]);
+}
+
+function snakeToCamel(name: string): string {
+  return name.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
 }

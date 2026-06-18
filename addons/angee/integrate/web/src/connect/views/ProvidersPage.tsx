@@ -7,9 +7,12 @@ import {
   Form,
   Group,
   List,
+  useEnumOptions,
+  useImplPrefill,
   type ActionContext,
 } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
+import { useActionMutation, useAuthoredMutation } from "@angee/sdk";
 
 import { useIntegrateT } from "../../i18n";
 import {
@@ -31,8 +34,8 @@ const providerList = (
 );
 
 // Connect-readiness is an OAuth concern: an enabled client with credentials and an
-// authorize/token endpoint pair. OIDC discovery (a `discoveryUrl` shortcut) belongs
-// to the login provider in `@angee/iam`, not the OAuth base.
+// authorize/token endpoint pair. Discovery can fill those endpoints, but the
+// actual connect flow requires the resolved transport fields.
 function canConnectAccount(record: Record<string, unknown>): boolean {
   if (record.isEnabled !== true) return false;
   if (!fieldString(record.clientId)) return false;
@@ -51,6 +54,21 @@ export function ProvidersPage(): React.ReactElement {
   const [connectAccountStart] = useAuthoredMutation(IntegrateConnectAccountStart);
   const [connectAccountComplete] = useAuthoredMutation(
     IntegrateConnectAccountComplete,
+  );
+  const [discoverEndpoints] =
+    useActionMutation<ActionFieldName>("discoverOauthEndpoints");
+
+  // Fill the transport endpoints from the client's discovery URL (no manual entry).
+  // Persists onto the saved row and re-pulls it, so the form shows the resolved
+  // endpoints; available once a discovery URL is set.
+  const discover = React.useCallback(
+    async (ctx: ActionContext) => {
+      if (typeof ctx.record?.id !== "string") return;
+      const message = await discoverEndpoints(ctx.record.id);
+      ctx.refresh();
+      return message ?? t("integrate.providers.discover.done");
+    },
+    [discoverEndpoints, t],
   );
 
   const connect = React.useCallback(
@@ -129,19 +147,35 @@ export function ProvidersPage(): React.ReactElement {
     [connectAccountStart, connectAccountComplete, t],
   );
 
+  // Provider type is an ImplClassField (Google / Generic OIDC / Generic OAuth);
+  // picking one seeds the client's defaults (endpoints/scopes/icon) on create via
+  // the server-side ImplDefaultsMixin. useEnumOptions lower-cases the write value.
+  const providerTypeOptions = useEnumOptions(MODEL, "providerType");
+  const providerTypePrefill = useImplPrefill(MODEL, "providerType");
+
   return (
     <DataPage model={MODEL} placement="inline" routed>
       {providerList}
       <Form model={MODEL} layout="tabs">
         <Field name="displayName" title />
         <Group label={t("integrate.providers.group.client")} columns={2}>
-          <Field name="slug" />
+          <Field
+            name="providerType"
+            widget="select"
+            options={providerTypeOptions}
+            prefill={providerTypePrefill}
+            createOnly
+          />
+          {/* Slug widget: derives live from the display name (the `title` field)
+              while creating, until edited. Editable on its own afterwards. */}
+          <Field name="slug" widget="slug" />
           <Field name="icon" />
           <Field name="environment" />
           <Field name="clientId" />
           <Field name="clientSecret" />
         </Group>
         <Group label={t("integrate.providers.group.endpoints")} columns={2}>
+          <Field name="discoveryUrl" />
           <Field name="authorizeEndpoint" />
           <Field name="tokenEndpoint" />
           <Field name="revokeEndpoint" />
@@ -170,6 +204,12 @@ export function ProvidersPage(): React.ReactElement {
           <Field name="authorizeParams" />
           <Field name="tokenParams" />
         </Group>
+        <Action
+          id="discover"
+          label={t("integrate.providers.action.discover")}
+          run={discover}
+          visibleWhen={(record) => fieldString(record.discoveryUrl) !== ""}
+        />
         <Action
           id="connect"
           label={t("integrate.providers.action.connect")}

@@ -29,6 +29,20 @@ export interface FieldProps {
    * select can swap the body. A hidden field is never sent.
    */
   showWhen?: (values: Row) => boolean;
+  /**
+   * Seed sibling fields when this field's value changes — the impl-defaults
+   * mechanism. Returns a `{fieldName: value}` map (camelCase form field names) the
+   * form applies as the chosen preset, overwriting those fields (so boolean defaults
+   * land too). Pair with `useImplPrefill(model, field)` for an `ImplClassField`; keep
+   * it on a create-only field so it never rewrites a saved record.
+   */
+  prefill?: (value: unknown) => Record<string, unknown> | null | undefined;
+  /**
+   * For a `widget="slug"` field: the form field this slug auto-derives from while
+   * creating (lowercased + hyphenated), until the user edits the slug. Defaults to
+   * the record's `title` field. The derive runs in the form, not the backend.
+   */
+  slugFrom?: string;
   title?: boolean;
   body?: boolean;
   kind?: PageFieldKind;
@@ -48,6 +62,10 @@ export interface FieldDescriptor {
   editOnly?: boolean;
   /** Render and submit this field only when the predicate matches form values (see `FieldProps`). */
   showWhen?: (values: Row) => boolean;
+  /** Load the chosen preset onto sibling fields when this field changes (see `FieldProps.prefill`). */
+  prefill?: (value: unknown) => Record<string, unknown> | null | undefined;
+  /** Source field a `widget="slug"` field derives from on create (see `FieldProps.slugFrom`). */
+  slugFrom?: string;
   title?: boolean;
   body?: boolean;
   kind?: PageFieldKind;

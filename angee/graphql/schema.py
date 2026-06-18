@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass
 from typing import Any, ClassVar, cast
 
 import strawberry
@@ -40,14 +40,26 @@ SCHEMA_PART_KEYS: tuple[str, ...] = (
     "types",
     "extensions",
     "type_extensions",
+    "input_extensions",
 )
 """GraphQL merge buckets accepted from addon schema declarations."""
 
-_NON_ROOT_KEYS = {"types", "extensions", "type_extensions"}
+_NON_ROOT_KEYS = {"types", "extensions", "type_extensions", "input_extensions"}
 _ROOT_TYPE_NAMES = {key: key.title() for key in SCHEMA_PART_KEYS if key not in _NON_ROOT_KEYS}
 
 _APPLIED_EXTENSIONS_ATTR = "__angee_applied_type_extensions__"
+_INPUT_EXTENSION_STATE_ATTR = "__angee_input_extension_state__"
 """Marker on a target Strawberry type recording which extensions are already merged."""
+
+
+@dataclass(slots=True)
+class _InputExtensionState:
+    """Target-owned state for additively merged Strawberry input extensions."""
+
+    original_init: Any
+    base_field_names: frozenset[str]
+    added_fields: dict[str, Any]
+    applied: set[int]
 
 
 def _unwrap_validation_error(exc: BaseException | None) -> ValidationError | None:
@@ -143,6 +155,10 @@ class SchemaParts:
     """Strawberry types (marked with ``extends_type``) whose fields are merged onto
     an upstream type at build — the GraphQL parallel to a model ``extends``."""
 
+    input_extensions: tuple[object, ...] = ()
+    """Strawberry input subclasses whose added fields are merged onto an upstream
+    hand-written crud input at build — the write-side parallel to type extension."""
+
     @classmethod
     def from_mapping(
         cls,
@@ -168,6 +184,7 @@ class SchemaParts:
             types=self._dedupe_by_identity(self.types + other.types),
             extensions=self._dedupe_by_identity(self.extensions + other.extensions),
             type_extensions=self._dedupe_by_identity(self.type_extensions + other.type_extensions),
+            input_extensions=self._dedupe_by_identity(self.input_extensions + other.input_extensions),
         )
 
     @staticmethod
@@ -187,6 +204,29 @@ class SchemaParts:
         return tuple(deduped)
 
 
+def _field_python_name(field: Any) -> str:
+    """Return the Python attribute name for one Strawberry input field."""
+
+    return str(getattr(field, "python_name", "") or field.name)
+
+
+def _input_field_default(python_name: str, field: Any) -> Any:
+    """Return the dataclass-style default for one contributed input field."""
+
+    default_factory = getattr(field, "default_factory", MISSING)
+    if default_factory is not MISSING:
+        return default_factory()
+    default = getattr(field, "default", MISSING)
+    if default is MISSING:
+        raise TypeError(f"missing required keyword-only argument: {python_name!r}")
+    if default is strawberry.UNSET:
+        return strawberry.UNSET
+    try:
+        return copy.deepcopy(default)
+    except Exception:  # noqa: BLE001 — a non-copyable immutable default is safe to reuse.
+        return default
+
+
 class GraphQLSchemas:
     """Collection owner for named GraphQL schema parts and builds."""
 
@@ -198,6 +238,7 @@ class GraphQLSchemas:
         self.addons = tuple(addons)
         self._builds: dict[str, strawberry.Schema] = {}
         self._type_extensions_applied = False
+        self._input_extensions_applied = False
 
     @classmethod
     def from_discovery(cls) -> GraphQLSchemas:
@@ -264,15 +305,27 @@ class GraphQLSchemas:
                 applied.add(id(extension))
                 self._apply_type_extension(extension)
 
-    def _apply_type_extension(self, extension: object) -> None:
-        """Append one ``extends_type`` donor's fields onto its target's definition.
+    def _ensure_input_extensions_applied(self) -> None:
+        """Merge every contributed ``input_extensions`` field onto its target input.
 
-        Idempotent across schema collections: the target is a global Strawberry type
-        object shared by every build, so each extension is recorded on the target and
-        applied at most once (a second collection skips it rather than re-adding the
-        field). A field name already present from a *different* source is a genuine
-        collision and fails fast.
+        The write-side parallel of ``_ensure_type_extensions_applied``: applied once,
+        before any schema builds, so an upstream hand-written crud input carries its
+        downstream-contributed fields wherever the create/update mutation reads it.
         """
+
+        if self._input_extensions_applied:
+            return
+        self._input_extensions_applied = True
+        applied: set[int] = set()
+        for parts in self.parts.values():
+            for extension in parts.input_extensions:
+                if id(extension) in applied:
+                    continue
+                applied.add(id(extension))
+                self._apply_input_extension(extension)
+
+    def _apply_type_extension(self, extension: object) -> None:
+        """Append one ``extends_type`` donor's fields onto its target type's definition."""
 
         target = extension_target(extension)
         if target is None:
@@ -280,6 +333,99 @@ class GraphQLSchemas:
                 f"{surface_name(extension)} is listed in type_extensions but is not "
                 "marked with @extends_type(TargetType)"
             )
+        self._merge_extension_fields(extension, target)
+
+    def _apply_input_extension(self, extension: object) -> None:
+        """Append one input subclass donor's added fields onto its base input.
+
+        The donor is a ``@strawberry.input`` subclass of the upstream crud input it
+        extends (e.g. ``OAuthClientOidcInput(OAuthClientInput)``) — the write-side
+        parallel of ``extends_type``. ``crud`` captured the base input eagerly, so the
+        schema assembler merges each donor's *added* fields onto the base object
+        definition and installs one composed ``__init__`` that accepts every merged
+        field. Multiple donors may extend the same base; field-name collisions fail
+        fast and addon discovery order makes the result deterministic.
+        """
+
+        target = self._input_extension_base(extension)
+        target_def = get_object_definition(target, strict=True)
+        state = cast(_InputExtensionState | None, getattr(target, _INPUT_EXTENSION_STATE_ATTR, None))
+        if state is None:
+            state = _InputExtensionState(
+                original_init=cast(Any, target).__init__,
+                base_field_names=frozenset(_field_python_name(field) for field in target_def.fields),
+                added_fields={},
+                applied=set(),
+            )
+            setattr(target, _INPUT_EXTENSION_STATE_ATTR, state)
+            self._install_input_extension_init(target, state)
+        if id(extension) in state.applied:
+            return
+
+        donor_def = get_object_definition(cast(type, extension), strict=True)
+        existing_graphql_names = {field.name for field in target_def.fields}
+        for field in donor_def.fields:
+            python_name = _field_python_name(field)
+            if python_name in state.base_field_names:
+                if field.name not in existing_graphql_names:
+                    raise ImproperlyConfigured(
+                        f"input extension {surface_name(extension)} redefines base field {python_name!r} "
+                        f"on {target_def.name}; input_extensions may only add fields"
+                    )
+                continue  # inherited base field — already on the target
+            if python_name in state.added_fields:
+                raise ImproperlyConfigured(
+                    f"input extension {surface_name(extension)} adds field {python_name!r} "
+                    f"already declared on {target_def.name}"
+                )
+            if field.name in existing_graphql_names:
+                raise ImproperlyConfigured(
+                    f"input extension {surface_name(extension)} adds field {field.name!r} "
+                    f"already declared on {target_def.name}"
+                )
+            copied = copy.copy(field)
+            target_def.fields.append(copied)
+            state.added_fields[python_name] = copied
+            existing_graphql_names.add(field.name)
+        state.applied.add(id(extension))
+
+    def _install_input_extension_init(self, target: object, state: _InputExtensionState) -> None:
+        """Install the one target-owned initializer that accepts all added fields."""
+
+        def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            extension_values: dict[str, Any] = {}
+            for python_name, field in state.added_fields.items():
+                if python_name in kwargs:
+                    extension_values[python_name] = kwargs.pop(python_name)
+                else:
+                    extension_values[python_name] = _input_field_default(python_name, field)
+            state.original_init(self, *args, **kwargs)
+            for python_name, value in extension_values.items():
+                setattr(self, python_name, value)
+
+        setattr(target, "__init__", __init__)
+
+    def _input_extension_base(self, extension: object) -> object:
+        """Return the upstream crud input a donor subclasses (its nearest Strawberry base)."""
+
+        for base in type.mro(cast(type, extension))[1:]:
+            if get_object_definition(base, strict=False) is not None:
+                return base
+        raise ImproperlyConfigured(
+            f"{surface_name(extension)} in input_extensions must subclass the crud "
+            "input it extends"
+        )
+
+    def _merge_extension_fields(self, extension: object, target: object) -> None:
+        """Append a donor's fields onto a target type/input definition, once per target.
+
+        Idempotent across schema collections: the target is a global Strawberry object
+        shared by every build, so each donor is recorded on the target and applied at
+        most once (a second collection skips it rather than re-adding the field). The
+        field objects are copied so donor and target never share one. A field name
+        already present from a *different* source is a genuine collision and fails fast.
+        """
+
         applied = cast(set, getattr(target, _APPLIED_EXTENSIONS_ATTR, None) or set())
         setattr(target, _APPLIED_EXTENSIONS_ATTR, applied)
         if id(extension) in applied:
@@ -290,7 +436,7 @@ class GraphQLSchemas:
         for field in donor_def.fields:
             if field.name in existing:
                 raise ImproperlyConfigured(
-                    f"type extension {surface_name(extension)} adds field {field.name!r} "
+                    f"extension {surface_name(extension)} adds field {field.name!r} "
                     f"already declared on {target_def.name}"
                 )
             target_def.fields.append(copy.copy(field))
@@ -304,6 +450,7 @@ class GraphQLSchemas:
         """Build the merged live Strawberry schema named ``name``."""
 
         self._ensure_type_extensions_applied()
+        self._ensure_input_extensions_applied()
         try:
             parts = self.parts[name]
         except KeyError as error:

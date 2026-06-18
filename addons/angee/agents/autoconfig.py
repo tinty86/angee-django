@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 SETTINGS = {
-    # The ``InferenceProvider.backend_class`` registry: each key a provider row may
-    # name → the dotted path of the ``InferenceBackend`` it resolves to. agents ships
-    # only the built-in ``manual`` backend (``ImplClassField`` requires a non-empty
-    # registry); a vendor backend addon adds its own impl with a yamlconf dotted key
-    # (``"ANGEE_INFERENCE_BACKEND_CLASSES.anthropic": "…"``). See ``ImplClassField``.
-    "ANGEE_INFERENCE_BACKEND_CLASSES": {"manual": "angee.agents.backends.ManualInferenceBackend"},
+    # Inference implementations join integrate's unified ``Integration.impl_class``
+    # registry. ``manual`` lists no models; its catalogue is hand-curated.
+    "ANGEE_INTEGRATION_IMPLS.manual": "angee.agents.backends.ManualInferenceBackend",
     # The agents addon owns the MCP catalogue, so it supplies the bearer→actor
     # verifier the base ``angee.mcp`` runtime calls: it matches an inbound bearer to an
     # ``agents.MCPServer.credential`` and resolves the agent actor (see ``mcp_verifier``).

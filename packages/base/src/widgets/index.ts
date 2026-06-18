@@ -16,6 +16,7 @@ import { progressBarWidget } from "./progressBar";
 import { ribbonWidget } from "./ribbon";
 import { emailWidget, phoneWidget, urlWidget } from "./scalarText";
 import { selectionWidget, selectWidget } from "./select";
+import { slugWidget } from "./slug";
 import { statusBadgeWidget } from "./statusBadge";
 import { statusbarWidget } from "./statusbar";
 import { booleanToggleWidget, switchWidget } from "./switch";
@@ -41,6 +42,7 @@ export type {
   WidgetRenderProps,
 } from "./types";
 export { widgetLabel } from "./label";
+export { slugify } from "./slug";
 export { STATUS_TONES, statusTone } from "./status-tones";
 export {
   RelationField,
@@ -73,6 +75,7 @@ export const defaultWidgets = {
   "markdown.preview": markdownPreviewWidget,
   select: selectWidget,
   selection: selectionWidget,
+  slug: slugWidget,
   switch: switchWidget,
   userRef: userRefWidget,
   ownerCell: ownerCellWidget,

@@ -23,7 +23,7 @@ import { enIntegrateMessages } from "./i18n";
 import { IntegrationsPage } from "./views/IntegrationsPage";
 import { RepositoriesPage } from "./views/RepositoriesPage";
 import { SourcesPage } from "./views/SourcesPage";
-import { VCSIntegrationsPage } from "./views/VCSIntegrationsPage";
+import { VcsBridgesPage } from "./views/VcsBridgesPage";
 import { VendorsPage } from "./views/VendorsPage";
 import { WebhooksPage } from "./views/WebhooksPage";
 
@@ -80,8 +80,8 @@ const integrateRoutes: readonly BaseAddonRoute[] = [
     name: "integrate.vcs",
     path: "/integrate/vcs",
     shell: "console",
-    component: VCSIntegrationsPage,
-    model: "VCSIntegration",
+    component: VcsBridgesPage,
+    model: "VcsBridge",
   },
   {
     name: "integrate.vcsIntegration",

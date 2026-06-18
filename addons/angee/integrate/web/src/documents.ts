@@ -5,21 +5,46 @@
 
 import { graphql, type DocumentType } from "@angee/gql/console";
 
+export const ConnectIntegration = graphql(`
+  mutation ConnectIntegration(
+    $integrationId: ID!
+    $redirectUri: String!
+    $next: String!
+  ) {
+    connectIntegration(
+      integrationId: $integrationId
+      redirectUri: $redirectUri
+      next: $next
+    ) {
+      attached
+      authorizeUrl
+      error
+      mode
+      state
+      redirectUri
+      integration {
+        id
+        status
+      }
+    }
+  }
+`);
+
 export const RotateWebhookSecret = graphql(`
   mutation RotateWebhookSecret($id: ID!) {
     rotateWebhookSecret(id: $id) { ok secret }
   }
 `);
 
-// --- VCS console: integration picker, repo typeahead, and inventory actions --
-// VCSIntegration/Source CRUD and Repository delete stay model-driven (DataPage
-// reads the SDL). These are the bespoke reads the VCS views need — the
-// integration picker for the add dialog and the repo search typeahead — plus the
-// non-CRUD action mutations a button invokes.
+// --- VCS console: bridge picker, repo typeahead, and inventory actions ---
+// VcsBridge/Source CRUD and Repository delete stay model-driven (DataPage
+// reads the SDL). These are the bespoke reads the VCS views need: the bridge
+// picker for the add dialog, the repo search typeahead, and the bulk-discover
+// mutation whose variables do not match the single-id ActionResult helper.
 
-/** VCS integrations for the add-repository dialog's integration picker. */
-export const IntegrateVcsIntegrations = graphql(`
-  query IntegrateVcsIntegrations($pagination: OffsetPaginationInput) {
+/** VCS bridges for the add-repository dialog's bridge picker. */
+export const IntegrateVcsBridges = graphql(`
+  query IntegrateVcsBridges($pagination: OffsetPaginationInput) {
     vcsIntegrations(pagination: $pagination) {
       results {
         id
@@ -59,6 +84,10 @@ export const IntegrateDiscoverRepositories = graphql(`
     discoverRepositories(vcsIntegrationId: $vcsIntegrationId, org: $org) { ok message }
   }
 `);
+
+/** Selection result for one `vcsIntegrations.results` item (the picker option). */
+export type VcsBridgeOption =
+  DocumentType<typeof IntegrateVcsBridges>["vcsIntegrations"]["results"][number];
 
 /** One host repository candidate the add typeahead lists (the SDL `RepoCandidate`). */
 export type RepoCandidate = DocumentType<

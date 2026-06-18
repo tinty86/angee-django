@@ -1,7 +1,7 @@
 """Tests for the VCS inventory flow — discover/import/search/refresh/sync.
 
 Uses the in-memory ``StubVCSBackend`` (registered as ``stub`` in the test
-``ANGEE_VCS_BACKEND_CLASSES``); canned host data rides on the integration config.
+``ANGEE_INTEGRATION_IMPLS``); canned host data rides on the integration config.
 REBAC-guarded reads run under ``system_context`` (writes already elevate
 themselves).
 """
@@ -25,7 +25,7 @@ from tests.conftest import (
     Repository,
     Source,
     Template,
-    VCSIntegration,
+    VcsBridge,
     _create_missing_tables,
     make_integration,
 )
@@ -70,14 +70,14 @@ def vcs_tables(transactional_db: Any) -> Iterator[None]:
                     schema_editor.delete_model(model)
 
 
-def _vcs_integration(slug: str, *, config: dict[str, Any], backend_class: str = "stub") -> Any:
-    """Create a VCS integration whose host (or local) data rides on the config."""
+def _vcs_integration(slug: str, *, config: dict[str, Any], impl_class: str = "stub") -> Any:
+    """Create a VCS bridge whose host (or local) data rides on the integration config."""
 
-    integration = make_integration(slug)
+    integration = make_integration(slug, impl_class=impl_class)
     with system_context(reason="test vcs setup"):
         integration.config = config
         integration.save(update_fields=["config", "updated_at"])
-        return VCSIntegration.objects.create(integration=integration, backend_class=backend_class)
+        return VcsBridge.objects.create(integration=integration)
 
 
 def _repo_names() -> set[str]:
@@ -164,7 +164,7 @@ def test_local_backend_materializes_templates_through_the_source_flow(vcs_tables
     """A `local`-backed integration inventories a working tree into Template rows.
 
     Drives the same ``discover → Source.refresh`` path the resource-seeded console
-    uses, proving the local backend wires through ``VCSIntegration → Source →
+    uses, proving the local backend wires through ``VcsBridge → Source →
     Template`` and that skip-dirs keep a stray ``copier.yml`` out of the inventory.
     """
 
@@ -180,7 +180,7 @@ def test_local_backend_materializes_templates_through_the_source_flow(vcs_tables
     vcs = _vcs_integration(
         "local",
         config={"local_root": str(tmp_path), "local_name": "checkout"},
-        backend_class="local",
+        impl_class="local",
     )
 
     assert vcs.discover_repositories() == 1

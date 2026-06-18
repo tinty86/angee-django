@@ -14,31 +14,35 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import strawberry
 import strawberry_django
 from django.apps import apps
 from django.conf import settings
-from django.db import models
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import models, transaction
 from rebac import current_actor, system_context
 from strawberry import auto, relay
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.agents.autoconfig import SETTINGS as _AGENTS_SETTINGS
+from angee.agents.backends import InferenceBackend
 from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
 from angee.base.models import instance_from_public_id
 from angee.graphql.actions import ActionResult
 from angee.graphql.crud import crud
+from angee.graphql.extension import extends_type
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.schema import UserType
 from angee.integrate.schema import (
     CredentialType,
+    IntegrationInput,
     IntegrationType,
     SourceType,
     TemplateType,
@@ -52,20 +56,34 @@ Skill = apps.get_model("agents", "Skill")
 MCPServer = apps.get_model("agents", "MCPServer")
 MCPTool = apps.get_model("agents", "MCPTool")
 Agent = apps.get_model("agents", "Agent")
+Integration = apps.get_model("integrate", "Integration")
 
 
 @strawberry_django.type(InferenceProvider)
 class InferenceProviderType(AngeeNode):
-    """Admin projection of an inference provider (a capability over an integration)."""
+    """Admin projection of an inference provider related model."""
 
     integration: IntegrationType
     name: auto
     base_url: auto
-    backend_class: auto
-    status: auto
     config: JSON
     created_at: auto
     updated_at: auto
+
+
+@extends_type(IntegrationType)
+@strawberry_django.type(Integration)
+class IntegrationInferenceProviderExtension:
+    """Contributes the inference provider related model onto integrate's IntegrationType."""
+
+    @strawberry_django.field(only=["id"])
+    def inference_provider(self) -> InferenceProviderType | None:
+        """Return this integration's inference provider related model when present."""
+
+        try:
+            return cast(InferenceProviderType, cast(Any, self).agents_inferenceprovider)
+        except ObjectDoesNotExist:
+            return None
 
 
 @strawberry_django.type(InferenceModel)
@@ -198,11 +216,9 @@ class InferenceProviderInput:
     integration: relay.GlobalID
     name: str
     base_url: str = ""
-    backend_class: str = "manual"
     # UNSET (not None): an omitted field must fall back to the model default, not
     # overwrite a non-null column with null (see docs/backend/guidelines.md Pitfalls).
     config: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -212,9 +228,7 @@ class InferenceProviderPatch:
     id: relay.GlobalID
     name: str | None = strawberry.UNSET
     base_url: str | None = strawberry.UNSET
-    backend_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
-    status: str | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -420,16 +434,50 @@ _AGENT_MUTATION = crud(
 )
 """Admin agent CRUD: owner is field-backed REBAC; written elevated."""
 
+
+def _require_inference_integration(integration: Any) -> None:
+    """Raise when an integration's implementation is not an inference backend."""
+
+    impl_class = Integration.objects.impl_class_for_key(str(getattr(integration, "impl_class", "")))
+    if not issubclass(impl_class, InferenceBackend):
+        raise ValueError(f"Integration {integration.sqid} does not use an inference implementation.")
+
+
+@strawberry.type
+class InferenceProviderCreateMutation:
+    """Admin create for an inference provider, validating the owning integration impl."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def create_inference_provider(self, data: InferenceProviderInput) -> InferenceProviderType:
+        """Create an inference provider only for integrations backed by ``InferenceBackend``."""
+
+        integration = _resolve(
+            Integration,
+            data.integration,
+            reason="agents.graphql.inference_provider.create.integration",
+        )
+        _require_inference_integration(integration)
+        attrs: dict[str, Any] = {
+            "integration": integration,
+            "name": data.name,
+            "base_url": data.base_url,
+        }
+        if data.config is not strawberry.UNSET:
+            attrs["config"] = data.config
+        with system_context(reason="agents.graphql.inference_provider.create"), transaction.atomic():
+            provider = InferenceProvider.objects.create(**attrs)
+        return cast(InferenceProviderType, provider)
+
+
 _INFERENCE_PROVIDER_MUTATION = crud(
     InferenceProviderType,
-    create=InferenceProviderInput,
     update=InferenceProviderPatch,
     delete=True,
     permission_classes=_ADMIN_PERMISSION_CLASSES,
     name="inference_provider",
     write_context="agents.graphql.inference_provider",
 )
-"""Admin inference-provider CRUD: FK input resolves via strawberry-django; written elevated."""
+"""Admin inference-provider update/delete; create validates the owning Integration impl."""
 
 _INFERENCE_MODEL_MUTATION = crud(
     InferenceModelType,
@@ -908,11 +956,28 @@ _CONSOLE_TYPES: list[type] = [
     AgentChatEndpoint,
 ]
 
+@strawberry.input
+class IntegrationInferenceInput(IntegrationInput):
+    """Inference create fields contributed onto integrate's ``IntegrationInput``.
+
+    The write-side parallel of ``IntegrationInferenceProviderExtension``: a
+    ``@strawberry.input`` subclass merged onto the base via ``input_extensions``, so
+    the create mutation accepts the InferenceProvider fields without ``integrate``
+    naming them. ``related_config`` maps to the provider's own ``config`` (distinct
+    from the Integration's ``config``).
+    """
+
+    name: str = ""
+    base_url: str = ""
+    related_config: JSON | None = strawberry.UNSET
+
+
 schemas = {
     "console": {
         "query": [AgentsConsoleQuery],
         "mutation": [
             _AGENT_MUTATION,
+            InferenceProviderCreateMutation,
             _INFERENCE_PROVIDER_MUTATION,
             _INFERENCE_MODEL_MUTATION,
             _MCP_SERVER_MUTATION,
@@ -923,6 +988,8 @@ schemas = {
         ],
         "subscription": [changes(Agent, field="agentChanged")],
         "types": _CONSOLE_TYPES,
+        "type_extensions": [IntegrationInferenceProviderExtension],
+        "input_extensions": [IntegrationInferenceInput],
     },
 }
 """GraphQL contributions installed by the agents addon."""

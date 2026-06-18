@@ -18,7 +18,7 @@ from rebac import actor_context, system_context
 
 from angee.agents.backends import InferenceBackend, InferenceModelSpec
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
-from angee.iam_integrate_oidc.models import OidcClient as AbstractOidcClient
+from angee.iam_integrate_oidc.models import OAuthClientOidc as AbstractOAuthClientOidc
 from angee.integrate.credentials import CredentialKind
 from angee.integrate.models import Credential as AbstractCredential
 from angee.integrate.models import ExternalAccount as AbstractExternalAccount
@@ -27,7 +27,7 @@ from angee.integrate.models import OAuthClient as AbstractOAuthClient
 from angee.integrate.models import Repository as AbstractRepository
 from angee.integrate.models import Source as AbstractSource
 from angee.integrate.models import Template as AbstractTemplate
-from angee.integrate.models import VCSIntegration as AbstractVCSIntegration
+from angee.integrate.models import VcsBridge as AbstractVcsBridge
 from angee.integrate.models import Vendor as AbstractVendor
 from angee.integrate.models import WebhookSubscription as AbstractWebhookSubscription
 from angee.integrate.vcs.backend import RepoDescriptor, TreeEntry, VCSBackend
@@ -42,8 +42,13 @@ from angee.storage.models import Folder as AbstractFolder
 from angee.storage.models import MimeType as AbstractMimeType
 
 
-class OAuthClient(AbstractOAuthClient):
-    """Concrete integration OAuth client used by source-addon tests."""
+class OAuthClient(AbstractOAuthClient, AbstractOAuthClientOidc):
+    """Concrete OAuth client used by source-addon tests.
+
+    Composes the OIDC login extension (``OAuthClientOidc``) the way the composer
+    folds it onto the real ``OAuthClient`` — so the one table carries both the OAuth
+    substrate and the OIDC login fields on one concrete model.
+    """
 
     class Meta(AbstractOAuthClient.Meta):
         """Django model options for the canonical test OAuth client."""
@@ -52,19 +57,6 @@ class OAuthClient(AbstractOAuthClient):
         app_label = "integrate"
         db_table = "test_integrate_oauth_client"
         rebac_resource_type = "integrate/oauth_client"
-        rebac_id_attr = "sqid"
-
-
-class OidcClient(AbstractOidcClient):
-    """Concrete OIDC refinement used by source-addon tests."""
-
-    class Meta(AbstractOidcClient.Meta):
-        """Django model options for the canonical test OIDC client."""
-
-        abstract = False
-        app_label = "iam_integrate_oidc"
-        db_table = "test_iam_integrate_oidc_oidc_client"
-        rebac_resource_type = "iam_integrate_oidc/oidc_client"
         rebac_id_attr = "sqid"
 
 
@@ -177,15 +169,15 @@ class MarkdownPage(AbstractMarkdownPage):
         rebac_id_attr = "sqid"
 
 
-IAM_CONNECTION_TEST_MODELS = (OAuthClient, OidcClient, ExternalAccount, Credential)
+IAM_CONNECTION_TEST_MODELS = (OAuthClient, ExternalAccount, Credential)
 """Concrete integration connection models created on demand by connection test fixtures."""
 
 INTEGRATE_TEST_MODELS = (Vendor, Integration)
 """Concrete integration catalogue/integration models created on demand by integrate fixtures."""
 
 
-class VCSIntegration(AbstractVCSIntegration):
-    """Concrete VCS integration used by source-addon tests.
+class VcsBridge(AbstractVcsBridge):
+    """Concrete VCS bridge used by source-addon tests.
 
     ``angee.integrate.schema`` binds the VCS console types at import time via
     ``apps.get_model``, so the concrete models live here (imported before any test
@@ -193,12 +185,12 @@ class VCSIntegration(AbstractVCSIntegration):
     one test depends on another test having been collected first.
     """
 
-    class Meta(AbstractVCSIntegration.Meta):
-        """Django model options for the canonical test VCS integration."""
+    class Meta(AbstractVcsBridge.Meta):
+        """Django model options for the canonical test VCS bridge."""
 
         abstract = False
         app_label = "integrate"
-        db_table = "test_integrate_vcs_integration"
+        db_table = "test_integrate_vcs_bridge"
         rebac_resource_type = "integrate/vcs_integration"
         rebac_id_attr = "sqid"
 
@@ -244,7 +236,7 @@ class Template(AbstractTemplate):
         rebac_id_attr = "sqid"
 
 
-VCS_TEST_MODELS = (VCSIntegration, Repository, Source, Template)
+VCS_TEST_MODELS = (VcsBridge, Repository, Source, Template)
 """Concrete VCS inventory models created on demand by VCS test fixtures."""
 
 
@@ -253,6 +245,7 @@ def make_integration(
     *,
     kind: Any = CredentialKind.STATIC_TOKEN,
     material: dict[str, Any] | None = None,
+    impl_class: str = "none",
 ) -> Any:
     """Create the iam credential chain and an integrate ``Integration`` for tests.
 
@@ -275,14 +268,20 @@ def make_integration(
         )
         credential = Credential.objects.upsert_for_user(user, oauth_client, kind, material)
         vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
-        return Integration.objects.create(vendor=vendor, credential=credential, owner=user)
+        return Integration.objects.create(
+            vendor=vendor,
+            credential=credential,
+            owner=user,
+            impl_class=impl_class,
+            status="active",
+        )
 
 
 class StubVCSBackend(VCSBackend):
     """In-memory VCS backend for tests; canned data rides on ``integration.config``.
 
-    Registered as the ``stub`` key in the test ``ANGEE_VCS_BACKEND_CLASSES`` so a
-    ``VCSIntegration(backend_class="stub")`` resolves to it. Each test injects
+    Registered as the ``stub`` key in the test ``ANGEE_INTEGRATION_IMPLS`` so an
+    ``Integration(impl_class="stub")`` resolves to it. Each test injects
     ``stub_repos``/``stub_tree``/``stub_blobs`` through the integration config.
     """
 
@@ -338,8 +337,8 @@ class StubVCSBackend(VCSBackend):
 class StubInferenceBackend(InferenceBackend):
     """In-memory inference backend for tests; canned models ride on ``provider.config``.
 
-    Registered as the ``stub`` key in the test ``ANGEE_INFERENCE_BACKEND_CLASSES`` so an
-    ``InferenceProvider(backend_class="stub")`` resolves to it. Each test injects
+    Registered as the ``stub_inference`` key in the test ``ANGEE_INTEGRATION_IMPLS`` so
+    an ``Integration(impl_class="stub_inference")`` resolves to it. Each test injects
     ``stub_models`` (a list of ``InferenceModelSpec`` kwargs) through the provider config.
     """
 

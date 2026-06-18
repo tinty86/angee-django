@@ -7,7 +7,6 @@ import {
   Form,
   List,
   type ActionContext,
-  useEnumOptions,
 } from "@angee/base";
 import { runActionResult, useActionMutation, useAuthoredMutation } from "@angee/sdk";
 import type { ActionFieldName } from "@angee/gql/console/actions";
@@ -15,31 +14,16 @@ import type { ActionFieldName } from "@angee/gql/console/actions";
 import { useIntegrateT } from "../i18n";
 import { IntegrateDiscoverRepositories } from "../documents";
 
-const MODEL = "integrate.VCSIntegration";
-
-const integrationList = (
-  <List model={MODEL}>
-    <Column field="displayName" />
-    <Column field="backendClass" />
-    <Column field="status" widget="statusBadge" />
-    <Column field="lastSyncCompletedAt" />
-  </List>
-);
+const MODEL = "integrate.VcsBridge";
 
 /**
- * VCS integrations: the git-host capabilities, their backend impl, and sync
- * health. The form binds an existing `Integration` (vendor=github) to a backend
- * class, then `discover`/`sync` populate and refresh the repository inventory.
+ * VCS bridges: related rows that bind an existing `Integration` to repository
+ * discovery and source sync.
  */
-export function VCSIntegrationsPage(): React.ReactElement {
+export function VcsBridgesPage(): React.ReactElement {
   const t = useIntegrateT();
   const [syncVcs] = useActionMutation<ActionFieldName>("syncVcsIntegration");
   const [discover] = useAuthoredMutation(IntegrateDiscoverRepositories);
-
-  // `backendClass` reads as the UPPERCASE enum member but its create input is a
-  // lowercase String key; `useEnumOptions` lower-cases the option values, and
-  // `createOnly` keeps the read casing off the edit patch.
-  const backendClassOptions = useEnumOptions(MODEL, "backendClass");
 
   const sync = React.useCallback(
     async (ctx: ActionContext) => {
@@ -62,19 +46,23 @@ export function VCSIntegrationsPage(): React.ReactElement {
 
   return (
     <DataPage model={MODEL} placement="inline" routed>
-      {integrationList}
-      <Form model={MODEL}>
-        {/* The integration and its backend class are fixed at create; the patch
-            input carries neither, so both are create-only. */}
-        <Field name="integration" createOnly />
-        <Field
-          name="backendClass"
-          widget="select"
-          options={backendClassOptions}
-          createOnly
+      <List model={MODEL}>
+        <Column field="displayName" />
+        <Column
+          field="integration.implLabel"
+          header={t("integrate.integrations.implClass")}
         />
-        <Field name="status" widget="statusbar" />
-        <Field name="config" widget="json" />
+        <Column
+          field="integration.status"
+          header={t("integrate.col.status")}
+          widget="statusBadge"
+        />
+        <Column field="lastSyncCompletedAt" />
+      </List>
+      <Form model={MODEL}>
+        {/* The implementation lives on the owning Integration. */}
+        <Field name="integration" createOnly />
+        <Field name="lastSyncStatus" readOnly />
         {/* Write-only signing secret — set on create, never read back. */}
         <Field name="webhookSecret" widget="text" kind="string" createOnly />
         <Action id="sync" label={t("integrate.action.syncNow")} icon="refresh" run={sync} />

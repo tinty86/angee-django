@@ -2,11 +2,11 @@
 ``SKILL.md`` parser.
 
 Skill discovery reuses the integrate VCS inventory: the concrete
-``VCSIntegration``/``Repository``/``Source`` models and the ``stub`` backend live in
+``VcsBridge``/``Repository``/``Source`` models and the ``stub`` backend live in
 ``tests.test_integrate_vcs``/``tests.conftest``, so this module imports them (a
 second concrete ``Source`` for ``app_label="integrate"`` would collide in the
 registry) and declares only the agents concretes. Inference sync rides on the
-``stub`` ``InferenceBackend`` whose canned models ride on ``provider.config``.
+``stub_inference`` ``InferenceBackend`` whose canned models ride on ``provider.config``.
 """
 
 from __future__ import annotations
@@ -181,12 +181,11 @@ def test_inference_provider_refresh_upserts_models(agents_tables: None) -> None:
     """Refreshing a provider upserts one ``InferenceModel`` per advertised spec."""
 
     del agents_tables
-    integration = make_integration("anthropic")
+    integration = make_integration("anthropic", impl_class="stub_inference")
     with system_context(reason="test"):
         provider = InferenceProvider.objects.create(
             integration=integration,
             name="Anthropic",
-            backend_class="stub",
             config={
                 "stub_models": [
                     {
@@ -215,9 +214,9 @@ def test_manual_backend_advertises_no_models(agents_tables: None) -> None:
     """The built-in ``manual`` backend lists nothing — its catalogue is hand-curated."""
 
     del agents_tables
-    integration = make_integration("manual-vendor")
+    integration = make_integration("manual-vendor", impl_class="manual")
     with system_context(reason="test"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Manual", backend_class="manual")
+        provider = InferenceProvider.objects.create(integration=integration, name="Manual")
     assert provider.refresh_models() == 0
     with system_context(reason="test read"):
         assert InferenceModel.objects.filter(provider=provider).count() == 0
@@ -230,7 +229,7 @@ def test_inference_provider_service_environment_reads_integration_credential_env
     """Provider service env exposes only the integration-declared credential token."""
 
     del agents_tables
-    integration = make_integration("anthropic-env")
+    integration = make_integration("anthropic-env", impl_class="manual")
     with system_context(reason="test service env setup"):
         oauth_client = OAuthClient.objects.create(
             slug="anthropic-oauth",
@@ -249,7 +248,6 @@ def test_inference_provider_service_environment_reads_integration_credential_env
         provider = InferenceProvider.objects.create(
             integration=integration,
             name="Anthropic",
-            backend_class="manual",
         )
 
     assert provider.service_environment() == {"ANTHROPIC_OAUTH_TOKEN": "oauth-token"}

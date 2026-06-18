@@ -10,12 +10,29 @@ export const enIntegrateMessages: Record<string, string> = {
   "integrate.action.refresh": "Refresh",
   "integrate.action.disable": "Disable",
 
-  // Integrations page.
-  "integrate.integrations.authentication": "Authentication",
-  "integrate.integrations.testConnection": "Test connection",
-  "integrate.integrations.activate": "Activate",
+  // Shared list/group column labels.
+  "integrate.col.status": "Status",
+  "integrate.col.implementation": "Implementation",
+  "integrate.col.vendor": "Vendor",
+  "integrate.col.credential": "Credential",
+  "integrate.col.lastError": "Last error",
 
-  // VCS integrations page.
+  // Integrations page.
+  "integrate.integrations.identity": "Identity",
+  "integrate.integrations.authentication": "Authentication",
+  "integrate.integrations.runtime": "Runtime",
+  "integrate.integrations.inference": "Inference provider",
+  "integrate.integrations.vcs": "VCS bridge",
+  "integrate.integrations.implClass": "Implementation",
+  "integrate.integrations.providerName": "Provider name",
+  "integrate.integrations.baseUrl": "Base URL",
+  "integrate.integrations.providerConfig": "Provider config",
+  "integrate.integrations.webhookSecret": "Webhook secret",
+  "integrate.integrations.action.connect": "Connect",
+  "integrate.integrations.connect.startError": "Could not start integration connection.",
+  "integrate.integrations.connect.connected": "Integration connected.",
+
+  // VCS bridge page.
   "integrate.vcs.discover": "Discover repositories",
 
   // Repositories page detail groups.
@@ -39,15 +56,15 @@ export const enIntegrateMessages: Record<string, string> = {
   // Add-repository dialog.
   "integrate.addRepo.title": "Add repository",
   "integrate.addRepo.description":
-    "Pick a VCS integration, then type to find a repository to inventory.",
-  "integrate.addRepo.integrationLabel": "VCS integration",
-  "integrate.addRepo.integrationPlaceholder": "Select an integration",
-  "integrate.addRepo.integrationSearch": "Search integrations…",
+    "Pick a VCS bridge, then type to find a repository to inventory.",
+  "integrate.addRepo.integrationLabel": "VCS bridge",
+  "integrate.addRepo.integrationPlaceholder": "Select a bridge",
+  "integrate.addRepo.integrationSearch": "Search bridges...",
   "integrate.addRepo.nameLabel": "Repository name",
   "integrate.addRepo.namePlaceholder": "Type a repository name…",
   "integrate.addRepo.addFailed": "Could not add repository.",
   "integrate.addRepo.selectIntegration":
-    "Select an integration to search its repositories.",
+    "Select a bridge to search its repositories.",
   "integrate.addRepo.typeToSearch": "Type a repository name to search.",
   "integrate.addRepo.searching": "Searching…",
   "integrate.addRepo.noMatches": "No matching repositories.",
@@ -65,8 +82,11 @@ export const enIntegrateMessages: Record<string, string> = {
   "integrate.providers.group.claims": "Claims",
   "integrate.providers.group.oauthMetadata": "OAuth metadata",
   "integrate.providers.action.connect": "Connect account",
+  "integrate.providers.action.discover": "Discover endpoints",
   "integrate.providers.action.disable": "Disable",
   "integrate.providers.action.enable": "Enable",
+  "integrate.providers.discover.done": "Discovered endpoints.",
+  "integrate.providers.discover.failed": "Discovery failed.",
   "integrate.providers.connect.startError": "Could not start account connection.",
   "integrate.providers.connect.redirecting": "Redirecting...",
   "integrate.providers.connect.openAuthorize": "Open the authorization page",

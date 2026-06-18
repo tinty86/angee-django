@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Iterator
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -40,6 +41,8 @@ from tests.conftest import (
     Integration,
     OAuthClient,
     SchemaAddon,
+    StubVCSBackend,
+    VcsBridge,
     Vendor,
     WebhookSubscription,
     execute_schema,
@@ -98,6 +101,135 @@ def test_integration_node_resolves_nested_relations(
     }
 
 
+def test_integration_groups_aggregate_runs_with_rebac_scope(
+    integrate_console_tables: None,
+) -> None:
+    """The integration aggregate root executes through the Angee aggregate queryset seam."""
+
+    admin = _platform_admin("conn-groups-admin")
+    make_integration("conn-groups", impl_class="stub")
+    console_schema = _schema()
+
+    grouped = _data(
+        _execute(
+            console_schema,
+            """
+            query IntegrationGroups($groupBy: [IntegrationAggregateGroupBySpec!]!) {
+              integrationGroups(groupBy: $groupBy, pagination: {offset: 0, limit: 10}) {
+                totalCount
+                results {
+                  key { implClass }
+                  count
+                }
+              }
+            }
+            """,
+            {"groupBy": [{"field": "IMPL_CLASS"}]},
+            user=admin,
+        )
+    )["integrationGroups"]
+    assert grouped["totalCount"] == 1
+    assert grouped["results"] == [{"key": {"implClass": "STUB"}, "count": 1}]
+
+
+def test_impl_choices_are_admin_only(integrate_console_tables: None) -> None:
+    """Impl choice metadata is console data, so it is platform-admin gated."""
+
+    console_schema = _schema()
+    plain = User.objects.create_user(username="impl-choices-plain", email="plain@example.com")
+    admin = _platform_admin("impl-choices-admin")
+    query = """
+        query {
+          implChoices(model: "integrate.Integration", field: "implClass") {
+            key
+          }
+        }
+    """
+
+    assert _execute(console_schema, query, user=plain).errors is not None
+    result = _data(_execute(console_schema, query, user=admin))["implChoices"]
+    assert {"key": "none"} in result
+
+
+def test_update_integration_rejects_impl_class_patch(integrate_console_tables: None) -> None:
+    """The implementation discriminator is create-time only."""
+
+    admin = _platform_admin("impl-patch-admin")
+    conn = make_integration("impl-patch")
+    console_schema = _schema()
+
+    result = _execute(
+        console_schema,
+        """
+        mutation UpdateIntegration($id: ID!) {
+          updateIntegration(data: {id: $id, implClass: "stub"}) {
+            status
+          }
+        }
+        """,
+        {"id": _integration_global_id(conn)},
+        user=admin,
+    )
+
+    assert result.errors is not None
+    assert "implClass" in result.errors[0].message
+
+
+def test_create_with_impl_creates_related_row_and_rolls_back(
+    integrate_console_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Integration manager owns related-row creation transactionally."""
+
+    user = User.objects.create_user(username="impl-factory-owner", email="impl-factory@example.com")
+    unset = object()
+    with system_context(reason="test.integrate.create_with_impl.seed"):
+        oauth_client = OAuthClient.objects.create(
+            slug="impl-factory",
+            display_name="Impl Factory",
+            client_id="impl-factory-client",
+        )
+        credential = Credential.objects.upsert_for_user(
+            user,
+            oauth_client,
+            CredentialKind.STATIC_TOKEN,
+            {"api_key": "x"},
+        )
+        vendor = Vendor.objects.create(slug="impl-factory", display_name="Impl Factory")
+        integration = Integration.objects.create_with_impl(
+            vendor=vendor,
+            credential=credential,
+            owner=user,
+            impl_class="stub",
+            status="active",
+            related_input=SimpleNamespace(webhook_secret="created-secret"),
+            related_unset=unset,
+        )
+
+        bridge = VcsBridge.objects.get(integration=integration)
+        assert str(bridge.webhook_secret) == "created-secret"
+
+        rollback_vendor = Vendor.objects.create(slug="impl-factory-rollback", display_name="Rollback")
+
+        def fail_create_related_row(cls: type[StubVCSBackend], integration: Any, values: dict[str, Any]) -> None:
+            del cls, integration, values
+            raise ValueError("related validation failed")
+
+        monkeypatch.setattr(StubVCSBackend, "create_related_row", classmethod(fail_create_related_row))
+        with pytest.raises(ValueError, match="related validation failed"):
+            Integration.objects.create_with_impl(
+                vendor=rollback_vendor,
+                credential=credential,
+                owner=user,
+                impl_class="stub",
+                status="active",
+                related_input=SimpleNamespace(webhook_secret="bad-secret"),
+                related_unset=unset,
+            )
+
+        assert not Integration.objects.filter(vendor=rollback_vendor, owner=user, impl_class="stub").exists()
+
+
 def test_integration_update_delete_are_admin_only(
     integrate_console_tables: None,
 ) -> None:
@@ -126,13 +258,10 @@ def test_integration_update_delete_are_admin_only(
         user=plain,
     ).errors is not None
 
-    # ``IntegrationPatch`` has no ``capability_statuses`` field, and the update's
-    # ``full_clean`` rejects an empty-default JSON dict; seed both JSON columns so
-    # the (separately verified) update write path is reachable.
+    # Seed a non-empty config so the update also proves unrelated JSON survives.
     with system_context(reason="test.integrate.integration_crud.seed"):
         conn.config = {"endpoint": "https://vendor.example"}
-        conn.capability_statuses = {"sync": "active"}
-        conn.save(update_fields=["config", "capability_statuses", "updated_at"])
+        conn.save(update_fields=["config", "updated_at"])
     integration_id = _integration_global_id(conn)
     update_integration = """
         mutation UpdateIntegration($id: ID!) {
@@ -365,8 +494,7 @@ def test_sync_integration_runs_for_an_admin(
             user=admin,
         )
     )["syncIntegration"]
-    # No concrete bridge models are registered in the test app, so the eager sync
-    # finds nothing to run and reports success.
+    # No bridge rows exist, so the eager sync finds nothing to run and reports success.
     assert result["ok"] is True
     assert "bridge" in result["message"].lower()
 
@@ -430,12 +558,37 @@ def test_update_integration_status_accepts_the_lowercase_value(
         assert str(conn.status) == "disabled"
 
 
+def test_create_vcs_integration_rejects_non_vcs_impl(
+    integrate_console_tables: None,
+) -> None:
+    """A VCS bridge cannot point at a non-VCS integration implementation."""
+
+    console_schema = _schema()
+    admin = _platform_admin("vcs-create-admin")
+    conn = make_integration("vcs-create-not-vcs")
+    result = _execute(
+        console_schema,
+        """
+        mutation CreateVcs($integration: ID!) {
+          createVcsIntegration(data: {integration: $integration}) {
+            id
+          }
+        }
+        """,
+        {"integration": _integration_global_id(conn)},
+        user=admin,
+    )
+
+    assert result.errors is not None
+    assert "does not use a VCS implementation" in result.errors[0].message
+
+
 @pytest.fixture()
 def integrate_console_tables(transactional_db: Any) -> Iterator[None]:
     """Create the iam + integrate (incl. webhook) console tables and sync REBAC."""
 
     del transactional_db
-    created_models = _create_connection_tables(IAM_CONNECTION_TEST_MODELS + INTEGRATE_TEST_MODELS)
+    created_models = _create_connection_tables(IAM_CONNECTION_TEST_MODELS + INTEGRATE_TEST_MODELS + (VcsBridge,))
     webhook_created = False
     if WebhookSubscription._meta.db_table not in connection.introspection.table_names():
         with connection.schema_editor() as schema_editor:

@@ -83,8 +83,7 @@ describe("IAM identity views", () => {
 
     renderInRouter(<GrantsPage />);
 
-    await screen.findByRole("button", { name: "Revoke" });
-    await nextTask();
+    await openDefaultGrantGroup();
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await screen.findByText("Revoke role?");
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" }).at(-1)!);
@@ -104,8 +103,7 @@ describe("IAM identity views", () => {
 
     renderInRouter(<GrantsPage />);
 
-    await screen.findByRole("button", { name: "Revoke" });
-    await nextTask();
+    await openDefaultGrantGroup();
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await screen.findByText("Revoke role?");
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" }).at(-1)!);
@@ -135,10 +133,9 @@ function renderInRouter(children: ReactNode): ReturnType<typeof render> {
   return render(<TestUrlState>{children}</TestUrlState>);
 }
 
-function nextTask(): Promise<void> {
-  return new Promise((resolve) => {
-    globalThis.setTimeout(resolve, 0);
-  });
+async function openDefaultGrantGroup(): Promise<void> {
+  fireEvent.click(await screen.findByRole("button", { name: "Iam 1" }));
+  await screen.findByRole("button", { name: "Revoke" });
 }
 
 const TestUrlStateContext = createContext<{ children: ReactNode } | null>(null);

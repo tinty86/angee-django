@@ -13,7 +13,7 @@ import { baseIcons } from "@angee/base";
 
 import { AddRepositoryControl } from "./AddRepositoryControl";
 
-// The mocked SDK surface: the two reads (integration catalogue, repo search), the
+// The mocked SDK surface: the two reads (bridge catalogue, repo search), the
 // add mutation, and the list invalidator the control fires after an add.
 const sdkMocks = vi.hoisted(() => ({
   integrations: {
@@ -48,7 +48,7 @@ vi.mock("@angee/sdk", async (importOriginal) => {
     ...actual,
     useAuthoredQuery: (document: unknown, variables: unknown) => {
       const name = operationName(document);
-      if (name === "IntegrateVcsIntegrations") return sdkMocks.integrations;
+      if (name === "IntegrateVcsBridges") return sdkMocks.integrations;
       if (name === "IntegrateSearchRepositories") {
         sdkMocks.lastSearchVars = variables;
         return sdkMocks.search;
@@ -106,13 +106,13 @@ describe("AddRepositoryControl typeahead", () => {
     renderControl();
     fireEvent.click(screen.getByRole("button", { name: "Add repository" }));
 
-    // The single integration auto-selects, so typing scopes the search to it.
+    // The single bridge auto-selects, so typing scopes the search to it.
     fireEvent.change(screen.getByLabelText("Repository name"), {
       target: { value: "widget" },
     });
 
     const candidate = await screen.findByRole("button", { name: /acme\/widgets/ });
-    // The debounced search carries the picked integration and the typed query.
+    // The debounced search carries the picked bridge and the typed query.
     expect(sdkMocks.lastSearchVars).toEqual({
       vcsIntegrationId: VCS_ID,
       query: "widget",

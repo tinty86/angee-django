@@ -34,7 +34,6 @@ from tests.conftest import (
     Credential,
     ExternalAccount,
     OAuthClient,
-    OidcClient,
     addon_schema,
     execute_schema,
 )
@@ -632,46 +631,50 @@ def test_oauth_client_crud_are_admin_only(
     ).errors is not None
 
 
-def test_oidc_client_crud_adds_login_refinement_to_oauth_client(
+def test_oauth_client_crud_sets_oidc_login_fields(
     iam_connection_tables: None,
 ) -> None:
-    """The OIDC refinement is created against an OAuth client and is admin gated."""
+    """OIDC login fields are updated on the OAuth client row and admin gated."""
 
     plain = User.objects.create_user(username="oidc-crud-plain", email="plain@example.com")
     admin = _platform_admin("oidc-crud-admin")
     oauth_client = _oauth_client("refine-me", is_oidc=False)
     oauth_client_id = relay.to_base64("OAuthClientType", oauth_client.sqid)
     console_schema = _schema("console")
-    create_oidc_client = """
-        mutation CreateOidcClient($oauthClient: ID!) {
-          createOidcClient(data: {
-            oauthClient: $oauthClient,
+    update_oauth_client = """
+        mutation UpdateOauthClient($id: ID!) {
+          updateOauthClient(data: {
+            id: $id,
             issuer: "https://issuer.example",
             discoveryUrl: "https://issuer.example/.well-known/openid-configuration",
+            loginEnabled: true,
             createOnLogin: true,
             allowedEmailDomains: ["example.com"]
           }) {
             issuer
             discoveryUrl
+            loginEnabled
             createOnLogin
             allowedEmailDomains
           }
         }
     """
-    variables = {"oauthClient": oauth_client_id}
+    variables = {"id": oauth_client_id}
 
-    assert _execute(console_schema, create_oidc_client, variables, user=plain).errors is not None
+    assert _execute(console_schema, update_oauth_client, variables, user=plain).errors is not None
 
-    created = _data(_execute(console_schema, create_oidc_client, variables, user=admin))["createOidcClient"]
-    assert created == {
+    updated = _data(_execute(console_schema, update_oauth_client, variables, user=admin))["updateOauthClient"]
+    assert updated == {
         "issuer": "https://issuer.example",
         "discoveryUrl": "https://issuer.example/.well-known/openid-configuration",
+        "loginEnabled": True,
         "createOnLogin": True,
         "allowedEmailDomains": ["example.com"],
     }
-    with system_context(reason="test.iam_integrate_oidc.oidc_client"):
+    with system_context(reason="test.iam_integrate_oidc.oauth_client_oidc"):
         oauth_client.refresh_from_db()
-        assert oauth_client.oidc.create_on_login is True
+        assert oauth_client.login_enabled is True
+        assert oauth_client.create_on_login is True
 
 
 def test_reveal_credential_returns_the_secret_and_is_admin_only(
@@ -1351,7 +1354,7 @@ def _create_auth_app_tables() -> list[Any]:
     return _create_connection_tables(auth_models)
 
 
-def test_discover_oidc_endpoints_is_admin_gated_and_validates_discovery_url(
+def test_discover_oauth_endpoints_is_admin_gated_and_validates_discovery_url(
     iam_connection_tables: None,
 ) -> None:
     """Discover is admin-gated and reports when no discovery URL is configured."""
@@ -1361,15 +1364,15 @@ def test_discover_oidc_endpoints_is_admin_gated_and_validates_discovery_url(
     )
     admin = _platform_admin("discover-admin")
     client = _oauth_client("discoverable", discovery_url="")
-    oidc_id = relay.to_base64("OidcClientType", client.oidc.sqid)
+    oauth_client_id = relay.to_base64("OAuthClientType", client.sqid)
     console_schema = _schema("console")
-    discover = "mutation($id: ID!){ discoverOidcEndpoints(id: $id){ ok message } }"
+    discover = "mutation($id: ID!){ discoverOauthEndpoints(id: $id){ ok message } }"
 
-    assert _execute(console_schema, discover, {"id": oidc_id}, user=plain).errors is not None
+    assert _execute(console_schema, discover, {"id": oauth_client_id}, user=plain).errors is not None
 
     result = _data(
-        _execute(console_schema, discover, {"id": oidc_id}, user=admin)
-    )["discoverOidcEndpoints"]
+        _execute(console_schema, discover, {"id": oauth_client_id}, user=admin)
+    )["discoverOauthEndpoints"]
     assert result["ok"] is False
     assert "discovery url" in result["message"].lower()
 
@@ -1455,13 +1458,6 @@ def _user_global_id(user: Any) -> str:
     return relay.to_base64("UserType", str(getattr(user, "sqid", user.pk)))
 
 
-# Field names owned by the OIDC refinement (``OidcClient``); everything else passed
-# to ``_oauth_client`` lands on the OAuth base (``OAuthClient``).
-_OIDC_CLIENT_FIELDS = frozenset(
-    {"issuer", "discovery_url", "jwks_uri", "link_on_email_match", "create_on_login", "allowed_email_domains"}
-)
-
-
 def _oauth_client(
     slug: str,
     *,
@@ -1469,42 +1465,33 @@ def _oauth_client(
     is_enabled: bool = True,
     **overrides: Any,
 ) -> OAuthClient:
-    """Create one self-describing OAuth client (plus an OIDC refinement when OIDC).
+    """Create one self-describing OAuth client with optional OIDC login fields."""
 
-    ``is_oidc=True`` attaches an ``OidcClient`` so the client can run login/link;
-    ``is_oidc=False`` is a connect-only client. OIDC-only overrides
-    (issuer/discovery_url/jwks_uri/policy) route to the refinement.
-    """
-
-    base_defaults: dict[str, Any] = {
+    defaults: dict[str, Any] = {
         "display_name": slug.title(),
         "icon": f"{slug}.svg",
         "client_id": f"{slug}-client",
         "client_secret": "secret",
+        "discovery_url": "",
         "authorize_endpoint": "https://issuer.example/authorize",
         "token_endpoint": "https://issuer.example/token",
         "userinfo_endpoint": "https://issuer.example/userinfo",
         "is_enabled": is_enabled,
         "supports_pkce": False,
         "default_scopes": ["openid", "email"],
+        # Explicit endpoints (above) make this a fully configured login provider; no
+        # discovery_url, so the OIDC flow never makes a discovery network call. Tests that
+        # exercise discovery set discovery_url explicitly.
+        "issuer": "https://issuer.example" if is_oidc else "",
+        "jwks_uri": "https://issuer.example/jwks" if is_oidc else "",
+        "login_enabled": is_oidc,
+        "link_on_email_match": False,
+        "create_on_login": False,
+        "allowed_email_domains": [],
     }
-    # Explicit endpoints (above) make this a fully configured login provider; no
-    # discovery_url, so the OIDC flow never makes a discovery network call. Tests that
-    # exercise discovery set discovery_url explicitly.
-    oidc_defaults: dict[str, Any] = {
-        "issuer": "https://issuer.example",
-        "jwks_uri": "https://issuer.example/jwks",
-    }
-    for key, value in overrides.items():
-        if key in _OIDC_CLIENT_FIELDS:
-            oidc_defaults[key] = value
-        else:
-            base_defaults[key] = value
+    defaults.update(overrides)
     with system_context(reason="test iam graphql setup"):
-        oauth_client = OAuthClient.objects.create(slug=slug, **base_defaults)
-        if is_oidc:
-            OidcClient.objects.create(oauth_client=oauth_client, **oidc_defaults)
-    return oauth_client
+        return OAuthClient.objects.create(slug=slug, **defaults)
 
 
 class _Session(dict[str, Any]):
