@@ -1,22 +1,18 @@
 import { describe, expectTypeOf, test } from "vitest";
 
-import type { SaleFilter, SaleOrder } from "./__generated__/public";
-import type {
-  ResourceFilter,
-  ResourceOrder,
-  ResourceTypeName,
-} from "./__generated__/resource-types";
+import type { ResourceFilter, ResourceOrder, ResourceTypeName } from "./resource-types";
 
-describe("resource type map", () => {
-  test("ResourceTypeName includes the generated model names", () => {
-    expectTypeOf<"Sale">().toMatchTypeOf<ResourceTypeName>();
+// The default (empty) `ResourceTypeMap`: any model name is accepted and types
+// loosely. A project that augments the interface gets strict per-model typing;
+// that augmentation is global, so it is not exercised here.
+describe("resource type contract", () => {
+  test("ResourceTypeName is open (any model name) with no registered models", () => {
+    expectTypeOf<string>().toEqualTypeOf<ResourceTypeName>();
+    expectTypeOf<"notes.Note">().toMatchTypeOf<ResourceTypeName>();
   });
 
-  test("ResourceFilter resolves to the model's generated filter input", () => {
-    expectTypeOf<ResourceFilter<"Sale">>().toEqualTypeOf<SaleFilter>();
-  });
-
-  test("ResourceOrder resolves to the model's generated order input", () => {
-    expectTypeOf<ResourceOrder<"Sale">>().toEqualTypeOf<SaleOrder>();
+  test("an unregistered model's filter/order type loosely", () => {
+    expectTypeOf<ResourceFilter<"notes.Note">>().toEqualTypeOf<Record<string, unknown>>();
+    expectTypeOf<ResourceOrder<"notes.Note">>().toEqualTypeOf<Record<string, unknown>>();
   });
 });

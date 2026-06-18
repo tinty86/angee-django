@@ -11,7 +11,7 @@ import {
 } from "./auth-hooks";
 
 const contract = buildSchema(
-  readFileSync(new URL("../schema/contract.graphql", import.meta.url), "utf8"),
+  readFileSync(new URL("./__fixtures__/schema.graphql", import.meta.url), "utf8"),
 );
 
 describe("auth documents", () => {

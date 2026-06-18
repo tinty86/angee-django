@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 import { cacheConfigFromSchema } from "./cache-config";
 
 const schema = buildSchema(
-  readFileSync(new URL("../schema/contract.graphql", import.meta.url), "utf8"),
+  readFileSync(new URL("./__fixtures__/schema.graphql", import.meta.url), "utf8"),
 );
 const { keys, resolvers } = cacheConfigFromSchema(schema);
 

@@ -12,13 +12,9 @@
     }
   },
   "scripts": {
-    "codegen": "graphql-codegen --config codegen.ts && node ./bin/build-resource-types.mjs",
-    "pretest": "pnpm codegen",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretypecheck": "pnpm codegen",
     "typecheck": "tsc --noEmit",
-    "prebuild": "pnpm codegen",
     "build": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -32,8 +28,6 @@
     "graphql-ws": "^6.0.8"
   },
   "devDependencies": {
-    "@graphql-codegen/cli": "^7.1.1",
-    "@graphql-codegen/typescript": "^6.0.2",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^25.9.1",
     "@types/react": "^19.0.0",

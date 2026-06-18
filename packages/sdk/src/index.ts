@@ -216,10 +216,10 @@ export {
   type FormOverrideMap,
 } from "./define-addon";
 
-// Generated, per-schema type contracts.
+// The resource filter/order type contract (open for downstream augmentation).
 export type {
   ResourceTypeMap,
   ResourceTypeName,
   ResourceFilter,
   ResourceOrder,
-} from "./__generated__/resource-types";
+} from "./resource-types";

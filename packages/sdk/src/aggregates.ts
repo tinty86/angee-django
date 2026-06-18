@@ -22,7 +22,7 @@ import {
 import type {
   ResourceFilter,
   ResourceTypeName,
-} from "./__generated__/resource-types";
+} from "./resource-types";
 
 // Stable empty variables for the ungrouped query, so the hook does not re-run on
 // every render.

@@ -459,9 +459,20 @@ convention note; agents action-ops flagged pending Phase 4.
   end state; the composer/`angee build`/`templates/` changes for it are still TODO
   (no `angee/compose/` change is in this work). The three dev resolvers carry
   cross-referencing "dev wiring" comments until then.
-- **Phase 5** — docs (`frontend/guidelines.md` ✅ route-by-filename rule, `stack.md`
-  ✅ codegen row, fix `codegen.ts` header); retire pinned `contract.graphql` + SDK
-  `__generated__`.
+- **Phase 5** — docs (`frontend/guidelines.md` ✅ route-by-filename + action rules,
+  `stack.md` ✅ codegen row).
+  - **Retire pinned `contract.graphql` + SDK `__generated__` ✅ DONE & verified.**
+    The SDK's codegen stand-in is gone: deleted `codegen.ts`,
+    `bin/build-resource-types.mjs`, the gitignored `src/__generated__/*`, the SDK
+    `codegen`/`pre*` scripts + `@graphql-codegen/{cli,typescript}` devDeps, and the
+    stale `.gitignore`. `__generated__/resource-types.ts` → hand-written **open**
+    `src/resource-types.ts` (`ResourceTypeMap` empty + augmentable; `ResourceTypeName`
+    widens to `string`, filters fall back to `Record<string,unknown>` — the API the
+    hooks already widened to). `contract.graphql` had a second life as a unit-test
+    SDL, so it's demoted to `src/__fixtures__/schema.graphql` (used by
+    `cache-config`/`auth-documents` tests). SDK typecheck + 157 tests, full-workspace
+    typecheck, base 40 tests — all green. (The SDK no longer runs codegen at all;
+    the only per-project codegen is the example's `runtime/gql`.)
   - **`angee dev` codegen ordering ✅ FIXED** — `angee build`'s reset clears
     `runtime/gql`, and the dev SDL hook only re-emits `schemas/`, so Vite failed to
     resolve `@angee/gql/*`. Added a `codegen` job (`pnpm --filter

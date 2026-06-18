@@ -32,7 +32,7 @@ import type {
   ResourceFilter,
   ResourceOrder,
   ResourceTypeName,
-} from "./__generated__/resource-types";
+} from "./resource-types";
 
 export type { PageInfo } from "./resource-result";
 export type { DeletePreview, DeletePreviewGroup, DeletePreviewNode } from "./resource-result";
