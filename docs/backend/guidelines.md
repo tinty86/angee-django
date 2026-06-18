@@ -263,6 +263,10 @@ data through REBAC, never a queryset bypass.
   gate every subcommand on that persisted state — so editing the zed can deadlock
   the sync. Unstick with `rebac --skip-checks sync --force-overwrite --yes` then
   `rebac sync`; never smoke-test a zed against the shared example DB.
+- When an addon removes its last REBAC resource, keep an empty package-owned
+  `permissions.zed` with a bumped schema revision until old package-managed rows
+  have been pruned; deleting the file makes `rebac sync` skip the package and
+  strand stale definitions in existing databases.
 
 ## Pitfalls
 

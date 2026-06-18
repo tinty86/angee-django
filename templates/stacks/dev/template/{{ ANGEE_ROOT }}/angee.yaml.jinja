@@ -189,6 +189,9 @@ services:
       ANGEE_OPERATOR_GRAPHQL_ENDPOINT: "/operator/graphql"
       ANGEE_OPERATOR_URL: "http://127.0.0.1:${ports.operator}"
       ANGEE_OPERATOR_TOKEN: "${secret.operator-token}"
+      # Container-reachable URL for this Django process's built-in /mcp mount.
+      # Agents run in containers, so they reach the local backend through the host gateway.
+      ANGEE_BUILTIN_MCP_URL: "http://host.docker.internal:{{ django_port }}/mcp"
     after: [resources, schema]
 
   # Vite dev server for the SPA. It proxies /graphql/ and /auth/csrf/ to Django,

@@ -11,7 +11,7 @@ and an :class:`InferenceProvider` related model over an ``Integration`` with its
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Any, cast
 
 from django.apps import apps
@@ -63,6 +63,10 @@ class MCPTransport(models.TextChoices):
     STDIO = "stdio", "stdio"
     HTTP = "http", "HTTP"
     SSE = "sse", "SSE"
+
+
+BUILTIN_MCP_ANGEE = "angee"
+"""``MCPServer.config["builtin"]`` value for this process's built-in Angee MCP server."""
 
 
 class AgentLifecycle(models.TextChoices):
@@ -343,14 +347,38 @@ class MCPServer(SqidMixin, AuditMixin, AngeeModel):
         return self.name
 
     @property
+    def builtin(self) -> str:
+        """Return the built-in MCP server key this row targets, if any."""
+
+        config = self.config if isinstance(self.config, Mapping) else {}
+        return str(config.get("builtin") or "").strip()
+
+    @property
+    def resolved_url(self) -> str:
+        """Return the container-reachable URL this MCP server renders for agents.
+
+        Explicit ``url`` wins for external/custom servers. The built-in Angee MCP
+        server is modelled as ``config = {"builtin": "angee"}`` with no row-owned
+        URL; the stack supplies the concrete container-reachable URL through
+        ``ANGEE_BUILTIN_MCP_URL`` so demo/catalogue data never bakes in a dev port.
+        """
+
+        if self.url:
+            return str(self.url)
+        if self.builtin == BUILTIN_MCP_ANGEE:
+            return str(getattr(settings, "ANGEE_BUILTIN_MCP_URL", "") or "").strip()
+        return ""
+
+    @property
     def is_addressable(self) -> bool:
         """Whether a rendered container can reach this server — i.e. it has a URL.
 
         A stdio server is a local command with no URL and isn't rendered into an
-        agent's ``.mcp.json``.
+        agent's ``.mcp.json``. A built-in Angee server is addressable when the stack
+        supplied ``ANGEE_BUILTIN_MCP_URL``.
         """
 
-        return bool(self.url)
+        return bool(self.resolved_url)
 
     def config_entry(self, bearer_env: str | None) -> dict[str, Any]:
         """Return this server's ``.mcp.json`` entry, given an optional bearer env var.
@@ -363,7 +391,7 @@ class MCPServer(SqidMixin, AuditMixin, AngeeModel):
         would never resolve. Pass ``None`` for an uncredentialed server.
         """
 
-        entry: dict[str, Any] = {"type": str(self.transport), "url": self.url}
+        entry: dict[str, Any] = {"type": str(self.transport), "url": self.resolved_url}
         if bearer_env is not None:
             entry["headers"] = {"Authorization": f"Bearer ${{{bearer_env}}}"}
         return entry

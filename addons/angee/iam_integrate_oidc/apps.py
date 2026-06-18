@@ -20,6 +20,7 @@ class IAMIntegrateOidcConfig(AppConfig):
     label = "iam_integrate_oidc"
     depends_on = ("angee.iam", "angee.integrate")
     schemas = "schema.schemas"
+    permissions = "permissions.zed"
 
     resources = {
         "install": (

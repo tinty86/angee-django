@@ -910,7 +910,7 @@ def test_render_view_context_never_previews_encrypted_secret(agents_console_tabl
     with system_context(reason="test.ctx.secret"):
         credential = Credential.objects.create_local_credential(
             owner,
-            kind=CredentialKind.STATIC_TOKEN,
+            kind=str(CredentialKind.STATIC_TOKEN),
             name="leaky-cred",
             material={"api_key": "SUPER-SECRET-XYZ"},
         )
@@ -938,7 +938,7 @@ def test_mcp_config_emits_secret_ref_auth_header_for_credentialed_server(
     owner = User.objects.create_user(username="agt-mcpcfg-owner", email="mcpcfg@example.com")
     with system_context(reason="test.agents.mcp_config"):
         credential = Credential.objects.create_local_credential(
-            owner, kind=CredentialKind.STATIC_TOKEN, name="notes-bearer", material={"api_key": "tok-notes"}
+            owner, kind=str(CredentialKind.STATIC_TOKEN), name="notes-bearer", material={"api_key": "tok-notes"}
         )
         agent = Agent.objects.create(name="Cfg", owner=owner)
         plain = MCPServer.objects.create(name="public", url="http://host.docker.internal:8101/mcp/public/")
@@ -960,6 +960,33 @@ def test_mcp_config_emits_secret_ref_auth_header_for_credentialed_server(
     assert secrets == {secret_name: "tok-notes"}  # synced server-side, never in the file
 
 
+def test_mcp_config_resolves_builtin_server_from_settings(
+    agents_console_tables: None,
+    settings: Any,
+) -> None:
+    """The built-in Angee MCP server is selected by model config, not seeded URL."""
+
+    settings.ANGEE_BUILTIN_MCP_URL = "http://host.docker.internal:8111/mcp"
+    owner = User.objects.create_user(username="agt-builtin-mcp-owner", email="builtin-mcp@example.com")
+    with system_context(reason="test.agents.builtin_mcp_config"):
+        agent = Agent.objects.create(name="Built-in MCP", owner=owner)
+        builtin = MCPServer.objects.create(
+            name="angee",
+            placement="internal",
+            transport="http",
+            config={"builtin": "angee"},
+        )
+        agent.mcp_servers.add(builtin)
+        config = agent.mcp_config()
+
+    assert builtin.url == ""
+    assert config == {
+        "mcpServers": {
+            "angee": {"type": "http", "url": "http://host.docker.internal:8111/mcp"},
+        },
+    }
+
+
 def test_mcp_actor_verifier_resolves_bearer_to_the_credential_owner(agents_console_tables: None) -> None:
     """The agents bearer verifier maps an MCP-server credential to its owning user.
 
@@ -971,7 +998,7 @@ def test_mcp_actor_verifier_resolves_bearer_to_the_credential_owner(agents_conso
     owner = User.objects.create_user(username="agt-verify-owner", email="verify@example.com")
     with system_context(reason="test.agents.mcp_verify"):
         credential = Credential.objects.create_local_credential(
-            owner, kind=CredentialKind.STATIC_TOKEN, name="mcp-bearer", material={"api_key": "tok-secret"}
+            owner, kind=str(CredentialKind.STATIC_TOKEN), name="mcp-bearer", material={"api_key": "tok-secret"}
         )
         MCPServer.objects.create(name="notes", url="http://x/mcp/notes/", credential=credential)
 

@@ -160,6 +160,7 @@ def test_iam_integrate_oidc_config_installs_oauth_client_oidc_defaults() -> None
     config = apps.get_app_config("iam_integrate_oidc")
     manifest = resource_manifest_for(config)
 
+    assert config.permissions == "permissions.zed"
     assert manifest["install"] == (
         {"path": "resources/install/010_integrate.oauthclient.yaml", "adopt": ("slug", "environment")},
     )
