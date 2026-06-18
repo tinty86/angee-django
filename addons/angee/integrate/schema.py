@@ -1186,10 +1186,10 @@ class IntegrationInput:
     impl_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
-    name: str = ""
-    base_url: str = ""
+    # VcsBridge (integrate's own related model) create field. A downstream addon adds
+    # its related-model create fields onto this input via ``input_extensions`` — so
+    # integrate names none of them here (e.g. agents adds name/base_url/related_config).
     webhook_secret: str = ""
-    related_config: JSON | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -1320,7 +1320,7 @@ class IntegrationCreateMutation:
             attrs["config"] = data.config
         if data.status not in (strawberry.UNSET, None):
             attrs["status"] = data.status
-        related_values = _related_create_values(data)
+        related_values = _related_create_values(impl_class, data)
         with system_context(reason="integrate.graphql.integration.create"), transaction.atomic():
             integration = Integration.objects.create(**attrs)
             impl_class.create_related_row(integration, related_values)
@@ -1390,18 +1390,22 @@ def _create_impl_key(value: str | None) -> str:
     return str(value).strip() or "none"
 
 
-def _related_create_values(data: IntegrationInput) -> dict[str, Any]:
-    """Return related model field values from the combined integration create input."""
+def _related_create_values(impl: type[IntegrationImpl], data: IntegrationInput) -> dict[str, Any]:
+    """Return the related model's create values, read off the combined input by the
+    impl's declared ``related_create_fields``.
+
+    The related model's own ``config`` arrives as ``related_config`` so it never
+    collides with the Integration's ``config``; every other field is read by name.
+    Fields a downstream addon contributes to the input (via ``input_extensions``) are
+    present on ``data`` once merged, so integrate names no downstream field here.
+    """
 
     values: dict[str, Any] = {}
-    if data.name:
-        values["name"] = data.name
-    if data.base_url:
-        values["base_url"] = data.base_url
-    if data.webhook_secret:
-        values["webhook_secret"] = data.webhook_secret
-    if data.related_config not in (strawberry.UNSET, None):
-        values["config"] = data.related_config
+    for field in impl.related_create_fields:
+        input_attr = "related_config" if field == "config" else field
+        value = getattr(data, input_attr, strawberry.UNSET)
+        if value not in (None, "", strawberry.UNSET):
+            values[field] = value
     return values
 
 

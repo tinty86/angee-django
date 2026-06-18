@@ -41,6 +41,7 @@ from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_
 from angee.iam.schema import UserType
 from angee.integrate.schema import (
     CredentialType,
+    IntegrationInput,
     IntegrationType,
     SourceType,
     TemplateType,
@@ -920,6 +921,22 @@ _CONSOLE_TYPES: list[type] = [
     AgentChatEndpoint,
 ]
 
+@strawberry.input
+class IntegrationInferenceInput(IntegrationInput):
+    """Inference create fields contributed onto integrate's ``IntegrationInput``.
+
+    The write-side parallel of ``IntegrationInferenceProviderExtension``: a
+    ``@strawberry.input`` subclass merged onto the base via ``input_extensions``, so
+    the create mutation accepts the InferenceProvider fields without ``integrate``
+    naming them. ``related_config`` maps to the provider's own ``config`` (distinct
+    from the Integration's ``config``).
+    """
+
+    name: str = ""
+    base_url: str = ""
+    related_config: JSON | None = strawberry.UNSET
+
+
 schemas = {
     "console": {
         "query": [AgentsConsoleQuery],
@@ -936,6 +953,7 @@ schemas = {
         "subscription": [changes(Agent, field="agentChanged")],
         "types": _CONSOLE_TYPES,
         "type_extensions": [IntegrationInferenceProviderExtension],
+        "input_extensions": [IntegrationInferenceInput],
     },
 }
 """GraphQL contributions installed by the agents addon."""
