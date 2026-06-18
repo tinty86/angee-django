@@ -83,7 +83,7 @@ const iam = defineBaseAddon({
     { name: "iam.grants", path: "/iam/grants", shell: "console", component: GrantsPage },
     { name: "iam.relationships", path: "/iam/relationships", shell: "console", component: RelationshipsPage },
     { name: "iam.schema", path: "/iam/schema", shell: "console", component: SchemaPage },
-    ...consolePage("iam.oidc", "/iam/oidc", OidcProvidersPage, "OidcClient"),
+    ...consolePage("iam.oidc", "/iam/oidc", OidcProvidersPage, "OAuthClient"),
   ],
   menus: identityMenu,
   i18n: { iam: enIamMessages },
