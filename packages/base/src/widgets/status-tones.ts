@@ -24,7 +24,8 @@ export const STATUS_TONES: ToneValueBuckets = {
   ],
   warning: [
     "draft", "paused", "review", "pending", "in_review",
-    "provisioning", "deprovisioning", "starting", "warning", "degraded",
+    "provisioning", "deprovisioning", "starting", "connecting",
+    "closed", "warning", "degraded",
   ],
   danger: ["error", "failed", "denied", "lost", "down", "crashed"],
   neutral: [
@@ -32,6 +33,13 @@ export const STATUS_TONES: ToneValueBuckets = {
     "stopped", "deprovisioned", "idle", "inactive", "offline", "unknown", "default",
   ],
 };
+
+export interface StatusToneOptions {
+  /** Tone for a non-empty value absent from the shared vocabulary. */
+  unknownTone?: Tone;
+  /** Tone for null/undefined/empty values. */
+  emptyTone?: Tone;
+}
 
 /**
  * Resolve a status value's tone. The caller's explicit `<Column tone>` entry wins —
@@ -42,8 +50,12 @@ export const STATUS_TONES: ToneValueBuckets = {
 export function statusTone(
   value: string | null | undefined,
   override?: Record<string, Tone>,
+  options: StatusToneOptions = {},
 ): Tone {
   const mapped = value && override ? override[value] : undefined;
   if (mapped) return mapped;
-  return stateToneFromValue(value ?? undefined, STATUS_TONES);
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return options.emptyTone ?? "neutral";
+  const tone = stateToneFromValue(normalized, STATUS_TONES);
+  return tone === "brand" ? (options.unknownTone ?? "brand") : tone;
 }

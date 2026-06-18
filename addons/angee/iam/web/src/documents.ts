@@ -19,21 +19,36 @@ export const IamRoles = graphql(`
 `);
 
 export const IamOverview = graphql(`
-  query IamOverview($pagination: OffsetPaginationInput) {
-    users(pagination: $pagination) {
-      totalCount
-    }
+  query IamOverview($peekLimit: Int = 6) {
     roles {
       id
       namespace
       label
       description
     }
-    grants(pagination: $pagination) {
-      totalCount
-    }
-    relationships(pagination: $pagination) {
-      totalCount
+    iamOverview(peekLimit: $peekLimit) {
+      userCount
+      roleCount
+      grantCount
+      relationshipCount
+      privilegedGrantCount
+      unassignedUserCount
+      namespaces {
+        namespace
+        roleCount
+        grantCount
+      }
+      privilegedGrants {
+        principalId
+        principalType
+        principalLabel
+        role
+      }
+      unassignedUsers {
+        id
+        username
+        email
+      }
     }
   }
 `);

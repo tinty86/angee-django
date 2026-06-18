@@ -4,12 +4,14 @@ import { Code, RowsListView, type ListColumn } from "@angee/base";
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { ResourceLedger } from "../documents";
+import { useResourcesT } from "../i18n";
 import { resourceRows, type ResourceRow } from "../lib/rows";
 
-const columns: readonly ListColumn<ResourceRow>[] = [
+function columns(t: (key: string) => string): readonly ListColumn<ResourceRow>[] {
+  return [
   {
     field: "source",
-    header: "Source",
+    header: t("resources.col.source"),
     render: (row) => (
       <span className="flex min-w-0 flex-col">
         <span className="font-medium text-fg">{row.source}</span>
@@ -17,10 +19,10 @@ const columns: readonly ListColumn<ResourceRow>[] = [
       </span>
     ),
   },
-  { field: "tier", header: "Tier" },
+  { field: "tier", header: t("resources.col.tier") },
   {
     field: "target",
-    header: "Target",
+    header: t("resources.col.target"),
     render: (row) => (
       <span className="flex min-w-0 flex-col">
         <Code truncate>{row.target}</Code>
@@ -32,14 +34,16 @@ const columns: readonly ListColumn<ResourceRow>[] = [
   },
   {
     field: "hash",
-    header: "Hash",
+    header: t("resources.col.hash"),
     sortable: false,
     render: (row) => <Code truncate tone="muted">{row.hash}</Code>,
   },
-  { field: "loaded", header: "Loaded" },
-];
+  { field: "loaded", header: t("resources.col.loaded") },
+  ];
+}
 
 export function ResourcesPage(): ReactElement {
+  const t = useResourcesT();
   const query = useAuthoredQuery(ResourceLedger);
   const rows = useMemo(
     () => resourceRows(query.data?.resourceLedger ?? []),
@@ -49,12 +53,12 @@ export function ResourcesPage(): ReactElement {
   return (
     <RowsListView
       rows={rows}
-      columns={columns}
+      columns={columns(t)}
       fetching={query.fetching}
       error={query.error}
       defaultGroup={{ field: "tier" }}
       pageSize={100}
-      emptyMessage="No imported resources yet."
+      emptyMessage={t("resources.empty.ledger")}
     />
   );
 }

@@ -9,7 +9,6 @@ const SECTIONS = [
   { label: "Grants", path: "/iam/grants" },
   { label: "Relationships", path: "/iam/relationships" },
   { label: "Schema", path: "/iam/schema" },
-  { label: "Connections", path: "/iam/connections" },
 ] as const;
 
 test.describe("iam console — admin", () => {
@@ -23,9 +22,12 @@ test.describe("iam console — admin", () => {
     ).toBeVisible({ timeout: 20000 });
 
     for (const section of SECTIONS) {
-      await page.getByRole("link", { name: section.label, exact: true }).click();
+      await page.goto(section.path);
       // Some sections append a default-group query (e.g. ?group=namespace).
       await expect(page).toHaveURL(new RegExp(`${section.path}(\\?|$)`));
+      await expect(page.getByText(section.label, { exact: true }).first()).toBeVisible({
+        timeout: 20000,
+      });
     }
   });
 

@@ -1,5 +1,4 @@
 import type { ReactElement, ReactNode } from "react";
-import { isValid, parseISO } from "date-fns";
 
 import { Glyph } from "../chrome/Glyph";
 import { Calendar } from "../ui/calendar";
@@ -10,23 +9,11 @@ import {
   PopoverRoot,
   PopoverTrigger,
 } from "../ui/popover";
-
-/** A date-ish widget value: an ISO string, a `Date`, or empty. */
-export type DateWidgetValue = string | Date | null;
-
-/** Parse a widget value to a valid `Date`, or null. */
-export function dateFromValue(value: DateWidgetValue | undefined): Date | null {
-  if (value instanceof Date) return isValid(value) ? value : null;
-  if (!value) return null;
-  const parsed = parseISO(value);
-  return isValid(parsed) ? parsed : null;
-}
-
-/** The raw value as a stable title/string (the ISO form for a `Date`). */
-export function valueLabel(value: DateWidgetValue | undefined): string {
-  if (value instanceof Date) return value.toISOString();
-  return value ?? "";
-}
+export {
+  dateFromValue,
+  valueLabel,
+  type DateWidgetValue,
+} from "./date-format";
 
 export interface DatePopoverProps {
   /** The selected date highlighted in the calendar (null when unset). */

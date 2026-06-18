@@ -20,6 +20,8 @@ from rebac import ObjectRef, current_actor
 from rebac.backends import backend
 from rebac.field_visibility import check_field_access
 
+from angee.addons import is_angee_addon
+
 _EXPLORER = ObjectRef("platform/explorer", "default")
 
 
@@ -124,7 +126,7 @@ def _addons() -> list[AppConfig]:
     """Return composed Angee addon app configs, sorted by name."""
 
     return sorted(
-        (config for config in apps.get_app_configs() if getattr(config, "angee_addon", False)),
+        (config for config in apps.get_app_configs() if is_angee_addon(config)),
         key=lambda config: config.name,
     )
 

@@ -5,15 +5,11 @@ import {
   SOURCE_FETCH_MUTATION,
   SOURCE_PULL_MUTATION,
   SOURCE_PUSH_MUTATION,
-} from "../../data/documents";
+} from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction } from "../../data/transport";
 import type { SourceState } from "../../data/types";
-import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
-
-interface SourceActionVars extends Record<string, unknown> {
-  name: string;
-}
+import { runDaemonAction } from "../parts/run-action";
 
 /** A git action for a source: its label, tone, and bound handler. */
 export interface SourceRowAction {
@@ -35,16 +31,24 @@ export function useSourceActions(refetch: () => void): {
   const t = useOperatorT();
   const toast = useToast();
 
-  const fetchSource = useOperatorAction<DaemonActionData, SourceActionVars>(SOURCE_FETCH_MUTATION);
-  const pull = useOperatorAction<DaemonActionData, SourceActionVars>(SOURCE_PULL_MUTATION);
-  const push = useOperatorAction<DaemonActionData, SourceActionVars>(SOURCE_PUSH_MUTATION);
+  const fetchSource = useOperatorAction(SOURCE_FETCH_MUTATION);
+  const pull = useOperatorAction(SOURCE_PULL_MUTATION);
+  const push = useOperatorAction(SOURCE_PUSH_MUTATION);
   const busy = fetchSource.result.fetching || pull.result.fetching || push.result.fetching;
 
   const actions = useMemo<readonly SourceRowAction[]>(() => {
-    const defs = [
-      { field: "sourceFetch", label: t("operator.sources.fetch"), variant: "secondary" as const, run: fetchSource.run },
-      { field: "sourcePull", label: t("operator.sources.pull"), variant: "ghost" as const, run: pull.run },
-      { field: "sourcePush", label: t("operator.sources.push"), variant: "ghost" as const, run: push.run },
+    const setError = (message: string | null): void => {
+      if (message) toast.danger({ title: message });
+    };
+    const defs: readonly {
+      field: string;
+      label: string;
+      variant: SourceRowAction["variant"];
+      run: (variables: { name: string }) => Promise<object>;
+    }[] = [
+      { field: "sourceFetch", label: t("operator.sources.fetch"), variant: "secondary", run: fetchSource.run },
+      { field: "sourcePull", label: t("operator.sources.pull"), variant: "ghost", run: pull.run },
+      { field: "sourcePush", label: t("operator.sources.push"), variant: "ghost", run: push.run },
     ];
     return defs.map((def) => ({
       label: def.label,
@@ -55,9 +59,7 @@ export function useSourceActions(refetch: () => void): {
           field: def.field,
           variables: { name: source.name },
           label: def.label,
-          setError: (message) => {
-            if (message) toast.danger({ title: message });
-          },
+          setError,
           refetch,
         });
       },

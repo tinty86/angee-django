@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { tv } from "../lib/variants";
 
@@ -32,9 +33,10 @@ export interface LogStreamProps
  */
 export const LogStream = React.forwardRef<HTMLDivElement, LogStreamProps>(
   function LogStream(
-    { lines, emptyMessage = "Waiting for output…", className, followThreshold = 24, ...props },
+    { lines, emptyMessage, className, followThreshold = 24, ...props },
     forwardedRef,
   ) {
+    const t = useBaseT();
     const styles = logStreamVariants();
     const viewportRef = React.useRef<HTMLDivElement | null>(null);
     // Whether the tail is "stuck" to the bottom; a reader scrolling up detaches it.
@@ -57,7 +59,9 @@ export const LogStream = React.forwardRef<HTMLDivElement, LogStreamProps>(
       <div ref={forwardedRef} className={cn(styles.root(), className)} {...props}>
         <div ref={viewportRef} className={styles.viewport()} onScroll={handleScroll}>
           {lines.length === 0 ? (
-            <span className={styles.empty()}>{emptyMessage}</span>
+            <span className={styles.empty()}>
+              {emptyMessage ?? t("logStream.waiting")}
+            </span>
           ) : (
             lines.map((line, index) => (
               <div key={index} className={styles.line()}>

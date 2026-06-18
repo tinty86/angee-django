@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
-import { format } from "date-fns";
 
+import { useBaseT } from "../i18n";
 import { Button } from "../ui/button";
 import {
   DatePopover,
@@ -8,6 +8,7 @@ import {
   valueLabel,
   type DateWidgetValue,
 } from "./date-popover";
+import { formatDate, formatDateStorage } from "./date-format";
 import { widgetLabel } from "./label";
 import type { WidgetDefinition, WidgetRenderProps } from "./types";
 
@@ -17,9 +18,10 @@ function DateEdit({
   field,
   readOnly,
 }: WidgetRenderProps<DateWidgetValue>): ReactElement {
+  const t = useBaseT();
   const [open, setOpen] = useState(false);
   const date = dateFromValue(value);
-  const label = formatDate(date) || widgetLabel(field, "Select date");
+  const label = formatDate(date) || widgetLabel(field, t("date.select"));
 
   if (readOnly) return <DateRead value={value} />;
 
@@ -27,11 +29,11 @@ function DateEdit({
     <DatePopover
       selected={date}
       label={label}
-      ariaLabel={widgetLabel(field, "Date")}
+      ariaLabel={widgetLabel(field, t("date.label"))}
       open={open}
       onOpenChange={setOpen}
       onSelectDate={(next) => {
-        onChange?.(next ? format(next, "yyyy-MM-dd") : null);
+        onChange?.(formatDateStorage(next));
         setOpen(false);
       }}
       footer={
@@ -47,7 +49,7 @@ function DateEdit({
                 setOpen(false);
               }}
             >
-              Clear
+              {t("date.clear")}
             </Button>
           </div>
         ) : null
@@ -73,7 +75,3 @@ export const dateWidget = {
   read: DateRead,
   cell: DateRead,
 } satisfies WidgetDefinition<DateWidgetValue>;
-
-function formatDate(value: Date | null): string {
-  return value ? format(value, "MMM d, yyyy") : "";
-}

@@ -17,6 +17,7 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PlatformExplorer } from "../documents";
+import { usePlatformT } from "../i18n";
 import {
   addonDetailPath,
   fieldsPath,
@@ -28,6 +29,7 @@ import { LinkedChips, useRouteNavigate } from "../lib/cells";
 const shortName = (dep: string): string => dep.split(".").pop() ?? dep;
 
 export function AddonDetail(): ReactElement {
+  const t = usePlatformT();
   const params = useParams({ strict: false });
   const id = "id" in params && typeof params.id === "string" ? params.id : undefined;
   const query = useAuthoredQuery(PlatformExplorer);
@@ -48,9 +50,11 @@ export function AddonDetail(): ReactElement {
   );
   const go = useRouteNavigate();
 
-  if (query.fetching && !addon) return <LoadingPanel message="Loading addon…" />;
+  if (query.fetching && !addon) {
+    return <LoadingPanel message={t("platform.detail.addon.loading")} />;
+  }
   if (!addon) {
-    return <EmptyState fill icon="list" title="Addon not found" description={id} />;
+    return <EmptyState fill icon="list" title={t("platform.detail.addon.notFound")} description={id} />;
   }
 
   return (
@@ -69,30 +73,30 @@ export function AddonDetail(): ReactElement {
       <MetricStrip
         metrics={[
           {
-            label: "Models",
+            label: t("platform.col.models"),
             value: addon.modelCount,
             icon: "grid",
             href: addon.modelCount ? modelsPath({ addon: addon.id }) : undefined,
             onNavigate: go,
           },
           {
-            label: "Fields",
+            label: t("platform.col.fields"),
             value: addon.fieldCount,
             icon: "columns",
             href: addon.fieldCount ? fieldsPath({ addon: addon.id }) : undefined,
             onNavigate: go,
           },
-          { label: "Resources", value: addon.resourceCount, icon: "files" },
+          { label: t("platform.col.resources"), value: addon.resourceCount, icon: "files" },
         ]}
       />
 
       <Card>
-        <CardHeader><CardTitle>Dependencies</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("platform.detail.dependencies")}</CardTitle></CardHeader>
         <CardContent>
           <MetaGrid
             rows={[
-              ["Depends on", <LinkedChips items={dependsOn} href={addonDetailPath} format={shortName} />],
-              ["Depended by", <LinkedChips items={dependedBy} href={addonDetailPath} format={shortName} />],
+              [t("platform.col.dependsOn"), <LinkedChips items={dependsOn} href={addonDetailPath} format={shortName} />],
+              [t("platform.col.dependedBy"), <LinkedChips items={dependedBy} href={addonDetailPath} format={shortName} />],
             ]}
           />
         </CardContent>
@@ -100,7 +104,11 @@ export function AddonDetail(): ReactElement {
 
       {modelLabels.length ? (
         <Card>
-          <CardHeader><CardTitle>{`Models (${modelLabels.length})`}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>
+              {t("platform.detail.modelsWithCount", { count: modelLabels.length })}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
             <LinkedChips items={modelLabels} href={modelDetailPath} />
           </CardContent>

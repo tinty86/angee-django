@@ -83,6 +83,15 @@ export const enOperatorMessages: Record<string, string> = {
   "operator.workspaces.detail.expiresAt": "Expires",
   "operator.workspaces.detail.mcp": "Playwright MCP",
   "operator.workspaces.detail.logs": "Logs",
+  "operator.workspaceSources.title": "Sources",
+  "operator.workspaceSources.empty": "No sources.",
+  "operator.workspaceSources.column.slot": "Slot",
+  "operator.workspaceSources.column.state": "State",
+  "operator.workspaceSources.column.branch": "Branch",
+  "operator.workspaceSources.column.drift": "Drift",
+  "operator.workspaceSources.column.path": "Path",
+  "operator.workspaceSources.dirty": "dirty",
+  "operator.workspaceSources.clean": "clean",
 
   // Sources.
   "operator.sources.loading": "Loading sources",

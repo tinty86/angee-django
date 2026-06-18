@@ -21,7 +21,7 @@ import strawberry_django
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import models, transaction
+from django.db import transaction
 from rebac import current_actor, system_context
 from strawberry import auto, relay
 from strawberry.scalars import JSON
@@ -32,8 +32,7 @@ from angee.agents.backends import InferenceBackend
 from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
-from angee.base.models import instance_from_public_id
-from angee.graphql.actions import ActionResult
+from angee.graphql.actions import ActionResult, resolve_action_target
 from angee.graphql.crud import crud
 from angee.graphql.extension import extends_type
 from angee.graphql.node import AngeeNode
@@ -451,7 +450,7 @@ class InferenceProviderCreateMutation:
     def create_inference_provider(self, data: InferenceProviderInput) -> InferenceProviderType:
         """Create an inference provider only for integrations backed by ``InferenceBackend``."""
 
-        integration = _resolve(
+        integration = resolve_action_target(
             Integration,
             data.integration,
             reason="agents.graphql.inference_provider.create.integration",
@@ -521,29 +520,6 @@ _SKILL_MUTATION = crud(
 )
 """Admin skill delete: rows arrive via source discovery; removal is inventory cleanup
 (re-discovered on the next source sync). No create/update — the source owns the data."""
-
-
-def _resolve(
-    model: type[models.Model],
-    gid: relay.GlobalID,
-    *,
-    reason: str,
-    select_related: tuple[str, ...] = (),
-) -> Any:
-    """Return the elevated instance addressed by ``gid`` for an action write.
-
-    ``select_related`` joins related rows the caller is about to walk (e.g. an agent's
-    inference-credential chain for provisioning) so the action runs in one query.
-    """
-
-    queryset = model._default_manager.all()
-    if select_related:
-        queryset = queryset.select_related(*select_related)
-    with system_context(reason=reason):
-        instance = instance_from_public_id(model, gid.node_id, queryset=queryset)
-    if instance is None:
-        raise ValueError(f"{model._meta.object_name} {gid.node_id!r} was not found.")
-    return instance
 
 
 # The inference-credential chains ``_render_plan`` walks: the per-agent override
@@ -619,7 +595,7 @@ class InferenceActionMutation:
     def refresh_provider_models(self, id: relay.GlobalID) -> ActionResult:
         """Re-list one provider's models into the catalogue now."""
 
-        provider = _resolve(InferenceProvider, id, reason="agents.graphql.refresh_provider_models")
+        provider = resolve_action_target(InferenceProvider, id, reason="agents.graphql.refresh_provider_models")
         with system_context(reason="agents.graphql.refresh_provider_models"):
             try:
                 count = provider.refresh_models()
@@ -751,7 +727,12 @@ class AgentActionMutation:
         :meth:`deprovision_agent` is the reset for any stuck state, then provision again.
         """
 
-        agent = _resolve(Agent, id, reason="agents.graphql.provision_agent", select_related=_PROVISION_CHAIN)
+        agent = resolve_action_target(
+            Agent,
+            id,
+            reason="agents.graphql.provision_agent",
+            select_related=_PROVISION_CHAIN,
+        )
         with system_context(reason="agents.graphql.provision_agent"):
             if agent.workspace:
                 return ActionResult(ok=False, message="Agent is already provisioned — deprovision it first.")
@@ -805,7 +786,12 @@ class AgentActionMutation:
         daemon already removed. Re-run to retry.
         """
 
-        agent = _resolve(Agent, id, reason="agents.graphql.reprovision_agent", select_related=_PROVISION_CHAIN)
+        agent = resolve_action_target(
+            Agent,
+            id,
+            reason="agents.graphql.reprovision_agent",
+            select_related=_PROVISION_CHAIN,
+        )
         with system_context(reason="agents.graphql.reprovision_agent"):
             workspace = agent.workspace
             service = agent.service
@@ -854,7 +840,7 @@ class AgentActionMutation:
         ``operatorConnection`` mints with — the session user.
         """
 
-        agent = _resolve(Agent, id, reason="agents.graphql.agent_chat_endpoint", select_related=("model",))
+        agent = resolve_action_target(Agent, id, reason="agents.graphql.agent_chat_endpoint", select_related=("model",))
         session = _mint_session(agent)
         return AgentChatEndpoint(
             url=session["url"],
@@ -896,7 +882,7 @@ class AgentActionMutation:
         ``agents.context``.
         """
 
-        _resolve(Agent, id, reason="agents.graphql.render_agent_prompt")
+        resolve_action_target(Agent, id, reason="agents.graphql.render_agent_prompt")
         return render_view_context(dict(view) if isinstance(view, dict) else {})
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
@@ -911,7 +897,7 @@ class AgentActionMutation:
         ``ERROR``, preserving the names so the teardown can be retried.
         """
 
-        agent = _resolve(Agent, id, reason="agents.graphql.deprovision_agent")
+        agent = resolve_action_target(Agent, id, reason="agents.graphql.deprovision_agent")
         with system_context(reason="agents.graphql.deprovision_agent"):
             if not agent.workspace and not agent.service:
                 agent.mark_deprovisioned()

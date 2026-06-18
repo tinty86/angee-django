@@ -135,6 +135,45 @@ describe("IAM overview page", () => {
     ).toBeTruthy();
   });
 
+  test("renders backend overview aggregates independently of the picker page", async () => {
+    sdkMocks.overview.data = overviewData({
+      userCount: 506,
+      roleCount: 2,
+      grantCount: 3,
+      relationshipCount: 3,
+      privilegedGrantCount: 2,
+      unassignedUserCount: 503,
+      namespaces: [{ namespace: "angee", roleCount: 2, grantCount: 3 }],
+      privilegedGrants: [
+        {
+          principalId: "1",
+          principalType: "auth/user",
+          principalLabel: "Admin User",
+          role: "angee/role:admin",
+        },
+      ],
+      unassignedUsers: [
+        userData({
+          id: STALE_RELAY_ID,
+          username: "unassigned",
+          email: "unassigned@example.com",
+        }),
+      ],
+    });
+    sdkMocks.users.data = usersData({
+      totalCount: 1,
+      results: [userData({ id: ALICE_RELAY_ID })],
+    });
+
+    renderInRouter(<OverviewPage />);
+
+    expect(await screen.findByText("503 without direct roles")).toBeTruthy();
+    expect(screen.getByText("Admin User")).toBeTruthy();
+    expect(screen.getByText("2 roles")).toBeTruthy();
+    expect(screen.getByText("3 grants")).toBeTruthy();
+    expect(screen.getByText("unassigned")).toBeTruthy();
+  });
+
   test("submits the selected user's relay id and renders the user label on success", async () => {
     sdkMocks.overview.data = overviewData();
     sdkMocks.users.data = usersData({
@@ -212,11 +251,8 @@ async function selectTrigger(label: string): Promise<HTMLElement> {
   return screen.findByRole("combobox", { name: label });
 }
 
-function overviewData(): unknown {
+function overviewData(overrides: Record<string, unknown> = {}): unknown {
   return {
-    users: {
-      totalCount: 1,
-    },
     roles: [
       {
         id: "writer",
@@ -225,11 +261,17 @@ function overviewData(): unknown {
         description: "",
       },
     ],
-    grants: {
-      totalCount: 0,
-    },
-    relationships: {
-      totalCount: 0,
+    iamOverview: {
+      userCount: 1,
+      roleCount: 1,
+      grantCount: 0,
+      relationshipCount: 0,
+      privilegedGrantCount: 0,
+      unassignedUserCount: 1,
+      namespaces: [{ namespace: "angee", roleCount: 1, grantCount: 0 }],
+      privilegedGrants: [],
+      unassignedUsers: [],
+      ...overrides,
     },
   };
 }

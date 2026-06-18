@@ -23,7 +23,7 @@ import {
   type SessionNotification,
 } from "@zed-industries/agent-client-protocol";
 import * as v from "valibot";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation, type DocumentVariables } from "@angee/sdk";
 
 import { messageOf } from "./acp-error";
 import { foldIntoLog, type ChatMessage } from "./acp-log";
@@ -36,7 +36,6 @@ import {
   type AgentChatEndpoint,
   type AgentChatView,
   type McpServerConfig,
-  type RenderAgentPromptVariables,
 } from "./documents";
 
 // Re-mint the route token this far before it expires, so the socket reconnects while
@@ -309,7 +308,7 @@ function parseEndpoint(
 /** Render the `<system_context>` block for the current view, or "" on failure. */
 async function fetchSystemContext(
   renderPrompt: (
-    variables: RenderAgentPromptVariables,
+    variables: DocumentVariables<typeof RenderAgentPrompt>,
   ) => Promise<DocumentType<typeof RenderAgentPrompt> | undefined>,
   agentId: string,
   view: AgentChatView,

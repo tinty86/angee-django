@@ -17,6 +17,7 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PlatformExplorer } from "../documents";
+import { usePlatformT } from "../i18n";
 import {
   addonDetailPath,
   fieldsPath,
@@ -26,6 +27,7 @@ import {
 import { LinkedChips, RouterLink, useRouteNavigate } from "../lib/cells";
 
 export function ModelDetail(): ReactElement {
+  const t = usePlatformT();
   const params = useParams({ strict: false });
   const id = "id" in params && typeof params.id === "string" ? params.id : undefined;
   const query = useAuthoredQuery(PlatformExplorer);
@@ -37,9 +39,11 @@ export function ModelDetail(): ReactElement {
   );
   const go = useRouteNavigate();
 
-  if (query.fetching && !model) return <LoadingPanel message="Loading model…" />;
+  if (query.fetching && !model) {
+    return <LoadingPanel message={t("platform.detail.model.loading")} />;
+  }
   if (!model) {
-    return <EmptyState fill icon="grid" title="Model not found" description={id} />;
+    return <EmptyState fill icon="grid" title={t("platform.detail.model.notFound")} description={id} />;
   }
 
   return (
@@ -58,22 +62,22 @@ export function ModelDetail(): ReactElement {
 
       <MetricStrip
         metrics={[
-          { label: "Fields", value: model.fieldCount, icon: "columns", href: fieldsPath({ model: model.label }), onNavigate: go },
-          { label: "Relations", value: model.relationCount, icon: "share" },
-          { label: "Addon", value: model.addonLabel, icon: "grid", href: addonDetailPath(model.addonId), onNavigate: go },
-          { label: "Graph", value: "Open", icon: "share", href: graphPath(model.label), onNavigate: go },
+          { label: t("platform.col.fields"), value: model.fieldCount, icon: "columns", href: fieldsPath({ model: model.label }), onNavigate: go },
+          { label: t("platform.col.relations"), value: model.relationCount, icon: "share" },
+          { label: t("platform.col.addon"), value: model.addonLabel, icon: "grid", href: addonDetailPath(model.addonId), onNavigate: go },
+          { label: t("platform.col.graph"), value: t("platform.detail.open"), icon: "share", href: graphPath(model.label), onNavigate: go },
         ]}
       />
 
       <Card>
-        <CardHeader><CardTitle>Definition</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("platform.detail.definition")}</CardTitle></CardHeader>
         <CardContent>
           <MetaGrid
             rows={[
-              ["Table", <Code truncate>{model.dbTable}</Code>],
-              ["App label", model.appLabel],
+              [t("platform.col.table"), <Code truncate>{model.dbTable}</Code>],
+              [t("platform.col.appLabel"), model.appLabel],
               ...(model.resourceType
-                ? [["Resource type", <Code truncate>{model.resourceType}</Code>] as const]
+                ? [[t("platform.col.resourceType"), <Code truncate>{model.resourceType}</Code>] as const]
                 : []),
             ]}
           />
@@ -81,12 +85,12 @@ export function ModelDetail(): ReactElement {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Dependencies</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("platform.detail.dependencies")}</CardTitle></CardHeader>
         <CardContent>
           <MetaGrid
             rows={[
-              ["Depends on", <LinkedChips items={model.dependsOn} href={modelDetailPath} />],
-              ["Depended by", <LinkedChips items={dependedBy} href={modelDetailPath} />],
+              [t("platform.col.dependsOn"), <LinkedChips items={model.dependsOn} href={modelDetailPath} />],
+              [t("platform.col.dependedBy"), <LinkedChips items={dependedBy} href={modelDetailPath} />],
             ]}
           />
         </CardContent>

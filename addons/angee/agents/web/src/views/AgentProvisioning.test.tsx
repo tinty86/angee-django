@@ -57,18 +57,34 @@ vi.mock("@angee/operator/runtime", () => ({
   ServiceLogs: ({ name, title }: { name: string; title?: ReactNode }) => (
     <section data-testid="service-logs" data-name={name}>{title}</section>
   ),
-  StateTag: ({ state }: { state: string }) => <span>{state}</span>,
   WorkspaceRow: ({ name }: { name: string }) => (
     <section data-testid="workspace-row">{name}</section>
+  ),
+  WorkspaceSources: ({
+    sources,
+    title,
+  }: {
+    sources: Array<Record<string, unknown>>;
+    title?: ReactNode;
+  }) => (
+    <section data-testid="workspace-sources">
+      <h3>{title}</h3>
+      {sources.map((source) => (
+        <p key={`${source.slot}:${source.source}`}>
+          <span>{String(source.source)}</span>
+          <span>{`+${source.ahead ?? 0} / -${source.behind ?? 0}`}</span>
+        </p>
+      ))}
+    </section>
   ),
   useOperatorSnapshot: () => ({
     result: {},
     snapshot: null,
   }),
-  useOperatorSubscription: () => ({
-    data: mocks.workspaceStatus
-      ? { onWorkspaceStatusChange: mocks.workspaceStatus }
-      : undefined,
+  useWorkspaceStatus: () => ({
+    status: mocks.workspaceStatus,
+    error: null,
+    fetching: false,
   }),
 }));
 

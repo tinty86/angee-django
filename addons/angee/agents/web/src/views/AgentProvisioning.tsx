@@ -3,11 +3,10 @@ import {
   OperatorTransportProvider,
   ServiceLogs,
   ServiceRow,
-  StateTag,
+  WorkspaceSources,
   WorkspaceRow,
-  useOperatorSubscription,
-  type WorkspaceSourceStatus,
-  type WorkspaceStatus,
+  useWorkspaceStatus,
+  type WorkspaceStatusResult,
 } from "@angee/operator/runtime";
 import { useResourceRecord, type Row } from "@angee/sdk";
 
@@ -37,51 +36,6 @@ interface AgentProvisionRecord extends Row {
 }
 
 export type AgentProvisioningPane = "service" | "workspace";
-
-interface NameVariables extends Record<string, unknown> {
-  name: string;
-}
-
-interface WorkspaceStatusData {
-  onWorkspaceStatusChange: WorkspaceStatus;
-}
-
-const WORKSPACE_STATUS_SUBSCRIPTION = `
-  subscription AgentWorkspaceStatus($name: String!) {
-    onWorkspaceStatusChange(name: $name) {
-      name
-      path
-      exists
-      state
-      error
-      innerError
-      template
-      processComposePort
-      ttl
-      ttlExpiresAt
-      sources {
-        slot
-        source
-        kind
-        mode
-        branch
-        ref
-        subpath
-        path
-        exists
-        state
-        currentRef
-        dirty
-        upstream
-        ahead
-        behind
-        pushed
-        unpushedReason
-        error
-      }
-    }
-  }
-`;
 
 /**
  * Service/workspace runtime panel for one agent. The form toolbar owns lifecycle
@@ -195,7 +149,7 @@ function WorkspaceRuntimeView({
 }: {
   error: string;
   lifecycleStatus: string;
-  status: WorkspaceStatus | null;
+  status: WorkspaceStatusResult["status"];
   workspace: string;
 }): React.ReactElement {
   const t = useAgentsT();
@@ -220,7 +174,11 @@ function WorkspaceRuntimeView({
       {workspaceError ? (
         <p className="text-13 text-danger-text">{workspaceError}</p>
       ) : null}
-      <SourceStatusTable sources={sources} />
+      <WorkspaceSources
+        emptyMessage={t("agents.provisioning.workspaceSourcesEmpty")}
+        sources={sources}
+        title={t("agents.provisioning.workspaceSources")}
+      />
     </div>
   );
 }
@@ -258,87 +216,12 @@ function ServiceRuntimeView({
   );
 }
 
-function SourceStatusTable({
-  sources,
-}: {
-  sources: readonly WorkspaceSourceStatus[];
-}): React.ReactElement {
-  const t = useAgentsT();
-
-  if (sources.length === 0) {
-    return (
-      <div>
-        <h4 className="text-13 font-medium text-fg">
-          {t("agents.provisioning.workspaceSources")}
-        </h4>
-        <p className="mt-1 text-13 text-fg-muted">
-          {t("agents.provisioning.workspaceSourcesEmpty")}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-md border border-border-subtle">
-      <div className="border-b border-border-subtle px-3 py-2 text-13 font-medium text-fg">
-        {t("agents.provisioning.workspaceSources")}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-13">
-          <thead className="bg-inset text-2xs uppercase text-fg-muted">
-            <tr>
-              <th className="px-3 py-2 font-medium">{t("agents.provisioning.sourceSlot")}</th>
-              <th className="px-3 py-2 font-medium">{t("agents.provisioning.sourceState")}</th>
-              <th className="px-3 py-2 font-medium">{t("agents.provisioning.sourceBranch")}</th>
-              <th className="px-3 py-2 font-medium">{t("agents.provisioning.sourceDrift")}</th>
-              <th className="px-3 py-2 font-medium">{t("agents.provisioning.sourcePath")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle">
-            {sources.map((source) => (
-              <tr key={`${source.slot}:${source.source}`}>
-                <td className="px-3 py-2">
-                  <div className="font-medium text-fg">{source.slot}</div>
-                  <div className="text-fg-muted">{source.source}</div>
-                </td>
-                <td className="px-3 py-2">
-                  <StateTag state={source.state} />
-                  {source.error ? (
-                    <div className="mt-1 text-danger-text">{source.error}</div>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 text-fg-muted">
-                  {source.branch ?? source.ref ?? source.currentRef ?? "—"}
-                </td>
-                <td className="px-3 py-2 text-fg-muted">{sourceDrift(source, t)}</td>
-                <td className="max-w-80 truncate px-3 py-2 font-mono text-fg-muted">
-                  {source.path}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function useProvisionRuntime(workspace: string): {
   error: string;
-  workspaceStatus: WorkspaceStatus | null;
+  workspaceStatus: WorkspaceStatusResult["status"];
 } {
-  const workspaceVariables = React.useMemo<NameVariables>(
-    () => ({ name: workspace }),
-    [workspace],
-  );
-
-  const workspaceStatusResult = useOperatorSubscription<WorkspaceStatusData, NameVariables>(
-    WORKSPACE_STATUS_SUBSCRIPTION,
-    workspaceVariables,
-    { enabled: Boolean(workspace) },
-  );
-
-  const workspaceStatus = workspaceStatusResult.data?.onWorkspaceStatusChange ?? null;
+  const workspaceStatusResult = useWorkspaceStatus(workspace);
+  const workspaceStatus = workspaceStatusResult.status;
   const error = workspaceStatusResult.error?.message ?? "";
 
   return { error, workspaceStatus };
@@ -359,17 +242,4 @@ function agentRuntime(record: Row | null): string {
 function stringField(record: Row | null, key: string): string {
   const value = record?.[key];
   return typeof value === "string" ? value : "";
-}
-
-function sourceDrift(
-  source: WorkspaceSourceStatus,
-  t: (key: string) => string,
-): string {
-  if (source.error) return source.error;
-  if (source.dirty) return t("agents.provisioning.dirty");
-  const ahead = source.ahead ?? 0;
-  const behind = source.behind ?? 0;
-  if (ahead || behind) return `+${ahead} / -${behind}`;
-  if (source.pushed === false && source.unpushedReason) return source.unpushedReason;
-  return t("agents.provisioning.clean");
 }

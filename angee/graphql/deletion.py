@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 
 import strawberry
-from django.db import models
+from django.db import models, transaction
 from django.db.models.deletion import (
     Collector,
     ProtectedError,
     RestrictedError,
 )
-from rebac import current_actor
+from rebac import current_actor, system_context
 from rebac.resources import model_resource_type
 
-from angee.base.models import public_id_of
+from angee.base.models import instance_from_public_id, public_id_of
 
 _PREVIEW_LEAF_LIMIT = 50
 
@@ -176,6 +177,37 @@ class DeletePreview:
         )
 
 
+def delete_by_public_id(
+    model: type[models.Model],
+    public_id: str,
+    *,
+    confirm: bool = False,
+    queryset: models.QuerySet[models.Model] | None = None,
+    before_delete: Callable[[models.Model], None] | None = None,
+    reason: str | None = None,
+) -> DeletePreview:
+    """Preview, then optionally delete, one public-id-addressed model row.
+
+    The caller owns authorization. Passing ``reason`` elevates the lookup/delete
+    under ``system_context`` for admin/action surfaces whose permission class has
+    already gated the request actor.
+    """
+
+    context = system_context(reason=reason) if reason is not None else nullcontext()
+    with context, transaction.atomic():
+        instance = _resolve_delete_target(
+            model,
+            public_id,
+            queryset=queryset if queryset is not None else model._default_manager.all(),
+        )
+        preview = DeletePreview.from_instance(instance)
+        if confirm and not preview.has_blockers:
+            if before_delete is not None:
+                before_delete(instance)
+            instance.delete()
+    return preview
+
+
 @dataclass(slots=True)
 class _PreviewRows:
     """Access-scoped visible/count-only row state for one preview tree group."""
@@ -321,6 +353,20 @@ def _object_id(instance: models.Model) -> str | None:
     """Return the public id used in deletion preview nodes."""
 
     return public_id_of(instance) or None
+
+
+def _resolve_delete_target(
+    model: type[models.Model],
+    public_id: str,
+    *,
+    queryset: models.QuerySet[models.Model],
+) -> models.Model:
+    """Return the delete target addressed by ``public_id`` or raise."""
+
+    instance = instance_from_public_id(model, public_id, queryset=queryset)
+    if instance is None:
+        raise ValueError(f"{model._meta.object_name} {public_id!r} was not found")
+    return instance
 
 
 def _read_scoped_queryset(

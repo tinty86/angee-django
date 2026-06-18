@@ -51,8 +51,9 @@ export {
   useWorkspaceCreate,
   useServiceCreate,
   useWorkspaceDestroy,
+  useWorkspaceStatus,
 } from "./data/provision";
-export type { TemplateMatch } from "./data/provision";
+export type { TemplateMatch, WorkspaceStatusResult } from "./data/provision";
 
 export { runDaemonAction } from "./views/parts/run-action";
 export type { DaemonActionData, RunDaemonActionParams } from "./views/parts/run-action";
@@ -70,5 +71,13 @@ export type { ServiceRowProps, ServicesSectionProps } from "./views/sections/Ser
 // so a provisioning addon embeds the same logs view as the operator console.
 export { ServiceLogs } from "./views/sections/logs";
 
-export { WorkspaceRow, WorkspacesSection } from "./views/sections/WorkspacesSection";
-export type { WorkspaceRowProps, WorkspacesSectionProps } from "./views/sections/WorkspacesSection";
+export {
+  WorkspaceRow,
+  WorkspaceSources,
+  WorkspacesSection,
+} from "./views/sections/WorkspacesSection";
+export type {
+  WorkspaceRowProps,
+  WorkspaceSourcesProps,
+  WorkspacesSectionProps,
+} from "./views/sections/WorkspacesSection";

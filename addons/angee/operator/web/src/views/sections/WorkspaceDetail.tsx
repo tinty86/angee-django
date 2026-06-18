@@ -15,7 +15,7 @@ import { useParams } from "@tanstack/react-router";
 import {
   WORKSPACE_LOGS_QUERY,
   WORKSPACE_LOGS_SUBSCRIPTION,
-} from "../../data/documents";
+} from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorSnapshot } from "../../data/transport";
 import { LogPanel, useDaemonLogStream } from "./logs";

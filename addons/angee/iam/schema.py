@@ -48,9 +48,11 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import instance_from_public_id
-from angee.graphql.deletion import DeletePreview
+from angee.graphql.deletion import DeletePreview, delete_by_public_id
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
+from angee.iam.identity import user_display_label as _user_display_label
+from angee.iam.identity import user_principal
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.permissions import request_from_info as _request
 
@@ -82,7 +84,10 @@ def _iam_model(name: str) -> type[Any]:
 
 User = _iam_model("User")
 
+_IAM_OVERVIEW_DEFAULT_PEEK_LIMIT = 6
+_IAM_OVERVIEW_MAX_PEEK_LIMIT = 100
 _PERMISSION_HUB_LIST_CAP = 1000
+_PRIVILEGED_PERMISSION_NAMES = frozenset({"create", "write", "delete"})
 _ROLE_SUFFIX = "/role"
 
 
@@ -218,6 +223,15 @@ class IAMResourceSchemaType:
     permissions: list[IAMPermissionType]
 
 
+@strawberry.type
+class IAMOverviewNamespaceType:
+    """Role namespace aggregate shown by the IAM overview."""
+
+    namespace: str
+    role_count: int
+    grant_count: int
+
+
 @strawberry_django.type(active_relationship_model())
 class IAMRelationshipType:
     """Raw active REBAC relationship tuple."""
@@ -266,6 +280,21 @@ class IAMRelationshipType:
 
 
 @strawberry.type
+class IAMOverviewType:
+    """IAM dashboard facts computed by the IAM backend owner."""
+
+    user_count: int
+    role_count: int
+    grant_count: int
+    relationship_count: int
+    privileged_grant_count: int
+    unassigned_user_count: int
+    namespaces: list[IAMOverviewNamespaceType]
+    privileged_grants: list[IAMGrantType]
+    unassigned_users: list[UserType]
+
+
+@strawberry.type
 class LoginPayload:
     """Result returned by the session login mutation."""
 
@@ -303,21 +332,36 @@ class UserPatch:
 def _relationship_ordering(*, include_relation: bool = False) -> tuple[str, ...]:
     """Return concrete field names for deterministic relationship ordering."""
 
-    model = active_relationship_model()
-    registry_storage = any(field.name == "resource_fk" for field in model._meta.fields)
-    if registry_storage:
-        fields = [
-            "resource_fk__resource_type",
-            "resource_fk__resource_id",
-            "subject_fk__resource_type",
-            "subject_fk__resource_id",
-        ]
-    else:
-        fields = ["resource_type", "resource_id", "subject_type", "subject_id"]
+    lookups = _relationship_storage_lookups()
+    fields = [
+        lookups["resource_type"],
+        lookups["resource_id"],
+        lookups["subject_type"],
+        lookups["subject_id"],
+    ]
     if include_relation:
         fields.insert(2, "relation")
     fields.extend(["optional_subject_relation", "caveat_name", "pk"])
     return tuple(fields)
+
+
+def _relationship_storage_lookups() -> dict[str, str]:
+    """Return ORM lookup names for the active REBAC relationship storage."""
+
+    model = active_relationship_model()
+    if any(field.name == "resource_fk" for field in model._meta.fields):
+        return {
+            "resource_type": "resource_fk__resource_type",
+            "resource_id": "resource_fk__resource_id",
+            "subject_type": "subject_fk__resource_type",
+            "subject_id": "subject_fk__resource_id",
+        }
+    return {
+        "resource_type": "resource_type",
+        "resource_id": "resource_id",
+        "subject_type": "subject_type",
+        "subject_id": "subject_id",
+    }
 
 
 def _role_namespace(resource_type: str) -> str:
@@ -364,11 +408,27 @@ def _relationship_rows() -> QuerySet[Any]:
 def _permission_hub_roles() -> list[IAMRoleType]:
     """Return roles visible from active role relationship rows."""
 
+    return _role_types_from_relationships(
+        _permission_hub_role_rows(limit=_PERMISSION_HUB_LIST_CAP),
+    )
+
+
+def _permission_hub_role_rows(limit: int | None = None) -> QuerySet[Any]:
+    """Return relationship rows that mention schema-declared role objects."""
+
     rows = (
         active_relationship_model()
         .objects.filter(resource_type__in=_schema_role_resource_types())
-        .order_by(*_relationship_ordering())[:_PERMISSION_HUB_LIST_CAP]
+        .order_by(*_relationship_ordering())
     )
+    if limit is not None:
+        rows = rows[:limit]
+    return cast(QuerySet[Any], rows)
+
+
+def _role_types_from_relationships(rows: QuerySet[Any]) -> list[IAMRoleType]:
+    """Return distinct role types from relationship rows."""
+
     roles: dict[tuple[str, str], IAMRoleType] = {}
     for row in rows:
         key = (row.resource_type, row.resource_id)
@@ -382,10 +442,9 @@ def _permission_hub_roles() -> list[IAMRoleType]:
     return sorted(roles.values(), key=lambda role: (role.namespace, role.id))
 
 
-def _permission_hub_grants(info: strawberry.Info) -> QuerySet[Any]:
+def _permission_hub_grant_rows() -> QuerySet[Any]:
     """Return direct user role-grant rows in stable order."""
 
-    del info
     return cast(
         QuerySet[Any],
         active_relationship_model()
@@ -397,6 +456,13 @@ def _permission_hub_grants(info: strawberry.Info) -> QuerySet[Any]:
         )
         .order_by(*_relationship_ordering()),
     )
+
+
+def _permission_hub_grants(info: strawberry.Info) -> QuerySet[Any]:
+    """Return direct user role-grant rows in stable order."""
+
+    del info
+    return _permission_hub_grant_rows()
 
 
 def _schema_role_resource_types() -> set[str]:
@@ -487,6 +553,193 @@ def _permission_schema() -> list[IAMResourceSchemaType]:
     return resources
 
 
+def _iam_overview(peek_limit: int) -> IAMOverviewType:
+    """Return IAM dashboard facts independent of paginated list rows."""
+
+    peek_limit = _clamped_peek_limit(peek_limit)
+    with system_context(reason="iam.graphql.overview"):
+        role_rows = _role_types_from_relationships(_permission_hub_role_rows())
+        grant_rows = list(_permission_hub_grant_rows())
+        privileged_role_refs = _privileged_role_refs()
+        privileged_grants = [
+            row
+            for row in grant_rows
+            if _role_ref(str(row.resource_type), str(row.resource_id)) in privileged_role_refs
+        ]
+        unassigned_queryset = _unassigned_user_queryset(grant_rows)
+        unassigned_users = list(unassigned_queryset[:peek_limit])
+        namespaces = _overview_namespaces(role_rows, grant_rows)
+        return IAMOverviewType(
+            user_count=User._default_manager.count(),
+            role_count=len(role_rows),
+            grant_count=len(grant_rows),
+            relationship_count=_relationship_rows().count(),
+            privileged_grant_count=len(privileged_grants),
+            unassigned_user_count=unassigned_queryset.count(),
+            namespaces=namespaces,
+            privileged_grants=cast(list[IAMGrantType], privileged_grants[:peek_limit]),
+            unassigned_users=cast(list[UserType], unassigned_users),
+        )
+
+
+def _clamped_peek_limit(value: int) -> int:
+    """Return a bounded overview preview size."""
+
+    return max(0, min(value, _IAM_OVERVIEW_MAX_PEEK_LIMIT))
+
+
+def _overview_namespaces(
+    roles: list[IAMRoleType],
+    grants: list[Any],
+) -> list[IAMOverviewNamespaceType]:
+    """Return namespace-level role and direct-grant counts."""
+
+    counts: dict[str, dict[str, int]] = {}
+    for role in roles:
+        entry = counts.setdefault(role.namespace, {"roles": 0, "grants": 0})
+        entry["roles"] += 1
+    for grant in grants:
+        namespace = _role_namespace(str(grant.resource_type))
+        entry = counts.setdefault(namespace, {"roles": 0, "grants": 0})
+        entry["grants"] += 1
+    return [
+        IAMOverviewNamespaceType(
+            namespace=namespace,
+            role_count=count["roles"],
+            grant_count=count["grants"],
+        )
+        for namespace, count in sorted(counts.items())
+    ]
+
+
+def _unassigned_user_queryset(grants: list[Any]) -> QuerySet[Any]:
+    """Return users without direct role grants."""
+
+    assigned_ids = {str(row.subject_id) for row in grants}
+    queryset = User._default_manager.all().order_by(*_user_ordering())
+    if assigned_ids:
+        queryset = queryset.exclude(**{f"{_user_subject_lookup()}__in": assigned_ids})
+    return cast(QuerySet[Any], queryset)
+
+
+def _user_subject_lookup() -> str:
+    """Return the User field lookup used by REBAC actor subject ids."""
+
+    subject_id_attr = str(
+        getattr(User._meta, "rebac_id_attr", None)
+        or app_settings.REBAC_USER_ID_ATTR
+    )
+    if subject_id_attr == "pk":
+        pk = User._meta.pk
+        return pk.name if pk is not None else "pk"
+    return subject_id_attr
+
+
+def _user_ordering() -> tuple[str, ...]:
+    """Return deterministic ordering for IAM overview user previews."""
+
+    concrete_fields = {field.name for field in User._meta.fields}
+    fields: list[str] = []
+    username_field = str(getattr(User, "USERNAME_FIELD", ""))
+    if username_field in concrete_fields:
+        fields.append(username_field)
+    pk = User._meta.pk
+    if pk is not None and pk.name not in fields:
+        fields.append(pk.name)
+    return tuple(fields or ("pk",))
+
+
+def _privileged_role_refs() -> set[str]:
+    """Return role refs that the installed REBAC schema treats as privileged."""
+
+    schema = rebac_backend().schema()
+    refs: set[str] = set()
+    universal_role = app_settings.REBAC_UNIVERSAL_ADMIN_ROLE
+    if universal_role:
+        refs.add(str(ObjectRef.parse(universal_role)))
+    for definition in schema.definitions:
+        relations = {relation.name: relation for relation in definition.relations}
+        permissions = {permission.name: permission for permission in definition.permissions}
+        admin_relation = relations.get("admin")
+        if admin_relation is not None:
+            refs.update(_relation_role_refs(admin_relation))
+        for permission_name in _PRIVILEGED_PERMISSION_NAMES:
+            permission = permissions.get(permission_name)
+            if permission is not None:
+                refs.update(
+                    _permission_role_refs(
+                        permission.expression,
+                        relations=relations,
+                        permissions=permissions,
+                    )
+                )
+    return refs
+
+
+def _permission_role_refs(
+    expression: Any,
+    *,
+    relations: dict[str, Any],
+    permissions: dict[str, Any],
+    seen_permissions: set[str] | None = None,
+) -> set[str]:
+    """Return role refs reachable from one REBAC permission expression."""
+
+    refs: set[str] = set()
+    seen = seen_permissions or set()
+    if isinstance(expression, PermBinOp):
+        refs.update(
+            _permission_role_refs(
+                expression.left,
+                relations=relations,
+                permissions=permissions,
+                seen_permissions=seen,
+            )
+        )
+        refs.update(
+            _permission_role_refs(
+                expression.right,
+                relations=relations,
+                permissions=permissions,
+                seen_permissions=seen,
+            )
+        )
+    elif isinstance(expression, PermRef):
+        relation = relations.get(expression.name)
+        if relation is not None:
+            refs.update(_relation_role_refs(relation))
+        elif expression.name in permissions and expression.name not in seen:
+            seen.add(expression.name)
+            refs.update(
+                _permission_role_refs(
+                    permissions[expression.name].expression,
+                    relations=relations,
+                    permissions=permissions,
+                    seen_permissions=seen,
+                )
+            )
+    elif isinstance(expression, PermArrow):
+        relation = relations.get(expression.via)
+        if relation is not None:
+            refs.update(_relation_role_refs(relation))
+    return refs
+
+
+def _relation_role_refs(relation: Any) -> set[str]:
+    """Return concrete role refs named by one REBAC relation declaration."""
+
+    refs: set[str] = set()
+    const_id = str(getattr(getattr(relation, "backing", None), "target_id", ""))
+    for allowed in relation.allowed_subjects:
+        resource_type = str(allowed.type)
+        if not _is_role_type(resource_type):
+            continue
+        role_id = str(getattr(allowed, "id", "") or const_id)
+        if role_id:
+            refs.add(_role_ref(resource_type, role_id))
+    return refs
+
+
 def _permission_relationships(
     info: strawberry.Info,
     *,
@@ -507,100 +760,10 @@ def _permission_relationships(
     return cast(QuerySet[Any], rows)
 
 
-def _user_display_label(subject_id: Any) -> str | None:
-    """Return a user principal's display name without exposing the user object.
-
-    Delegates to :func:`_user_principal` - the one owner of "grant subject id ->
-    user" (REBAC-id-attr aware, read under ``system_context``) - and returns only
-    a display string, never the guarded user object.
-    """
-
-    if not subject_id:
-        return None
-    try:
-        user = _user_principal(str(subject_id))
-    except ValueError:
-        return None
-    return str(user.get_full_name() or user.username)
-
-
-def _user_principal(principal_id: str) -> Any:
-    """Return the user addressed by a role-grant principal id."""
-
-    resolved_id = principal_id
-    try:
-        global_id = relay.GlobalID.from_id(principal_id)
-    except ValueError:
-        pass
-    else:
-        if global_id.type_name == _user_graphql_type_name():
-            resolved_id = global_id.node_id
-
-    lookups: list[dict[str, str]] = []
-    subject_id_attr = str(
-        getattr(User._meta, "rebac_id_attr", None)
-        or app_settings.REBAC_USER_ID_ATTR
-    )
-    lookups.append({subject_id_attr: resolved_id})
-    public_lookup = getattr(User, "public_id_lookup", None)
-    if callable(public_lookup):
-        lookups.append(public_lookup(resolved_id))
-    pk = User._meta.pk
-    if pk is not None:
-        lookups.append({pk.name: resolved_id})
-
-    tried: set[tuple[tuple[str, str], ...]] = set()
-    with system_context(reason="iam.graphql.permission_hub.principal"):
-        for lookup in lookups:
-            key = tuple(sorted(lookup.items()))
-            if key in tried:
-                continue
-            tried.add(key)
-            try:
-                user = User._default_manager.filter(**lookup).first()
-            except (TypeError, ValueError):
-                continue
-            if user is not None:
-                return user
-    raise ValueError(f"User principal {principal_id!r} was not found.")
-
-
 def _user_graphql_type_name() -> str:
     """Return the registered GraphQL type name for console user rows."""
 
     return str(cast(Any, UserType).__strawberry_definition__.name)
-
-
-def _user_from_global_id(user_id: relay.GlobalID) -> Any:
-    """Return the user addressed by one GraphQL global id, or raise."""
-
-    with system_context(reason="iam.graphql.user.lookup"):
-        user = instance_from_public_id(User, user_id.node_id, queryset=User._default_manager.all())
-    if user is None:
-        raise ValueError(f"User {user_id!s} was not found.")
-    return user
-
-
-def _admin_delete(
-    model: Any,
-    node_id: str,
-    *,
-    reason: str,
-    confirm: bool,
-    before_delete: Any = None,
-) -> DeletePreview:
-    """Preview-then-delete one row elevated (mirrors ``crud``'s delete resolver)."""
-
-    with system_context(reason=reason), transaction.atomic():
-        instance = instance_from_public_id(model, node_id, queryset=model._default_manager.all())
-        if instance is None:
-            raise ValueError(f"{model._meta.object_name} {node_id!r} was not found")
-        preview = DeletePreview.from_instance(instance)
-        if confirm and not preview.has_blockers:
-            if before_delete is not None:
-                before_delete(instance)
-            instance.delete()
-    return preview
 
 
 @strawberry.type
@@ -648,6 +811,15 @@ class IAMConsoleQuery:
         """Return the installed REBAC schema projection."""
 
         return _permission_schema()
+
+    @strawberry.field(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def iam_overview(
+        self,
+        peek_limit: int = _IAM_OVERVIEW_DEFAULT_PEEK_LIMIT,
+    ) -> IAMOverviewType:
+        """Return IAM dashboard aggregates and peek rows."""
+
+        return _iam_overview(peek_limit)
 
     relationships: OffsetPaginated[IAMRelationshipType] = strawberry_django.offset_paginated(
         resolver=_permission_relationships,
@@ -751,7 +923,12 @@ class IAMUserMutation:
     def delete_user(self, id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
         """Delete one user when unblocked."""
 
-        return _admin_delete(User, id.node_id, reason="iam.graphql.user.delete", confirm=confirm)
+        return delete_by_public_id(
+            User,
+            id.node_id,
+            reason="iam.graphql.user.delete",
+            confirm=confirm,
+        )
 
 
 @strawberry.type
@@ -763,7 +940,7 @@ class IAMPermissionHubMutation:
         """Grant a role to one user principal."""
 
         role_ref = _validate_role(role)
-        principal = _user_principal(principal_id)
+        principal = user_principal(principal_id, graphql_type_name=_user_graphql_type_name())
         with (
             system_context(reason="iam.graphql.permission_hub.grant_role"),
             transaction.atomic(),
@@ -776,7 +953,7 @@ class IAMPermissionHubMutation:
         """Revoke a role from one user principal."""
 
         role_ref = _validate_role(role)
-        principal = _user_principal(principal_id)
+        principal = user_principal(principal_id, graphql_type_name=_user_graphql_type_name())
         with (
             system_context(reason="iam.graphql.permission_hub.revoke_role"),
             transaction.atomic(),
@@ -810,6 +987,8 @@ schemas = {
             IAMPermCondition,
             IAMPermissionType,
             IAMResourceSchemaType,
+            IAMOverviewNamespaceType,
+            IAMOverviewType,
             IAMRelationshipType,
         ],
     },

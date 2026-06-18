@@ -18,8 +18,9 @@ class AppGraph:
 
     - ``angee_addon_root``: whether the project declared this app as a root
       (``True``) versus pulling it in only through another app's ``depends_on``
-      closure (``False``). The root/dependency split is the source of an addon's
-      "consumer" vs "required" classification.
+      closure (``False``). If a declared root is also another root's dependency,
+      the root declaration wins. The root/dependency split is the source of an
+      addon's "consumer" vs "required" classification.
     - ``angee_depends_on``: the addon's declared dependency names, normalized
       through :meth:`app_dependencies` (the one parser of that fact).
     """
@@ -30,6 +31,7 @@ class AppGraph:
         app_configs_by_name: dict[str, AppConfig] = {}
         aliases: dict[str, str] = {}
         root_names: list[str] = []
+        root_name_set: set[str] = set()
         expanded: set[str] = set()
 
         def register(config: AppConfig) -> AppConfig:
@@ -80,10 +82,14 @@ class AppGraph:
 
         for root in roots:
             config = root if isinstance(root, AppConfig) else create_app_config(aliases.get(root, root))
+            if config.name in root_name_set:
+                raise ImproperlyConfigured(f"Duplicate root app {config.name!r}")
             if config.name in app_configs_by_name:
                 root_names.append(config.name)
                 continue
-            root_names.append(register(config).name)
+            root_name = register(config).name
+            root_names.append(root_name)
+            root_name_set.add(root_name)
 
         for name in tuple(root_names):
             include_dependencies(app_configs_by_name[name])
@@ -96,7 +102,6 @@ class AppGraph:
         for name in sorted(app_configs_by_name):
             visit_app(name, ordered=ordered, visiting=visiting, visited=visited)
 
-        root_name_set = set(root_names)
         for config in ordered:
             config.angee_addon_root = config.name in root_name_set
             config.angee_depends_on = self.app_dependencies(config)
@@ -113,4 +118,9 @@ class AppGraph:
         dependencies = tuple(value)
         if not all(isinstance(item, str) for item in dependencies):
             raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
+        seen: set[str] = set()
+        for dependency in dependencies:
+            if dependency in seen:
+                raise ImproperlyConfigured(f"{config.name} declares duplicate dependency {dependency!r}")
+            seen.add(dependency)
         return dependencies

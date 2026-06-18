@@ -10,16 +10,18 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PlatformExplorer } from "../documents";
+import { usePlatformT } from "../i18n";
 import { LinkedChips, TextRouteLink } from "../lib/cells";
 import { addonDetailPath, fieldsPath, modelsPath } from "../lib/paths";
 import { addonRows, type AddonRow } from "../lib/rows";
 
 const shortName = (id: string): string => id.split(".").pop() ?? id;
 
-const columns: readonly ListColumn<AddonRow>[] = [
+function columns(t: (key: string) => string): readonly ListColumn<AddonRow>[] {
+  return [
   {
     field: "addon",
-    header: "Addon",
+    header: t("platform.col.addon"),
     render: (row) => (
       <span className="flex min-w-0 flex-col">
         <TextRouteLink href={addonDetailPath(row.id)} className="font-medium">
@@ -31,19 +33,19 @@ const columns: readonly ListColumn<AddonRow>[] = [
   },
   {
     field: "namespace",
-    header: "Namespace",
+    header: t("platform.col.namespace"),
     render: (row) => <Code truncate>{row.namespace}</Code>,
   },
   {
     field: "kind",
-    header: "Kind",
+    header: t("platform.col.kind"),
     render: (row) => (
       <Badge tone={row.kind === "required" ? "info" : "neutral"}>{row.kind}</Badge>
     ),
   },
   {
     field: "models",
-    header: "Models",
+    header: t("platform.col.models"),
     render: (row) =>
       row.models ? (
         <TextRouteLink href={modelsPath({ addon: row.id })}>{row.models}</TextRouteLink>
@@ -53,7 +55,7 @@ const columns: readonly ListColumn<AddonRow>[] = [
   },
   {
     field: "fields",
-    header: "Fields",
+    header: t("platform.col.fields"),
     render: (row) =>
       row.fields ? (
         <TextRouteLink href={fieldsPath({ addon: row.id })}>{row.fields}</TextRouteLink>
@@ -61,29 +63,33 @@ const columns: readonly ListColumn<AddonRow>[] = [
         <span className="text-fg-muted">0</span>
       ),
   },
-  { field: "resources", header: "Resources" },
+  { field: "resources", header: t("platform.col.resources") },
   {
     field: "dependsOn",
-    header: "Depends on",
+    header: t("platform.col.dependsOn"),
     sortable: false,
     render: (row) => <LinkedChips items={row.dependsOnList} href={addonDetailPath} format={shortName} />,
   },
   {
     field: "dependedBy",
-    header: "Depended by",
+    header: t("platform.col.dependedBy"),
     sortable: false,
     render: (row) => <LinkedChips items={row.dependedByList} href={addonDetailPath} format={shortName} />,
   },
-];
+  ];
+}
 
-const groupOptions: readonly DataToolbarGroupOption[] = [
-  { id: "namespace", label: "Namespace", group: { field: "namespace" }, type: "value" },
-  { id: "kind", label: "Kind", group: { field: "kind" }, type: "value" },
-  { id: "dependsOn", label: "Depends on", group: { field: "dependsOn" }, type: "value" },
-  { id: "dependedBy", label: "Depended by", group: { field: "dependedBy" }, type: "value" },
-];
+function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+  return [
+    { id: "namespace", label: t("platform.col.namespace"), group: { field: "namespace" }, type: "value" },
+    { id: "kind", label: t("platform.col.kind"), group: { field: "kind" }, type: "value" },
+    { id: "dependsOn", label: t("platform.col.dependsOn"), group: { field: "dependsOn" }, type: "value" },
+    { id: "dependedBy", label: t("platform.col.dependedBy"), group: { field: "dependedBy" }, type: "value" },
+  ];
+}
 
 export function AddonsPage(): ReactElement {
+  const t = usePlatformT();
   const query = useAuthoredQuery(PlatformExplorer);
   const rows = useMemo(
     () => addonRows(query.data?.platformExplorer?.addons ?? []),
@@ -93,13 +99,13 @@ export function AddonsPage(): ReactElement {
   return (
     <RowsListView
       rows={rows}
-      columns={columns}
-      groupOptions={groupOptions}
+      columns={columns(t)}
+      groupOptions={groupOptions(t)}
       fetching={query.fetching}
       error={query.error}
       defaultGroup={{ field: "namespace" }}
       pageSize={50}
-      emptyMessage="No addons."
+      emptyMessage={t("platform.empty.addons")}
     />
   );
 }

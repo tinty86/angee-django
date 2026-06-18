@@ -7,16 +7,23 @@ import {
   SERVICE_CREATE_MUTATION,
   WORKSPACE_CREATE_MUTATION,
   WORKSPACE_DESTROY_MUTATION,
-} from "./documents";
-import { useOperatorAction, type OperatorActionHook } from "./transport";
+  WORKSPACE_STATUS_SUBSCRIPTION,
+} from "./documents.daemon";
+import { useMemo } from "react";
+import type { DocumentData } from "@angee/sdk";
+
+import {
+  useOperatorAction,
+  useOperatorSubscription,
+  type OperatorActionHook,
+} from "./transport";
 import type {
   KeyValueInput,
-  ServiceCreateInput,
-  ServiceState,
   TemplateDescriptor,
-  WorkspaceCreateInput,
-  WorkspaceRef,
 } from "./types";
+
+type WorkspaceStatusData = DocumentData<typeof WORKSPACE_STATUS_SUBSCRIPTION>;
+export type ProvisionWorkspaceStatus = WorkspaceStatusData["onWorkspaceStatusChange"];
 
 /** A daemon template identified by its name + kind (e.g. an agent's template FK). */
 export interface TemplateMatch {
@@ -51,37 +58,37 @@ export function toAnswerList(inputs: unknown): KeyValueInput[] {
   }));
 }
 
-interface WorkspaceCreateVars extends Record<string, unknown> {
-  input: WorkspaceCreateInput;
-}
-interface ServiceCreateVars extends Record<string, unknown> {
-  input: ServiceCreateInput;
-}
-interface WorkspaceDestroyVars extends Record<string, unknown> {
-  name: string;
-  purge: boolean;
-}
-
 /** Render a workspace template into a new worktree workspace. */
-export function useWorkspaceCreate(): OperatorActionHook<
-  { workspaceCreate: WorkspaceRef | null },
-  WorkspaceCreateVars
-> {
+export function useWorkspaceCreate(): OperatorActionHook<typeof WORKSPACE_CREATE_MUTATION> {
   return useOperatorAction(WORKSPACE_CREATE_MUTATION);
 }
 
 /** Render a service template into an existing workspace. */
-export function useServiceCreate(): OperatorActionHook<
-  { serviceCreate: ServiceState | null },
-  ServiceCreateVars
-> {
+export function useServiceCreate(): OperatorActionHook<typeof SERVICE_CREATE_MUTATION> {
   return useOperatorAction(SERVICE_CREATE_MUTATION);
 }
 
 /** Tear a workspace (and its services) down. */
-export function useWorkspaceDestroy(): OperatorActionHook<
-  Record<string, unknown>,
-  WorkspaceDestroyVars
-> {
+export function useWorkspaceDestroy(): OperatorActionHook<typeof WORKSPACE_DESTROY_MUTATION> {
   return useOperatorAction(WORKSPACE_DESTROY_MUTATION);
+}
+
+export interface WorkspaceStatusResult {
+  status: ProvisionWorkspaceStatus | null;
+  fetching: boolean;
+  error: Error | null;
+}
+
+/** Subscribe to the daemon-owned live status for one workspace. */
+export function useWorkspaceStatus(name: string): WorkspaceStatusResult {
+  const variables = useMemo(() => ({ name }), [name]);
+  const result = useOperatorSubscription(WORKSPACE_STATUS_SUBSCRIPTION, variables, {
+    enabled: Boolean(name),
+  });
+
+  return {
+    status: result.data?.onWorkspaceStatusChange ?? null,
+    fetching: result.fetching,
+    error: result.error,
+  };
 }

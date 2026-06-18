@@ -57,6 +57,14 @@ class SqidField(SqidsField):
             return None
         return super().from_db_value(value, expression, connection, *args)
 
+    def public_id_from_value(self, value: Any) -> str:
+        """Return the encoded public id for one backing integer value."""
+
+        if value in (None, ""):
+            return ""
+        encoded_value = self.sqids_instance.encode([int(value)])
+        return f"{self.prefix}{encoded_value}" if encoded_value is not None else ""
+
 
 class StateField(TextChoicesField):
     """A finite-state column backed by a ``TextChoices`` enum.
@@ -74,6 +82,27 @@ class StateField(TextChoicesField):
 
         kwargs.setdefault("db_index", True)
         super().__init__(**kwargs)
+
+    def to_python(self, value: Any) -> Any:
+        """Accept stored values and GraphQL enum member names for this state."""
+
+        choices_enum = cast(Any, self.choices_enum)
+        if isinstance(value, choices_enum):
+            return value
+        raw = getattr(value, "value", value)
+        text = str(raw).strip()
+        if text:
+            member = getattr(choices_enum, "__members__", {}).get(text)
+            if member is not None:
+                return member
+        return super().to_python(raw)
+
+    def pre_save(self, model_instance: models.Model, add: bool) -> Any:
+        """Normalize the in-memory value before Django writes and returns it."""
+
+        value = self.to_python(super().pre_save(model_instance, add))
+        setattr(model_instance, self.attname, value)
+        return value
 
 
 class EncryptedField(models.TextField):
@@ -276,20 +305,46 @@ class ImplClassField(TextChoicesField):
         """
 
         registry = self._registry()
+        key = self.key_for(key)
         try:
-            dotted = registry[str(key)]
+            dotted = registry[key]
         except KeyError as error:
             known = ", ".join(sorted(registry)) or "none configured"
             raise ImproperlyConfigured(
-                f"No impl for key {str(key)!r} in settings.{self.registry_setting} (known: {known})."
+                f"No impl for key {key!r} in settings.{self.registry_setting} (known: {known})."
             ) from error
         impl = import_string(dotted)
         if not (isinstance(self.base_class, type) and isinstance(impl, type) and issubclass(impl, self.base_class)):
             base_name = getattr(self.base_class, "__name__", self.base_class)
             raise ImproperlyConfigured(
-                f"settings.{self.registry_setting}[{str(key)!r}] = {dotted!r} is not a {base_name}."
+                f"settings.{self.registry_setting}[{key!r}] = {dotted!r} is not a {base_name}."
             )
         return impl
+
+    def key_for(self, value: Any) -> str:
+        """Return the canonical registry key for a stored/input enum-ish value.
+
+        GraphQL reads ``TextChoices`` fields as enum member names (``GITHUB``) while
+        the database and registry use the member values (``github``). The field owns
+        that mapping, so callers canonicalize here before resolving or storing.
+        """
+
+        registry = self._registry()
+        raw = getattr(value, "value", value)
+        text = str(raw).strip()
+        if text in registry:
+            return text
+        name = str(getattr(value, "name", "")).strip()
+        candidates = [candidate for candidate in (text, name) if candidate]
+        for candidate in candidates:
+            lower = candidate.lower()
+            if lower in registry:
+                return lower
+            upper = candidate.upper()
+            for key in registry:
+                if key.upper() == upper:
+                    return key
+        return text
 
     def _build_enum(self) -> type[models.TextChoices]:
         """Return a ``TextChoices`` enum over the registered keys, in deterministic order."""

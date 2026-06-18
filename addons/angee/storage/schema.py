@@ -16,7 +16,7 @@ from strawberry.permission import BasePermission
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.base.models import public_id_of
+from angee.base.models import public_id_for
 from angee.graphql.crud import crud
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
@@ -74,7 +74,7 @@ class DriveType(AngeeNode):
     def backend(self) -> strawberry.ID:
         """Return the parent backend's public id without exposing the row."""
 
-        return strawberry.ID(public_id_of(Backend(id=cast(Any, self).backend_id)))
+        return strawberry.ID(public_id_for(Backend, cast(Any, self).backend_id))
 
 
 @strawberry_django.type(Folder)
@@ -93,14 +93,14 @@ class FolderType(AngeeNode):
         """Return the drive's public id; smart folders have none."""
 
         drive_id = cast(Any, self).drive_id
-        return strawberry.ID(public_id_of(Drive(id=drive_id))) if drive_id else None
+        return strawberry.ID(public_id_for(Drive, drive_id)) if drive_id else None
 
     @strawberry_django.field(only=["parent_id"])
     def parent(self) -> strawberry.ID | None:
         """Return the parent folder's public id, if any."""
 
         parent_id = cast(Any, self).parent_id
-        return strawberry.ID(public_id_of(Folder(id=parent_id))) if parent_id else None
+        return strawberry.ID(public_id_for(Folder, parent_id)) if parent_id else None
 
 
 @strawberry_django.type(File)
@@ -123,14 +123,14 @@ class FileType(AngeeNode):
     def drive(self) -> strawberry.ID:
         """Return the drive's public id without exposing the drive object."""
 
-        return strawberry.ID(public_id_of(Drive(id=cast(Any, self).drive_id)))
+        return strawberry.ID(public_id_for(Drive, cast(Any, self).drive_id))
 
     @strawberry_django.field(only=["folder_id"])
     def folder(self) -> strawberry.ID | None:
         """Return the folder's public id, if the file is in one."""
 
         folder_id = cast(Any, self).folder_id
-        return strawberry.ID(public_id_of(Folder(id=folder_id))) if folder_id else None
+        return strawberry.ID(public_id_for(Folder, folder_id)) if folder_id else None
 
     @strawberry_django.field(only=["created_by_id"])
     def created_by(self) -> strawberry.ID | None:

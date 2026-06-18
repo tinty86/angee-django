@@ -5,6 +5,7 @@ import {
   EmptyState,
   Glyph,
   Spinner,
+  formatDate as formatBaseDate,
   useResolvedWidget,
   type WidgetField,
 } from "@angee/base";
@@ -132,7 +133,10 @@ function SaveBadge({
 }
 
 function metaLine(detail: KnowledgePageDetail, t: Translate): string {
-  const parts = [detail.createdByLabel ?? "—", formatDate(detail.updatedAt)];
+  const parts = [
+    detail.createdByLabel ?? "—",
+    formatBaseDate(detail.updatedAt) || "—",
+  ];
   if (detail.markdown) {
     parts.push(
       t("knowledge.editor.wordCount", {
@@ -141,14 +145,4 @@ function metaLine(detail: KnowledgePageDetail, t: Translate): string {
     );
   }
   return parts.join(" · ");
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }

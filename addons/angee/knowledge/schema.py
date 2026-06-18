@@ -12,7 +12,7 @@ from rebac import system_context
 from strawberry import auto, relay
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.base.models import instance_from_public_id, public_id_of
+from angee.base.models import instance_from_public_id, public_id_for
 from angee.graphql.crud import crud
 from angee.graphql.node import AngeeNode
 from angee.graphql.revisions import revisions
@@ -64,7 +64,7 @@ class MarkdownPageType(AngeeNode):
     def page(self) -> strawberry.ID:
         """Return the owning page's public id."""
 
-        return strawberry.ID(public_id_of(Page(id=cast(Any, self).page_id)))
+        return strawberry.ID(public_id_for(Page, cast(Any, self).page_id))
 
     @strawberry_django.field(only=["body"])
     def excerpt(self) -> str:
@@ -96,7 +96,7 @@ class PageType(AngeeNode):
     def vault(self) -> strawberry.ID:
         """Return the owning vault's public id without exposing the vault."""
 
-        return strawberry.ID(public_id_of(Vault(id=cast(Any, self).vault_id)))
+        return strawberry.ID(public_id_for(Vault, cast(Any, self).vault_id))
 
     @strawberry_django.field(only=["vault_id"])
     def vault_label(self) -> str | None:
@@ -117,7 +117,7 @@ class PageType(AngeeNode):
 
         if cast(Any, self).parent_id is None:
             return None
-        return strawberry.ID(public_id_of(Page(id=cast(Any, self).parent_id)))
+        return strawberry.ID(public_id_for(Page, cast(Any, self).parent_id))
 
     @strawberry_django.field(only=["created_by_id"])
     def created_by(self) -> strawberry.ID | None:
@@ -160,7 +160,7 @@ class PageType(AngeeNode):
         )
         return [
             BacklinkType(
-                page=strawberry.ID(public_id_of(Page(id=row.source_page_id))),
+                page=strawberry.ID(public_id_for(Page, row.source_page_id)),
                 title=str(row.source_title),
                 display_text=row.display_text,
             )

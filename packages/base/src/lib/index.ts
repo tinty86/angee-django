@@ -28,10 +28,13 @@ export {
   writeDndPayload,
   readDndPayload,
   dragHasAcceptedType,
+  dragHasFiles,
   useDraggable,
   dragSourceProps,
   useDropTarget,
+  useFileDropTarget,
   type DndPayload,
   type DragSourceProps,
   type UseDropTargetOptions,
+  type UseFileDropTargetOptions,
 } from "./dnd";

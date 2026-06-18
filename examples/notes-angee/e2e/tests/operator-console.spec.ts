@@ -42,13 +42,14 @@ test.describe("operator console — admin", () => {
     // The snapshot's git-backed resolvers take a couple seconds; the pane must
     // resolve to the stack summary and never stay on the loading state (a poll
     // firing faster than the response once aborted every request in flight).
-    await expect(page.getByText("angee-notes")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("notes-angee")).toBeVisible({ timeout: 20000 });
     await expect(page.getByText("Loading overview")).toHaveCount(0);
   });
 
   test("the Sources pane lists the git-backed sources", async ({ page }) => {
     await page.goto("/operator/sources");
-    await expect(page.getByText("angee-django")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("framework")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("app")).toBeVisible();
   });
 });
 

@@ -1,5 +1,12 @@
 import { Alert, EmptyState, LoadingPanel } from "@angee/base";
-import { errorMessage, useDocumentSubscription, useSchemaClients } from "@angee/sdk";
+import {
+  errorMessage,
+  useDocumentSubscription,
+  useSchemaClients,
+  type DocumentData,
+  type DocumentVariables,
+} from "@angee/sdk";
+import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import {
   Provider as UrqlProvider,
   useMutation,
@@ -21,18 +28,18 @@ import {
 } from "react";
 
 import { useOperatorT } from "../i18n";
+import { OperatorConnectionQuery } from "./documents.console";
 import {
-  OperatorConnectionQuery,
   SNAPSHOT_QUERY,
   STACK_SNAPSHOT_SUBSCRIPTION,
-} from "./documents";
+} from "./documents.daemon";
 import { createOperatorClient } from "./operator-client";
 import type {
   OperatorConnectionInfo,
   OperatorSnapshot,
   OperatorSnapshotQueryData,
+  OperatorSnapshotQueryVariables,
   OperatorSnapshotSections,
-  OperatorSnapshotSubscriptionData,
 } from "./types";
 
 const CONSOLE_SCHEMA = "console";
@@ -41,7 +48,11 @@ const CONSOLE_SCHEMA = "console";
 // long-running console never degrades to a dead token.
 const CONNECTION_REFRESH_MS = 15 * 60_000;
 
-type EmptyVariables = Record<string, never>;
+type OperatorDocument = TypedDocumentNode<object, any>;
+type OperatorVariables<TDocument extends OperatorDocument> =
+  DocumentVariables<TDocument> extends Record<string, unknown>
+    ? DocumentVariables<TDocument>
+    : Record<string, never>;
 
 // The one section→`@include` mapping: each snapshot pane and the matching
 // `$want<Pane>` toggle in `SNAPSHOT_QUERY`. The hook derives its variables from
@@ -66,7 +77,7 @@ function wantVariable(section: keyof OperatorSnapshotSections): WantVariable {
 }
 
 /** The snapshot query's `@include` toggles — one per pane (`$wantOverview`…). */
-type SnapshotVariables = Record<WantVariable, boolean>;
+type SnapshotVariables = OperatorSnapshotQueryVariables;
 
 type ConnectionState =
   | { kind: "loading" }
@@ -233,7 +244,7 @@ export function useOperatorSnapshot(
   // The one-shot query owns first paint: the daemon emits no snapshot on connect,
   // so the console reads the current state once. The live subscription supersedes
   // it for every subsequent change (no polling — see docs/frontend/guidelines.md).
-  const [result, reexecute] = useQuery<OperatorSnapshotQueryData, SnapshotVariables>({
+  const [result, reexecute] = useQuery({
     query: SNAPSHOT_QUERY,
     variables,
     requestPolicy: "cache-and-network",
@@ -242,9 +253,7 @@ export function useOperatorSnapshot(
   // `onStackSnapshotChange` pushes the whole `StackSnapshot` whenever the daemon's
   // aggregate hash changes; urql dedupes the (variable-free) document so the 8 panes
   // share one upstream subscription. The latest push is the live snapshot.
-  const live = useOperatorSubscription<OperatorSnapshotSubscriptionData>(
-    STACK_SNAPSHOT_SUBSCRIPTION,
-  );
+  const live = useOperatorSubscription(STACK_SNAPSHOT_SUBSCRIPTION);
 
   const reexecuteRef = useRef(reexecute);
   useEffect(() => {
@@ -274,18 +283,21 @@ export function useOperatorSnapshot(
   return { result, snapshot, refetch };
 }
 
-export interface OperatorActionHook<
-  Data extends object,
-  Variables extends Record<string, unknown>,
-> {
-  result: UseMutationState<Data, Variables>;
-  run: (variables: Variables) => Promise<Data>;
+export interface OperatorActionHook<TDocument extends OperatorDocument> {
+  result: UseMutationState<
+    DocumentData<TDocument>,
+    OperatorVariables<TDocument>
+  >;
+  run: (
+    variables: OperatorVariables<TDocument>,
+  ) => Promise<DocumentData<TDocument>>;
 }
 
-export function useOperatorAction<
-  Data extends object,
-  Variables extends Record<string, unknown> = EmptyVariables,
->(document: string): OperatorActionHook<Data, Variables> {
+export function useOperatorAction<TDocument extends OperatorDocument>(
+  document: TDocument,
+): OperatorActionHook<TDocument> {
+  type Data = DocumentData<TDocument>;
+  type Variables = OperatorVariables<TDocument>;
   const [result, execute] = useMutation<Data, Variables>(document);
   const run = useCallback(
     async (variables: Variables): Promise<Data> => {
@@ -315,11 +327,24 @@ export interface OperatorSubscriptionResult<TData> {
   error: Error | null;
 }
 
+export function useOperatorSubscription<TDocument extends OperatorDocument>(
+  document: TDocument,
+  variables?: OperatorVariables<TDocument>,
+  options?: OperatorSubscriptionOptions<DocumentData<TDocument>>,
+): OperatorSubscriptionResult<DocumentData<TDocument>>;
 export function useOperatorSubscription<
   TData extends object,
-  TVariables extends Record<string, unknown> = EmptyVariables,
+  TVariables extends Record<string, unknown> = Record<string, never>,
 >(
   document: string,
+  variables?: TVariables,
+  options?: OperatorSubscriptionOptions<TData>,
+): OperatorSubscriptionResult<TData>;
+export function useOperatorSubscription<
+  TData extends object,
+  TVariables extends Record<string, unknown>,
+>(
+  document: OperatorDocument | string,
   variables?: TVariables,
   options: OperatorSubscriptionOptions<TData> = {},
 ): OperatorSubscriptionResult<TData> {

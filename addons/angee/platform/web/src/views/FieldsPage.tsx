@@ -9,34 +9,36 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PlatformExplorer } from "../documents";
+import { usePlatformT } from "../i18n";
 import { TextRouteLink } from "../lib/cells";
 import { addonDetailPath, modelDetailPath } from "../lib/paths";
 import { fieldRows, type FieldRow } from "../lib/rows";
 
-const columns: readonly ListColumn<FieldRow>[] = [
+function columns(t: (key: string) => string): readonly ListColumn<FieldRow>[] {
+  return [
   {
     field: "field",
-    header: "Field",
+    header: t("platform.col.field"),
     render: (row) => <span className="font-medium text-fg">{row.field}</span>,
   },
   {
     field: "model",
-    header: "Model",
+    header: t("platform.col.model"),
     render: (row) => (
       <TextRouteLink href={modelDetailPath(row.model)}>{row.model}</TextRouteLink>
     ),
   },
   {
     field: "addon",
-    header: "Addon",
+    header: t("platform.col.addon"),
     render: (row) => (
       <TextRouteLink href={addonDetailPath(row.addonId)}>{row.addon}</TextRouteLink>
     ),
   },
-  { field: "kind", header: "Type" },
+  { field: "kind", header: t("platform.col.type") },
   {
     field: "relationTarget",
-    header: "Relation target",
+    header: t("platform.col.relationTarget"),
     render: (row) =>
       row.relationTarget ? (
         <TextRouteLink href={modelDetailPath(row.relationTarget)}>
@@ -44,16 +46,20 @@ const columns: readonly ListColumn<FieldRow>[] = [
         </TextRouteLink>
       ) : null,
   },
-];
+  ];
+}
 
-const groupOptions: readonly DataToolbarGroupOption[] = [
-  { id: "addon", label: "Addon", group: { field: "addon" }, type: "value" },
-  { id: "model", label: "Model", group: { field: "model" }, type: "value" },
-  { id: "kind", label: "Type", group: { field: "kind" }, type: "value" },
-  { id: "relationTarget", label: "Relation target", group: { field: "relationTarget" }, type: "value" },
-];
+function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+  return [
+    { id: "addon", label: t("platform.col.addon"), group: { field: "addon" }, type: "value" },
+    { id: "model", label: t("platform.col.model"), group: { field: "model" }, type: "value" },
+    { id: "kind", label: t("platform.col.type"), group: { field: "kind" }, type: "value" },
+    { id: "relationTarget", label: t("platform.col.relationTarget"), group: { field: "relationTarget" }, type: "value" },
+  ];
+}
 
 export function FieldsPage(): ReactElement {
+  const t = usePlatformT();
   const query = useAuthoredQuery(PlatformExplorer);
   const [modelScope] = useQueryState("model", parseAsString);
   const [addonScope] = useQueryState("addon", parseAsString);
@@ -67,13 +73,13 @@ export function FieldsPage(): ReactElement {
   return (
     <RowsListView
       rows={rows}
-      columns={columns}
-      groupOptions={groupOptions}
+      columns={columns(t)}
+      groupOptions={groupOptions(t)}
       fetching={query.fetching}
       error={query.error}
       defaultGroup={modelScope ? null : { field: "model" }}
       pageSize={100}
-      emptyMessage="No fields."
+      emptyMessage={t("platform.empty.fields")}
     />
   );
 }

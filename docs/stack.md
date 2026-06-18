@@ -53,7 +53,7 @@ Dependency changes must update this file in the same change.
 | TypeScript >= 6 | Language and type system | Branded boundary types |
 | urql React 5 + @urql/core 6 | GraphQL client, normalized cache, subscriptions | Provider stack and invalidation wiring; consumes generated `TypedDocumentNode`s |
 | graphql-ws 6 | GraphQL WebSocket lifecycle | Connection params and retry policy |
-| GraphQL Code Generator (client-preset) + @graphql-typed-document-node/core | Generated TypeScript schema and operation types from the emitted SDL, as `TypedDocumentNode` documents | Each project web package owns a `codegen` script that emits `runtime/gql/<schema>` from `runtime/schemas/<schema>.graphql`, routed to a schema by document filename (`documents.ts`/`documents.console.ts` → console, `documents.public.ts` → public); authored operations carry no hand-written result/variables types |
+| GraphQL Code Generator (client-preset) + @graphql-typed-document-node/core | Generated TypeScript schema and operation types from emitted Django SDL and daemon-owned SDL, as `TypedDocumentNode` documents | Each project web package owns a `codegen` script that emits `runtime/gql/<schema>` from `runtime/schemas/<schema>.graphql`, routed to a Django schema by document filename (`documents.ts`/`documents.console.ts` → console, `documents.public.ts` → public); the operator web package owns a separate daemon client-preset run from `schema/operator.graphql` scanning only `documents.daemon.ts`; authored operations carry no hand-written result/variables types |
 | TanStack Router | Type-safe routing and search params | `defineAddon` to `createApp` route composition and flat URL search codec |
 | TanStack Form | Form state | `FormView` binding |
 | TanStack Table | Columns, sort, filter, grouping, selection | `ListView` and `BoardView` bindings |
@@ -95,6 +95,7 @@ Dependency changes must update this file in the same change.
 | @xyflow/react | node/edge graph canvas | `@angee/base` `GraphView` shell |
 | @dagrejs/dagre | directed-graph layout | `@angee/base` `GraphView` node placement |
 | @dnd-kit | Drag and drop | Board and rail interactions |
+| Native browser drag/drop | File drag enter/leave/drop events and `DataTransfer.files` | `@angee/base` upload drop target primitive |
 
 ## Tooling
 
@@ -124,7 +125,6 @@ Dependency changes must update this file in the same change.
 | django-ninja + pydantic | Typed REST sidecars (callbacks, webhooks, health) |
 | boto3 | S3-compatible storage backend (S3 / R2 / MinIO presigned IO) |
 | @xyflow/react | Graph and canvas (node/edge) views |
-| react-dropzone | Storage upload drop boundary |
 | react-json-view-lite + ansi-to-react | JSON widget read tree, debug/log JSON + ANSI panels |
 | simple-icons + @lobehub/icons | Brand and vendor SVG icon registry |
 

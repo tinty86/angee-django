@@ -10,14 +10,16 @@ import {
 import { useAuthoredQuery } from "@angee/sdk";
 
 import { PlatformExplorer } from "../documents";
+import { usePlatformT } from "../i18n";
 import { LinkedChips, TextRouteLink } from "../lib/cells";
 import { addonDetailPath, fieldsPath, modelDetailPath } from "../lib/paths";
 import { modelRows, type ModelRow } from "../lib/rows";
 
-const columns: readonly ListColumn<ModelRow>[] = [
+function columns(t: (key: string) => string): readonly ListColumn<ModelRow>[] {
+  return [
   {
     field: "model",
-    header: "Model",
+    header: t("platform.col.model"),
     render: (row) => (
       <span className="flex min-w-0 flex-col">
         <TextRouteLink href={modelDetailPath(row.id)} className="font-medium">
@@ -29,46 +31,50 @@ const columns: readonly ListColumn<ModelRow>[] = [
   },
   {
     field: "addon",
-    header: "Addon",
+    header: t("platform.col.addon"),
     render: (row) => (
       <TextRouteLink href={addonDetailPath(row.addonId)}>{row.addon}</TextRouteLink>
     ),
   },
-  { field: "table", header: "Table", render: (row) => <Code truncate>{row.table}</Code> },
+  { field: "table", header: t("platform.col.table"), render: (row) => <Code truncate>{row.table}</Code> },
   {
     field: "fields",
-    header: "Fields",
+    header: t("platform.col.fields"),
     render: (row) => (
       <TextRouteLink href={fieldsPath({ model: row.id })}>{row.fields}</TextRouteLink>
     ),
   },
-  { field: "relations", header: "Relations" },
+  { field: "relations", header: t("platform.col.relations") },
   {
     field: "resourceType",
-    header: "Resource type",
+    header: t("platform.col.resourceType"),
     render: (row) => (row.resourceType ? <Code truncate>{row.resourceType}</Code> : null),
   },
   {
     field: "dependsOn",
-    header: "Depends on",
+    header: t("platform.col.dependsOn"),
     sortable: false,
     render: (row) => <LinkedChips items={row.dependsOnList} href={modelDetailPath} />,
   },
   {
     field: "dependedBy",
-    header: "Depended by",
+    header: t("platform.col.dependedBy"),
     sortable: false,
     render: (row) => <LinkedChips items={row.dependedByList} href={modelDetailPath} />,
   },
-];
+  ];
+}
 
-const groupOptions: readonly DataToolbarGroupOption[] = [
-  { id: "addon", label: "Addon", group: { field: "addon" }, type: "value" },
-  { id: "dependsOn", label: "Depends on", group: { field: "dependsOn" }, type: "value" },
-  { id: "dependedBy", label: "Depended by", group: { field: "dependedBy" }, type: "value" },
-];
+function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+  return [
+    { id: "addon", label: t("platform.col.addon"), group: { field: "addon" }, type: "value" },
+    { id: "dependsOn", label: t("platform.col.dependsOn"), group: { field: "dependsOn" }, type: "value" },
+    { id: "dependedBy", label: t("platform.col.dependedBy"), group: { field: "dependedBy" }, type: "value" },
+  ];
+}
 
 export function ModelsPage(): ReactElement {
+  const t = usePlatformT();
   const query = useAuthoredQuery(PlatformExplorer);
   const [addonScope] = useQueryState("addon", parseAsString);
   const rows = useMemo(() => {
@@ -79,13 +85,13 @@ export function ModelsPage(): ReactElement {
   return (
     <RowsListView
       rows={rows}
-      columns={columns}
-      groupOptions={groupOptions}
+      columns={columns(t)}
+      groupOptions={groupOptions(t)}
       fetching={query.fetching}
       error={query.error}
       defaultGroup={{ field: "addon" }}
       pageSize={50}
-      emptyMessage="No models."
+      emptyMessage={t("platform.empty.models")}
     />
   );
 }

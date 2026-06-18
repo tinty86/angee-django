@@ -4,6 +4,7 @@ import {
   type BaseMenuItem,
 } from "@angee/base";
 
+import { enResourcesMessages } from "./i18n";
 import { ResourcesPage } from "./views/ResourcesPage";
 
 // Resources contributes a "Resources" section into the platform console — the
@@ -31,6 +32,7 @@ const resources = defineBaseAddon({
   id: "resources",
   routes: resourcesRoutes,
   menus: resourcesMenu,
+  i18n: { resources: enResourcesMessages },
 });
 
 export default resources;

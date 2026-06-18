@@ -1,9 +1,17 @@
 // Domain types come from the daemon's own SDL via codegen
 // (`schema/operator.graphql` → `__generated__/operator.ts`); the console never
-// hand-maintains them. This module re-exports the ones the panes render and adds
-// the frontend-only `OperatorSnapshot`: the daemon exposes its state as separate
-// root query fields, not one object, so the console aggregates the roots each
-// pane needs into a single snapshot.
+// hand-maintains them. The daemon operation documents are generated separately
+// under `__generated__/operator-gql`. This module re-exports the schema shapes
+// the panes render and adds the frontend-only `OperatorSnapshot`: the daemon
+// exposes its state as separate root query fields, not one object, so the console
+// aggregates the roots each pane needs into a single snapshot.
+import type { DocumentData, DocumentVariables } from "@angee/sdk";
+
+import type {
+  SNAPSHOT_QUERY,
+  STACK_SNAPSHOT_SUBSCRIPTION,
+} from "./documents.daemon";
+
 export type {
   ServiceState,
   JobState,
@@ -33,7 +41,6 @@ import type {
   WorkspaceRef,
   TemplateDescriptor,
   SecretRef,
-  StackSnapshot,
   StackStatus,
   GitOpsTopology,
   MutationResult,
@@ -58,21 +65,15 @@ export interface OperatorSnapshot {
   workspaces: readonly WorkspaceRef[];
   templates: readonly TemplateDescriptor[];
   secrets: readonly SecretRef[];
-  gitOps: GitOpsTopology | null;
+  gitOps: Pick<GitOpsTopology, "root" | "name" | "summary" | "links"> | null;
 }
 
 /** Raw snapshot-query result: each root is omitted unless its `@include` is on. */
-export interface OperatorSnapshotQueryData {
-  health?: MutationResult | null;
-  stackStatus?: Pick<StackStatus, "root" | "name"> | null;
-  services?: readonly ServiceState[] | null;
-  jobs?: readonly JobState[] | null;
-  sources?: readonly SourceState[] | null;
-  workspaces?: readonly WorkspaceRef[] | null;
-  templates?: readonly TemplateDescriptor[] | null;
-  secrets?: readonly SecretRef[] | null;
-  gitOpsTopology?: GitOpsTopology | null;
-}
+export type OperatorSnapshotQueryData = DocumentData<typeof SNAPSHOT_QUERY>;
+
+/** The snapshot query's `@include` toggles — one per pane (`$wantOverview`...). */
+export type OperatorSnapshotQueryVariables =
+  DocumentVariables<typeof SNAPSHOT_QUERY>;
 
 /**
  * The live snapshot push: `onStackSnapshotChange` carries the daemon's aggregate
@@ -80,9 +81,9 @@ export interface OperatorSnapshotQueryData {
  * on each push; its non-null arrays are assignable to the query's nullable roots,
  * so {@link snapshotFromQueryData} consumes either source.
  */
-export interface OperatorSnapshotSubscriptionData {
-  onStackSnapshotChange?: StackSnapshot | null;
-}
+export type OperatorSnapshotSubscriptionData = DocumentData<
+  typeof STACK_SNAPSHOT_SUBSCRIPTION
+>;
 
 /** Which panes' data to fetch — maps to the snapshot query's `@include` flags. */
 export interface OperatorSnapshotSections {

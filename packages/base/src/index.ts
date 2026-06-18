@@ -12,12 +12,15 @@ export {
   writeDndPayload,
   readDndPayload,
   dragHasAcceptedType,
+  dragHasFiles,
   useDraggable,
   dragSourceProps,
   useDropTarget,
+  useFileDropTarget,
   type DndPayload,
   type DragSourceProps,
   type UseDropTargetOptions,
+  type UseFileDropTargetOptions,
 } from "./lib";
 
 // The semantic-color vocabulary: one tone (palette) × variant (fill) model.
@@ -93,6 +96,7 @@ export * from "./ui/spinner";
 export * from "./ui/skeleton";
 export * from "./ui/field";
 export * from "./ui/form";
+export * from "./ui/inline-text-action";
 export * from "./ui/label";
 export * from "./ui/input";
 export * from "./ui/textarea";
@@ -135,3 +139,4 @@ export * from "./ui/tooltip";
 export * from "./ui/scroll-area";
 export * from "./ui/toolbar";
 export * from "./ui/form-layout";
+export * from "./ui/upload-drop-target";

@@ -41,6 +41,8 @@ const sdkMocks = vi.hoisted(() => ({
   record: null as Row | null,
   mutate: vi.fn(),
   recordSelection: undefined as readonly string[] | undefined,
+  mutationAction: undefined as string | undefined,
+  mutationOptions: undefined as { fields?: readonly string[]; enabled?: boolean } | undefined,
 }));
 
 vi.mock("@angee/sdk", async (importOriginal) => {
@@ -60,10 +62,18 @@ vi.mock("@angee/sdk", async (importOriginal) => {
         refetch: vi.fn(),
       };
     },
-    useResourceMutation: () => [
-      sdkMocks.mutate,
-      { fetching: false, error: null },
-    ],
+    useResourceMutation: (
+      _model: string,
+      action: string,
+      options?: { fields?: readonly string[]; enabled?: boolean },
+    ) => {
+      sdkMocks.mutationAction = action;
+      sdkMocks.mutationOptions = options;
+      return [
+        sdkMocks.mutate,
+        { fetching: false, error: null },
+      ];
+    },
   };
 });
 
@@ -111,6 +121,8 @@ describe("FormView", () => {
     };
     sdkMocks.mutate.mockReset();
     sdkMocks.recordSelection = undefined;
+    sdkMocks.mutationAction = undefined;
+    sdkMocks.mutationOptions = undefined;
     sdkMocks.mutate.mockImplementation(async ({ data }: { data: Row }) => ({
       ...sdkMocks.record,
       ...data,
@@ -309,6 +321,46 @@ describe("FormView", () => {
         "Refetched",
       ),
     );
+  });
+
+  test("keeps an existing-record form locked until its record loads", async () => {
+    sdkMocks.record = null;
+
+    function Harness(): ReactElement {
+      const [loaded, setLoaded] = useState(false);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              sdkMocks.record = {
+                id: "note-1",
+                title: "Loaded",
+                status: "ACTIVE",
+              };
+              setLoaded(true);
+            }}
+          >
+            load {String(loaded)}
+          </button>
+          <FormView model="notes.Note" id="note-1" fields={fields} />
+        </>
+      );
+    }
+
+    renderWithProviders(<Harness />);
+
+    expect(screen.queryByRole("textbox", { name: "Title" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /load/ }));
+
+    const title = await screen.findByRole("textbox", { name: "Title" });
+    await waitFor(() =>
+      expect((title as HTMLInputElement).value).toBe("Loaded"),
+    );
+    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: true });
   });
 
   test("renders standalone Form from Field and Group children", async () => {
@@ -517,6 +569,25 @@ describe("FormView", () => {
     });
   });
 
+  test("does not require a mutation for a read-only detail form", async () => {
+    sdkMocks.record = { id: "repo-1", name: "widgets", org: "acme" };
+    renderWithProviders(
+      <FormView
+        model="integrate.Repository"
+        id="repo-1"
+        fields={[
+          { name: "org", label: "Org", readOnly: true },
+          { name: "name", label: "Name", readOnly: true },
+        ]}
+      />,
+    );
+
+    expect(await screen.findByText("widgets")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(sdkMocks.mutationAction).toBe("update");
+    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: false });
+  });
+
   test("includes an enum field when the user changes it", async () => {
     renderForm("note-1");
 
@@ -580,6 +651,86 @@ describe("FormView", () => {
     await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
     expect(sdkMocks.mutate).toHaveBeenCalledWith({
       data: { title: "", status: "ACTIVE", reminderAt: null },
+    });
+  });
+
+  test("submits only fields accepted by the schema create input", async () => {
+    sdkMocks.record = null;
+    sdkMocks.mutate.mockReset();
+    const metadata: SchemaFieldMetadata = {
+      types: {
+        IntegrationType: {
+          typeName: "IntegrationType",
+          fields: {
+            displayName: { name: "displayName", kind: "scalar", scalar: "String" },
+            vendor: { name: "vendor", kind: "relation", relationTarget: "VendorType" },
+            owner: { name: "owner", kind: "relation", relationTarget: "UserType" },
+            credential: {
+              name: "credential",
+              kind: "relation",
+              relationTarget: "CredentialType",
+            },
+            implClass: { name: "implClass", kind: "scalar", scalar: "String" },
+            implLabel: { name: "implLabel", kind: "scalar", scalar: "String" },
+            vendorLabel: { name: "vendorLabel", kind: "scalar", scalar: "String" },
+            config: { name: "config", kind: "scalar", scalar: "JSON" },
+            lastError: { name: "lastError", kind: "scalar", scalar: "String" },
+          },
+          rootFields: {
+            create: "createIntegration",
+            createFields: ["vendor", "owner", "credential", "implClass", "config"],
+          },
+        },
+      },
+    };
+    const integrationFields = [
+      { name: "displayName", label: "Display Name", title: true },
+      { name: "vendor", label: "Vendor" },
+      { name: "owner", label: "Owner" },
+      { name: "credential", label: "Credential" },
+      {
+        name: "implClass",
+        label: "Impl Class",
+        prefill: () => ({
+          displayName: "Github",
+          implLabel: "GitHub",
+          vendorLabel: "GitHub",
+          config: {},
+        }),
+      },
+      { name: "implLabel", label: "Implementation" },
+      { name: "vendorLabel", label: "Vendor Label" },
+      { name: "config", label: "Config", widget: "json" },
+      { name: "lastError", label: "Last Error", readOnly: true },
+    ] satisfies readonly FormField[];
+
+    renderWithProviders(
+      <FormView
+        model="integrate.Integration"
+        fields={integrationFields}
+        defaultValues={{
+          vendor: "vendor-1",
+          owner: "user-1",
+          credential: "credential-1",
+        }}
+      />,
+      metadata,
+    );
+
+    fireEvent.change(screen.getByLabelText("Impl Class"), {
+      target: { value: "github.vcs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: {
+        vendor: "vendor-1",
+        owner: "user-1",
+        credential: "credential-1",
+        implClass: "github.vcs",
+        config: {},
+      },
     });
   });
 

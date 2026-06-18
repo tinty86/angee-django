@@ -65,11 +65,6 @@ export interface AgentChatView extends Record<string, unknown> {
   params?: Record<string, unknown>;
 }
 
-export interface RenderAgentPromptVariables extends Record<string, unknown> {
-  id: string;
-  view: AgentChatView;
-}
-
 // Resolve which agent serves the user's current view (the side chatter). Returns the
 // agent identity only — the client then mints its chat endpoint with `agentChatEndpoint`;
 // `null` means the user has no running agent (the chatter shows a call-to-action).

@@ -11,6 +11,7 @@ from angee.base.mixins import RevisionMixin, SqidMixin
 from angee.base.models import (
     AngeeModel,
     instance_from_public_id,
+    public_id_for,
     public_id_of,
 )
 
@@ -73,6 +74,9 @@ def test_public_id_helpers_support_angee_and_plain_django_models() -> None:
 
         assert public_id_of(angee_instance) == angee_instance.sqid
         assert public_id_of(plain_instance) == str(plain_instance.pk)
+        assert public_id_for(PublicIdThing, angee_instance.pk) == angee_instance.sqid
+        assert public_id_for(PlainPublicIdThing, plain_instance.pk) == str(plain_instance.pk)
+        assert public_id_for(PublicIdThing, None) == ""
         with system_context(reason="test public-id lookup"):
             assert instance_from_public_id(PublicIdThing, angee_instance.public_id) == angee_instance
             assert PublicIdThing.from_public_id(angee_instance.public_id) == angee_instance

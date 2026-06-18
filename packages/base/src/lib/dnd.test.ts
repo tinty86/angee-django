@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   DND_MIME,
   dragHasAcceptedType,
+  dragHasFiles,
   dragSourceProps,
   readDndPayload,
   writeDndPayload,
@@ -38,6 +39,17 @@ describe("dnd seam", () => {
 
   test("readDndPayload returns null for a foreign/empty transfer", () => {
     expect(readDndPayload(fakeTransfer())).toBeNull();
+  });
+
+  test("dragHasFiles recognizes native file drags", () => {
+    const empty = fakeTransfer();
+    expect(dragHasFiles(empty)).toBe(false);
+
+    const filesType = {
+      types: ["Files"],
+      files: [] as unknown as FileList,
+    } as Pick<DataTransfer, "types" | "files">;
+    expect(dragHasFiles(filesType)).toBe(true);
   });
 
   test("dragSourceProps writes the payload on drag, or stays inert when null", () => {

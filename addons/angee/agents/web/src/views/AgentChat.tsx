@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
   ToolFallback,
   chatComposerInputClassName,
+  statusTone as resolveStatusTone,
 } from "@angee/base";
 import {
   AssistantRuntimeProvider,
@@ -27,7 +28,7 @@ import {
 } from "@assistant-ui/react";
 import { Streamdown } from "streamdown";
 
-import { useAcpRuntime, type AcpStatus } from "../useAcpRuntime";
+import { useAcpRuntime } from "../useAcpRuntime";
 import { useAgentsT } from "../i18n";
 import type { AgentChatView, McpServerConfig } from "../documents";
 
@@ -61,7 +62,7 @@ export function AgentChat({
           title={t("agents.chat.title")}
           subtitle={effectiveModelHandle}
           statusLabel={t(`agents.chat.status.${status}`)}
-          statusTone={statusTone(status)}
+          statusTone={resolveStatusTone(status)}
           actions={
             <>
               <SessionInfoPopover
@@ -112,14 +113,6 @@ export function AgentChat({
       </div>
     </AssistantRuntimeProvider>
   );
-}
-
-/** Map the connection status to a base `Tone` for the header dot + tag. */
-function statusTone(status: AcpStatus): "success" | "danger" | "warning" | "info" {
-  if (status === "ready") return "success";
-  if (status === "error") return "danger";
-  if (status === "closed") return "warning";
-  return "info";
 }
 
 /** One user message: a right-aligned bubble of plain text. */

@@ -1095,9 +1095,10 @@ class IntegrationManager(AngeeManager):
     ) -> Any:
         """Create an integration and its implementation-owned related row atomically."""
 
-        impl_key = str(attrs.get("impl_class") or "none").strip() or "none"
+        field = cast(ImplClassField, self.model._meta.get_field("impl_class"))
+        impl_key = field.key_for(attrs.get("impl_class") or "none") or "none"
         attrs["impl_class"] = impl_key
-        impl_class = self.impl_class_for_key(impl_key)
+        impl_class = cast(type[IntegrationImpl], field.resolve_class(impl_key))
         with transaction.atomic():
             integration = self.create(**attrs)
             related_values = (
@@ -1277,9 +1278,8 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
 class IntegrationMixin(SqidMixin, AuditMixin, AngeeModel):
     """Abstract base for optional one-to-one integration related models."""
 
-    # ``%(app_label)s_%(class)s``: every concrete related model gets a distinct reverse
-    # accessor on ``Integration``. ``Integration.impl`` resolves the declared
-    # related model through this convention.
+    # The field owner declares the reverse accessor; ``Integration.impl`` asks
+    # Django relation metadata for the concrete name.
     integration = models.OneToOneField(
         "integrate.Integration",
         on_delete=models.CASCADE,

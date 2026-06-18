@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type DragEventHandler,
+  type DragEvent,
 } from "react";
 
 /**
@@ -84,6 +85,14 @@ export function dragHasAcceptedType(
   return wanted.some((type) => types.includes(typeMarker(type)));
 }
 
+/** Whether the native browser drag currently carries one or more files. */
+export function dragHasFiles(
+  dataTransfer: Pick<DataTransfer, "types" | "files">,
+): boolean {
+  const types = Array.from(dataTransfer.types, (type) => type.toLowerCase());
+  return types.includes("files") || (dataTransfer.files?.length ?? 0) > 0;
+}
+
 /**
  * Make an element draggable with a typed payload — spread the result onto any
  * element. Pass `null` (or a getter returning `null`) to disable for a render.
@@ -134,6 +143,12 @@ export interface UseDropTargetOptions<TData = unknown> {
   canDrop?: (payload: DndPayload<TData>) => boolean;
   /** Called with the decoded payload when an accepted item is dropped. */
   onDrop: (payload: DndPayload<TData>) => void;
+}
+
+export interface UseFileDropTargetOptions {
+  disabled?: boolean;
+  /** Called with browser `File`s dropped onto the target. */
+  onDrop: (files: readonly File[], event: DragEvent) => void;
 }
 
 /**
@@ -188,4 +203,68 @@ export function useDropTarget<TData = unknown>({
   );
 
   return { isOver, dropProps: { onDragOver, onDragLeave, onDrop: handleDrop } };
+}
+
+/**
+ * Make an element a native file drop target. This is separate from Angee's
+ * internal typed DnD payload seam: browser file drops use `DataTransfer.files`,
+ * not the JSON payload MIME used for row/card moves.
+ */
+export function useFileDropTarget({
+  disabled = false,
+  onDrop,
+}: UseFileDropTargetOptions): {
+  isOver: boolean;
+  dropProps: {
+    onDragEnter: DragEventHandler;
+    onDragOver: DragEventHandler;
+    onDragLeave: DragEventHandler;
+    onDrop: DragEventHandler;
+  };
+} {
+  const [isOver, setIsOver] = useState(false);
+  const depth = useRef(0);
+
+  const onDragEnter = useCallback<DragEventHandler>(
+    (event) => {
+      if (disabled || !dragHasFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      depth.current += 1;
+      setIsOver(true);
+    },
+    [disabled],
+  );
+
+  const onDragOver = useCallback<DragEventHandler>(
+    (event) => {
+      if (disabled || !dragHasFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setIsOver(true);
+    },
+    [disabled],
+  );
+
+  const onDragLeave = useCallback<DragEventHandler>(() => {
+    depth.current = Math.max(0, depth.current - 1);
+    if (depth.current === 0) setIsOver(false);
+  }, []);
+
+  const handleDrop = useCallback<DragEventHandler>(
+    (event) => {
+      depth.current = 0;
+      setIsOver(false);
+      if (disabled || !dragHasFiles(event.dataTransfer)) return;
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length === 0) return;
+      event.preventDefault();
+      onDrop(files, event);
+    },
+    [disabled, onDrop],
+  );
+
+  return {
+    isOver,
+    dropProps: { onDragEnter, onDragOver, onDragLeave, onDrop: handleDrop },
+  };
 }

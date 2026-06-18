@@ -84,6 +84,18 @@ def test_permission_hub_queries_are_admin_only(
           }
         }
         """,
+        """
+        query {
+          iamOverview {
+            userCount
+            roleCount
+            grantCount
+            relationshipCount
+            privilegedGrantCount
+            unassignedUserCount
+          }
+        }
+        """,
     ]
 
     for query in queries:
@@ -184,6 +196,90 @@ def test_grants_query_labels_principals_by_display_name(
     }
     assert labels[str(named.pk)] == "Named Owner"
     assert labels[str(plain.pk)] == "hub-label-plain"
+
+
+def test_iam_overview_aggregates_do_not_depend_on_paginated_rows(
+    iam_permission_hub_tables: None,
+) -> None:
+    """The IAM overview is a backend aggregate, not a summary of page-limited rows."""
+
+    admin = _platform_admin("hub-overview-admin")
+    User.objects.bulk_create(
+        User(
+            username=f"hub-overview-target-{index:03d}",
+            email=f"target-{index:03d}@example.com",
+        )
+        for index in range(505)
+    )
+    targets = list(
+        User.objects.filter(username__startswith="hub-overview-target-").order_by(
+            "username",
+        )
+    )
+    grant(actor=targets[0], role="angee/role:auditor")
+    grant(actor=targets[-1], role="angee/role:admin")
+
+    data = _data(
+        _execute(
+            _schema("console"),
+            """
+            query {
+              users(pagination: {limit: 1}) {
+                totalCount
+                results { username }
+              }
+              grants(pagination: {limit: 1}) {
+                totalCount
+                results { role }
+              }
+              iamOverview(peekLimit: 2) {
+                userCount
+                roleCount
+                grantCount
+                relationshipCount
+                privilegedGrantCount
+                unassignedUserCount
+                namespaces {
+                  namespace
+                  roleCount
+                  grantCount
+                }
+                privilegedGrants {
+                  principalId
+                  principalLabel
+                  role
+                }
+                unassignedUsers {
+                  username
+                }
+              }
+            }
+            """,
+            user=admin,
+        )
+    )
+
+    overview = data["iamOverview"]
+    assert len(data["users"]["results"]) == 1
+    assert len(data["grants"]["results"]) == 1
+    assert data["users"]["totalCount"] == 506
+    assert data["grants"]["totalCount"] == 3
+    assert overview["userCount"] == 506
+    assert overview["roleCount"] == 2
+    assert overview["grantCount"] == 3
+    assert overview["relationshipCount"] == 3
+    assert overview["privilegedGrantCount"] == 2
+    assert overview["unassignedUserCount"] == 503
+    assert overview["namespaces"] == [
+        {"namespace": "angee", "roleCount": 2, "grantCount": 3},
+    ]
+    assert {row["role"] for row in overview["privilegedGrants"]} == {
+        "angee/role:admin",
+    }
+    assert [row["username"] for row in overview["unassignedUsers"]] == [
+        "hub-overview-target-001",
+        "hub-overview-target-002",
+    ]
 
 
 def test_permission_hub_mutations_are_admin_only(

@@ -1,5 +1,6 @@
 import { useEffect, type ReactElement } from "react";
 
+import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import {
   applyThemePreference,
@@ -11,9 +12,9 @@ import { widgetLabel } from "./label";
 import type { WidgetDefinition, WidgetRenderProps } from "./types";
 
 const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
+  { value: "light", label: "theme.light" },
+  { value: "dark", label: "theme.dark" },
+  { value: "system", label: "theme.system" },
 ] satisfies readonly { value: ThemePreference; label: string }[];
 
 function ThemePickerEdit({
@@ -22,6 +23,7 @@ function ThemePickerEdit({
   field,
   readOnly,
 }: WidgetRenderProps<ThemePreference>): ReactElement {
+  const t = useBaseT();
   const { preference, setPreference, system } = useThemePreference();
   const theme = normaliseThemePreference(value) ?? preference;
 
@@ -39,7 +41,7 @@ function ThemePickerEdit({
     <span
       className="inline-flex min-w-0 flex-wrap items-center gap-1"
       role="group"
-      aria-label={widgetLabel(field, "Theme")}
+      aria-label={widgetLabel(field, t("theme.label"))}
     >
       {THEME_OPTIONS.map((option) => (
         <button
@@ -61,7 +63,7 @@ function ThemePickerEdit({
             )}
             aria-hidden
           />
-          <span>{option.label}</span>
+          <span>{t(option.label)}</span>
         </button>
       ))}
     </span>
@@ -71,9 +73,10 @@ function ThemePickerEdit({
 function ThemePickerRead({
   value,
 }: WidgetRenderProps<ThemePreference>): ReactElement {
+  const t = useBaseT();
   const theme = normaliseThemePreference(value) ?? "system";
   const label =
-    THEME_OPTIONS.find((item) => item.value === theme)?.label ?? "System";
+    THEME_OPTIONS.find((item) => item.value === theme)?.label ?? "theme.system";
   return (
     <span className="inline-flex items-center gap-2 text-13 text-fg">
       <span
@@ -83,7 +86,7 @@ function ThemePickerRead({
         )}
         aria-hidden
       />
-      {label}
+      {t(label)}
     </span>
   );
 }

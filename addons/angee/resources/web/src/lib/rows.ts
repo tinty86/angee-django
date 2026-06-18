@@ -1,3 +1,5 @@
+import { formatDateTime } from "@angee/base";
+
 import type { ResourceLedgerRowData } from "../documents";
 
 export interface ResourceRow extends Record<string, unknown> {
@@ -22,6 +24,6 @@ export function resourceRows(
     target: row.targetModel,
     targetId: row.targetId,
     hash: row.contentHash.slice(0, 12),
-    loaded: row.loadedAt ? row.loadedAt.slice(0, 19).replace("T", " ") : "",
+    loaded: formatDateTime(row.loadedAt),
   }));
 }

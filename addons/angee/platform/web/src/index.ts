@@ -4,6 +4,7 @@ import {
   type BaseMenuItem,
 } from "@angee/base";
 
+import { enPlatformMessages } from "./i18n";
 import { PlatformGlyph } from "./PlatformGlyph";
 import { AddonDetail } from "./views/AddonDetail";
 import { AddonsPage } from "./views/AddonsPage";
@@ -54,6 +55,7 @@ const platform = defineBaseAddon({
   id: "platform",
   routes: platformRoutes,
   menus: platformMenu,
+  i18n: { platform: enPlatformMessages },
   icons: { platform: PlatformGlyph },
 });
 

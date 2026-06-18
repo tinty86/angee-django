@@ -24,11 +24,9 @@ import { errorMessage, useAuthoredMutation, useAuthoredQuery } from "@angee/sdk"
 
 import {
   IamGrantRole,
-  IamGrants,
   IamOverview,
   IamRevokeRole,
   IamUsers,
-  type IAMGrantsVariables,
   type IAMOverviewVariables,
   type IAMUsersVariables,
 } from "../documents";
@@ -37,7 +35,6 @@ import { grantRows, roleRef, roleRows, type IAMGrantRow } from "../identity-rows
 import { IAM_LIST_LIMIT } from "../list-config";
 import { useIamT } from "../i18n";
 
-const OVERVIEW_COUNT_LIMIT = 1;
 const PEEK_LIMIT = 6;
 
 /**
@@ -48,27 +45,32 @@ const PEEK_LIMIT = 6;
  */
 export function OverviewPage(): ReactElement {
   const t = useIamT();
-  const countVars = useMemo<IAMOverviewVariables>(
-    () => ({ pagination: { offset: 0, limit: OVERVIEW_COUNT_LIMIT } }),
+  const overviewVars = useMemo<IAMOverviewVariables>(
+    () => ({ peekLimit: PEEK_LIMIT }),
     [],
   );
-  const listVars = useMemo<IAMUsersVariables & IAMGrantsVariables>(
+  const listVars = useMemo<IAMUsersVariables>(
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const overview = useAuthoredQuery(IamOverview, countVars);
+  const overview = useAuthoredQuery(IamOverview, overviewVars);
   const usersQuery = useAuthoredQuery(IamUsers, listVars);
-  const grantsQuery = useAuthoredQuery(IamGrants, listVars);
   const [grantRole, grantState] = useAuthoredMutation(IamGrantRole);
 
+  const overviewFacts = overview.data?.iamOverview;
   const roles = useMemo(() => roleRows(overview.data?.roles ?? []), [overview.data]);
   const users = useMemo(
     () => [...(usersQuery.data?.users.results ?? [])],
     [usersQuery.data],
   );
-  const grants = useMemo(
-    () => grantRows(grantsQuery.data?.grants.results ?? []),
-    [grantsQuery.data],
+  const privileged = useMemo(
+    () => grantRows(overviewFacts?.privilegedGrants ?? []),
+    [overviewFacts],
+  );
+  const namespaces = overviewFacts?.namespaces ?? [];
+  const unassigned = useMemo(
+    () => [...(overviewFacts?.unassignedUsers ?? [])],
+    [overviewFacts],
   );
 
   const roleOptions = useMemo(
@@ -85,32 +87,8 @@ export function OverviewPage(): ReactElement {
   );
   const userTotalCount = usersQuery.data?.users.totalCount ?? 0;
   const usersTruncated = userTotalCount > IAM_LIST_LIMIT;
-
-  // Namespaces with their role + grant counts, sorted by namespace.
-  const namespaces = useMemo(() => {
-    const byNamespace = new Map<string, { roles: number; grants: number }>();
-    for (const role of roles) {
-      const entry = byNamespace.get(role.namespace) ?? { roles: 0, grants: 0 };
-      entry.roles += 1;
-      byNamespace.set(role.namespace, entry);
-    }
-    for (const grant of grants) {
-      const entry = byNamespace.get(grant.namespace) ?? { roles: 0, grants: 0 };
-      entry.grants += 1;
-      byNamespace.set(grant.namespace, entry);
-    }
-    return [...byNamespace.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [roles, grants]);
-
-  const privileged = useMemo(() => grants.filter(isPrivileged), [grants]);
-  const assignedIds = useMemo(
-    () => new Set(grants.map((grant) => grant.principalId)),
-    [grants],
-  );
-  const unassigned = useMemo(
-    () => users.filter((user) => !assignedIds.has(user.id)),
-    [users, assignedIds],
-  );
+  const privilegedTotal = overviewFacts?.privilegedGrantCount ?? privileged.length;
+  const unassignedTotal = overviewFacts?.unassignedUserCount ?? unassigned.length;
 
   const [principalId, setPrincipalId] = useState("");
   const [role, setRole] = useState("");
@@ -140,23 +118,22 @@ export function OverviewPage(): ReactElement {
       const result = await grantRole({ principalId, role });
       if (result?.grantRole === false) throw new Error(t("iam.overview.grant.error"));
       setPrincipalId("");
-      grantsQuery.refetch();
       overview.refetch();
     } catch (caught) {
       setError(errorMessage(caught, t("iam.overview.grant.error")));
     }
   }
 
-  const loading = overview.fetching || grantsQuery.fetching;
+  const loading = overview.fetching;
 
   return (
     <DashboardView className="p-1">
-      <Metric label={t("iam.overview.metric.users")} value={count(overview.data?.users.totalCount, loading)} icon="users" />
-      <Metric label={t("iam.overview.metric.roles")} value={count(roles.length, loading)} icon="auth" tone="brand" />
-      <Metric label={t("iam.overview.metric.grants")} value={count(overview.data?.grants.totalCount, loading)} icon="check" tone="success" />
-      <Metric label={t("iam.overview.metric.relationships")} value={count(overview.data?.relationships.totalCount, loading)} icon="share" tone="info" />
-      <Metric label={t("iam.overview.metric.privileged")} value={count(privileged.length, loading)} icon="auth" tone="warning" detail={t("iam.overview.metric.privilegedDetail")} />
-      <Metric label={t("iam.overview.metric.unassigned")} value={count(unassigned.length, loading)} icon="users" tone="danger" detail={t("iam.overview.metric.unassignedDetail")} />
+      <Metric label={t("iam.overview.metric.users")} value={count(overviewFacts?.userCount, loading)} icon="users" />
+      <Metric label={t("iam.overview.metric.roles")} value={count(overviewFacts?.roleCount, loading)} icon="auth" tone="brand" />
+      <Metric label={t("iam.overview.metric.grants")} value={count(overviewFacts?.grantCount, loading)} icon="check" tone="success" />
+      <Metric label={t("iam.overview.metric.relationships")} value={count(overviewFacts?.relationshipCount, loading)} icon="share" tone="info" />
+      <Metric label={t("iam.overview.metric.privileged")} value={count(overviewFacts?.privilegedGrantCount, loading)} icon="auth" tone="warning" detail={t("iam.overview.metric.privilegedDetail")} />
+      <Metric label={t("iam.overview.metric.unassigned")} value={count(overviewFacts?.unassignedUserCount, loading)} icon="users" tone="danger" detail={t("iam.overview.metric.unassignedDetail")} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-6">
@@ -215,12 +192,11 @@ export function OverviewPage(): ReactElement {
 
           <SurfacePanel
             title={t("iam.overview.privileged.title")}
-            summary={t("iam.overview.privileged.summary", { count: privileged.length.toLocaleString() })}
+            summary={t("iam.overview.privileged.summary", { count: privilegedTotal.toLocaleString() })}
           >
             <div className="divide-y divide-border-subtle">
-              {privileged.slice(0, PEEK_LIMIT).map((grant) => (
+              {privileged.map((grant) => (
                 <PrivilegedGrantRow key={grant.id} grant={grant} onRevoked={() => {
-                  grantsQuery.refetch();
                   overview.refetch();
                 }} />
               ))}
@@ -237,18 +213,18 @@ export function OverviewPage(): ReactElement {
             summary={t("iam.overview.namespaces.summary", { count: namespaces.length.toLocaleString() })}
           >
             <div className="space-y-3 p-4">
-              {namespaces.map(([namespace, counts]) => (
+              {namespaces.map((namespace) => (
                 <MiniCard
-                  key={namespace}
-                  title={titleLabel(namespace)}
+                  key={namespace.namespace}
+                  title={titleLabel(namespace.namespace)}
                   meta={
-                    counts.roles === 1
-                      ? t("iam.overview.namespaces.roleCount.one", { count: counts.roles.toLocaleString() })
-                      : t("iam.overview.namespaces.roleCount.other", { count: counts.roles.toLocaleString() })
+                    namespace.roleCount === 1
+                      ? t("iam.overview.namespaces.roleCount.one", { count: namespace.roleCount.toLocaleString() })
+                      : t("iam.overview.namespaces.roleCount.other", { count: namespace.roleCount.toLocaleString() })
                   }
                   primaryTag={{
-                    label: t("iam.overview.namespaces.grantCount", { count: counts.grants.toLocaleString() }),
-                    tone: counts.grants > 0 ? "brand" : "neutral",
+                    label: t("iam.overview.namespaces.grantCount", { count: namespace.grantCount.toLocaleString() }),
+                    tone: namespace.grantCount > 0 ? "brand" : "neutral",
                   }}
                 />
               ))}
@@ -258,10 +234,10 @@ export function OverviewPage(): ReactElement {
 
           <SurfacePanel
             title={t("iam.overview.unassigned.title")}
-            summary={t("iam.overview.unassigned.summary", { count: unassigned.length.toLocaleString() })}
+            summary={t("iam.overview.unassigned.summary", { count: unassignedTotal.toLocaleString() })}
           >
             <div className="divide-y divide-border-subtle">
-              {unassigned.slice(0, PEEK_LIMIT).map((user) => (
+              {unassigned.map((user) => (
                 <div key={user.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <div className="truncate text-13 font-medium text-fg">{user.username}</div>
@@ -307,11 +283,6 @@ function PrivilegedGrantRow({
       </Button>
     </div>
   );
-}
-
-/** Admin-tier heuristic: any grant whose role id reads as an admin role. */
-function isPrivileged(grant: IAMGrantRow): boolean {
-  return grant.roleName.toLowerCase().includes("admin");
 }
 
 function count(value: number | undefined, loading: boolean): string {

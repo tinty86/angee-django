@@ -10,6 +10,7 @@ import {
   isObjectType,
   isScalarType,
   type GraphQLField,
+  type GraphQLInputObjectType,
   type GraphQLNamedType,
   type GraphQLObjectType,
   type GraphQLOutputType,
@@ -65,10 +66,14 @@ export interface ModelRootFieldMetadata {
   revisionFields?: readonly string[];
   /** Mutation field creating one record. */
   create?: string;
+  /** Fields accepted by the create input object. */
+  createFields?: readonly string[];
   /** Required (non-null, no default) fields of the create input — for client-side validation. */
   requiredCreateFields?: readonly string[];
   /** Mutation field updating one record. */
   update?: string;
+  /** Fields accepted by the update patch input object, excluding its id. */
+  updateFields?: readonly string[];
   /** Mutation field deleting one record. */
   delete?: string;
 }
@@ -246,12 +251,16 @@ function rootFieldsForType(
     const deleteCandidates: string[] = [];
     for (const [name, field] of Object.entries(mutation.getFields())) {
       if (returnsDirectObject(field.type, type.name)) {
-        if (rootFields.create === undefined && hasModelInputArg(field, type, "Input")) {
+        const createInput = modelInputType(field, type, "Input");
+        if (rootFields.create === undefined && createInput) {
           rootFields.create = name;
-          rootFields.requiredCreateFields = requiredInputFields(field, type, "Input");
+          rootFields.createFields = inputFieldNames(createInput);
+          rootFields.requiredCreateFields = requiredInputFields(createInput);
         }
-        if (rootFields.update === undefined && hasModelInputArg(field, type, "Patch")) {
+        const updateInput = modelInputType(field, type, "Patch");
+        if (rootFields.update === undefined && updateInput) {
           rootFields.update = name;
+          rootFields.updateFields = inputFieldNames(updateInput).filter((field) => field !== "id");
         }
       }
       if (returnsNamedType(field.type, "DeletePreview") && hasArgument(field, "id")) {
@@ -393,8 +402,18 @@ function hasModelInputArg(
   type: GraphQLObjectType,
   suffix: string,
 ): boolean {
+  return modelInputType(field, type, suffix) !== null;
+}
+
+function modelInputType(
+  field: GraphQLField<unknown, unknown>,
+  type: GraphQLObjectType,
+  suffix: string,
+): GraphQLInputObjectType | null {
   const inputName = `${inputBaseName(type)}${suffix}`;
-  return field.args.some((arg) => getNamedType(arg.type).name === inputName);
+  const arg = field.args.find((candidate) => getNamedType(candidate.type).name === inputName);
+  const inputType = arg ? getNamedType(arg.type) : null;
+  return inputType && isInputObjectType(inputType) ? inputType : null;
 }
 
 function inputBaseName(type: GraphQLObjectType): string {
@@ -407,17 +426,15 @@ function inputBaseName(type: GraphQLObjectType): string {
  * block submit on it. Used for client-side required validation.
  */
 function requiredInputFields(
-  field: GraphQLField<unknown, unknown>,
-  type: GraphQLObjectType,
-  suffix: string,
+  inputType: GraphQLInputObjectType,
 ): readonly string[] {
-  const inputName = `${inputBaseName(type)}${suffix}`;
-  const arg = field.args.find((candidate) => getNamedType(candidate.type).name === inputName);
-  const inputType = arg ? getNamedType(arg.type) : null;
-  if (!inputType || !isInputObjectType(inputType)) return [];
   return Object.values(inputType.getFields())
     .filter((inputField) => isNonNullType(inputField.type) && inputField.defaultValue === undefined)
     .map((inputField) => inputField.name);
+}
+
+function inputFieldNames(inputType: GraphQLInputObjectType): readonly string[] {
+  return Object.keys(inputType.getFields());
 }
 
 function deleteFieldFor(
@@ -426,14 +443,28 @@ function deleteFieldFor(
   candidates: readonly string[],
 ): string | undefined {
   // DeletePreview does not carry the deleted model type in SDL, so the schema
-  // cannot link delete to a model by return type the way create/update can.
-  const suffixes = [
-    commonSuffix(rootFields.create, rootFields.update),
+  // cannot link delete to a model by return type the way create/update can. Ask
+  // the operation names for their target first (`createVcsIntegration` /
+  // `updateVcsIntegration` -> `VcsIntegration`), then fall back to the model type
+  // name for conventional roots (`deleteWidget`).
+  const targets = [
+    operationTargetName(rootFields.create, "create"),
+    operationTargetName(rootFields.update, "update"),
     inputBaseName(type),
-  ].filter((suffix): suffix is string => Boolean(suffix));
+    commonSuffix(rootFields.create, rootFields.update),
+  ].filter((target): target is string => Boolean(target));
   return candidates.find((candidate) =>
-    suffixes.some((suffix) => namesMatchSuffix(candidate, suffix)),
+    targets.some((target) => namesMatchSuffix(candidate, target)),
   );
+}
+
+function operationTargetName(
+  name: string | undefined,
+  verb: "create" | "update" | "delete",
+): string | undefined {
+  if (!name || !name.toLowerCase().startsWith(verb)) return undefined;
+  const target = name.slice(verb.length);
+  return target === "" ? undefined : target;
 }
 
 function commonSuffix(

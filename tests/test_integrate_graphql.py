@@ -196,16 +196,19 @@ def test_create_with_impl_creates_related_row_and_rolls_back(
             {"api_key": "x"},
         )
         vendor = Vendor.objects.create(slug="impl-factory", display_name="Impl Factory")
+        assert integrate_schema._create_impl_key("STUB") == "stub"
         integration = Integration.objects.create_with_impl(
             vendor=vendor,
             credential=credential,
             owner=user,
-            impl_class="stub",
-            status="active",
+            impl_class="STUB",
+            status="DRAFT",
             related_input=SimpleNamespace(webhook_secret="created-secret"),
             related_unset=unset,
         )
 
+        assert integration.impl_class == "stub"
+        assert str(integration.status) == "draft"
         bridge = VcsBridge.objects.get(integration=integration)
         assert str(bridge.webhook_secret) == "created-secret"
 
@@ -222,7 +225,7 @@ def test_create_with_impl_creates_related_row_and_rolls_back(
                 credential=credential,
                 owner=user,
                 impl_class="stub",
-                status="active",
+                status="DRAFT",
                 related_input=SimpleNamespace(webhook_secret="bad-secret"),
                 related_unset=unset,
             )
@@ -478,6 +481,49 @@ def test_create_integration_from_credential_is_authenticated_user_owned(
         assert integration.config["credential_env"] == "ANTHROPIC_OAUTH_TOKEN"
 
 
+def test_connect_integration_reuses_existing_row_with_enum_impl_class(
+    integrate_console_tables: None,
+) -> None:
+    """The self-service connect mutation accepts read-side enum casing on retry."""
+
+    console_schema = _schema()
+    conn = make_integration(
+        "connect-enum",
+        kind=CredentialKind.OAUTH,
+        impl_class="stub",
+    )
+    mutation = """
+        mutation {
+          connectIntegration(vendorSlug: "connect-enum", implClass: "STUB") {
+            attached
+            error
+            integration {
+              implClass
+              vendor { slug }
+            }
+          }
+        }
+    """
+
+    for _attempt in range(2):
+        result = _data(_execute(console_schema, mutation, user=conn.owner))["connectIntegration"]
+        assert result == {
+            "attached": True,
+            "error": None,
+            "integration": {
+                "implClass": "STUB",
+                "vendor": {"slug": "connect-enum"},
+            },
+        }
+
+    with system_context(reason="test.integrate.connect_enum.verify"):
+        assert Integration.objects.filter(
+            owner=conn.owner,
+            vendor=conn.vendor,
+            impl_class="stub",
+        ).count() == 1
+
+
 def test_sync_integration_runs_for_an_admin(
     integrate_console_tables: None,
 ) -> None:
@@ -556,6 +602,28 @@ def test_update_integration_status_accepts_the_lowercase_value(
     with system_context(reason="test.integrate.status.verify"):
         conn.refresh_from_db()
         assert str(conn.status) == "disabled"
+
+
+def test_update_integration_status_accepts_the_graphql_enum_name(
+    integrate_console_tables: None,
+) -> None:
+    """A status patch can echo the read-side GraphQL enum name back to the server."""
+
+    console_schema = _schema()
+    admin = _platform_admin("status-enum-admin")
+    conn = make_integration("status-enum")
+    result = _data(
+        _execute(
+            console_schema,
+            'mutation($id: ID!){ updateIntegration(data: {id: $id, status: "DRAFT"}){ status } }',
+            {"id": _integration_global_id(conn)},
+            user=admin,
+        )
+    )["updateIntegration"]
+    assert result["status"] == "DRAFT"
+    with system_context(reason="test.integrate.status_enum.verify"):
+        conn.refresh_from_db()
+        assert str(conn.status) == "draft"
 
 
 def test_create_vcs_integration_rejects_non_vcs_impl(

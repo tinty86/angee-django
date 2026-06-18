@@ -472,9 +472,7 @@ class Runtime:
                     f"{extension.__module__}.{extension.__name__} extends unknown model {target!r}"
                 )
             grouped.setdefault(target, []).append(extension_model)
-        return {
-            target: tuple(sorted(classes, key=lambda cls: cls._meta.object_name)) for target, classes in grouped.items()
-        }
+        return {target: tuple(classes) for target, classes in grouped.items()}
 
     def _check_field_collisions(self) -> None:
         """Raise when composed bases declare the same direct field."""
@@ -545,7 +543,7 @@ class Runtime:
         """Return whether ``path`` participates in source drift checks."""
 
         relative = path.relative_to(self.runtime_dir)
-        if relative.parts and relative.parts[0] == "schemas":
+        if relative.parts and relative.parts[0] in {"gql", "schemas"}:
             return False
         if self._is_orphaned_migration_path(relative):
             return False
@@ -685,7 +683,9 @@ class Runtime:
             source = importlib.import_module(f"{app_config.name}.models")
         if source is None:
             return (), ()
-        for _name, value in inspect.getmembers(source, inspect.isclass):
+        for value in source.__dict__.values():
+            if not inspect.isclass(value):
+                continue
             if value in seen:
                 continue
             origin = value.__module__
@@ -697,6 +697,7 @@ class Runtime:
             model_class = cast(type[AngeeModel], value)
             if not model_class._meta.abstract:
                 continue
+            self._validate_source_model_label(app_config, model_class)
             seen.add(value)
             if model_class.get_extension_target() is None:
                 if model_class.is_runtime_model():
@@ -709,13 +710,18 @@ class Runtime:
                 extensions.append(model_class)
         return (
             tuple(sorted(models_owned, key=lambda cls: cls._meta.object_name)),
-            tuple(
-                sorted(
-                    extensions,
-                    key=lambda cls: (
-                        cast(type[AngeeModel], cls).get_extension_target() or "",
-                        cls._meta.object_name,
-                    ),
-                )
-            ),
+            tuple(extensions),
         )
+
+    def _validate_source_model_label(
+        self,
+        app_config: AppConfig,
+        model_class: type[AngeeModel],
+    ) -> None:
+        """Raise when a source model's Django label does not match its addon."""
+
+        if model_class._meta.app_label != app_config.label:
+            raise ImproperlyConfigured(
+                f"{model_class.__module__}.{model_class.__name__} has app_label "
+                f"{model_class._meta.app_label!r}; expected {app_config.label!r}"
+            )

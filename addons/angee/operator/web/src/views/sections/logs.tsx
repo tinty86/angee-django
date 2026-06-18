@@ -7,11 +7,16 @@ import {
   CardTitle,
   LogStream,
 } from "@angee/base";
+import type { DocumentData } from "@angee/sdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "urql";
 
 import { useOperatorT } from "../../i18n";
 import { useOperatorConnection, useOperatorSubscription } from "../../data/transport";
+import type {
+  WORKSPACE_LOGS_QUERY,
+  WORKSPACE_LOGS_SUBSCRIPTION,
+} from "../../data/documents.daemon";
 
 const HISTORY_LIMIT = 500;
 const MAX_LIVE_LINES = 2000;
@@ -44,18 +49,18 @@ export function useDaemonLogStream({
   streamField,
 }: {
   name: string | undefined;
-  historyQuery: string;
-  historyField: string;
-  streamSubscription: string;
-  streamField: string;
+  historyQuery: typeof WORKSPACE_LOGS_QUERY;
+  historyField: keyof DocumentData<typeof WORKSPACE_LOGS_QUERY> & string;
+  streamSubscription: typeof WORKSPACE_LOGS_SUBSCRIPTION;
+  streamField: keyof DocumentData<typeof WORKSPACE_LOGS_SUBSCRIPTION> & string;
 }): DaemonLogStream {
-  const [history] = useQuery<Record<string, string | null>>({
+  const [history] = useQuery({
     query: historyQuery,
     variables: { name: name ?? "", limit: HISTORY_LIMIT },
     pause: !name,
   });
   const [live, setLive] = useState<readonly string[]>([]);
-  const stream = useOperatorSubscription<Record<string, string | null>, { name: string }>(
+  const stream = useOperatorSubscription(
     streamSubscription,
     { name: name ?? "" },
     {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.db import models
 
+from angee.integrate.impl import IntegrationImpl
 from angee.integrate.models import Bridge, IntegrationMixin, IntegrationStatus
 from tests.conftest import Integration
 
@@ -19,6 +20,31 @@ class ConcreteBridge(Bridge):
         db_table = "test_integrate_bridge"
         rebac_resource_type = "tests/bridge"
         rebac_id_attr = "sqid"
+
+
+class RenamedRelated(models.Model):
+    """Related model whose reverse accessor intentionally breaks the default pattern."""
+
+    integration = models.OneToOneField(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="renamed_related",
+    )
+
+    class Meta:
+        """Django model options for the reverse-accessor test double."""
+
+        app_label = "tests"
+
+
+class RenamedRelatedImpl(IntegrationImpl):
+    """Implementation that returns a model object directly for accessor tests."""
+
+    @classmethod
+    def related_model_class(cls) -> type[models.Model]:
+        """Return the related model under test."""
+
+        return RenamedRelated
 
 
 def test_integrate_bases_are_abstract() -> None:
@@ -42,6 +68,13 @@ def test_concrete_bridge_inherits_scheduler_field() -> None:
     field = ConcreteBridge._meta.get_field("next_sync_at")
 
     assert isinstance(field, models.DateTimeField)
+
+
+def test_integration_impl_asks_django_for_related_accessor() -> None:
+    """Changing the field-owned related name updates implementation lookup."""
+
+    assert RenamedRelatedImpl.related_accessor_name() == "renamed_related"
+    assert RenamedRelatedImpl.related_accessor_name() != "tests_renamedrelated"
 
 
 def test_report_status_records_integration_telemetry() -> None:

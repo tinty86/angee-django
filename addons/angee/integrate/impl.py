@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from django.apps import apps
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist
 from django.db import models
 
 from angee.base.impl import ImplBase
@@ -52,11 +52,27 @@ class IntegrationImpl(ImplBase):
         model = cls.related_model_class()
         if model is None:
             return None
-        related_name = f"{model._meta.app_label}_{model._meta.model_name}"
+        related_name = cls.related_accessor_name(model)
         try:
             return getattr(integration, related_name)
         except ObjectDoesNotExist:
             return None
+
+    @classmethod
+    def related_accessor_name(cls, model: type[models.Model] | None = None) -> str:
+        """Return the reverse accessor declared by this impl's related model field."""
+
+        related_model = model if model is not None else cls.related_model_class()
+        if related_model is None:
+            raise ImproperlyConfigured(f"{cls.__name__} does not declare related_model.")
+        field = related_model._meta.get_field("integration")
+        remote_field = field.remote_field
+        if remote_field is None:
+            raise ImproperlyConfigured(f"{related_model._meta.label}.integration has no remote relation.")
+        accessor = remote_field.get_accessor_name()
+        if not accessor:
+            raise ImproperlyConfigured(f"{related_model._meta.label}.integration has no reverse accessor.")
+        return str(accessor)
 
     @classmethod
     def create_related_row(cls, integration: Any, values: dict[str, Any]) -> Any | None:

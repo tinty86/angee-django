@@ -193,6 +193,14 @@ class AngeeModel(TimestampMixin, RebacMixin):
 
         return {cls._meta.pk.name: value}
 
+    @classmethod
+    def public_id_from_pk(cls, value: Any) -> str:
+        """Return the public id encoded from this model's primary-key value."""
+
+        if value in (None, ""):
+            return ""
+        return str(value)
+
     def public_id_value(self) -> Any:
         """Return the raw public identifier value owned by this instance."""
 
@@ -223,6 +231,17 @@ def public_id_of(instance: models.Model) -> str:
     if instance.pk is None:
         return ""
     return str(instance.pk)
+
+
+def public_id_for(model: type[models.Model], pk: Any) -> str:
+    """Return the public id for ``model`` when only its primary key is known."""
+
+    if pk in (None, ""):
+        return ""
+    resolver = getattr(model, "public_id_from_pk", None)
+    if callable(resolver):
+        return str(resolver(pk))
+    return str(pk)
 
 
 def _relationship_subject(value: Any) -> SubjectRef:

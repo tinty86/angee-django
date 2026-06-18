@@ -1,6 +1,7 @@
 import type { DndPayload } from "@angee/base";
+import { relationRelayGlobalId, toRelayGlobalId } from "@angee/sdk";
 
-import { PAGE_TYPE, VAULT_TYPE, relationGlobalId, toGlobalId } from "../lib/global-id";
+import { PAGE_TYPE, VAULT_TYPE } from "../lib/global-id";
 import type { KnowledgePageRow } from "./documents";
 
 // The browser fetches every vault/page once and scopes client-side, so this
@@ -48,13 +49,13 @@ export function pageTreeRows(
   vaultId: string,
 ): KnowledgeTreeRow[] {
   return pages
-    .filter((page) => toGlobalId(VAULT_TYPE, page.vault) === vaultId)
+    .filter((page) => toRelayGlobalId(VAULT_TYPE, page.vault) === vaultId)
     .slice()
     .sort(comparePages)
     .map((page) => ({
       id: page.id,
       title: page.title,
-      parent: relationGlobalId(PAGE_TYPE, page.parent) ?? "",
+      parent: relationRelayGlobalId(PAGE_TYPE, page.parent) ?? "",
       icon: pageIcon(page.kind),
     }));
 }
@@ -76,7 +77,7 @@ export function pageIdByTitle(
   const wanted = title.trim().toLowerCase();
   const match = pages.find(
     (page) =>
-      toGlobalId(VAULT_TYPE, page.vault) === vaultId &&
+      toRelayGlobalId(VAULT_TYPE, page.vault) === vaultId &&
       page.title.trim().toLowerCase() === wanted,
   );
   return match?.id ?? null;
@@ -105,7 +106,7 @@ export function isSelfOrAncestor(
   const seen = new Set<string>();
   let current = byId.get(nodeId);
   while (current) {
-    const parentId = relationGlobalId(PAGE_TYPE, current.parent);
+    const parentId = relationRelayGlobalId(PAGE_TYPE, current.parent);
     if (!parentId || seen.has(parentId)) return false;
     if (parentId === ancestorId) return true;
     seen.add(parentId);

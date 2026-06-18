@@ -16,22 +16,25 @@ import strawberry
 import strawberry_django
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, models, transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rebac import PermissionDenied, system_context
 from strawberry import auto, relay
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
+from angee.base.fields import ImplClassField
 from angee.base.models import instance_from_public_id
-from angee.graphql.actions import ActionResult
+from angee.graphql.actions import ActionResult, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
-from angee.graphql.deletion import DeletePreview
+from angee.graphql.deletion import DeletePreview, delete_by_public_id
 from angee.graphql.impl import ImplChoice
 from angee.graphql.impl import impl_choices as resolve_impl_choices
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
+from angee.iam.identity import user_from_global_id as _user_from_global_id
+from angee.iam.identity import user_principal as _user_principal
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.permissions import request_from_info as _request
 from angee.iam.permissions import session_user as _session_user
@@ -489,22 +492,6 @@ def _oauth_client_from_id(oauth_client_id: relay.GlobalID) -> Any:
     return flow.oauth_client_from_id(oauth_client_id)
 
 
-def _user_principal(principal: str) -> Any:
-    """Return the user addressed by a string principal id (sqid/pk), or raise."""
-
-    from angee.iam.schema import _user_principal as iam_user_principal
-
-    return iam_user_principal(principal)
-
-
-def _user_from_global_id(user_id: relay.GlobalID) -> Any:
-    """Return the user addressed by one GraphQL global id, or raise."""
-
-    from angee.iam.schema import _user_from_global_id as iam_user_from_global_id
-
-    return iam_user_from_global_id(user_id)
-
-
 def _credential_material(data: CredentialInput) -> dict[str, str]:
     """Read the secret the kind's handler names out of the discriminated input."""
 
@@ -572,13 +559,18 @@ def _current_user_integration(
     """Return the current user's target integration, creating the draft selector row when needed."""
 
     if integration_id is not None:
-        integration = _resolve(Integration, integration_id, reason="integrate.graphql.connect_integration")
+        integration = resolve_action_target(
+            Integration,
+            integration_id,
+            reason="integrate.graphql.connect_integration",
+        )
         if integration.owner_id != user.pk:
             raise PermissionDenied("Integration does not belong to the current user.")
         return integration
 
     vendor_key = vendor_slug.strip()
-    impl_key = impl_class.strip()
+    impl_field = cast(ImplClassField, Integration._meta.get_field("impl_class"))
+    impl_key = impl_field.key_for(impl_class) or ""
     if not (vendor_key and impl_key):
         raise ValueError("connectIntegration requires integrationId or vendorSlug and implClass.")
     _integration_impl_class(impl_key)
@@ -613,28 +605,6 @@ def _attach_completed_integration(integration_sqid: str, user: Any, credential: 
     if credential.user_id != user.pk:
         raise PermissionDenied("Credential does not belong to the current user.")
     integration.attach_credential(credential)
-
-
-def _admin_delete(
-    model: Any,
-    node_id: str,
-    *,
-    reason: str,
-    confirm: bool,
-    before_delete: Any = None,
-) -> DeletePreview:
-    """Preview-then-delete one row elevated (mirrors ``crud``'s delete resolver)."""
-
-    with system_context(reason=reason), transaction.atomic():
-        instance = instance_from_public_id(model, node_id, queryset=model._default_manager.all())
-        if instance is None:
-            raise ValueError(f"{model._meta.object_name} {node_id!r} was not found")
-        preview = DeletePreview.from_instance(instance)
-        if confirm and not preview.has_blockers:
-            if before_delete is not None:
-                before_delete(instance)
-            instance.delete()
-    return preview
 
 
 @strawberry.type
@@ -944,7 +914,7 @@ class IntegrateExternalAccountMutation:
             if owner is not None:
                 ExternalAccount.objects.revoke_owner(account, owner)
 
-        return _admin_delete(
+        return delete_by_public_id(
             ExternalAccount,
             id.node_id,
             reason="integrate.graphql.external_account.delete",
@@ -1001,7 +971,7 @@ class IntegrateCredentialMutation:
     def delete_credential(self, id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
         """Best-effort remote revoke, then delete the credential when unblocked."""
 
-        return _admin_delete(
+        return delete_by_public_id(
             Credential,
             id.node_id,
             reason="integrate.graphql.credential.delete",
@@ -1295,12 +1265,20 @@ class IntegrationCreateMutation:
     def create_integration(self, data: IntegrationInput) -> IntegrationType:
         """Create a draft integration and related row in one transaction."""
 
-        vendor = _resolve(Vendor, data.vendor, reason="integrate.graphql.integration.create.vendor")
+        vendor = resolve_action_target(
+            Vendor,
+            data.vendor,
+            reason="integrate.graphql.integration.create.vendor",
+        )
         owner = _user_from_global_id(data.owner)
         credential = (
             None
             if data.credential is None
-            else _resolve(Credential, data.credential, reason="integrate.graphql.integration.create.credential")
+            else resolve_action_target(
+                Credential,
+                data.credential,
+                reason="integrate.graphql.integration.create.credential",
+            )
         )
         account = (
             strawberry.UNSET
@@ -1308,7 +1286,11 @@ class IntegrationCreateMutation:
             else (
                 None
                 if data.account is None
-                else _resolve(ExternalAccount, data.account, reason="integrate.graphql.integration.create.account")
+                else resolve_action_target(
+                    ExternalAccount,
+                    data.account,
+                    reason="integrate.graphql.integration.create.account",
+                )
             )
         )
         impl_key = _create_impl_key(data.impl_class)
@@ -1364,21 +1346,6 @@ class RotatedSecret:
     secret: str
 
 
-def _resolve(model: type[models.Model], gid: relay.GlobalID, *, reason: str) -> Any:
-    """Return the elevated instance addressed by ``gid`` for an action write.
-
-    Admin authorization is enforced by the field's ``permission_classes`` (with
-    the request actor) before the resolver runs; the row read/write then runs
-    elevated, the same shape as ``crud(..., write_context=…)``.
-    """
-
-    with system_context(reason=reason):
-        instance = instance_from_public_id(model, gid.node_id, queryset=model._default_manager.all())
-    if instance is None:
-        raise ValueError(f"{model._meta.object_name} {gid.node_id!r} was not found.")
-    return instance
-
-
 def _vendor_by_slug(slug: str) -> Any:
     """Return a vendor catalogue row by slug, or raise."""
 
@@ -1394,7 +1361,8 @@ def _create_impl_key(value: str | None) -> str:
 
     if value is None or value is strawberry.UNSET:
         return "none"
-    return str(value).strip() or "none"
+    field = cast(Any, Integration._meta.get_field("impl_class"))
+    return str(field.key_for(value) or "none")
 
 
 @strawberry.type
@@ -1412,7 +1380,7 @@ class IntegrationCredentialMutation:
         """Create or update this user's integration from a connected credential.
 
         Self-service, not platform-admin: the authorization is *ownership of the
-        credential*. ``_resolve`` reads the credential elevated, then the
+        credential*. ``resolve_action_target`` reads the credential elevated, then the
         ``user_id`` check below is the actual gate. This deliberately bypasses the
         ``create = admin->member`` arm in ``integrate/permissions.zed`` (which
         governs the admin-console Integration CRUD), so a credential owner can wire
@@ -1420,7 +1388,7 @@ class IntegrationCredentialMutation:
         """
 
         user = _session_user(info)
-        oauth_credential = _resolve(
+        oauth_credential = resolve_action_target(
             Credential,
             credential,
             reason="integrate.graphql.integration_from_credential.credential",
@@ -1456,7 +1424,7 @@ class IntegrationActionMutation:
     def sync_integration(self, id: relay.GlobalID) -> ActionResult:
         """Run every bridge of one integration now (eager variant of the scheduler)."""
 
-        integration = _resolve(Integration, id, reason="integrate.graphql.sync_integration")
+        integration = resolve_action_target(Integration, id, reason="integrate.graphql.sync_integration")
         now = timezone.now()
         ran = 0
         errors = 0
@@ -1485,7 +1453,7 @@ class IntegrationActionMutation:
     def test_connection(self, id: relay.GlobalID) -> ActionResult:
         """Probe the integration's credential so the operator sees it is usable."""
 
-        integration = _resolve(Integration, id, reason="integrate.graphql.test_connection")
+        integration = resolve_action_target(Integration, id, reason="integrate.graphql.test_connection")
         with system_context(reason="integrate.graphql.test_connection"):
             credential = integration.credential
             if credential is None:
@@ -1505,7 +1473,7 @@ class WebhookActionMutation:
     def test_webhook_delivery(self, id: relay.GlobalID) -> ActionResult:
         """Send a test event to one subscription and report the delivery outcome."""
 
-        subscription = _resolve(WebhookSubscription, id, reason="integrate.graphql.test_webhook_delivery")
+        subscription = resolve_action_target(WebhookSubscription, id, reason="integrate.graphql.test_webhook_delivery")
         body = json.dumps(
             {"type": "test", "subscription": subscription.public_id},
             sort_keys=True,
@@ -1525,7 +1493,7 @@ class WebhookActionMutation:
     def rotate_webhook_secret(self, id: relay.GlobalID) -> RotatedSecret:
         """Roll one subscription's signing secret and return the new value once."""
 
-        subscription = _resolve(WebhookSubscription, id, reason="integrate.graphql.rotate_webhook_secret")
+        subscription = resolve_action_target(WebhookSubscription, id, reason="integrate.graphql.rotate_webhook_secret")
         with system_context(reason="integrate.graphql.rotate_webhook_secret"):
             secret = subscription.rotate_secret()
         return RotatedSecret(ok=True, secret=secret)
@@ -1708,7 +1676,11 @@ class VCSConsoleQuery:
     def search_repositories(self, vcs_integration_id: relay.GlobalID, query: str) -> list[RepoCandidate]:
         """Return host repositories matching ``query`` for the add typeahead."""
 
-        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.search_repositories")
+        vcs = resolve_action_target(
+            VcsBridge,
+            vcs_integration_id,
+            reason="integrate.graphql.search_repositories",
+        )
         with system_context(reason="integrate.graphql.search_repositories"):
             return [_repo_candidate(descriptor) for descriptor in vcs.search_repositories(query)]
 
@@ -1729,7 +1701,7 @@ class VcsBridgeCreateMutation:
     def create_vcs_integration(self, data: VcsBridgeInput) -> VcsBridgeType:
         """Create a VCS bridge only for integrations backed by ``VCSBackend``."""
 
-        integration = _resolve(
+        integration = resolve_action_target(
             Integration,
             data.integration,
             reason="integrate.graphql.vcs_integration.create.integration",
@@ -1782,7 +1754,7 @@ class VCSActionMutation:
     def add_repository(self, vcs_integration_id: relay.GlobalID, name: str) -> RepositoryType:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
-        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.add_repository")
+        vcs = resolve_action_target(VcsBridge, vcs_integration_id, reason="integrate.graphql.add_repository")
         with system_context(reason="integrate.graphql.add_repository"):
             return cast(RepositoryType, vcs.import_repository(name))
 
@@ -1790,7 +1762,7 @@ class VCSActionMutation:
     def discover_repositories(self, vcs_integration_id: relay.GlobalID, org: str = "") -> ActionResult:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
-        vcs = _resolve(VcsBridge, vcs_integration_id, reason="integrate.graphql.discover_repositories")
+        vcs = resolve_action_target(VcsBridge, vcs_integration_id, reason="integrate.graphql.discover_repositories")
         with system_context(reason="integrate.graphql.discover_repositories"):
             count = vcs.discover_repositories(org=org)
         return ActionResult(ok=True, message=f"Inventoried {count} repository(ies).")
@@ -1799,7 +1771,7 @@ class VCSActionMutation:
     def sync_vcs_integration(self, id: relay.GlobalID) -> ActionResult:
         """Refresh every repository's sources for one VCS bridge now."""
 
-        vcs = _resolve(VcsBridge, id, reason="integrate.graphql.sync_vcs_integration")
+        vcs = resolve_action_target(VcsBridge, id, reason="integrate.graphql.sync_vcs_integration")
         now = timezone.now()
         with system_context(reason="integrate.graphql.sync_vcs_integration"):
             vcs.mark_sync_started(now=now)
@@ -1815,7 +1787,7 @@ class VCSActionMutation:
     def refresh_source(self, id: relay.GlobalID) -> ActionResult:
         """Re-enumerate one source's output rows now."""
 
-        source = _resolve(Source, id, reason="integrate.graphql.refresh_source")
+        source = resolve_action_target(Source, id, reason="integrate.graphql.refresh_source")
         with system_context(reason="integrate.graphql.refresh_source"):
             count = source.refresh()
         return ActionResult(ok=True, message=f"Synced {count} item(s).")

@@ -14,21 +14,12 @@ import { type ReactElement } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useQuery } from "urql";
 
-import { SERVICE_ENDPOINT_QUERY } from "../../data/documents";
+import { SERVICE_ENDPOINT_QUERY } from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorSnapshot } from "../../data/transport";
 import { StateTag } from "../parts/StateTag";
 import { ServiceLogs } from "./logs";
 import { ServiceActions, useServiceActions } from "./service-actions";
-
-interface ServiceEndpointData {
-  serviceEndpoint: {
-    routed: boolean;
-    url: string;
-    internalHost: string;
-    internalPort: number;
-  } | null;
-}
 
 /** Service detail: state + lifecycle actions + the live log tail. */
 export function ServiceDetail(): ReactElement {
@@ -37,7 +28,7 @@ export function ServiceDetail(): ReactElement {
   const name = "name" in params && typeof params.name === "string" ? params.name : undefined;
   const { snapshot, result, refetch } = useOperatorSnapshot({ services: true });
   const { actions, busy } = useServiceActions(refetch);
-  const [endpoint] = useQuery<ServiceEndpointData>({
+  const [endpoint] = useQuery({
     query: SERVICE_ENDPOINT_QUERY,
     variables: { name: name ?? "" },
     pause: !name,

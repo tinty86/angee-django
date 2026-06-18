@@ -17,26 +17,20 @@ import {
   STACK_DESTROY_MUTATION,
   STACK_DOWN_MUTATION,
   STACK_UP_MUTATION,
-} from "../../data/documents";
+} from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { JobState } from "../../data/types";
-import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
-
-type StackVars = Record<string, unknown>;
-interface JobVars extends Record<string, unknown> {
-  name: string;
-}
+import { runDaemonAction } from "../parts/run-action";
 
 /** A stack lifecycle control: its label, tone, variables, and handler. */
 interface StackAction {
   field: string;
   label: string;
   variant: "secondary" | "ghost";
-  variables: StackVars;
   /** Destructive — require a styled confirmation first. */
   dangerous?: boolean;
-  run: (variables: StackVars) => Promise<DaemonActionData>;
+  perform: () => Promise<boolean>;
 }
 
 // RowsListView keys rows by `id`; the daemon identifies a job by name.
@@ -137,17 +131,24 @@ function useOperationActions(refetch: () => void): {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const build = useOperatorAction<DaemonActionData, StackVars>(STACK_BUILD_MUTATION);
-  const up = useOperatorAction<DaemonActionData, StackVars>(STACK_UP_MUTATION);
-  const down = useOperatorAction<DaemonActionData, StackVars>(STACK_DOWN_MUTATION);
-  const destroy = useOperatorAction<DaemonActionData, StackVars>(STACK_DESTROY_MUTATION);
-  const jobRun = useOperatorAction<DaemonActionData, JobVars>(JOB_RUN_MUTATION);
+  const build = useOperatorAction(STACK_BUILD_MUTATION);
+  const up = useOperatorAction(STACK_UP_MUTATION);
+  const down = useOperatorAction(STACK_DOWN_MUTATION);
+  const destroy = useOperatorAction(STACK_DESTROY_MUTATION);
+  const jobRun = useOperatorAction(JOB_RUN_MUTATION);
   const busy =
     build.result.fetching ||
     up.result.fetching ||
     down.result.fetching ||
     destroy.result.fetching ||
     jobRun.result.fetching;
+
+  const setError = useMemo(
+    () => (message: string | null): void => {
+      if (message) toast.danger({ title: message });
+    },
+    [toast],
+  );
 
   const runJob = useMemo(
     () => (job: JobState) => {
@@ -156,30 +157,74 @@ function useOperationActions(refetch: () => void): {
         field: "jobRun",
         variables: { name: job.name },
         label: t("operator.operations.run"),
-        setError: (message) => {
-          if (message) toast.danger({ title: message });
-        },
+        setError,
         refetch,
       });
     },
-    [jobRun.run, refetch, t, toast],
+    [jobRun.run, refetch, setError, t],
   );
 
   const stackActions = useMemo<readonly StackAction[]>(
     () => [
-      { field: "stackBuild", label: t("operator.operations.stack.build"), variant: "secondary", variables: {}, run: build.run },
-      { field: "stackUp", label: t("operator.operations.stack.up"), variant: "secondary", variables: {}, run: up.run },
-      { field: "stackDown", label: t("operator.operations.stack.down"), variant: "ghost", variables: {}, run: down.run },
+      {
+        field: "stackBuild",
+        label: t("operator.operations.stack.build"),
+        variant: "secondary",
+        perform: () =>
+          runDaemonAction({
+            run: build.run,
+            field: "stackBuild",
+            variables: {},
+            label: t("operator.operations.stack.build"),
+            setError,
+            refetch,
+          }),
+      },
+      {
+        field: "stackUp",
+        label: t("operator.operations.stack.up"),
+        variant: "secondary",
+        perform: () =>
+          runDaemonAction({
+            run: up.run,
+            field: "stackUp",
+            variables: {},
+            label: t("operator.operations.stack.up"),
+            setError,
+            refetch,
+          }),
+      },
+      {
+        field: "stackDown",
+        label: t("operator.operations.stack.down"),
+        variant: "ghost",
+        perform: () =>
+          runDaemonAction({
+            run: down.run,
+            field: "stackDown",
+            variables: {},
+            label: t("operator.operations.stack.down"),
+            setError,
+            refetch,
+          }),
+      },
       {
         field: "stackDestroy",
         label: t("operator.operations.stack.destroy"),
         variant: "ghost",
-        variables: { purge: false },
         dangerous: true,
-        run: destroy.run,
+        perform: () =>
+          runDaemonAction({
+            run: destroy.run,
+            field: "stackDestroy",
+            variables: { purge: false },
+            label: t("operator.operations.stack.destroy"),
+            setError,
+            refetch,
+          }),
       },
     ],
-    [build.run, destroy.run, down.run, t, up.run],
+    [build.run, destroy.run, down.run, refetch, setError, t, up.run],
   );
 
   const runStack = useMemo(
@@ -194,19 +239,10 @@ function useOperationActions(refetch: () => void): {
           });
           if (!ok) return;
         }
-        await runDaemonAction({
-          run: action.run,
-          field: action.field,
-          variables: action.variables,
-          label: action.label,
-          setError: (message) => {
-            if (message) toast.danger({ title: message });
-          },
-          refetch,
-        });
+        await action.perform();
       })();
     },
-    [confirm, refetch, t, toast],
+    [confirm, t],
   );
 
   return { runJob, stackActions, runStack, busy };

@@ -7,7 +7,7 @@ from typing import Any
 import strawberry
 import strawberry_django
 from django.core.exceptions import ImproperlyConfigured
-from django.db import models, transaction
+from django.db import models
 from rebac import system_context
 from strawberry import UNSET, relay
 from strawberry.annotation import StrawberryAnnotation
@@ -22,7 +22,7 @@ from strawberry_django.mutations.fields import (
 from strawberry_django.permissions import filter_with_perms
 
 from angee.base.models import instance_from_public_id
-from angee.graphql.deletion import DeletePreview
+from angee.graphql.deletion import DeletePreview, delete_by_public_id
 from angee.graphql.introspection import django_model, surface_name
 
 
@@ -214,23 +214,11 @@ def _delete_resolver(model: type[models.Model]) -> Any:
     def delete(id: relay.GlobalID, confirm: bool = False) -> DeletePreview:
         """Delete one model instance by global id when unblocked."""
 
-        with transaction.atomic():
-            instance = _resolve_for_delete(model, id.node_id)
-            preview = DeletePreview.from_instance(instance)
-            if confirm and not preview.has_blockers:
-                instance.delete()
-        return preview
+        return delete_by_public_id(
+            model,
+            id.node_id,
+            confirm=confirm,
+            queryset=_write_queryset(model),
+        )
 
     return delete
-
-
-def _resolve_for_delete(
-    model: type[models.Model],
-    public_id: str,
-) -> models.Model:
-    """Return the instance addressed by ``public_id`` or raise."""
-
-    instance = instance_from_public_id(model, public_id, queryset=_write_queryset(model))
-    if instance is None:
-        raise ValueError(f"{model._meta.object_name} {public_id!r} was not found")
-    return instance

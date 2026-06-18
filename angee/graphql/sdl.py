@@ -41,24 +41,25 @@ class GraphQLSdl:
         return self.schemas.render_sdl()
 
     def emit(self) -> None:
-        """Write every rendered SDL file (atomic per file, skips unchanged)."""
+        """Reconcile the owned SDL directory to the rendered schemas."""
 
-        for name, sdl in self.render().items():
+        rendered = self.render()
+        self._prune_orphans(rendered)
+        for name, sdl in rendered.items():
             write_atomic(self.schema_dir / f"{name}.graphql", sdl)
 
     def emit_if_stale(self) -> bool:
-        """Write only the SDL files that drift; return whether any changed.
+        """Reconcile drifted SDL files and orphans; return whether any changed.
 
         Mirrors :meth:`angee.compose.runtime.Runtime.emit_if_stale`: drift-gated,
-        write-only, idempotent. Writes only currently-rendered schemas; an orphaned
-        on-disk file (a removed schema bucket) is flagged by :meth:`check` but, like
-        :meth:`emit`, not pruned here.
+        idempotent, and converges the owned directory to the render.
         """
 
         drift = self._drift()
         if not drift:
             return False
         rendered = self.render()
+        self._prune_orphans(rendered)
         for name in drift:
             if name in rendered:
                 write_atomic(self.schema_dir / f"{name}.graphql", rendered[name])
@@ -85,3 +86,13 @@ class GraphQLSdl:
             (set(expected) ^ set(actual))
             | {name for name in expected.keys() & actual.keys() if expected[name] != actual[name]}
         )
+
+    def _prune_orphans(self, rendered: dict[str, str]) -> None:
+        """Remove SDL files for schema buckets that no longer render."""
+
+        if not self.schema_dir.exists():
+            return
+        expected_names = set(rendered)
+        for path in sorted(self.schema_dir.glob("*.graphql")):
+            if path.stem not in expected_names:
+                path.unlink()

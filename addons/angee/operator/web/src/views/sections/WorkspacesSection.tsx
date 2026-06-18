@@ -7,9 +7,10 @@ import { useMemo, type ReactNode } from "react";
 
 import { useOperatorT } from "../../i18n";
 import { useOperatorSnapshot } from "../../data/transport";
-import type { WorkspaceRef } from "../../data/types";
+import type { WorkspaceRef, WorkspaceSourceStatus } from "../../data/types";
 import { workspaceDetailPath } from "../../lib/paths";
 import { OperatorSection } from "../parts/OperatorSection";
+import { StateTag } from "../parts/StateTag";
 import {
   WorkspaceActions,
   useWorkspaceActions,
@@ -18,6 +19,7 @@ import {
 
 // RowsListView keys rows by `id`; the daemon identifies a workspace by name.
 type WorkspaceRowData = WorkspaceRef & { id: string };
+type WorkspaceSourceRowData = WorkspaceSourceStatus & { id: string };
 
 export interface WorkspacesSectionProps {
   /** Restrict the list to these workspace names; omit to show every workspace. */
@@ -126,6 +128,99 @@ export function WorkspaceRow({ name, emptyMessage }: WorkspaceRowProps): ReactNo
   );
 }
 
+export interface WorkspaceSourcesProps {
+  sources: readonly WorkspaceSourceStatus[];
+  title?: ReactNode;
+  emptyMessage?: ReactNode;
+}
+
+/** The daemon-owned source status table for a workspace. */
+export function WorkspaceSources({
+  sources,
+  title,
+  emptyMessage,
+}: WorkspaceSourcesProps): ReactNode {
+  const t = useOperatorT();
+
+  const rows = useMemo<readonly WorkspaceSourceRowData[]>(
+    () =>
+      sources.map((source) => ({
+        ...source,
+        id: `${source.slot}:${source.source}`,
+      })),
+    [sources],
+  );
+
+  const columns = useMemo<readonly ListColumn<WorkspaceSourceRowData>[]>(
+    () => [
+      {
+        field: "slot",
+        header: t("operator.workspaceSources.column.slot"),
+        render: (source) => (
+          <span>
+            <span className="block font-medium text-fg">{source.slot}</span>
+            <span className="block text-fg-muted">{source.source}</span>
+          </span>
+        ),
+      },
+      {
+        field: "state",
+        header: t("operator.workspaceSources.column.state"),
+        render: (source) => (
+          <span>
+            <StateTag state={source.state} />
+            {source.error ? (
+              <span className="mt-1 block text-danger-text">{source.error}</span>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        field: "branch",
+        header: t("operator.workspaceSources.column.branch"),
+        render: (source) => (
+          <span className="text-13 text-fg-muted">
+            {source.branch ?? source.ref ?? source.currentRef ?? "—"}
+          </span>
+        ),
+      },
+      {
+        field: "drift",
+        header: t("operator.workspaceSources.column.drift"),
+        render: (source) => (
+          <span className="text-13 text-fg-muted">{workspaceSourceDrift(source, t)}</span>
+        ),
+      },
+      {
+        field: "path",
+        header: t("operator.workspaceSources.column.path"),
+        render: (source) => (
+          <span className="block max-w-80 truncate font-mono text-13 text-fg-muted">
+            {source.path}
+          </span>
+        ),
+      },
+    ],
+    [t],
+  );
+
+  return (
+    <section className="flex flex-col gap-2">
+      {title !== null ? (
+        <h4 className="text-13 font-medium text-fg">
+          {title ?? t("operator.workspaceSources.title")}
+        </h4>
+      ) : null}
+      <RowsListView<WorkspaceSourceRowData>
+        rows={rows}
+        columns={columns}
+        emptyMessage={emptyMessage ?? t("operator.workspaceSources.empty")}
+        pageSize={5}
+      />
+    </section>
+  );
+}
+
 function WorkspaceControlRow({
   actions,
   busy,
@@ -170,4 +265,17 @@ function WorkspaceRowSkeleton(): ReactNode {
       </div>
     </div>
   );
+}
+
+function workspaceSourceDrift(
+  source: WorkspaceSourceStatus,
+  t: (key: string) => string,
+): string {
+  if (source.error) return source.error;
+  if (source.dirty) return t("operator.workspaceSources.dirty");
+  const ahead = source.ahead ?? 0;
+  const behind = source.behind ?? 0;
+  if (ahead || behind) return `+${ahead} / -${behind}`;
+  if (source.pushed === false && source.unpushedReason) return source.unpushedReason;
+  return t("operator.workspaceSources.clean");
 }

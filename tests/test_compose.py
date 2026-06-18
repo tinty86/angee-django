@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
-from django.apps import apps
+from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import CommandError
 from django.db import models
@@ -121,14 +121,14 @@ def test_runtime_renders_model_decorators_from_mixins(tmp_path: Path) -> None:
     """Mixin-declared decorators are emitted on concrete runtime models."""
 
     app_config = SimpleNamespace(
-        label="decorated",
+        label="tests",
         name=__name__,
         module=sys.modules[__name__],
         models_module=sys.modules[__name__],
     )
     runtime = Runtime((app_config,), runtime_dir=tmp_path / "runtime")
 
-    source = runtime.render_sources()[Path("decorated/models.py")]
+    source = runtime.render_sources()[Path("tests/models.py")]
 
     assert "import reversion" in source
     assert "@reversion.register(fields=('body',))" in source
@@ -139,13 +139,13 @@ def test_runtime_emits_only_models_marked_runtime(tmp_path: Path) -> None:
     """Only abstract source models declaring ``runtime = True`` are emitted."""
 
     app_config = SimpleNamespace(
-        label="selected",
+        label="tests",
         name=__name__,
         module=sys.modules[__name__],
         models_module=sys.modules[__name__],
     )
 
-    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("selected/models.py")]
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("tests/models.py")]
 
     assert "class DecoratedRevisionThing" in source
     assert "class SkippedRuntimeThing" not in source
@@ -163,7 +163,7 @@ def test_runtime_rejects_materialized_extensions(tmp_path: Path) -> None:
             app_label = "tests"
 
     app_config = SimpleNamespace(
-        label="selected",
+        label="tests",
         name=__name__,
         module=sys.modules[__name__],
         models_module=SimpleNamespace(BadExtension=BadExtension),
@@ -171,6 +171,61 @@ def test_runtime_rejects_materialized_extensions(tmp_path: Path) -> None:
 
     with pytest.raises(ImproperlyConfigured, match="runtime = True and extends"):
         Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+
+
+def test_runtime_rejects_mismatched_runtime_model_label(tmp_path: Path) -> None:
+    """Runtime source models must belong to the app config that contributes them."""
+
+    class MismatchedRuntimeLabel(AngeeModel):
+        runtime = True
+
+        class Meta:
+            abstract = True
+            app_label = "wrong"
+
+    app_config = SimpleNamespace(
+        label="owner",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(MismatchedRuntimeLabel=MismatchedRuntimeLabel),
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="expected 'owner'"):
+        Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+
+
+def test_runtime_rejects_mismatched_extension_model_label(tmp_path: Path) -> None:
+    """Extension source models must also belong to their contributing app config."""
+
+    class LabelTarget(AngeeModel):
+        runtime = True
+
+        class Meta:
+            abstract = True
+            app_label = "target"
+
+    class MismatchedExtensionLabel(AngeeModel):
+        extends = "target.LabelTarget"
+
+        class Meta:
+            abstract = True
+            app_label = "wrong"
+
+    target_config = SimpleNamespace(
+        label="target",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(LabelTarget=LabelTarget),
+    )
+    extension_config = SimpleNamespace(
+        label="extension",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(MismatchedExtensionLabel=MismatchedExtensionLabel),
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="expected 'extension'"):
+        Runtime((target_config, extension_config), runtime_dir=tmp_path / "runtime")
 
 
 def test_runtime_emit_and_check_detect_drift(tmp_path: Path) -> None:
@@ -200,6 +255,93 @@ def test_runtime_check_ignores_schema_command_output(tmp_path: Path) -> None:
     schema_path.write_text("type Query { ok: Boolean! }\n", encoding="utf-8")
 
     runtime.check()
+
+
+def test_runtime_check_ignores_graphql_codegen_output(tmp_path: Path) -> None:
+    """Generated GraphQL client code is checked by its frontend owner, not build."""
+
+    runtime = runtime_for(tmp_path)
+    runtime.emit()
+    gql_path = tmp_path / "runtime" / "gql" / "public" / "graphql.ts"
+    gql_path.parent.mkdir(parents=True)
+    gql_path.write_text("export const ok = true;\n", encoding="utf-8")
+
+    runtime.check()
+
+
+def test_runtime_extensions_follow_app_graph_order_not_class_names(tmp_path: Path) -> None:
+    """Renaming extension classes must not change extension base precedence."""
+
+    target_module = ModuleType("tests.target.models")
+    preferred_module = ModuleType("tests.preferred.models")
+    fallback_module = ModuleType("tests.fallback.models")
+
+    TargetRuntime = type(
+        "TargetRuntime",
+        (AngeeModel,),
+        {
+            "__module__": target_module.__name__,
+            "runtime": True,
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "target"}),
+        },
+    )
+    ZPreferredExtension = type(
+        "ZPreferredExtension",
+        (AngeeModel,),
+        {
+            "__module__": preferred_module.__name__,
+            "extends": "target.TargetRuntime",
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "preferred"}),
+        },
+    )
+    AFallbackExtension = type(
+        "AFallbackExtension",
+        (AngeeModel,),
+        {
+            "__module__": fallback_module.__name__,
+            "extends": "target.TargetRuntime",
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "fallback"}),
+        },
+    )
+    target_module.TargetRuntime = TargetRuntime
+    preferred_module.ZPreferredExtension = ZPreferredExtension
+    fallback_module.AFallbackExtension = AFallbackExtension
+
+    runtime = Runtime(
+        (
+            SimpleNamespace(
+                label="target",
+                name="tests.target",
+                module=ModuleType("tests.target"),
+                models_module=target_module,
+            ),
+            SimpleNamespace(
+                label="preferred",
+                name="tests.preferred",
+                module=ModuleType("tests.preferred"),
+                models_module=preferred_module,
+            ),
+            SimpleNamespace(
+                label="fallback",
+                name="tests.fallback",
+                module=ModuleType("tests.fallback"),
+                models_module=fallback_module,
+            ),
+        ),
+        runtime_dir=tmp_path / "runtime",
+    )
+
+    source = runtime.render_sources()[Path("target/models.py")]
+
+    assert (
+        "from tests.preferred.models import ZPreferredExtension as TargetRuntimeExtension1"
+        in source
+    )
+    assert (
+        "from tests.fallback.models import AFallbackExtension as TargetRuntimeExtension2"
+        in source
+    )
+    assert "class TargetRuntime(TargetRuntimeExtension1, TargetRuntimeExtension2, AbstractTargetRuntime):" in source
 
 
 def test_runtime_clean_requires_generated_sentinel(tmp_path: Path) -> None:
@@ -341,3 +483,29 @@ def test_appgraph_annotates_roots_and_dependencies() -> None:
 
     # `resources` is pulled in through iam's closure, not declared — a dependency.
     assert configs["angee.resources"].angee_addon_root is False
+
+
+def test_appgraph_rejects_duplicate_roots() -> None:
+    """A repeated explicit root app is a settings error, not hidden dedupe."""
+
+    with pytest.raises(ImproperlyConfigured, match="Duplicate root app 'angee.resources'"):
+        AppGraph().resolve(["angee.resources", "angee.resources"])
+
+
+def test_appgraph_root_wins_when_also_a_dependency() -> None:
+    """An app declared as a root remains a root even if another root depends on it."""
+
+    configs = {config.name: config for config in AppGraph().resolve(["angee.iam", "angee.resources"])}
+
+    assert configs["angee.iam"].angee_addon_root is True
+    assert configs["angee.resources"].angee_addon_root is True
+
+
+def test_appgraph_rejects_duplicate_dependencies() -> None:
+    """Repeated dependencies are rejected at their declaring owner."""
+
+    config = AppConfig("tests.duplicate_dependency", sys.modules[__name__])
+    config.depends_on = ("angee.base", "angee.base")
+
+    with pytest.raises(ImproperlyConfigured, match="duplicate dependency 'angee.base'"):
+        AppGraph().resolve([config])

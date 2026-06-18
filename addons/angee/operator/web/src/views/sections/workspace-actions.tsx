@@ -4,15 +4,11 @@ import { useMemo, type ReactNode } from "react";
 import {
   WORKSPACE_DESTROY_MUTATION,
   WORKSPACE_SYNC_BASE_MUTATION,
-} from "../../data/documents";
+} from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction } from "../../data/transport";
 import type { WorkspaceRef } from "../../data/types";
-import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
-
-interface WorkspaceActionVars extends Record<string, unknown> {
-  name: string;
-}
+import { runDaemonAction } from "../parts/run-action";
 
 /** A lifecycle action for a workspace: its label, tone, and bound handler. */
 export interface WorkspaceRowAction {
@@ -35,51 +31,53 @@ export function useWorkspaceActions(refetch: () => void): {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const syncBase = useOperatorAction<DaemonActionData, WorkspaceActionVars>(WORKSPACE_SYNC_BASE_MUTATION);
-  const destroy = useOperatorAction<DaemonActionData, WorkspaceActionVars>(WORKSPACE_DESTROY_MUTATION);
+  const syncBase = useOperatorAction(WORKSPACE_SYNC_BASE_MUTATION);
+  const destroy = useOperatorAction(WORKSPACE_DESTROY_MUTATION);
   const busy = syncBase.result.fetching || destroy.result.fetching;
 
   const actions = useMemo<readonly WorkspaceRowAction[]>(() => {
-    const defs = [
-      { field: "workspaceSyncBase", label: t("operator.workspaces.syncBase"), variant: "secondary" as const, run: syncBase.run },
+    const setError = (message: string | null): void => {
+      if (message) toast.danger({ title: message });
+    };
+    return [
       {
-        field: "workspaceDestroy",
-        label: t("operator.workspaces.destroy"),
-        variant: "ghost" as const,
-        dangerous: true,
-        run: destroy.run,
+        label: t("operator.workspaces.syncBase"),
+        variant: "secondary",
+        perform: (workspace: WorkspaceRef) => {
+          void runDaemonAction({
+            run: syncBase.run,
+            field: "workspaceSyncBase",
+            variables: { name: workspace.name },
+            label: t("operator.workspaces.syncBase"),
+            setError,
+            refetch,
+          });
+        },
       },
-    ];
-    return defs.map((def) => ({
-      label: def.label,
-      variant: def.variant,
-      perform: (workspace: WorkspaceRef) => {
-        void (async () => {
-          if (def.dangerous) {
+      {
+        label: t("operator.workspaces.destroy"),
+        variant: "ghost",
+        perform: (workspace: WorkspaceRef) => {
+          void (async () => {
             const ok = await confirm({
               title: t("operator.workspaces.destroy.confirm.title"),
               body: t("operator.workspaces.destroy.confirm.body", { name: workspace.name }),
-              confirm: def.label,
+              confirm: t("operator.workspaces.destroy"),
               danger: true,
             });
             if (!ok) return;
-          }
-          await runDaemonAction({
-            run: def.run,
-            field: def.field,
-            variables:
-              def.field === "workspaceDestroy"
-                ? { name: workspace.name, purge: false }
-                : { name: workspace.name },
-            label: def.label,
-            setError: (message) => {
-              if (message) toast.danger({ title: message });
-            },
-            refetch,
-          });
-        })();
+            await runDaemonAction({
+              run: destroy.run,
+              field: "workspaceDestroy",
+              variables: { name: workspace.name, purge: false },
+              label: t("operator.workspaces.destroy"),
+              setError,
+              refetch,
+            });
+          })();
+        },
       },
-    }));
+    ] satisfies readonly WorkspaceRowAction[];
   }, [confirm, destroy.run, refetch, syncBase.run, t, toast]);
 
   return { actions, busy };

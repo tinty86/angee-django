@@ -73,6 +73,15 @@ class SqidMixin(models.Model):
 
         return {"sqid": value}
 
+    @classmethod
+    def public_id_from_pk(cls, value: Any) -> str:
+        """Return the public id encoded from this model's primary-key value."""
+
+        field = cls._meta.get_field("sqid")
+        if not isinstance(field, SqidField):
+            return ""
+        return field.public_id_from_value(value)
+
 
 class AuditMixin(models.Model):
     """Add conventional user-owned audit foreign keys to a model."""

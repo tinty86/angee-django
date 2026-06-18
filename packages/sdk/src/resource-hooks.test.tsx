@@ -32,13 +32,13 @@ function mockTransport(payload: unknown) {
   return { fetch: fetch as unknown as typeof globalThis.fetch, bodies };
 }
 
-function wrapperWith(fetch: typeof globalThis.fetch) {
+function wrapperWith(fetch: typeof globalThis.fetch, sdl = TEST_SCHEMA_SDL) {
   return ({ children }: { children: ReactNode }) =>
     createElement(GraphQLClientProvider, {
       config: {
         public: {
           url: "/graphql/",
-          sdl: TEST_SCHEMA_SDL,
+          sdl,
           fetch,
           exchanges: [fetchExchange],
         },
@@ -196,6 +196,27 @@ describe("useResourceRevisions", () => {
 });
 
 describe("useResourceMutation", () => {
+  test("does not require a mutation root when disabled", () => {
+    const { fetch } = mockTransport({});
+    const sdl = /* GraphQL */ `
+      interface Node { id: ID! }
+      type ReadOnlyThing implements Node { id: ID! name: String! }
+      type Query { readOnlyThing(id: ID!): ReadOnlyThing }
+    `;
+
+    expect(() =>
+      renderHook(
+        () =>
+          useResourceMutation("ReadOnlyThing", "update", {
+            fields: ["name"],
+            enabled: false,
+          }),
+        { wrapper: wrapperWith(fetch, sdl) },
+      ),
+    ).not.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test("create runs the verb-first mutation and resolves to the created node", async () => {
     const { fetch, bodies } = mockTransport({ createSale: { id: "9", title: "New" } });
     const { result } = renderHook(

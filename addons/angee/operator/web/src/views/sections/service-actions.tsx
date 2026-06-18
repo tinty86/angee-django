@@ -7,16 +7,11 @@ import {
   SERVICE_START_MUTATION,
   SERVICE_STOP_MUTATION,
   STACK_UP_MUTATION,
-} from "../../data/documents";
+} from "../../data/documents.daemon";
 import { useOperatorT } from "../../i18n";
 import { useOperatorAction } from "../../data/transport";
 import type { ServiceState } from "../../data/types";
-import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
-
-// Permissive, like the stack actions' vars (OperationsSection): the per-service daemon ops
-// take `{ name }`, while Recreate takes stackUp's `{ input }`. Each call's GraphQL document
-// types the actual variables; this is just the shared run-handler shape.
-type ServiceActionVars = Record<string, unknown>;
+import { runDaemonAction } from "../parts/run-action";
 
 /** A lifecycle action for a service: its label, tone, and bound handler. */
 export interface ServiceRowAction {
@@ -39,11 +34,11 @@ export function useServiceActions(refetch: () => void): {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const start = useOperatorAction<DaemonActionData, ServiceActionVars>(SERVICE_START_MUTATION);
-  const stop = useOperatorAction<DaemonActionData, ServiceActionVars>(SERVICE_STOP_MUTATION);
-  const restart = useOperatorAction<DaemonActionData, ServiceActionVars>(SERVICE_RESTART_MUTATION);
-  const recreate = useOperatorAction<DaemonActionData, ServiceActionVars>(STACK_UP_MUTATION);
-  const destroy = useOperatorAction<DaemonActionData, ServiceActionVars>(SERVICE_DESTROY_MUTATION);
+  const start = useOperatorAction(SERVICE_START_MUTATION);
+  const stop = useOperatorAction(SERVICE_STOP_MUTATION);
+  const restart = useOperatorAction(SERVICE_RESTART_MUTATION);
+  const recreate = useOperatorAction(STACK_UP_MUTATION);
+  const destroy = useOperatorAction(SERVICE_DESTROY_MUTATION);
   const busy =
     start.result.fetching ||
     stop.result.fetching ||
@@ -52,60 +47,64 @@ export function useServiceActions(refetch: () => void): {
     destroy.result.fetching;
 
   const actions = useMemo<readonly ServiceRowAction[]>(() => {
-    const named = (s: ServiceState): ServiceActionVars => ({ name: s.name });
-    const defs = [
-      { field: "serviceStart", label: t("operator.services.start"), variant: "secondary" as const, run: start.run, variables: named },
-      { field: "serviceRestart", label: t("operator.services.restart"), variant: "ghost" as const, run: restart.run, variables: named },
-      // Recreate rebuilds the image and recreates the container, so a service-template change
-      // (Dockerfile or env) takes effect — a plain Restart reuses the cached image. The daemon
-      // exposes no per-service rebuild: `serviceUp(name)` has no `build` arg, and only
-      // `stackUp(input: { build: true })` rebuilds an image — so scope `stackUp` to this one
-      // service (`compose up --build <service>`). If the daemon gains `serviceUp(build:)` or a
-      // `serviceRecreate(name)`, switch this to that per-service owner.
-      {
-        field: "stackUp",
-        label: t("operator.services.recreate"),
-        variant: "ghost" as const,
-        run: recreate.run,
-        variables: (s: ServiceState): ServiceActionVars => ({ input: { services: [s.name], build: true } }),
-      },
-      { field: "serviceStop", label: t("operator.services.stop"), variant: "ghost" as const, run: stop.run, variables: named },
-      {
-        field: "serviceDestroy",
-        label: t("operator.services.destroy"),
-        variant: "ghost" as const,
-        dangerous: true,
-        run: destroy.run,
-        variables: named,
-      },
-    ];
-    return defs.map((def) => ({
-      label: def.label,
-      variant: def.variant,
-      perform: (service: ServiceState) => {
+    const setError = (message: string | null): void => {
+      if (message) toast.danger({ title: message });
+    };
+    const named = (
+      field: string,
+      label: string,
+      variant: ServiceRowAction["variant"],
+      run: (variables: { name: string }) => Promise<object>,
+      dangerous = false,
+    ): ServiceRowAction => ({
+      label,
+      variant,
+      perform: (service) => {
         void (async () => {
-          if (def.dangerous) {
+          if (dangerous) {
             const ok = await confirm({
               title: t("operator.services.destroy.confirm.title"),
               body: t("operator.services.destroy.confirm.body", { name: service.name }),
-              confirm: def.label,
+              confirm: label,
               danger: true,
             });
             if (!ok) return;
           }
           await runDaemonAction({
-            run: def.run,
-            field: def.field,
-            variables: def.variables(service),
-            label: def.label,
-            setError: (message) => {
-              if (message) toast.danger({ title: message });
-            },
+            run,
+            field,
+            variables: { name: service.name },
+            label,
+            setError,
             refetch,
           });
         })();
       },
-    }));
+    });
+    return [
+      named("serviceStart", t("operator.services.start"), "secondary", start.run),
+      named("serviceRestart", t("operator.services.restart"), "ghost", restart.run),
+      {
+        label: t("operator.services.recreate"),
+        variant: "ghost",
+        perform: (service) => {
+          void runDaemonAction({
+            run: recreate.run,
+            field: "stackUp",
+            // Recreate rebuilds the image and recreates the container, so a service-template change
+            // (Dockerfile or env) takes effect. The daemon exposes no per-service rebuild:
+            // `serviceUp(name)` has no `build` arg, and only `stackUp(input: { build: true })`
+            // rebuilds an image, so scope `stackUp` to this one service.
+            variables: { input: { services: [service.name], build: true } },
+            label: t("operator.services.recreate"),
+            setError,
+            refetch,
+          });
+        },
+      },
+      named("serviceStop", t("operator.services.stop"), "ghost", stop.run),
+      named("serviceDestroy", t("operator.services.destroy"), "ghost", destroy.run, true),
+    ] satisfies readonly ServiceRowAction[];
   }, [confirm, destroy.run, recreate.run, refetch, restart.run, start.run, stop.run, t, toast]);
 
   return { actions, busy };

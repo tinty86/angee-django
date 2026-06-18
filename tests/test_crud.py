@@ -12,8 +12,9 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from strawberry import auto, relay
 
+import angee.graphql.deletion as deletion_module
 from angee.graphql.crud import _delete_resolver, crud
-from angee.graphql.deletion import DeletePreview, DeletePreviewGroup
+from angee.graphql.deletion import DeletePreview, DeletePreviewGroup, delete_by_public_id
 
 
 @strawberry_django.type(Group)
@@ -257,3 +258,97 @@ def test_delete_resolver_previews_and_deletes_inside_transaction(
     assert entered
     assert not active
     assert not Group.objects.filter(pk=group.pk).exists()
+
+
+@pytest.mark.django_db
+def test_delete_by_public_id_elevates_lookup_and_runs_hook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admin deletes share one elevated preview/delete helper with before-delete hooks."""
+
+    group = Group.objects.create(name="admin-delete")
+    reasons: list[str | None] = []
+    hooked: list[int] = []
+
+    class Context:
+        """Small context manager that records the elevated reason."""
+
+        def __init__(self, reason: str | None) -> None:
+            """Store the reason passed to ``system_context``."""
+
+            self.reason = reason
+
+        def __enter__(self) -> None:
+            reasons.append(self.reason)
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    def system_context(*, reason: str | None = None) -> Context:
+        """Return a recording system context."""
+
+        return Context(reason)
+
+    def preview_for(
+        cls: type[DeletePreview],
+        instance: Group,
+    ) -> DeletePreview:
+        del cls
+        assert instance == group
+        return DeletePreview(
+            total_deleted_count=1,
+            deleted=[DeletePreviewGroup(label="groups", count=1)],
+            updated=[],
+            blocked=[],
+            has_blockers=False,
+        )
+
+    monkeypatch.setattr(deletion_module, "system_context", system_context)
+    monkeypatch.setattr(DeletePreview, "from_instance", classmethod(preview_for))
+
+    preview = delete_by_public_id(
+        Group,
+        str(group.pk),
+        confirm=True,
+        reason="iam.graphql.user.delete",
+        before_delete=lambda row: hooked.append(cast(Group, row).pk),
+    )
+
+    assert not preview.has_blockers
+    assert reasons == ["iam.graphql.user.delete"]
+    assert hooked == [group.pk]
+    assert not Group.objects.filter(pk=group.pk).exists()
+
+
+@pytest.mark.django_db
+def test_delete_by_public_id_skips_hook_when_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blocked delete previews do not run destructive hooks."""
+
+    group = Group.objects.create(name="blocked-admin-delete")
+
+    def preview_for(
+        cls: type[DeletePreview],
+        instance: Group,
+    ) -> DeletePreview:
+        del cls, instance
+        return DeletePreview(
+            total_deleted_count=1,
+            deleted=[],
+            updated=[],
+            blocked=[DeletePreviewGroup(label="groups", count=1)],
+            has_blockers=True,
+        )
+
+    monkeypatch.setattr(DeletePreview, "from_instance", classmethod(preview_for))
+
+    preview = delete_by_public_id(
+        Group,
+        str(group.pk),
+        confirm=True,
+        before_delete=lambda row: row.delete(),
+    )
+
+    assert preview.has_blockers
+    assert Group.objects.filter(pk=group.pk).exists()

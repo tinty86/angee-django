@@ -217,9 +217,15 @@ importers:
       '@graphql-codegen/cli':
         specifier: ^7.1.1
         version: 7.1.1(@types/node@25.9.1)(graphql@16.14.0)(typescript@6.0.3)
+      '@graphql-codegen/client-preset':
+        specifier: ^6.0.1
+        version: 6.0.1(graphql@16.14.0)
       '@graphql-codegen/typescript':
         specifier: ^6.0.2
         version: 6.0.2(graphql@16.14.0)
+      '@graphql-typed-document-node/core':
+        specifier: ^3.2.0
+        version: 3.2.0(graphql@16.14.0)
       '@tanstack/react-router':
         specifier: ^1.170.8
         version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)

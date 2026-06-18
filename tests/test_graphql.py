@@ -640,6 +640,18 @@ def test_choice_enum_value_descriptions_come_from_django_labels() -> None:
     assert priority_enum.values["HIGH"].description == "High Priority"
 
 
+def test_state_field_accepts_graphql_enum_member_names() -> None:
+    """StateField owns enum-name to stored-value normalization."""
+
+    field = WorkflowItem._meta.get_field("state")
+
+    assert field.to_python("DRAFT") == WorkflowItem.State.DRAFT
+    assert field.to_python("IN_REVIEW") == WorkflowItem.State.IN_REVIEW
+    assert field.to_python("draft") == WorkflowItem.State.DRAFT
+    with pytest.raises(ValidationError):
+        field.to_python("MISSING")
+
+
 def test_revisions_query_surface_exposes_revision_mixin_versions() -> None:
     """A generated revision query replaces consumer-authored resolvers.
 

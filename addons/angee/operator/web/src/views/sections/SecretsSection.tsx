@@ -10,18 +10,13 @@ import {
 import { useCallback, useMemo, type ReactNode } from "react";
 
 import { useOperatorT } from "../../i18n";
-import { SECRET_DELETE_MUTATION, SECRET_SET_MUTATION } from "../../data/documents";
+import {
+  SECRET_DELETE_MUTATION,
+  SECRET_SET_MUTATION,
+} from "../../data/documents.daemon";
 import { useOperatorAction, useOperatorSnapshot } from "../../data/transport";
 import type { SecretRef } from "../../data/types";
-import { runDaemonAction, type DaemonActionData } from "../parts/run-action";
-
-interface SecretSetVars extends Record<string, unknown> {
-  name: string;
-  value: string;
-}
-interface SecretDeleteVars extends Record<string, unknown> {
-  name: string;
-}
+import { runDaemonAction } from "../parts/run-action";
 
 // RowsListView keys rows by `id`; the daemon identifies a secret by name.
 type SecretRowData = SecretRef & { id: string };
@@ -180,8 +175,8 @@ function useSecretActions(refetch: () => void): {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const set = useOperatorAction<DaemonActionData, SecretSetVars>(SECRET_SET_MUTATION);
-  const remove = useOperatorAction<DaemonActionData, SecretDeleteVars>(SECRET_DELETE_MUTATION);
+  const set = useOperatorAction(SECRET_SET_MUTATION);
+  const remove = useOperatorAction(SECRET_DELETE_MUTATION);
   const busy = set.result.fetching || remove.result.fetching;
 
   const setError = useCallback(

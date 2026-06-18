@@ -27,22 +27,43 @@ test.describe("iam auth — credential login", () => {
 });
 
 test.describe("iam auth — OAuth sign-in", () => {
-  // The demo OIDC connection (seeded in the demo resource tier) surfaces a
-  // "Continue with <provider>" button; clicking it starts the provider redirect
-  // with a same-site redirect_uri and PKCE. The external hop is blocked so the
-  // test never leaves.
-  test("the provider button starts an OIDC redirect with PKCE", async ({
+  // The demo OIDC connection is optional in local resource data. When present it
+  // surfaces a "Continue with <provider>" button; clicking it starts the provider
+  // redirect with a same-site redirect_uri and PKCE. When unavailable, the page
+  // must show the explicit provider boundary while keeping password login usable.
+  test("surfaces OIDC sign-in when configured, otherwise the provider boundary", async ({
     page,
   }) => {
-    await page.route(/accounts\.google\.com/, (route) => route.abort());
+    await page.route(/accounts\.google\.com|\/application\/o\//, (route) =>
+      route.abort(),
+    );
     const login = new LoginPage(page);
     await login.goto();
 
     const provider = page.getByRole("button", { name: /continue with/i });
-    await provider.waitFor({ state: "visible", timeout: 15000 });
+    const providersUnavailable = page
+      .getByRole("alert")
+      .filter({ hasText: "Sign-in providers unavailable" });
+
+    await expect(provider.or(providersUnavailable).first()).toBeVisible({
+      timeout: 15000,
+    });
+
+    if (await providersUnavailable.isVisible()) {
+      await expect(providersUnavailable).toBeVisible();
+      await expect(
+        page.getByText("Username and password sign-in is still available."),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+      return;
+    }
+
+    await expect(provider).toBeVisible();
 
     const [request] = await Promise.all([
-      page.waitForRequest(/accounts\.google\.com/, { timeout: 10000 }),
+      page.waitForRequest(/accounts\.google\.com|\/application\/o\//, {
+        timeout: 10000,
+      }),
       provider.click(),
     ]);
     const url = request.url();

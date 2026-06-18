@@ -1,7 +1,12 @@
-import { isImageMime, type Tone } from "@angee/base";
+import {
+  formatDate as formatBaseDate,
+  isImageMime,
+  statusTone as resolveStatusTone,
+  type Tone,
+} from "@angee/base";
 
 // Presentational mappings for file rows: a mime → glyph name, the upload-state
-// → stage badge, and a compact date. Byte sizes reuse `formatSize` from
+// → stage badge, and a date display. Byte sizes reuse `formatSize` from
 // `@angee/base` (the preview model owns it) — this module never re-coins it.
 
 /** Registry glyph for a file's mime — `image` (addon-registered) or the
@@ -22,22 +27,22 @@ export function fileStage(
   uploadState: string,
   t: (key: string) => string,
 ): FileStage {
+  const tone = resolveStatusTone(uploadState, undefined, {
+    unknownTone: "neutral",
+  });
   switch (uploadState.toLowerCase()) {
     case "ready":
-      return { label: t("storage.stage.ready"), tone: "success" };
+      return { label: t("storage.stage.ready"), tone };
     case "draft":
-      return { label: t("storage.stage.uploading"), tone: "warning" };
+      return { label: t("storage.stage.uploading"), tone };
     case "failed":
-      return { label: t("storage.stage.failed"), tone: "danger" };
+      return { label: t("storage.stage.failed"), tone };
     default:
-      return { label: uploadState || t("storage.stage.unknown"), tone: "neutral" };
+      return { label: uploadState || t("storage.stage.unknown"), tone };
   }
 }
 
-/** A short, locale-formatted date, or an em dash when absent/invalid. */
+/** A base-formatted date, or an em dash when absent/invalid. */
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatBaseDate(value) || "—";
 }

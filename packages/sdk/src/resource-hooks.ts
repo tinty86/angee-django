@@ -337,18 +337,19 @@ export type ResourceMutate<TAction extends MutationAction = MutationAction> = (
 export function useResourceMutation<TAction extends MutationAction>(
   modelLabel: string,
   action: TAction,
-  options: { fields?: readonly string[] } = {},
+  options: { fields?: readonly string[]; enabled?: boolean } = {},
 ): [ResourceMutate<TAction>, { fetching: boolean; error: Error | null }] {
   const fields = options.fields ?? [];
+  const enabled = options.enabled ?? true;
   const fieldsKey = fields.join(" ");
   const rootFields = useModelRootFields(modelLabel);
   const document = useMemo(
     () =>
-      rootFields
+      enabled && rootFields
         ? assembleMutationDocument(modelLabel, action, fields, rootFields)
         : DISABLED_DOCUMENTS.mutation,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modelLabel, rootFields, action, fieldsKey],
+    [enabled, modelLabel, rootFields, action, fieldsKey],
   );
 
   const { execute, fetching, error } = useDocumentMutation<unknown, ResourceMutationVariables>(

@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
-import { format } from "date-fns";
 
+import { useBaseT } from "../i18n";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -9,6 +9,11 @@ import {
   valueLabel,
   type DateWidgetValue,
 } from "./date-popover";
+import {
+  formatDateTime,
+  formatDateTimeStorage,
+  formatTimeInput,
+} from "./date-format";
 import { widgetLabel } from "./label";
 import type { WidgetDefinition, WidgetRenderProps } from "./types";
 
@@ -18,10 +23,11 @@ function DatetimeEdit({
   field,
   readOnly,
 }: WidgetRenderProps<DateWidgetValue>): ReactElement {
+  const t = useBaseT();
   const [open, setOpen] = useState(false);
   const date = dateFromValue(value);
   const label =
-    formatDatetime(date) || widgetLabel(field, "Select date and time");
+    formatDateTime(date) || widgetLabel(field, t("datetime.select"));
 
   if (readOnly) return <DatetimeRead value={value} />;
 
@@ -29,7 +35,7 @@ function DatetimeEdit({
     <DatePopover
       selected={date}
       label={label}
-      ariaLabel={widgetLabel(field, "Date and time")}
+      ariaLabel={widgetLabel(field, t("datetime.label"))}
       open={open}
       onOpenChange={setOpen}
       onSelectDate={(next) => {
@@ -38,15 +44,15 @@ function DatetimeEdit({
         if (date) {
           selected.setHours(date.getHours(), date.getMinutes(), 0, 0);
         }
-        onChange?.(formatStorage(selected));
+        onChange?.(formatDateTimeStorage(selected));
       }}
       footer={
         <div className="flex items-center justify-between gap-2 border-t border-border-subtle p-2">
           <Input
             type="time"
-            value={date ? format(date, "HH:mm") : ""}
+            value={formatTimeInput(date)}
             disabled={!date}
-            aria-label="Time"
+            aria-label={t("datetime.time")}
             className="h-8 tabular-nums"
             onChange={(event) => {
               if (!date) return;
@@ -63,7 +69,7 @@ function DatetimeEdit({
                   : 0;
               const next = new Date(date);
               next.setHours(safeHours, safeMinutes, 0, 0);
-              onChange?.(formatStorage(next));
+              onChange?.(formatDateTimeStorage(next));
             }}
           />
           {date ? (
@@ -76,7 +82,7 @@ function DatetimeEdit({
                 setOpen(false);
               }}
             >
-              Clear
+              {t("date.clear")}
             </Button>
           ) : null}
         </div>
@@ -89,7 +95,7 @@ function DatetimeRead({
   value,
 }: WidgetRenderProps<DateWidgetValue>): ReactElement {
   const date = dateFromValue(value);
-  const label = formatDatetime(date) || valueLabel(value);
+  const label = formatDateTime(date);
   return (
     <span className="text-13 tabular-nums text-fg" title={valueLabel(value)}>
       {label}
@@ -102,11 +108,3 @@ export const datetimeWidget = {
   read: DatetimeRead,
   cell: DatetimeRead,
 } satisfies WidgetDefinition<DateWidgetValue>;
-
-function formatDatetime(value: Date | null): string {
-  return value ? format(value, "MMM d, yyyy, p") : "";
-}
-
-function formatStorage(value: Date): string {
-  return format(value, "yyyy-MM-dd'T'HH:mm");
-}

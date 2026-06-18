@@ -373,18 +373,23 @@ export function FormView({
       enabled: !isCreate,
     },
   );
+  // An existing-record form starts before its query resolves. Keep fields locked
+  // until the record exists so a fast edit cannot be overwritten by the seed reset.
+  const recordUnavailable = !isCreate && record == null;
+  const formReadOnly = React.useMemo(
+    () =>
+      recordUnavailable ||
+      (formFields.length > 0 && formFields.every((field) => field.readOnly)),
+    [formFields, recordUnavailable],
+  );
   const [mutate, mutation] = useResourceMutation(
     model,
     isCreate ? "create" : "update",
-    { fields: selection },
+    { fields: selection, enabled: !formReadOnly },
   );
   const emptyValues = React.useMemo(
     () => emptyDraft(formFields, defaultValues),
     [defaultValues, formFields],
-  );
-  const formReadOnly = React.useMemo(
-    () => formFields.length > 0 && formFields.every((field) => field.readOnly),
-    [formFields],
   );
   const [patchedRecord, setPatchedRecord] = React.useState<Row | null>(null);
   const displayRecord = patchedRecord ?? record;
@@ -416,6 +421,12 @@ export function FormView({
       .filter((field) => required.has(field.name) && !field.readOnly)
       .map((field) => field.name);
   }, [formFields, modelMetadata]);
+  const writableFieldNames = React.useMemo<ReadonlySet<string> | null>(() => {
+    const fields = isCreate
+      ? modelMetadata?.rootFields?.createFields
+      : modelMetadata?.rootFields?.updateFields;
+    return fields ? new Set(fields) : null;
+  }, [isCreate, modelMetadata]);
   const form = useForm({
     defaultValues: baselineValuesRef.current,
     onSubmit: async ({ value }) => {
@@ -441,6 +452,7 @@ export function FormView({
         baseline: baselineValuesRef.current,
         id,
         isCreate,
+        writableFields: writableFieldNames,
       });
       try {
         const saved = await mutate({ data });
@@ -609,6 +621,7 @@ export function FormView({
           field={field}
           relation={relationByField.get(field.name)}
           value={api.state.value}
+          readOnly={fieldReadOnly(field)}
           errors={api.state.meta.errors}
           serverMessages={serverFieldErrors[field.name]}
           onChange={(next) => {
@@ -659,6 +672,10 @@ export function FormView({
   function afterFieldChange(field: FieldDescriptor, value: unknown): void {
     applyFieldPrefill(field, value);
     applySlugDerivation(field, value);
+  }
+
+  function fieldReadOnly(field: FieldDescriptor): boolean {
+    return recordUnavailable || Boolean(field.readOnly);
   }
 
   const recordPanelContext: RecordPanelContext | null =
@@ -735,6 +752,7 @@ export function FormView({
               <BodyFieldControl
                 field={bodyField}
                 value={api.state.value}
+                readOnly={fieldReadOnly(bodyField)}
                 errors={api.state.meta.errors}
                 serverMessages={serverFieldErrors[bodyField.name]}
                 onChange={(next) => {
@@ -847,7 +865,7 @@ export function FormView({
               {titleField ? (
                 <form.Field name={titleField.name}>
                   {(api) => (
-                    titleField.readOnly ? (
+                    fieldReadOnly(titleField) ? (
                       <h1 className={TITLE_TEXT_CLASS}>
                         {titleText(api.state.value)}
                       </h1>
@@ -887,7 +905,7 @@ export function FormView({
                     <FieldWidget
                       field={statusField}
                       value={api.state.value}
-                      readOnly={statusField.readOnly}
+                      readOnly={fieldReadOnly(statusField)}
                       onChange={(next) => {
                         api.handleChange(next);
                         afterFieldChange(statusField, next);
@@ -1142,6 +1160,7 @@ function BoundFieldRow({
   field,
   relation,
   value,
+  readOnly,
   errors,
   serverMessages,
   onChange,
@@ -1149,11 +1168,12 @@ function BoundFieldRow({
   field: FieldDescriptor;
   relation?: RelationFieldInfo;
   value: unknown;
+  readOnly?: boolean;
   errors: readonly unknown[];
   serverMessages?: readonly string[];
   onChange: (value: unknown) => void;
 }): React.ReactElement {
-  const readOnly = Boolean(field.readOnly);
+  const effectiveReadOnly = Boolean(readOnly);
   const messages = [...fieldErrorMessages(errors), ...(serverMessages ?? [])];
   return (
     <FieldRoot
@@ -1166,14 +1186,14 @@ function BoundFieldRow({
       <div
         className={cn(
           FIELD_CONTROL_CLASS,
-          readOnly ? READONLY_FIELD_CONTROL_CLASS : EDITABLE_FIELD_CONTROL_CLASS,
+          effectiveReadOnly ? READONLY_FIELD_CONTROL_CLASS : EDITABLE_FIELD_CONTROL_CLASS,
         )}
       >
         {relation ? (
           <RelationFieldWidget
             value={typeof value === "string" ? value : null}
             onChange={onChange}
-            readOnly={readOnly}
+            readOnly={effectiveReadOnly}
             relation={relation}
             aria-label={fieldAriaLabel(field)}
           />
@@ -1181,7 +1201,7 @@ function BoundFieldRow({
           <FieldWidget
             field={field}
             value={value}
-            readOnly={field.readOnly}
+            readOnly={effectiveReadOnly}
             onChange={onChange}
           />
         )}
@@ -1194,12 +1214,14 @@ function BoundFieldRow({
 function BodyFieldControl({
   field,
   value,
+  readOnly,
   errors,
   serverMessages,
   onChange,
 }: {
   field: FieldDescriptor;
   value: unknown;
+  readOnly?: boolean;
   errors: readonly unknown[];
   serverMessages?: readonly string[];
   onChange: (value: unknown) => void;
@@ -1210,7 +1232,7 @@ function BodyFieldControl({
       <FieldWidget
         field={field}
         value={value}
-        readOnly={field.readOnly}
+        readOnly={readOnly}
         onChange={onChange}
       />
       <FieldFooter description={field.description} errors={messages} />
@@ -1419,10 +1441,14 @@ function mutationData(
     baseline: Values;
     id?: string | null;
     isCreate: boolean;
+    writableFields?: ReadonlySet<string> | null;
   },
 ): Values {
   const data: Values = {};
   for (const field of fields) {
+    if (options.writableFields && !options.writableFields.has(field.name)) {
+      continue;
+    }
     if (field.readOnly) continue;
     // A field hidden by its `showWhen` predicate is not part of the record.
     if (!isFieldVisible(field, values)) continue;

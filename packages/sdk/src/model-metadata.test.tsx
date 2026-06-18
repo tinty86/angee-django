@@ -109,12 +109,50 @@ describe("fieldMetadataFromSDL", () => {
     const writeMetadata = fieldMetadataFromSDL(/* GraphQL */ `
       type WidgetType { id: ID! name: String! }
       input WidgetInput { name: String! count: Int color: String! }
+      input WidgetPatch { id: ID! name: String count: Int }
       type Query { widget(id: ID!): WidgetType! }
-      type Mutation { createWidget(data: WidgetInput!): WidgetType! }
+      type Mutation {
+        createWidget(data: WidgetInput!): WidgetType!
+        updateWidget(data: WidgetPatch!): WidgetType!
+      }
     `);
     const root = required(writeMetadata.types.WidgetType).rootFields;
     expect(root?.create).toBe("createWidget");
+    expect(root?.createFields).toEqual(["name", "count", "color"]);
     expect(root?.requiredCreateFields).toEqual(["name", "color"]);
+    expect(root?.update).toBe("updateWidget");
+    expect(root?.updateFields).toEqual(["name", "count"]);
+  });
+
+  test("matches delete roots whose operation target differs from the model name", () => {
+    const writeMetadata = fieldMetadataFromSDL(/* GraphQL */ `
+      type DeletePreview { totalDeletedCount: Int! }
+      type VcsBridgeType { id: ID! displayName: String! }
+      type VcsBridgeTypeOffsetPaginated { results: [VcsBridgeType!]! }
+      input VcsBridgeInput { integration: ID! }
+      input VcsBridgePatch { id: ID! webhookSecret: String }
+      type Query {
+        vcsIntegrations: VcsBridgeTypeOffsetPaginated!
+        vcsIntegration(id: ID!): VcsBridgeType
+      }
+      type Mutation {
+        createVcsIntegration(data: VcsBridgeInput!): VcsBridgeType!
+        updateVcsIntegration(data: VcsBridgePatch!): VcsBridgeType!
+        deleteVcsIntegration(id: ID!, confirm: Boolean = false): DeletePreview!
+      }
+    `);
+
+    expect(
+      required(modelMetadataForLabel(writeMetadata, "integrate.VcsBridge")).rootFields,
+    ).toMatchObject({
+      detail: "vcsIntegration",
+      list: "vcsIntegrations",
+      create: "createVcsIntegration",
+      createFields: ["integration"],
+      update: "updateVcsIntegration",
+      updateFields: ["webhookSecret"],
+      delete: "deleteVcsIntegration",
+    });
   });
 
   test("captures grouped aggregate roots with prefixed aggregate types", () => {
@@ -157,7 +195,7 @@ describe("fieldMetadataFromSDL", () => {
   });
 });
 
-function required<T>(value: T | undefined): T {
-  if (value === undefined) throw new Error("Expected fixture value to exist.");
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected fixture value to exist.");
   return value;
 }
