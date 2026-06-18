@@ -9,8 +9,7 @@
     // `vite.config.ts`), and the Vitest alias (`vitest.shared.ts`). See
     // `.agents/plans/typed-graphql-operations.md`.
     "paths": {
-      "@angee/gql/public": ["./examples/notes-angee/runtime/gql/public"],
-      "@angee/gql/console": ["./examples/notes-angee/runtime/gql/console"]
+      "@angee/gql/*": ["./examples/notes-angee/runtime/gql/*"]
     },
     "target": "ES2022",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],

@@ -125,24 +125,6 @@ export const IamGrantRole = graphql(`
   }
 `);
 
-// Action-shaped single-id mutation (`{ ok, message }`); left as a raw string until
-// the later phase migrates the trivial id actions.
-export const IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION = `
-  mutation IamDiscoverOidcEndpoints($id: ID!) {
-    discoverOidcEndpoints(id: $id) { ok message }
-  }
-`;
-
-/** Selection result for `IamDiscoverOidcEndpoints`. */
-export interface DiscoverOidcEndpointsData {
-  discoverOidcEndpoints: { ok: boolean; message: string };
-}
-
-/** Variables addressing one record by global id. */
-export interface IamIdVariables extends Record<string, unknown> {
-  id: string;
-}
-
 /** Offset-pagination input shared by the IAM list reads. */
 export interface IAMPaginationVariables extends Record<string, unknown> {
   pagination: {

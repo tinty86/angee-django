@@ -19,14 +19,12 @@ export default defineConfig({
   // (Framework-repo dev wiring; a rendered downstream project gets this emitted
   // per-project by the composer/template — see the plan note.)
   resolve: {
-    alias: {
-      "@angee/gql/public": fileURLToPath(
-        new URL("../runtime/gql/public", import.meta.url),
-      ),
-      "@angee/gql/console": fileURLToPath(
-        new URL("../runtime/gql/console", import.meta.url),
-      ),
-    },
+    alias: [
+      {
+        find: /^@angee\/gql\//,
+        replacement: fileURLToPath(new URL("../runtime/gql/", import.meta.url)),
+      },
+    ],
   },
   server: {
     host: true,

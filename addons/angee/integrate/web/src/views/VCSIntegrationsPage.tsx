@@ -9,15 +9,11 @@ import {
   type ActionContext,
   useEnumOptions,
 } from "@angee/base";
-import { runActionResult, useAuthoredMutation } from "@angee/sdk";
+import { runActionResult, useActionMutation, useAuthoredMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
-import {
-  IntegrateDiscoverRepositories,
-  SYNC_VCS_INTEGRATION_MUTATION,
-  type IdVariables,
-  type SyncVcsIntegrationData,
-} from "../documents";
+import { IntegrateDiscoverRepositories } from "../documents";
 
 const MODEL = "integrate.VCSIntegration";
 
@@ -37,9 +33,7 @@ const integrationList = (
  */
 export function VCSIntegrationsPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [syncVcs] = useAuthoredMutation<SyncVcsIntegrationData, IdVariables>(
-    SYNC_VCS_INTEGRATION_MUTATION,
-  );
+  const [syncVcs] = useActionMutation<ActionFieldName>("syncVcsIntegration");
   const [discover] = useAuthoredMutation(IntegrateDiscoverRepositories);
 
   // `backendClass` reads as the UPPERCASE enum member but its create input is a
@@ -50,9 +44,9 @@ export function VCSIntegrationsPage(): React.ReactElement {
   const sync = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await syncVcs({ id: ctx.record.id });
+      const message = await syncVcs(ctx.record.id);
       ctx.refresh();
-      return runActionResult(result?.syncVcsIntegration);
+      return message;
     },
     [syncVcs],
   );

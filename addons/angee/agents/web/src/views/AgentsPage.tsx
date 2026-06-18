@@ -17,24 +17,17 @@ import {
 } from "@angee/base";
 import {
   fromRelayGlobalId,
-  useAuthoredMutation,
+  useActionMutation,
   useModelInvalidation,
   useResourceRecord,
   type Row,
 } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useAgentsT } from "../i18n";
 import { AgentChat } from "./AgentChat";
 import { AgentProvisioning } from "./AgentProvisioning";
-import {
-  DEPROVISION_AGENT_MUTATION,
-  PROVISION_AGENT_MUTATION,
-  type ActionResultData,
-  type AgentChatView,
-  type DeprovisionAgentData,
-  type IdVariables,
-  type ProvisionAgentData,
-} from "../documents";
+import { type AgentChatView } from "../documents";
 
 const MODEL = "agents.Agent";
 
@@ -84,14 +77,6 @@ function canDeleteAgent(record: Row): boolean {
   );
 }
 
-function actionMessage(
-  result: ActionResultData | undefined,
-  fallback: string,
-): string {
-  if (!result?.ok) throw new Error(result?.message ?? fallback);
-  return result.message ?? "";
-}
-
 /**
  * The agent detail's Chat tab. Once the agent is RUNNING and has a rendered
  * `service` (the routed WebSocket the browser connects to) it shows the live ACP
@@ -126,9 +111,7 @@ function AgentProvisionToolbarAction({
   const toast = useToast();
   const invalidateAgent = useModelInvalidation(MODEL);
   const [optimisticProvisioning, setOptimisticProvisioning] = React.useState(false);
-  const [provisionAgent, provisionState] = useAuthoredMutation<ProvisionAgentData, IdVariables>(
-    PROVISION_AGENT_MUTATION,
-  );
+  const [provisionAgent, provisionState] = useActionMutation<ActionFieldName>("provisionAgent");
   const lifecycle = agentLifecycle(record);
 
   React.useEffect(() => {
@@ -148,10 +131,7 @@ function AgentProvisionToolbarAction({
     setOptimisticProvisioning(true);
     patchRecord({ lifecycle: "PROVISIONING" });
     try {
-      const message = actionMessage(
-        (await provisionAgent({ id: recordId }))?.provisionAgent,
-        t("agents.provisioning.provisionFailed"),
-      );
+      const message = await provisionAgent(recordId);
       invalidateAgent();
       reload();
       if (message) toast.success({ title: message });
@@ -216,9 +196,7 @@ function AgentDataPage({
   const labels = useAgentLabels();
   const t = useAgentsT();
   const invalidateAgent = useModelInvalidation(MODEL);
-  const [deprovisionAgent] = useAuthoredMutation<DeprovisionAgentData, IdVariables>(
-    DEPROVISION_AGENT_MUTATION,
-  );
+  const [deprovisionAgent] = useActionMutation<ActionFieldName>("deprovisionAgent");
   const recordTabs: readonly RecordTabDescriptor[] | undefined = isTemplate
     ? undefined
     : [
@@ -278,10 +256,7 @@ function AgentDataPage({
             run={async ({ record, refresh }) => {
               const id = stringField(record, "id");
               if (!id) throw new Error(t("agents.provisioning.saveFirst"));
-              const message = actionMessage(
-                (await deprovisionAgent({ id }))?.deprovisionAgent,
-                t("agents.provisioning.deprovisionFailed"),
-              );
+              const message = await deprovisionAgent(id);
               invalidateAgent();
               refresh();
               return message;

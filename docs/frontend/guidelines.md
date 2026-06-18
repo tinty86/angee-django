@@ -28,6 +28,13 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   scan inline ops), and a console op placed in a `documents.public.ts` (or vice
   versa) fails codegen loudly against the wrong schema. Keep valibot only to narrow
   a `JSON`-scalar field the schema leaves opaque (parse, do not assert).
+- **Single-id action mutations are derived, not authored.** For a
+  `<field>(id: ID!): ActionResult{ok,message}` mutation, call
+  `useActionMutation<ActionFieldName>("field")` (`ActionFieldName` from
+  `@angee/gql/<schema>/actions`) — no document, result type, or variables. The
+  runner takes the `id` and returns the success message (it applies
+  `runActionResult`: an `ok:false` business failure throws → error toast). Don't
+  hand-author these as `graphql()` documents.
 - React does not own business logic, permissions, models, or persistence.
 - Use `defineAddon` (headless, `@angee/sdk`) or `defineBaseAddon` (rendered,
   `@angee/base`, routes carry React components) to declare an addon, and

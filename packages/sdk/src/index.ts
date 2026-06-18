@@ -131,6 +131,8 @@ export {
   type ActionOutcome,
   type ByIdVariables,
 } from "./action-result";
+// Single-id action mutations derived from a field name (no authored document).
+export { useActionMutation, type ActionMutate } from "./action-hooks";
 export { errorMessage } from "./error-message";
 export { useBusyRun, type BusyRun } from "./use-busy-run";
 

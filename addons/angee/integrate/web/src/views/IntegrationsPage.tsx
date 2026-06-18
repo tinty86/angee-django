@@ -9,16 +9,10 @@ import {
   List,
   type ActionContext,
 } from "@angee/base";
-import { runActionResult, useAuthoredMutation, type Row } from "@angee/sdk";
+import { useActionMutation, type Row } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
-import {
-  SYNC_INTEGRATION_MUTATION,
-  TEST_CONNECTION_MUTATION,
-  type IdVariables,
-  type SyncIntegrationData,
-  type TestConnectionData,
-} from "../documents";
 
 const MODEL = "integrate.Integration";
 
@@ -36,27 +30,22 @@ const isActive = (record: Row): boolean =>
 /** Integrations landing: the first-class integrations, their health, and operations. */
 export function IntegrationsPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [syncIntegration] = useAuthoredMutation<SyncIntegrationData, IdVariables>(
-    SYNC_INTEGRATION_MUTATION,
-  );
-  const [testConnection] = useAuthoredMutation<TestConnectionData, IdVariables>(
-    TEST_CONNECTION_MUTATION,
-  );
+  const [syncIntegration] = useActionMutation<ActionFieldName>("syncIntegration");
+  const [testConnection] = useActionMutation<ActionFieldName>("testConnection");
 
   const sync = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await syncIntegration({ id: ctx.record.id });
+      const message = await syncIntegration(ctx.record.id);
       ctx.refresh();
-      return runActionResult(result?.syncIntegration);
+      return message;
     },
     [syncIntegration],
   );
   const test = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await testConnection({ id: ctx.record.id });
-      return runActionResult(result?.testConnection);
+      return testConnection(ctx.record.id);
     },
     [testConnection],
   );

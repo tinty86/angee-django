@@ -436,7 +436,17 @@ convention note; agents action-ops flagged pending Phase 4.
   console) from daemon ops; daemon interpolation (`MUTATION_RESULT`/`SOURCE_FIELDS`)
   → GraphQL fragments or leave out-of-codegen; `fragmentMasking:false`; operator has
   its OWN `operator.graphql` daemon schema + codegen (`operator/web/codegen.ts`).
-- **Phase 4** — `action()`/`useActionMutation` + build-time `ActionFieldName` metadata.
+- **Phase 4 — `action()`/`useActionMutation` ✅ DONE & verified.** SDK
+  `useActionMutation<ActionFieldName>("field")` (`packages/sdk/src/action-hooks.ts`)
+  builds the `<field>(id:ID!){ok message}` document at runtime and applies
+  `runActionResult`; returns `[run, {fetching,error}]` where `run(id)` → message.
+  `ActionFieldName` is generated per schema (`bin/build-action-types.mjs` →
+  `runtime/gql/<schema>/actions.ts`; console = 10 fields, public = `never`) — a
+  compile-time allow-list (verified: valid field passes, typo rejected TS2345). The
+  `@angee/gql/*` alias is now a single **wildcard** (collapses the triplicated
+  exact entries the reviewers flagged + resolves `…/actions`). All 10 action ops
+  converted (agents 4, iam 1, integrate 5); the agents `actionMessage` helper and
+  every action string/`…Data`/`IdVariables` deleted. Typecheck + tests green.
 - **Composer/template emission for downstream projects — NOT YET IMPLEMENTED**
   (accuracy correction, reviewers 2026-06-18). What ships today is the
   **framework-repo dev wiring only**: the `@angee/gql/*` alias is example-pinned in

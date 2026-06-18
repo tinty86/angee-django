@@ -1,29 +1,23 @@
 import * as React from "react";
 import { Action, type ActionContext, Column, DataPage, Field, Form, Group, List, useEnumOptions } from "@angee/base";
-import { runActionResult, useAuthoredMutation } from "@angee/sdk";
+import { useActionMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useAgentsT } from "../i18n";
-import {
-  REFRESH_PROVIDER_MODELS_MUTATION,
-  type IdVariables,
-  type RefreshProviderModelsData,
-} from "../documents";
 
 const PROVIDER_MODEL = "agents.InferenceProvider";
 const MODEL_MODEL = "agents.InferenceModel";
 
 export function InferenceProvidersPage(): React.ReactElement {
   const t = useAgentsT();
-  const [refreshProviderModels] = useAuthoredMutation<RefreshProviderModelsData, IdVariables>(
-    REFRESH_PROVIDER_MODELS_MUTATION,
-  );
+  const [refreshProviderModels] = useActionMutation<ActionFieldName>("refreshProviderModels");
 
   const refreshModels = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await refreshProviderModels({ id: ctx.record.id });
+      const message = await refreshProviderModels(ctx.record.id);
       ctx.refresh();
-      return runActionResult(result?.refreshProviderModels);
+      return message;
     },
     [refreshProviderModels],
   );

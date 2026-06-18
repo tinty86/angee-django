@@ -9,14 +9,10 @@ import {
   List,
   type ActionContext,
 } from "@angee/base";
-import { runActionResult, useAuthoredMutation } from "@angee/sdk";
+import { useActionMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
-import {
-  REFRESH_SOURCE_MUTATION,
-  type IdVariables,
-  type RefreshSourceData,
-} from "../documents";
 
 const MODEL = "integrate.Source";
 
@@ -36,15 +32,13 @@ const sourceList = (
  */
 export function SourcesPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [refreshSource] = useAuthoredMutation<RefreshSourceData, IdVariables>(
-    REFRESH_SOURCE_MUTATION,
-  );
+  const [refreshSource] = useActionMutation<ActionFieldName>("refreshSource");
   const refresh = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await refreshSource({ id: ctx.record.id });
+      const message = await refreshSource(ctx.record.id);
       ctx.refresh();
-      return runActionResult(result?.refreshSource);
+      return message;
     },
     [refreshSource],
   );

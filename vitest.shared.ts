@@ -10,10 +10,11 @@ import { fileURLToPath } from "node:url";
 // and the Vite `resolve.alias` in the example app) until the composer emits the
 // per-project alias for rendered downstream projects. Absolute (resolved from
 // this file) so every consumer, at any depth, resolves the same target.
-const gql = (name: string): string =>
-  fileURLToPath(new URL(`./examples/notes-angee/runtime/gql/${name}`, import.meta.url));
-
-export const gqlAlias: Record<string, string> = {
-  "@angee/gql/public": gql("public"),
-  "@angee/gql/console": gql("console"),
-};
+export const gqlAlias = [
+  {
+    find: /^@angee\/gql\//,
+    replacement: fileURLToPath(
+      new URL("./examples/notes-angee/runtime/gql/", import.meta.url),
+    ),
+  },
+];

@@ -1,8 +1,8 @@
 import * as React from "react";
 import { Action, type ActionContext, Column, DataPage, Field, Form, Group, List } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useActionMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
-import { REFRESH_SOURCE_MUTATION, type IdVariables, type RefreshSourceData } from "../documents";
 import { useAgentsT } from "../i18n";
 
 // Skill sources are `integrate.Source` rows of kind "skill". The repository and its
@@ -13,16 +13,15 @@ const SKILL_DEFAULTS = { kind: "skill" };
 
 export function SourcesPage(): React.ReactElement {
   const t = useAgentsT();
-  const [refreshSource] = useAuthoredMutation<RefreshSourceData, IdVariables>(REFRESH_SOURCE_MUTATION);
+  const [refreshSource] = useActionMutation<ActionFieldName>("refreshSource");
   const refresh = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await refreshSource({ id: ctx.record.id });
+      // `useActionMutation` applies `runActionResult`: an ok:false business
+      // failure throws (→ error toast), success returns its message.
+      const message = await refreshSource(ctx.record.id);
       ctx.refresh();
-      const outcome = result?.refreshSource;
-      // Surface an ok:false business failure as an error toast, not a green success.
-      if (outcome && !outcome.ok) throw new Error(outcome.message);
-      return outcome?.message;
+      return message;
     },
     [refreshSource],
   );

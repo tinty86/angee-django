@@ -10,13 +10,9 @@ import {
   type ActionContext,
   type DataToolbarGroupOption,
 } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useActionMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
-import {
-  IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION,
-  type DiscoverOidcEndpointsData,
-  type IamIdVariables,
-} from "../documents";
 import { useIamT } from "../i18n";
 
 const MODEL = "OidcClient";
@@ -32,17 +28,16 @@ const MODEL = "OidcClient";
  */
 export function OidcProvidersPage(): React.ReactElement {
   const t = useIamT();
-  const [discoverEndpoints] = useAuthoredMutation<
-    DiscoverOidcEndpointsData,
-    IamIdVariables
-  >(IAM_DISCOVER_OIDC_ENDPOINTS_MUTATION);
+  const [discoverEndpoints] = useActionMutation<ActionFieldName>("discoverOidcEndpoints");
 
   const discover = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await discoverEndpoints({ id: ctx.record.id });
+      // `useActionMutation` applies `runActionResult`: an ok:false business
+      // failure throws (→ error toast), success returns its message.
+      const message = await discoverEndpoints(ctx.record.id);
       ctx.refresh();
-      return result?.discoverOidcEndpoints.message;
+      return message;
     },
     [discoverEndpoints],
   );

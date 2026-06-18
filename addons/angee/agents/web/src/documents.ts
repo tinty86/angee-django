@@ -1,80 +1,11 @@
 // Non-CRUD console operations the agents pages invoke. Model CRUD is derived from
-// the SDL by the DataPage; only bespoke action mutations are authored here.
-//
-// This file mixes two states on purpose: the custom operations below are typed
-// `graphql()` documents (the target pattern — no hand-written result types), while
-// the single-id `{ ok, message }` ACTION mutations are still raw strings + hand
-// types, deferred to the Phase 4 `action()`/`useActionMutation` helper that will
-// derive them from the SDL (see .agents/plans/typed-graphql-operations.md). Author
-// any new custom operation as a `graphql()` document; do not add hand-typed strings.
+// the SDL by the DataPage; only bespoke *custom* operations are authored here as
+// typed `graphql()` documents (no hand-written result types). Single-id
+// `{ ok, message }` action mutations use `useActionMutation(field)` at the call
+// site — no document is authored here.
 
 import { graphql, type DocumentType } from "@angee/gql/console";
-import type { ActionOutcome, ByIdVariables } from "@angee/sdk";
 import * as v from "valibot";
-
-// --- Action-shaped mutations (single id → `{ ok, message }`): pending Phase 4 ---
-
-export const REFRESH_PROVIDER_MODELS_MUTATION = `
-  mutation RefreshProviderModels($id: ID!) {
-    refreshProviderModels(id: $id) {
-      ok
-      message
-    }
-  }
-`;
-
-/** `{ ok, message }` action outcome — the shared SDK contract. */
-export type ActionResultData = ActionOutcome;
-
-export interface RefreshProviderModelsData {
-  refreshProviderModels: ActionResultData;
-}
-
-// Re-discover a skill source's skills — the integrate `refreshSource` action,
-// invoked from the agents Skills → Sources tab.
-export const REFRESH_SOURCE_MUTATION = `
-  mutation AgentsRefreshSource($id: ID!) {
-    refreshSource(id: $id) {
-      ok
-      message
-    }
-  }
-`;
-
-export interface RefreshSourceData {
-  refreshSource: ActionResultData;
-}
-
-// Provision an agent through Django's server-side operator bridge.
-export const PROVISION_AGENT_MUTATION = `
-  mutation ProvisionAgent($id: ID!) {
-    provisionAgent(id: $id) {
-      ok
-      message
-    }
-  }
-`;
-
-export interface ProvisionAgentData {
-  provisionAgent: ActionResultData;
-}
-
-// Tear down the agent's operator workspace and services.
-export const DEPROVISION_AGENT_MUTATION = `
-  mutation DeprovisionAgent($id: ID!) {
-    deprovisionAgent(id: $id) {
-      ok
-      message
-    }
-  }
-`;
-
-export interface DeprovisionAgentData {
-  deprovisionAgent: ActionResultData;
-}
-
-/** Single-id action variables — the shared SDK contract. */
-export type IdVariables = ByIdVariables;
 
 // The browser-reachable chat endpoint for a running agent: the routed WebSocket URL
 // (no token), a per-actor route token to append as `?token=`, the selected model handle

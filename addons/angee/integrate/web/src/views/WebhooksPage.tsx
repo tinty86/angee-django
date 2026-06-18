@@ -9,15 +9,11 @@ import {
   List,
   type ActionContext,
 } from "@angee/base";
-import { runActionResult, useAuthoredMutation } from "@angee/sdk";
+import { useActionMutation, useAuthoredMutation } from "@angee/sdk";
+import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
-import {
-  RotateWebhookSecret,
-  TEST_WEBHOOK_DELIVERY_MUTATION,
-  type IdVariables,
-  type TestWebhookDeliveryData,
-} from "../documents";
+import { RotateWebhookSecret } from "../documents";
 
 const MODEL = "integrate.WebhookSubscription";
 
@@ -32,17 +28,15 @@ const webhookList = (
 /** Outbound webhook subscriptions and their delivery operations. */
 export function WebhooksPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [testDelivery] = useAuthoredMutation<TestWebhookDeliveryData, IdVariables>(
-    TEST_WEBHOOK_DELIVERY_MUTATION,
-  );
+  const [testDelivery] = useActionMutation<ActionFieldName>("testWebhookDelivery");
   const [rotateSecret] = useAuthoredMutation(RotateWebhookSecret);
 
   const sendTest = React.useCallback(
     async (ctx: ActionContext) => {
       if (typeof ctx.record?.id !== "string") return;
-      const result = await testDelivery({ id: ctx.record.id });
+      const message = await testDelivery(ctx.record.id);
       ctx.refresh();
-      return runActionResult(result?.testWebhookDelivery);
+      return message;
     },
     [testDelivery],
   );

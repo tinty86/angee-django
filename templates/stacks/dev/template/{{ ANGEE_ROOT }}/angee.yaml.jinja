@@ -166,7 +166,7 @@ jobs:
   codegen:
     runtime: local
     workdir: source://framework
-    command: ["pnpm", "--filter", "@angee-example/notes-host", "codegen"]
+    command: ["pnpm", "codegen"]
     depends_on: [deps, schema]
 
 services:
