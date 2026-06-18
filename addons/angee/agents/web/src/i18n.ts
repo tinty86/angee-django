@@ -92,7 +92,6 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.provisioning.logs": "Operator logs",
   "agents.provisioning.actionFailed": "The action failed.",
   "agents.provisioning.provisionFailed": "Provisioning failed.",
-  "agents.provisioning.deprovisionFailed": "Deprovisioning failed.",
   "agents.provisioning.confirmTitle": "Deprovision agent?",
   "agents.provisioning.confirmBody":
     "The operator workspace and its services will be destroyed. This cannot be undone.",

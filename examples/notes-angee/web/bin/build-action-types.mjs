@@ -26,7 +26,14 @@ function actionFields(sdlPath) {
       const returned = getNamedType(field.type);
       if (!(returned instanceof GraphQLObjectType)) return false;
       const result = returned.getFields();
-      return Boolean(result.ok && result.message);
+      // The ActionResult contract precisely — `ok: Boolean!` + `message: String!`,
+      // not merely fields *named* ok/message — so an unrelated return type can't
+      // widen the allow-list and feed a mistyped outcome to `runActionResult`.
+      if (!result.ok || !result.message) return false;
+      return (
+        String(result.ok.type) === "Boolean!" &&
+        String(result.message.type) === "String!"
+      );
     })
     .sort();
 }
