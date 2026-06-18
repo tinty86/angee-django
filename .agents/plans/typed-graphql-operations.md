@@ -384,6 +384,16 @@ agent chat-endpoint query, anything returning real records). Those keep a
 
 ## Build status — 2026-06-18 (branch `typed-graphql-operations`)
 
+**Committed: `72041f85`** — Phases 1–3 (foundation + agents reference + 7-addon
+rollout) + the architecture/react/codex review fixes. 81 files, +1153/−1178
+(net ~1000 hand-written interface lines deleted). Full-workspace typecheck +
+per-addon tests green; the one failing `iam/IdentityViews.test.tsx` is
+pre-existing on HEAD. Not pushed. Review fixes folded in: `stack.md` codegen row;
+`frontend/guidelines.md` route-by-filename rule; `@angee/gql/*` resolvers labeled
+dev-only + cross-referenced; `OperatorConnection` document renamed to
+`OperatorConnectionQuery` (value/type collision); operator `documents.ts` daemon
+convention note; agents action-ops flagged pending Phase 4.
+
 **Done & verified (full-workspace `pnpm typecheck` green):**
 - **Phase 1 — foundation.** Per-project client-preset codegen → `runtime/gql/{public,console}/`
   from the emitted SDL; `examples/notes-angee/web/codegen.{shared,public,console}.ts`.
@@ -441,5 +451,12 @@ agent chat-endpoint query, anything returning real records). Those keep a
   cross-referencing "dev wiring" comments until then.
 - **Phase 5** — docs (`frontend/guidelines.md` ✅ route-by-filename rule, `stack.md`
   ✅ codegen row, fix `codegen.ts` header); retire pinned `contract.graphql` + SDK
-  `__generated__`; `angee dev` codegen ordering (no predev step yet — dev relies on
-  a prior `pnpm codegen`).
+  `__generated__`.
+  - **`angee dev` codegen ordering ✅ FIXED** — `angee build`'s reset clears
+    `runtime/gql`, and the dev SDL hook only re-emits `schemas/`, so Vite failed to
+    resolve `@angee/gql/*`. Added a `codegen` job (`pnpm --filter
+    @angee-example/notes-host codegen`, `depends_on: [deps, schema]`) mirroring
+    `operator-codegen`, and added it to `frontend.after`, in both the dev stack
+    template (`templates/stacks/dev/.../angee.yaml.jinja`) and the rendered
+    `.angee/angee.yaml`. (One-shot at bring-up like `operator-codegen`; a schema
+    change mid-session still needs a manual `pnpm codegen` or a future `--watch`.)

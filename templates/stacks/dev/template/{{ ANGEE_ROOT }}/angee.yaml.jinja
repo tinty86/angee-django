@@ -159,6 +159,16 @@ jobs:
     command: ["pnpm", "--filter", "@angee/operator", "codegen"]
     depends_on: [deps, operator-schema]
 
+  # Regenerate the SPA's typed GraphQL operations into runtime/gql/<name>/ from the
+  # freshly emitted SDL. The `build` reset above clears that tree and the frontend
+  # imports `@angee/gql/<name>` from it, so it must be (re)generated after `schema`
+  # and before Vite starts.
+  codegen:
+    runtime: local
+    workdir: source://framework
+    command: ["pnpm", "--filter", "@angee-example/notes-host", "codegen"]
+    depends_on: [deps, schema]
+
 services:
   # Angee overrides `runserver` to serve angee.asgi with uvicorn (keeping the ASGI
   # lifespan the MCP mount's session manager needs — see angee.asgi) under Django's
@@ -196,7 +206,7 @@ services:
       # The UI proxies /operator/* to the daemon (same-origin → no CORS), the same
       # way it proxies /graphql/ to Django.
       ANGEE_OPERATOR_URL: "http://127.0.0.1:${ports.operator}"
-    after: [deps, schema, django, operator, operator-codegen]
+    after: [deps, schema, django, operator, operator-codegen, codegen]
 
   # Storybook component workshop (@angee/storybook), served alongside the SPA. It
   # renders @angee/base against mocked SDK fixtures, so it needs only the JS
