@@ -57,6 +57,8 @@ dev = [
 # Developing against the local django-zed-rebac checkout while a create-gating fix
 # lands; switch back to the published pin once it ships.
 # django-zed-rebac = { path = "../django-zed-rebac", editable = true }
+strawberry-graphql = { path = "../strawberry" }
+strawberry-graphql-django = { path = "../strawberry-django" }
 
 [tool.hatch.build.targets.wheel]
 # Two source roots merge into the one `angee` PEP 420 namespace: the framework

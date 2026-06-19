@@ -1163,8 +1163,8 @@ class IntegrationInput:
     impl_class: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
-    # VcsBridge (integrate's own related model) create field. A downstream addon adds
-    # its related-model create fields onto this input via ``input_extensions`` — so
+    # VcsBridge (integrate's own related model) create field. Downstream addons add
+    # related-model create fields with native Strawberry ``input_extensions`` — so
     # integrate names none of them here (e.g. agents adds name/base_url/related_config).
     webhook_secret: str = ""
 

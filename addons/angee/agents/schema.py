@@ -36,14 +36,12 @@ from angee.base.mixins import actor_user_id
 from angee.graphql.actions import ActionResult, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
-from angee.graphql.extension import extends_type
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.schema import UserType
 from angee.integrate.schema import (
     CredentialType,
-    IntegrationInput,
     IntegrationType,
     SourceType,
     TemplateType,
@@ -72,8 +70,7 @@ class InferenceProviderType(AngeeNode):
     updated_at: auto
 
 
-@extends_type(IntegrationType)
-@strawberry_django.type(Integration)
+@strawberry_django.type(Integration, name="IntegrationType", extend=True)
 class IntegrationInferenceProviderExtension:
     """Contributes the inference provider related model onto integrate's IntegrationType."""
 
@@ -1021,15 +1018,14 @@ _CONSOLE_TYPES: list[type] = [
     _inference_model_aggregates.group_key_type,
 ]
 
-@strawberry.input
-class IntegrationInferenceInput(IntegrationInput):
+
+@strawberry.input(name="IntegrationInput", extend=True)
+class IntegrationInferenceInput:
     """Inference create fields contributed onto integrate's ``IntegrationInput``.
 
-    The write-side parallel of ``IntegrationInferenceProviderExtension``: a
-    ``@strawberry.input`` subclass merged onto the base via ``input_extensions``, so
-    the create mutation accepts the InferenceProvider fields without ``integrate``
-    naming them. ``related_config`` maps to the provider's own ``config`` (distinct
-    from the Integration's ``config``).
+    Native Strawberry input extension lets the create mutation accept provider
+    fields without ``integrate`` naming them. ``related_config`` maps to the
+    provider's own ``config`` (distinct from the Integration's ``config``).
     """
 
     name: str = ""

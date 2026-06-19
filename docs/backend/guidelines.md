@@ -264,8 +264,8 @@ Rules that follow from the layering:
 - GraphQL authoring is native Strawberry. Addons expose a `schemas` mapping in
   conventional `schema.py` modules. Each named schema contributes into fixed
   buckets (`query`, `mutation`, `subscription`, `types`, `extensions`,
-  `type_extensions`); Angee merges buckets across addons and builds one Strawberry
-  `Schema` per name.
+  `type_extensions`, `input_extensions`); Angee merges buckets across addons and
+  builds one Strawberry `Schema` per name.
 - **GraphQL types and enums bind to the composed *runtime* model, never the
   abstract source class.** Resolve the model with `apps.get_model("app", "Model")`
   (the concrete emitted class), not `from app.models import Model` (the abstract
@@ -282,19 +282,19 @@ Rules that follow from the layering:
   `ImplClassField` registry (settings-keyed, one impl class per key — use it only
   when each key has genuinely distinct implementation code, not as a workaround for
   a closed `TextChoices`); add a *field onto another addon's GraphQL type* with
-  `@extends_type(UpstreamType)` on a `strawberry_django.type` bound to the same
-  runtime model, listed in the `type_extensions` bucket — the composer merges its
-  fields onto the target and strawberry-django resolves any relation projection
-  from its model registry (e.g. `iam_integrate_oidc` adds `OAuthClientType.oidc`
-  without `integrate` importing it); add *fields onto another addon's handwritten
-  GraphQL input* by subclassing the target `@strawberry.input` and listing the
-  subclass in `input_extensions`. Input extensions are the write-side equivalent:
-  they must subclass the target input and add fields only; the schema assembler
-  merges multiple donors additively in addon order and fails fast on field-name
-  collisions. Type and input extensions are global-additive, like a model
-  `extends`: the field lands on the target wherever it appears (the bucket only
-  gates registration), so reference a field type that some bucket lacks and that
-  bucket's build fails loudly rather than leaking.
+  native `strawberry_django.type(RuntimeModel, name="UpstreamType", extend=True)`,
+  listed in the `type_extensions` bucket — Strawberry owns the extension merge and
+  strawberry-django resolves any relation projection from its model registry (e.g.
+  `iam_integrate_oidc` adds fields to `OAuthClientType` without `integrate`
+  importing it); add *fields onto another addon's handwritten GraphQL input* with
+  native `strawberry.input(name="UpstreamInput", extend=True)` listed in
+  `input_extensions`. Input extensions are the write-side equivalent: they name the
+  target input and add fields only; Strawberry merges multiple donors additively in
+  addon order and fails fast on field-name collisions. Type and input extensions
+  are global-additive, like a model `extends`: the field lands on the target
+  wherever it appears (the bucket only gates registration), so reference a field
+  type that some bucket lacks and that bucket's build fails loudly rather than
+  leaking.
 - Use symbolic model references across addon boundaries; avoid import cycles.
 - Build output must be byte-deterministic.
 

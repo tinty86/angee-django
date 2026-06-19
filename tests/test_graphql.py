@@ -21,7 +21,6 @@ from strawberry.extensions import SchemaExtension
 
 from angee.base.fields import StateField
 from angee.base.mixins import RevisionMixin
-from angee.graphql.extension import extends_type
 from angee.graphql.revisions import revisions
 from angee.graphql.schema import (
     DEFAULT_SCHEMA_NAME,
@@ -297,8 +296,7 @@ class Widget:
     name: str
 
 
-@extends_type(Widget)
-@strawberry.type
+@strawberry.type(name="Widget", extend=True)
 class WidgetExtra:
     """Downstream donor contributing ``extra`` onto :class:`Widget`."""
 
@@ -319,15 +317,15 @@ class InputExtensionBaseInput:
     name: str
 
 
-@strawberry.input
-class InputExtensionFirstInput(InputExtensionBaseInput):
+@strawberry.input(name="InputExtensionBaseInput", extend=True)
+class InputExtensionFirstInput:
     """First downstream input donor."""
 
     first: str = ""
 
 
-@strawberry.input
-class InputExtensionSecondInput(InputExtensionBaseInput):
+@strawberry.input(name="InputExtensionBaseInput", extend=True)
+class InputExtensionSecondInput:
     """Second downstream input donor."""
 
     second: str = ""
@@ -349,15 +347,15 @@ class InputExtensionCollisionBaseInput:
     name: str
 
 
-@strawberry.input
-class InputExtensionCollisionFirstInput(InputExtensionCollisionBaseInput):
+@strawberry.input(name="InputExtensionCollisionBaseInput", extend=True)
+class InputExtensionCollisionFirstInput:
     """First donor defining the colliding field."""
 
     shared: str = ""
 
 
-@strawberry.input
-class InputExtensionCollisionSecondInput(InputExtensionCollisionBaseInput):
+@strawberry.input(name="InputExtensionCollisionBaseInput", extend=True)
+class InputExtensionCollisionSecondInput:
     """Second donor defining the colliding field."""
 
     shared: int = 0
@@ -409,8 +407,7 @@ def test_type_extension_rejects_field_collision() -> None:
     class Conflict:
         shared: str
 
-    @extends_type(Conflict)
-    @strawberry.type
+    @strawberry.type(name="Conflict", extend=True)
     class ConflictExtra:
         shared: int
 
@@ -420,26 +417,13 @@ def test_type_extension_rejects_field_collision() -> None:
         def conflict(self) -> Conflict:
             return Conflict(shared="x")
 
-    with pytest.raises(ImproperlyConfigured, match="already declared"):
+    with pytest.raises(TypeError, match="duplicate extension field"):
         GraphQLSchemas(
             [
                 addon(public={"query": [ConflictQuery], "types": [Conflict]}),
                 addon(public={"type_extensions": [ConflictExtra]}),
             ]
         ).build("public")
-
-
-def test_type_extension_requires_marker() -> None:
-    """A ``type_extensions`` member without ``@extends_type`` is rejected."""
-
-    @strawberry.type
-    class Unmarked:
-        extra: int
-
-    with pytest.raises(ImproperlyConfigured, match="extends_type"):
-        GraphQLSchemas([addon(public={"query": [HelloQuery], "type_extensions": [Unmarked]})]).build(
-            "public"
-        )
 
 
 def test_input_extension_merges_multiple_donors() -> None:
@@ -475,7 +459,7 @@ def test_input_extension_merges_multiple_donors() -> None:
 def test_input_extension_rejects_field_collision() -> None:
     """Two input donors adding the same field to one base fail fast."""
 
-    with pytest.raises(ImproperlyConfigured, match="already declared"):
+    with pytest.raises(TypeError, match="duplicate extension field"):
         GraphQLSchemas(
             [
                 addon(

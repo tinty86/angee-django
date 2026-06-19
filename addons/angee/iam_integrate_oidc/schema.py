@@ -21,7 +21,6 @@ from strawberry import auto
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.graphql.extension import extends_type
 from angee.iam.permissions import request_from_info as _request
 from angee.iam.permissions import session_user as _session_user
 from angee.iam.schema import UserType
@@ -32,8 +31,6 @@ from angee.integrate.oauth import state as oauth_state
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, OAuthFlowError
 from angee.integrate.schema import (
     ExternalAccountType,
-    OAuthClientInput,
-    OAuthClientPatch,
     OAuthClientType,
     OAuthStartPayload,
 )
@@ -320,8 +317,7 @@ class OidcLoginMutation:
 # --- Admin: direct OAuth-client OIDC fields -------------------------------------
 
 
-@extends_type(OAuthClientType)
-@strawberry_django.type(OAuthClient)
+@strawberry_django.type(OAuthClient, name="OAuthClientType", extend=True)
 class OAuthClientOidcExtension:
     """Contributes OIDC login fields onto integrate's ``OAuthClientType``.
 
@@ -342,15 +338,12 @@ class OAuthClientOidcExtension:
         return cast(list[str], cast(Any, self).allowed_email_domain_values)
 
 
-@strawberry.input
-class OAuthClientOidcInput(OAuthClientInput):
+@strawberry.input(name="OAuthClientInput", extend=True)
+class OAuthClientOidcInput:
     """OIDC login write fields added to integrate's OAuth client create input.
 
-    A ``@strawberry.input`` subclass of ``OAuthClientInput``: dataclass inheritance
-    gives it the base OAuth fields plus these, and ``input_extensions`` folds the
-    combination onto the base input that integrate's ``crud`` instantiates — the
-    write-side parallel of ``OAuthClientOidcExtension``, so ``integrate`` stays
-    OIDC-agnostic and a project without this addon keeps an OAuth-only input.
+    Native Strawberry input extension keeps ``integrate`` OIDC-agnostic while the
+    console create mutation receives these fields on its ``OAuthClientInput`` value.
     """
 
     issuer: str = ""
@@ -361,8 +354,8 @@ class OAuthClientOidcInput(OAuthClientInput):
     allowed_email_domains: list[str] = strawberry.field(default_factory=list)
 
 
-@strawberry.input
-class OAuthClientOidcPatch(OAuthClientPatch):
+@strawberry.input(name="OAuthClientPatch", extend=True)
+class OAuthClientOidcPatch:
     """OIDC login write fields added to integrate's OAuth client update input."""
 
     issuer: str | None = strawberry.UNSET
