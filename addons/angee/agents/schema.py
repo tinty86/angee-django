@@ -34,6 +34,7 @@ from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
 from angee.graphql.actions import ActionResult, resolve_action_target
+from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
 from angee.graphql.extension import extends_type
 from angee.graphql.node import AngeeNode
@@ -387,10 +388,31 @@ class AgentOrder:
     updated_at: auto
 
 
+@strawberry.input
+class IdLookup:
+    """Relay-id lookup shape used by toolbar facets over relation owners."""
+
+    exact: relay.GlobalID | None = strawberry.UNSET
+    in_list: list[relay.GlobalID] | None = strawberry.UNSET
+
+
+def id_lookup_q(prefix: str, field: str, value: IdLookup) -> Q:
+    """Return a Q object for a relay-id exact/in-list lookup."""
+
+    query = Q()
+    if value.exact not in (None, strawberry.UNSET):
+        query &= Q(**{f"{prefix}{field}": cast(relay.GlobalID, value.exact).node_id})
+    if value.in_list not in (None, strawberry.UNSET):
+        ids = [item.node_id for item in cast(list[relay.GlobalID], value.in_list)]
+        query &= Q(**{f"{prefix}{field}__in": ids})
+    return query
+
+
 @strawberry_django.filter_type(InferenceModel, lookups=True)
 class InferenceModelFilter:
     """Field lookups accepted when filtering the inference model catalogue."""
 
+    provider: auto
     name: auto
     display_name: auto
     model_use: auto
@@ -398,10 +420,10 @@ class InferenceModelFilter:
     status: auto
 
     @strawberry_django.filter_field
-    def provider(self, queryset: Any, value: relay.GlobalID, prefix: str) -> tuple[Any, Q]:
-        """Narrow catalogue rows to one provider addressed by its relay id."""
+    def provider_id(self, queryset: Any, value: IdLookup, prefix: str) -> tuple[Any, Q]:
+        """Toolbar-friendly provider facet addressed by provider relay ids."""
 
-        return queryset, Q(**{f"{prefix}provider__sqid": value.node_id})
+        return queryset, id_lookup_q(prefix, "provider__sqid", value)
 
     @strawberry_django.filter_field
     def publisher(self, queryset: Any, value: relay.GlobalID, prefix: str) -> tuple[Any, Q]:
@@ -422,6 +444,17 @@ class InferenceModelOrder:
     is_default: auto
     status: auto
     updated_at: auto
+
+
+_inference_model_aggregates = rebac_aggregate_builder(
+    model=InferenceModel,
+    name_prefix="InferenceModelAggregate",
+    aggregate_fields=["id", "context_window", "max_output_tokens"],
+    group_by_fields=["provider", "model_use", "status"],
+    filter_type=InferenceModelFilter,
+    pagination_style="offset",
+    enable_filter_echo=True,
+).build()
 
 
 @strawberry.type
@@ -460,6 +493,8 @@ class AgentsConsoleQuery:
     inference_model: InferenceModelType | None = strawberry_django.node(
         permission_classes=_ADMIN_PERMISSION_CLASSES,
     )
+    inference_model_aggregate = _inference_model_aggregates.aggregate_field
+    inference_model_groups = _inference_model_aggregates.group_by_field
 
 
 _AGENT_MUTATION = crud(
@@ -980,6 +1015,10 @@ _CONSOLE_TYPES: list[type] = [
     MCPToolType,
     AgentType,
     AgentChatEndpoint,
+    _inference_model_aggregates.aggregate_type,
+    _inference_model_aggregates.grouped_type,
+    _inference_model_aggregates.grouped_result_type,
+    _inference_model_aggregates.group_key_type,
 ]
 
 @strawberry.input

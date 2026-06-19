@@ -38,6 +38,30 @@ resources, and failing fast on collisions.
 A wrapper must prove it adds a real new concept. If it only forwards,
 normalizes, or renames a Django object, delete it.
 
+Django-native also means app-native. Addons are reusable Django apps with
+conventional files: `apps.py` declares addon facts, `models.py` owns data and row
+behavior, `managers.py` owns reusable row-set APIs when they outgrow the model
+module, `schema.py` owns Strawberry declarations, `permissions.zed` owns REBAC
+structure, `forms.py` owns Django form validation/presentation, `admin.py` owns
+Django admin presentation, and `management/commands/` owns CLI parsing. Do not
+add a parallel registry, loader, or naming convention until the native Django
+surface is proven insufficient.
+
+Before adding backend structure, pass the Django architecture gate:
+
+- Use Django's object first: model, field, manager, queryset, `AppConfig`,
+  management command, URLconf, migration, setting, or admin/form hook.
+- Keep Django apps reusable. An addon may depend on declared upstream addon
+  contracts, but it should not know the host project, consumer addon, route
+  layout, or generated runtime package by import.
+- Keep policy on Django owners and details at the edge. GraphQL resolvers,
+  commands, resources, webhooks, OAuth callbacks, and vendor clients translate
+  inputs to model/manager/queryset/service calls; they do not re-decide model
+  rules, permissions, implementation keys, or schema shape.
+- If two addons need the same backend behavior, move it to the base addon or
+  framework owner that both compose. Do not copy a resolver, resource loader,
+  SDK wrapper, settings parser, or permission rule sideways.
+
 ## Package Layering
 
 The framework core is three packages with a one-way dependency rule that a test
@@ -103,6 +127,33 @@ Rules that follow from the layering:
 - Manager/QuerySet canon: chainable read scopes live on a `*QuerySet` exposed
   through `Manager.from_queryset(...)`. Factories and mutations stay on the
   manager that owns the write.
+- Model methods own instance invariants, state transitions, validation, and
+  side-effect boundaries tied to one row. Managers own factories, upserts,
+  reconcile/load flows, and writes that begin from a model class. QuerySets own
+  chainable read predicates and reusable scoping. If a resolver, view, or command
+  repeats a filter predicate, promote it to a QuerySet; if it mutates row state,
+  promote it to a model or manager method.
+- Cross-addon and generated-model references go through Django's app registry
+  (`apps.get_model`, `apps.get_app_config`, `apps.get_app_configs`) and `_meta`.
+  Never import generated `runtime/` modules or rediscover model/app facts by
+  string parsing.
+- GraphQL resolvers stay thin. They resolve the runtime model, actor/context, and
+  input object, then delegate to the model, manager/queryset, action, or
+  aggregate builder that owns the rule. If a resolver branches on field names,
+  status values, permissions, or implementation variants, the owner is missing a
+  method.
+- GraphQL schema files declare Strawberry types, inputs, filters, buckets, and
+  field-level resolver glue. They bind to composed runtime models and compose
+  library primitives (`strawberry-django`, `crud`, `changes`, aggregate builders)
+  instead of reimplementing ORM, permission, or serialization behavior.
+- Management commands stay thin. They parse CLI arguments, load settings/context,
+  and call the owner. Command modules should not contain reusable business logic,
+  import generated runtime models directly, or duplicate resource/composer/schema
+  behavior.
+- Vendor SDK clients are details. Keep SDK request/response quirks in the
+  provider addon or backend class that owns that vendor, and map them into
+  Angee-owned models/actions at the boundary. Do not let SDK field names become
+  framework/domain names unless they are the domain vocabulary.
 - Source model discovery should follow Django model inheritance and explicit
   model-owned declarations, not naming or field-shape heuristics.
 - Put behavior on the object that owns the shape, the Django way: coerce values
@@ -448,6 +499,15 @@ it exactly.
 
 Run the narrowest relevant check while editing, then the broad check before
 handoff:
+
+Before adding a backend abstraction, search for the native owner first:
+`rg "AppConfig|schemas|permissions|resources|autoconfig"`,
+`rg "QuerySet|Manager.from_queryset"`, and
+`rg "apps.get_model|get_app_configs"`. If the change introduces or extends a
+seam, add a focused guard in the owning test area: layering in
+`tests/test_layering.py`, addon/AppConfig contracts in app tests,
+settings/autoconfig/app graph behavior in `tests/test_settings.py`, runtime
+emission in `tests/test_compose.py`, and schema composition in GraphQL tests.
 
 ```sh
 uv run python -m ruff check . --no-cache

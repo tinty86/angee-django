@@ -29,6 +29,16 @@ Ask yourself:
 - **Has anyone else done it before?** Look at open-source projects and modules.
 - **What are the existing best practices?**
 
+For Angee work, research is a small architecture inventory, not a broad essay:
+
+- Check `docs/stack.md` for the dependency that owns the concern.
+- Search the repo for the same concept, shape, page type, model pattern, schema
+  pattern, or integration pattern before adding another one.
+- Read the owner: the model/manager/queryset, `AppConfig`, shared primitive,
+  schema builder, or dependency API that should answer the question.
+- For structural refactors, record the owner map and expected deletion/reuse path
+  in `.agents/plans/` or in the handoff note.
+
 ### 2. Think
 
 Take time to think about the problem and possible solutions. Break down complex
@@ -38,8 +48,10 @@ problems into their basic elements using [first-principles thinking](#use-first-
 
 Outline your objectives. A specified goal keeps you focused and ensures your code
 meets requirements. Keep the description concise and clear for teammates. Document
-it in the README or GitHub issues so the team has access. Include relevant links
-or references.
+it in the README, GitHub issue, or `.agents/plans/` so the team has access.
+Include relevant links or references. For architecture work, include the owner
+map, sibling inventory, dependency owner, naming vocabulary, and what existing
+code should become unnecessary.
 
 ### 4. Discuss
 
@@ -77,6 +89,39 @@ Don't Repeat Yourself is a fundamental software development principle that
 encourages avoiding code repetition. **Reuse highly tested existing code
 whenever possible.**
 
+Before copying code or extracting a helper, run the duplication gate:
+
+- Search for the concept, name, shape, and nearby synonyms with `rg`.
+- Identify the owner that should hold the fact or primitive.
+- Same rule twice means choose one owner and delete the copy.
+- Same shape three times means extract the smallest boring primitive.
+- Generated duplication means fix the source declaration or generator.
+- Similar code with different intent should remain separate and be named by that
+  different intent.
+
+DRY refactors should make callers thinner. If the line count grows, explain what
+owner was missing and what deletion the new owner unlocks.
+
+### Keep Policy Above Detail
+
+Clean architecture is useful here only when translated into Angee's native
+owners. Policy is the rule the product or framework cares about. Detail is the
+transport, UI, storage, SDK, generated artifact, command, or resolver that lets a
+user reach that rule.
+
+- Domain policy lives on models, fields, managers, querysets, addon-owned
+  services/use cases, and the shared primitives that own a framework behavior.
+- Details include React components, GraphQL resolvers, management commands,
+  filesystem emitters, vendor SDK clients, generated runtime code, and browser or
+  CLI adapters.
+- Details translate inputs, acquire context, call the owner, and format output.
+  They do not decide permissions, persistence rules, business state, model shape,
+  or cross-addon composition policy.
+- Dependencies point inward toward the stable owner. If a policy needs a detail,
+  invert through an explicit Angee contract such as settings/autoconfig,
+  `ImplClassField`, schema buckets, slots, registered forms/glyphs, or an
+  addon-owned interface.
+
 ### Put Behavior on the Owning Object
 
 This is the class-scope face of **Find the owner** in
@@ -91,6 +136,17 @@ each fact and place the behavior there:
 - Declaration facts live on the declaring object.
 - Commands, routes, and other entrypoints parse inputs and dispatch to the owner.
 - Cross-object orchestration stays loose only when no single participant owns it.
+
+Use this decision tree:
+
+- One object owns the data: add a method, property, or field behavior there.
+- A row owns it: use a model method/property.
+- A row set owns it: use a queryset or manager.
+- An addon declaration owns it: use the addon's `AppConfig`.
+- A cross-owner workflow owns it: create the smallest addon-local service/use
+  case and keep callers thin.
+- A route, command, resolver, view, or event handler sees it first: parse,
+  validate, acquire context, and dispatch; do not keep the rule there.
 
 Rules belong beside the data they interpret. Prefer methods and properties on the
 class that owns a fact over loose helper functions that repeatedly decode the
@@ -107,6 +163,12 @@ on the field, but it calls the ownerless `parse_date` to parse the string.
 Do not fix hidden magic by adding ceremony. If a refactor replaces implicit
 behavior with a larger explicit ritual, stop and look for the smaller native
 framework shape.
+
+Thin entrypoint budget: a command, route, resolver, React handler, resource
+command, or worker task may parse/validate input, resolve actor/context, call the
+owner/use case, and format the result. If it branches on business state, builds
+query policy, duplicates permission logic, chooses a dependency implementation,
+or inspects model/component shape, move that behavior inward.
 
 ### Let Code Carry Code Contracts
 
@@ -127,6 +189,14 @@ elements and reassemble them from the ground up.
 
 - Do not reinvent the wheel.
 - Every piece of functionality should be built as a clean and reusable module.
+- Let the host framework's conventional objects own the design. In Django, prefer
+  reusable apps, `AppConfig`, models, fields, managers, querysets, forms, admin,
+  management commands, settings, and the app registry over neutral helper modules
+  or parallel registries. In React, prefer component composition, props, render
+  derivation, route/search owners, form owners, and shared view primitives over
+  mirrored local state or forked component trees.
+- When a new convention or seam is necessary, add a check or focused test that
+  prevents future reinvention and drift.
 - Follow the best practices for the framework you're using — for example, PEP 8
   for Python. For this project, the specifics live in
   [Backend Guidelines](backend/guidelines.md) and
@@ -217,6 +287,22 @@ team, or by the wider community — when a highly tested solution already exists
   one.
 - **What to do:** do your [Research](#1-research) first. Reuse existing, well-tested
   code. Don't reinvent the wheel.
+
+#### Boundary leaks and detail-driven policy
+
+Letting an outer detail decide an inner rule, or crossing a boundary by probing a
+foreign object shape instead of using a declared contract.
+
+- **What it looks like:** React deciding permissions, GraphQL resolvers
+  re-deriving model rules, vendor SDK clients shaping domain models, serving code
+  importing the composer, addon code importing downstream consumers, or page code
+  recreating table/filter/form behavior.
+- **Why it's bad:** the same policy gets rewritten in every adapter, and the next
+  feature has to rediscover which copy is authoritative.
+- **What to do:** move the rule to the owner and cross the boundary through the
+  declared Angee contract: model fields/methods, managers/querysets, `AppConfig`,
+  schema buckets, generated SDL, settings/autoconfig, slots, registered forms, or
+  shared primitives.
 
 #### Following antipatterns
 

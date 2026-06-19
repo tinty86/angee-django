@@ -38,6 +38,21 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   `runActionResult`: an `ok:false` business failure throws → error toast). Don't
   hand-author these as `graphql()` documents.
 - React does not own business logic, permissions, models, or persistence.
+- **React state has one owner.** Keep canonical facts in the smallest owner:
+  route/search facts in TanStack Router/nuqs, server facts in GraphQL/urql, data
+  view facts in `DataViewProvider`, form facts in `FormView`/TanStack Form, and
+  ephemeral interaction state in the component that handles it. Lift state when
+  siblings coordinate; do not keep parallel local copies.
+- **Derive during render.** Do not store `filteredRows`, selected records,
+  labels, options, variables, column lists, or capability booleans in state when
+  they can be computed from props, route search, GraphQL results, model metadata,
+  or existing Angee state. Use `const` first and `useMemo` only for expensive work
+  or referential stability; never use `useEffect` + `setState` to mirror render
+  data.
+- **Effects are for external synchronization.** Use `useEffect` to sync with
+  browser APIs, storage, subscriptions, timers, navigation after async data, or
+  imperative libraries like CodeMirror. Event logic belongs in handlers, and
+  render-derived data belongs in render.
 - Use `defineAddon` (headless, `@angee/sdk`) or `defineBaseAddon` (rendered,
   `@angee/base`, routes carry React components) to declare an addon, and
   `createApp` for the project's host composition. One greppable seam per addon —
@@ -87,6 +102,14 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   `@angee/base` (the owner) so every addon gets it. The principle and what a
   hand-rolled copy silently drops live in `AGENTS.md` → "Compose, never
   re-implement, at the addon level".
+- **Routes and pages stay thin.** A route declares URL, shell, menu/chrome, model,
+  and component. A model-backed page composes `DataPage` with `List` and `Form`
+  declarations; a daemon/remote/in-memory collection composes `RowsListView` or a
+  named shared owner; a grouped or board-capable model composes `GroupListView`
+  and the matching backend aggregate/filter contract. Page components may add
+  small action controls or hooks, but they do not own table mechanics, duplicate
+  route params, cache state, bespoke loading/error surfaces, or local copies of
+  shared view state.
 - A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
   across recipes). A default `size` is a visual contract — do not flip it without a
   requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`
@@ -260,3 +283,14 @@ pnpm run build
 Run the package vitest suite — not just `tsc` and a story render, which miss
 stale assertion drift. When verifying data-bound views, wait for the async query
 to load before asserting. Use browser verification for meaningful UI changes.
+
+For page/addon changes, run a primitive-drift scan and explain every hit outside
+`@angee/base`:
+
+```sh
+rg -n '<table\b|<thead\b|<tbody\b|<tr\b|<td\b|<th\b|role="grid"|useReactTable|manualPagination' addons examples/notes-angee/web -g '*.tsx'
+rg -n 'useAuthored(Query|Mutation)<|interface .*Data|interface .*Variables|fetch\([^)]*graphql|gql`' addons examples/notes-angee/web packages -g '*.ts' -g '*.tsx'
+```
+
+A hit is not automatically wrong, but it must either compose the shared primitive
+or identify the owning base/SDK gap to fix first.

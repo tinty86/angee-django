@@ -97,6 +97,12 @@ multiple plausible patterns, escalate to the human architect to set the pattern.
 Code establishes patterns and docs reference them; a mismatch between code and
 docs is a bug that requires reconciliation.
 
+Dependencies point toward stable owners and policy, never outward toward details.
+Framework and base addons must not depend on consumer addons; serving/runtime code
+must not import the build-time composer; addon dependencies stay one-way; UI,
+GraphQL, CLI, filesystem, vendor SDK, and generated-runtime details translate to
+owners instead of deciding rules themselves.
+
 The smell that means stop: a function that takes an object and inspects it to
 decide something. This law has three faces:
 
@@ -118,6 +124,38 @@ mostly forwards to, mutates, or interprets one owner, move the behavior to that
 owner. If the move creates more ceremony than clarity, stop and choose the
 smaller native framework shape.
 
+## Architecture Gate
+
+Before editing source for a structural change, refactor, new view, addon,
+integration, model, or shared primitive, make the architecture check explicit in
+your working note, plan, or user update. The goal is not ceremony; it is to stop
+local patches from bypassing the owner that should make the whole platform
+cleaner.
+
+- **Owner map:** name the owner of each fact you are about to encode. Owners are
+  Django, React, a locked dependency in `docs/stack.md`, an Angee primitive, an
+  addon `AppConfig`, a model/manager/queryset, a schema contract, or a specific
+  class. If no owner exists, create or extend the smallest owner at the right
+  level before adding callers.
+- **Sibling inventory:** search for the same page type, model pattern, schema
+  pattern, or integration pattern in at least two nearby addons/packages. If the
+  same shape appears twice, fix the shared owner or document why the shapes have
+  different intent.
+- **Dependency check:** consult `docs/stack.md` before hand-rolling behavior. If
+  a locked library owns the concern, use its native shape and keep Angee glue
+  thin. Add a dependency only by updating the stack row and manifest together.
+- **Thin caller check:** entrypoints, routes, commands, resolvers, and page
+  components should declare intent and dispatch. They should not accumulate
+  business rules, persistence rules, data-view mechanics, or framework glue that
+  belongs to an owner.
+- **Deletion check:** a DRY/refactor change should make some existing code
+  unnecessary. If lines increase, explain what owner is being introduced and what
+  follow-up deletion it unlocks; otherwise stop and find the smaller native
+  shape.
+- **Naming check:** use one name for one concept across files, classes, routes,
+  GraphQL fields, menu labels, settings, tests, and docs. A synonym is a design
+  decision, not a convenience.
+
 - Docs teach principles and point to owners; code states the concrete contract.
   Do not maintain a parallel code inventory in prose. Public classes, methods,
   fields, and settings helpers explain their current API with docstrings.
@@ -128,6 +166,12 @@ smaller native framework shape.
   duplication.
 - Make extension mechanical: named hooks, explicit owners, deterministic order,
   fail-fast collisions.
+- Cross boundaries only through declared Angee contracts: `AppConfig`
+  attributes, schema buckets, model `extends`, input/type extensions,
+  settings/autoconfig, `ImplClassField` registries, slots, registered glyphs and
+  forms, generated SDL, and dependency-native extension points. Do not cross a
+  boundary by ad hoc import, object-shape probing, monkey-patching, or runtime
+  registration.
 - **Compose, never re-implement, at the addon level.** An addon composes the
   framework's shared primitives (the data grid/list/group/board views, forms,
   detail/record views, navigation, glyphs, state surfaces); it never hand-rolls
@@ -139,7 +183,12 @@ smaller native framework shape.
   missing, insufficient, or has a gap for your case, fix or extend it **at its
   owning level** (a base addon or the framework core) so every addon inherits it,
   then compose it; the gap is the signal the change belongs in the framework, not
-  a workaround in the addon.
+  a workaround in the addon. For React, apply the same owner test to state: URL
+  facts live in the router/search owner, server facts in GraphQL/urql,
+  collection facts in the data-view primitive, form facts in the form primitive,
+  and only short-lived interaction state stays local. Routes and pages compose
+  those owners and pass declarations/handlers; they do not mirror facts into a
+  bespoke component tree or hand-roll a shared view.
 - Verify before claiming done. Drift is a bug, whether it is code, docs, schema,
   generated output, or tests.
 
@@ -227,9 +276,21 @@ getting smarter. Apply it first, then follow the language-specific rules below.
 
 ## Definition of Done
 
-_TBD — the handoff checklist (checks to run, artifacts to regenerate, what
-"verified" means) will be defined here. Until then, run the per-area Checks in the
-backend and frontend guidelines and follow "verify before claiming done" above._
+A change is done only when the code and the architecture are both checked.
+
+- The architecture gate above has been satisfied for any structural work.
+- The change is at the level that owns the concern: framework/core, base addon,
+  consumer addon, project settings, generated artifact source, or dependency.
+- New behavior composes shared primitives or locked dependencies. Any exception
+  is narrow, named, and documented where future work will find it.
+- DRY/refactor work reports the net shape: what was deleted, what callers became
+  thinner, and why any line increase is temporary or earns its keep.
+- Generated outputs are regenerated from source, never edited by hand.
+- Names are normalized across code, tests, docs, menus/routes, GraphQL, settings,
+  and files touched by the change.
+- Relevant backend, frontend, schema, browser, or e2e checks from the
+  language-specific guidelines have run, or the final handoff states exactly why
+  they could not run.
 
 ## Guide Split
 

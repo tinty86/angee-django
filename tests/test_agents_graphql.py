@@ -193,8 +193,8 @@ def test_refresh_provider_models_is_admin_gated(agents_console_tables: None) -> 
     assert result["ok"] is True
 
 
-def test_inference_models_query_accepts_provider_filter(agents_console_tables: None) -> None:
-    """The model catalogue list supports the generic DataPage `filters` argument."""
+def test_inference_models_query_accepts_provider_id_filter(agents_console_tables: None) -> None:
+    """The model catalogue list supports toolbar provider facet filters."""
 
     admin = _platform_admin("agt-model-filter-admin")
     integration_a = make_integration("agt-model-filter-a", impl_class="manual")
@@ -211,7 +211,7 @@ def test_inference_models_query_accepts_provider_filter(agents_console_tables: N
             _schema(),
             """
             query ModelsForProvider($provider: ID!) {
-              inferenceModels(filters: {provider: $provider}, order: {name: ASC}) {
+              inferenceModels(filters: {providerId: {exact: $provider}}, order: {name: ASC}) {
                 totalCount
                 results {
                   name
@@ -228,6 +228,65 @@ def test_inference_models_query_accepts_provider_filter(agents_console_tables: N
     assert result["totalCount"] == 2
     assert [row["name"] for row in result["results"]] == ["claude-opus-4-8", "claude-sonnet-4-6"]
     assert {row["provider"]["name"] for row in result["results"]} == {"Anthropic"}
+
+
+def test_inference_model_groups_aggregate_runs_for_provider_and_capability(
+    agents_console_tables: None,
+) -> None:
+    """The model catalogue exposes grouped buckets for list/board views."""
+
+    admin = _platform_admin("agt-model-groups-admin")
+    integration_a = make_integration("agt-model-groups-a", impl_class="manual")
+    integration_b = make_integration("agt-model-groups-b", impl_class="manual")
+    with system_context(reason="test.agents.model_groups.seed"):
+        provider_a = InferenceProvider.objects.create(integration=integration_a, name="Anthropic")
+        provider_b = InferenceProvider.objects.create(integration=integration_b, name="Manual")
+        InferenceModel.objects.create(provider=provider_a, name="claude-sonnet-4-6", model_use="chat")
+        InferenceModel.objects.create(provider=provider_a, name="claude-embed-4-6", model_use="embedding")
+        InferenceModel.objects.create(provider=provider_b, name="manual-model", model_use="chat")
+
+    grouped = _data(
+        _execute(
+            _schema(),
+            """
+            query InferenceModelGroups(
+              $byUse: [InferenceModelAggregateGroupBySpec!]!
+              $byProvider: [InferenceModelAggregateGroupBySpec!]!
+            ) {
+              byUse: inferenceModelGroups(groupBy: $byUse, pagination: {offset: 0, limit: 10}) {
+                totalCount
+                results {
+                  key { modelUse }
+                  count
+                  filter
+                }
+              }
+              byProvider: inferenceModelGroups(groupBy: $byProvider, pagination: {offset: 0, limit: 10}) {
+                totalCount
+                results {
+                  key { providerId }
+                  count
+                  filter
+                }
+              }
+            }
+            """,
+            {
+                "byUse": [{"field": "MODEL_USE"}],
+                "byProvider": [{"field": "PROVIDER"}],
+            },
+            user=admin,
+        )
+    )
+
+    assert grouped["byUse"]["totalCount"] == 2
+    assert sorted(grouped["byUse"]["results"], key=lambda row: row["key"]["modelUse"]) == [
+        {"key": {"modelUse": "CHAT"}, "count": 2, "filter": {"modelUse": {"exact": "CHAT"}}},
+        {"key": {"modelUse": "EMBEDDING"}, "count": 1, "filter": {"modelUse": {"exact": "EMBEDDING"}}},
+    ]
+    assert grouped["byProvider"]["totalCount"] == 2
+    provider_filters = {row["filter"]["provider"]["pk"] for row in grouped["byProvider"]["results"]}
+    assert provider_filters == {provider_a.pk, provider_b.pk}
 
 
 def test_create_inference_provider_requires_inference_impl(agents_console_tables: None) -> None:

@@ -1,6 +1,7 @@
 # angee-django
 
-**The Django + React framework and base addons for the [Angee platform](https://angee.ai).**
+**Developer framework and base addons for building Django + React applications
+on the [Angee platform](https://angee.ai).**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.14%2B-3776AB.svg)
@@ -8,9 +9,16 @@
 ![React](https://img.shields.io/badge/react-19-61DAFB.svg)
 ![Status](https://img.shields.io/badge/status-early%20alpha%20preview-orange.svg)
 
-> **Early alpha preview.** Angee is prototyped and working end to end and is being
-> open-sourced addon by addon — expect rapid change, and don't run it
-> business-critical yet.
+> **For developers, not end users.** This repository is the framework source for
+> teams building Angee applications and addons. If you want a product to use,
+> start with derivative distributions built on Angee:
+> [ARP](https://github.com/ang-ee/arp-angee) (open-source agentic ERP / aERP),
+> [fyltr.ai](https://fyltr.ai/) (personal AI), [SmartOPS Aero](https://smartops.aero/)
+> (aviation operations), or another product-specific Angee distribution.
+
+> **Public alpha / active refactor.** Angee is being opened while major addon,
+> API, and UI surfaces are still moving. Use it for exploration and feedback,
+> not production. Roadmap and compatibility guarantees are still in progress.
 
 ## What is this?
 

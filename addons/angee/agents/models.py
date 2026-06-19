@@ -25,7 +25,7 @@ from angee.agents.backends import InferenceBackend, InferenceRequest, InferenceR
 from angee.agents.skills import parse_skill_meta
 from angee.base.fields import SqidField, StateField
 from angee.base.mixins import AuditMixin, SqidMixin
-from angee.base.models import AngeeModel
+from angee.base.models import AngeeManager, AngeeModel
 from angee.integrate.credentials import CredentialKind
 from angee.integrate.models import IntegrationMixin
 
@@ -121,7 +121,7 @@ class InferenceProvider(IntegrationMixin):
     config = models.JSONField(default=dict, blank=True)
     """Provider-scoped settings used by inference implementations."""
 
-    objects = RebacManager()
+    objects = AngeeManager()
 
     class Meta:
         """Django model options for the inference provider related model."""
@@ -193,7 +193,7 @@ class InferenceProvider(IntegrationMixin):
         return getattr(self.integration, "credential", None)
 
 
-class InferenceModelManager(RebacManager):
+class InferenceModelManager(AngeeManager):
     """Manager owning the upsert of model rows from a provider's catalogue."""
 
     def sync_from_provider(self, provider: Any) -> int:

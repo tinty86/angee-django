@@ -44,6 +44,9 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.inference.refreshModels": "Refresh models",
   "agents.inference.backend": "Backend",
   "agents.inference.catalogue": "Catalogue",
+  "agents.inference.provider": "Provider",
+  "agents.inference.capability": "Capability",
+  "agents.inference.status": "Status",
 
   // AgentProvisioning — the embedded provisioning panel.
   "agents.provisioning.title": "Provisioning",

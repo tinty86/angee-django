@@ -1,6 +1,19 @@
 import * as React from "react";
-import { Action, type ActionContext, Column, DataPage, Field, Form, Group, List, useEnumOptions } from "@angee/base";
-import { useActionMutation } from "@angee/sdk";
+import {
+  Action,
+  type ActionContext,
+  Column,
+  DataPage,
+  Field,
+  Form,
+  Group,
+  GroupListView,
+  List,
+  useEnumOptions,
+  type DataToolbarFilterOption,
+  type DataToolbarGroupOption,
+} from "@angee/base";
+import { useActionMutation, useResourceList } from "@angee/sdk";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useAgentsT } from "../i18n";
@@ -45,10 +58,70 @@ export function InferenceProvidersPage(): React.ReactElement {
 export function InferenceModelsPage(): React.ReactElement {
   const t = useAgentsT();
   const modelUseOptions = useEnumOptions(MODEL_MODEL, "modelUse");
+  const providers = useResourceList(PROVIDER_MODEL, {
+    fields: ["id", "name"],
+    pageSize: 100,
+  });
+  const providerFilters = React.useMemo<readonly DataToolbarFilterOption[]>(
+    () =>
+      providers.rows
+        .flatMap((provider) => {
+          const id = typeof provider.id === "string" ? provider.id : "";
+          const name = typeof provider.name === "string" ? provider.name : "";
+          if (!id || !name) return [];
+          return [{
+            id: `provider:${id}`,
+            label: name,
+            chipLabel: name,
+            filter: { providerId: { exact: id } },
+          }];
+        })
+        .sort((left, right) => String(left.label).localeCompare(String(right.label))),
+    [providers.rows],
+  );
+  const groupOptions = React.useMemo<readonly DataToolbarGroupOption[]>(
+    () => [
+      {
+        id: "provider.name",
+        label: t("agents.inference.provider"),
+        group: {
+          field: "provider.name",
+          aggregateField: "provider",
+          aggregateKey: "providerId",
+        },
+      },
+      {
+        id: "modelUse",
+        label: t("agents.inference.capability"),
+        group: { field: "modelUse" },
+      },
+      {
+        id: "status",
+        label: t("agents.inference.status"),
+        group: { field: "status" },
+      },
+    ],
+    [t],
+  );
+
   return (
     <DataPage model={MODEL_MODEL} placement="inline" routed>
-      <List model={MODEL_MODEL}>
+      <List
+        model={MODEL_MODEL}
+        list={GroupListView}
+        filters={providerFilters}
+        groupOptions={groupOptions}
+        defaultGroups={{
+          list: { field: "modelUse" },
+          board: {
+            field: "provider.name",
+            aggregateField: "provider",
+            aggregateKey: "providerId",
+          },
+        }}
+      >
         <Column field="name" />
+        <Column field="provider.name" header={t("agents.inference.provider")} />
         <Column field="displayName" />
         <Column field="modelUse" />
         <Column field="status" widget="statusBadge" />
