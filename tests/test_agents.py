@@ -33,6 +33,7 @@ from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
     Credential,
+    Integration,
     OAuthClient,
     _create_missing_tables,
     make_integration,
@@ -59,7 +60,7 @@ class Skill(AbstractSkill):
         rebac_id_attr = "sqid"
 
 
-class InferenceProvider(AbstractInferenceProvider):
+class InferenceProvider(Integration, AbstractInferenceProvider):
     """Concrete inference provider (capability over an integration) used by tests."""
 
     class Meta(AbstractInferenceProvider.Meta):
@@ -86,6 +87,29 @@ class InferenceModel(AbstractInferenceModel):
 
 
 AGENTS_TEST_MODELS = (Skill, InferenceProvider, InferenceModel)
+
+
+def _provider(
+    slug: str,
+    *,
+    backend_class: str = "manual",
+    name: str = "Provider",
+    kind: Any = CredentialKind.STATIC_TOKEN,
+    material: dict[str, Any] | None = None,
+    **attrs: Any,
+) -> Any:
+    """Create an inference provider child row with inherited integration fields."""
+
+    return make_integration(
+        slug,
+        kind=kind,
+        material=material,
+        model=InferenceProvider,
+        backend_class=backend_class,
+        name=name,
+        **attrs,
+    )
+
 
 SKILL_TREE = [
     {"path": "skills/calc/SKILL.md", "type": "blob", "oid": "a"},
@@ -167,8 +191,8 @@ def test_skill_source_refresh_materializes_and_prunes(agents_tables: None) -> No
     # the source so it reads the updated config fresh (the action path loads it anew),
     # rather than the related chain cached on this Python object.
     with system_context(reason="test"):
-        vcs.integration.config = {"stub_repos": REPOS, "stub_tree": SKILL_TREE[:1], "stub_blobs": SKILL_BLOBS}
-        vcs.integration.save(update_fields=["config", "updated_at"])
+        vcs.config = {"stub_repos": REPOS, "stub_tree": SKILL_TREE[:1], "stub_blobs": SKILL_BLOBS}
+        vcs.save(update_fields=["config", "updated_at"])
         source = Source.objects.get(pk=source.pk)
     assert source.refresh() == 1
     with system_context(reason="test read"):
@@ -183,23 +207,22 @@ def test_inference_provider_refresh_upserts_models(agents_tables: None) -> None:
     """Refreshing a provider upserts one ``InferenceModel`` per advertised spec."""
 
     del agents_tables
-    integration = make_integration("anthropic", impl_class="stub_inference")
-    with system_context(reason="test"):
-        provider = InferenceProvider.objects.create(
-            integration=integration,
-            name="Anthropic",
-            config={
-                "stub_models": [
-                    {
-                        "handle": "claude-opus-4-8",
-                        "display_name": "Claude Opus 4.8",
-                        "model_use": "chat",
-                        "context_window": 200000,
-                    },
-                    {"handle": "claude-haiku-4-5", "model_use": "chat"},
-                ]
-            },
-        )
+    provider = _provider(
+        "anthropic",
+        backend_class="stub_inference",
+        name="Anthropic",
+        config={
+            "stub_models": [
+                {
+                    "handle": "claude-opus-4-8",
+                    "display_name": "Claude Opus 4.8",
+                    "model_use": "chat",
+                    "context_window": 200000,
+                },
+                {"handle": "claude-haiku-4-5", "model_use": "chat"},
+            ]
+        },
+    )
 
     assert provider.refresh_models() == 2
     with system_context(reason="test read"):
@@ -212,26 +235,39 @@ def test_inference_provider_refresh_upserts_models(agents_tables: None) -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+def test_inference_provider_materializes_backend_defaults(agents_tables: None) -> None:
+    """Provider backend defaults land on direct child-row creates."""
+
+    del agents_tables
+    provider = make_integration(
+        "provider-defaults",
+        model=InferenceProvider,
+        backend_class="anthropic",
+    )
+
+    assert provider.name == "Anthropic"
+    assert provider.credential_env == "ANTHROPIC_API_KEY"
+
+
+@pytest.mark.django_db(transaction=True)
 def test_manual_backend_advertises_no_models(agents_tables: None) -> None:
     """The built-in ``manual`` backend lists nothing — its catalogue is hand-curated."""
 
     del agents_tables
-    integration = make_integration("manual-vendor", impl_class="manual")
-    with system_context(reason="test"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Manual")
+    provider = _provider("manual-vendor", backend_class="manual", name="Manual")
     assert provider.refresh_models() == 0
     with system_context(reason="test read"):
         assert InferenceModel.objects.filter(provider=provider).count() == 0
 
 
 @pytest.mark.django_db(transaction=True)
-def test_inference_provider_service_environment_reads_integration_credential_env(
+def test_inference_provider_service_environment_reads_provider_credential_env(
     agents_tables: None,
 ) -> None:
-    """Provider service env exposes only the integration-declared credential token."""
+    """Provider service env exposes only the provider-declared credential token."""
 
     del agents_tables
-    integration = make_integration("anthropic-env", impl_class="manual")
+    integration = make_integration("anthropic-env")
     with system_context(reason="test service env setup"):
         oauth_client = OAuthClient.objects.create(
             slug="anthropic-oauth",
@@ -244,12 +280,12 @@ def test_inference_provider_service_environment_reads_integration_credential_env
             CredentialKind.OAUTH,
             {"access_token": "oauth-token"},
         )
-        integration.credential = credential
-        integration.config = {"credential_env": "ANTHROPIC_OAUTH_TOKEN"}
-        integration.save(update_fields=["credential", "config", "updated_at"])
-        provider = InferenceProvider.objects.create(
-            integration=integration,
+        provider = _provider(
+            "anthropic-env-provider",
+            backend_class="manual",
             name="Anthropic",
+            credential=credential,
+            credential_env="ANTHROPIC_OAUTH_TOKEN",
         )
 
     assert provider.service_environment() == {"ANTHROPIC_OAUTH_TOKEN": "oauth-token"}
@@ -257,8 +293,8 @@ def test_inference_provider_service_environment_reads_integration_credential_env
     assert AbstractAgent.service_environment(agent_like) == {"ANTHROPIC_OAUTH_TOKEN": "oauth-token"}
 
     with system_context(reason="test service env disabled"):
-        integration.config = {}
-        integration.save(update_fields=["config", "updated_at"])
+        provider.credential_env = ""
+        provider.save(update_fields=["credential_env", "updated_at"])
         provider.refresh_from_db()
 
     assert provider.service_environment() == {}
@@ -388,13 +424,12 @@ def test_anthropic_backend_refresh_syncs_native_and_broker_models(
     del agents_tables
     _FakeAnthropicClient.instances.clear()
     monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
-    integration = make_integration(
+    provider = _provider(
         "anthropic-sdk",
-        impl_class="anthropic",
+        backend_class="anthropic",
+        name="Anthropic",
         material={"api_key": "api-key"},
     )
-    with system_context(reason="test anthropic provider"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
 
     assert provider.refresh_models() == 2
 
@@ -421,13 +456,13 @@ def test_anthropic_model_chat_uses_sdk_messages_and_strips_broker_prefix(
     del agents_tables
     _FakeAnthropicClient.instances.clear()
     monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
-    integration = make_integration(
+    provider = _provider(
         "anthropic-chat",
-        impl_class="anthropic",
+        backend_class="anthropic",
+        name="Anthropic",
         material={"api_key": "api-key"},
     )
     with system_context(reason="test anthropic chat"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
         model = InferenceModel.objects.create(provider=provider, name="anthropic/claude-sonnet-4-6")
 
     response = model.chat(
@@ -468,14 +503,14 @@ def test_anthropic_backend_uses_auth_token_for_oauth_credentials(
     del agents_tables
     _FakeAnthropicClient.instances.clear()
     monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
-    integration = make_integration(
+    provider = _provider(
         "anthropic-oauth-chat",
         kind=CredentialKind.OAUTH,
-        impl_class="anthropic",
+        backend_class="anthropic",
+        name="Anthropic",
         material={"access_token": "oauth-token"},
     )
     with system_context(reason="test anthropic oauth chat"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
         model = InferenceModel.objects.create(provider=provider, name="claude-sonnet-4-6")
 
     assert model.chat([{"role": "user", "content": "Ping"}]).text == "pong"
@@ -492,13 +527,13 @@ def test_anthropic_chat_rejects_options_that_override_owned_request_fields(
     del agents_tables
     _FakeAnthropicClient.instances.clear()
     monkeypatch.setattr(AnthropicInferenceBackend, "client_class", _FakeAnthropicClient)
-    integration = make_integration(
+    provider = _provider(
         "anthropic-owned-options",
-        impl_class="anthropic",
+        backend_class="anthropic",
+        name="Anthropic",
         material={"api_key": "api-key"},
     )
     with system_context(reason="test anthropic options guard"):
-        provider = InferenceProvider.objects.create(integration=integration, name="Anthropic")
         model = InferenceModel.objects.create(provider=provider, name="claude-sonnet-4-6")
 
     with pytest.raises(ValueError, match="model"):
@@ -515,13 +550,12 @@ def test_openai_backend_refresh_syncs_native_and_broker_models(
     del agents_tables
     _FakeOpenAIClient.instances.clear()
     monkeypatch.setattr(OpenAIInferenceBackend, "client_class", _FakeOpenAIClient)
-    integration = make_integration(
+    provider = _provider(
         "openai-sdk",
-        impl_class="openai",
+        backend_class="openai",
+        name="OpenAI",
         material={"api_key": "api-key"},
     )
-    with system_context(reason="test openai provider"):
-        provider = InferenceProvider.objects.create(integration=integration, name="OpenAI")
 
     assert provider.refresh_models() == 2
 
@@ -551,14 +585,14 @@ def test_openai_backend_rejects_oauth_credentials(
     del agents_tables
     _FakeOpenAIClient.instances.clear()
     monkeypatch.setattr(OpenAIInferenceBackend, "client_class", _FakeOpenAIClient)
-    integration = make_integration(
+    provider = _provider(
         "openai-oauth-chat",
         kind=CredentialKind.OAUTH,
-        impl_class="openai",
+        backend_class="openai",
+        name="OpenAI",
         material={"access_token": "oauth-token"},
     )
     with system_context(reason="test openai oauth rejection"):
-        provider = InferenceProvider.objects.create(integration=integration, name="OpenAI")
         model = InferenceModel.objects.create(provider=provider, name="gpt-4.1")
 
     with pytest.raises(ValueError, match="does not support OAuth"):
@@ -576,13 +610,13 @@ def test_openai_model_chat_uses_sdk_chat_completions_and_strips_broker_prefix(
     del agents_tables
     _FakeOpenAIClient.instances.clear()
     monkeypatch.setattr(OpenAIInferenceBackend, "client_class", _FakeOpenAIClient)
-    integration = make_integration(
+    provider = _provider(
         "openai-chat",
-        impl_class="openai",
+        backend_class="openai",
+        name="OpenAI",
         material={"api_key": "api-key"},
     )
     with system_context(reason="test openai chat"):
-        provider = InferenceProvider.objects.create(integration=integration, name="OpenAI")
         model = InferenceModel.objects.create(provider=provider, name="openai/gpt-4.1")
 
     response = model.chat(
@@ -622,17 +656,14 @@ def test_openai_backend_can_configure_max_completion_tokens(
     del agents_tables
     _FakeOpenAIClient.instances.clear()
     monkeypatch.setattr(OpenAIInferenceBackend, "client_class", _FakeOpenAIClient)
-    integration = make_integration(
+    provider = _provider(
         "openai-max-completion",
-        impl_class="openai",
+        backend_class="openai",
+        name="OpenAI",
         material={"api_key": "api-key"},
+        config={"max_tokens_param": "max_completion_tokens"},
     )
     with system_context(reason="test openai max tokens"):
-        provider = InferenceProvider.objects.create(
-            integration=integration,
-            name="OpenAI",
-            config={"max_tokens_param": "max_completion_tokens"},
-        )
         model = InferenceModel.objects.create(provider=provider, name="gpt-4.1")
 
     assert model.chat([{"role": "user", "content": "Ping"}], max_tokens=8).text == "pong"
@@ -649,13 +680,13 @@ def test_openai_chat_rejects_options_that_override_owned_request_fields(
     del agents_tables
     _FakeOpenAIClient.instances.clear()
     monkeypatch.setattr(OpenAIInferenceBackend, "client_class", _FakeOpenAIClient)
-    integration = make_integration(
+    provider = _provider(
         "openai-owned-options",
-        impl_class="openai",
+        backend_class="openai",
+        name="OpenAI",
         material={"api_key": "api-key"},
     )
     with system_context(reason="test openai options guard"):
-        provider = InferenceProvider.objects.create(integration=integration, name="OpenAI")
         model = InferenceModel.objects.create(provider=provider, name="gpt-4.1")
 
     with pytest.raises(ValueError, match="model"):

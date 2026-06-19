@@ -419,8 +419,8 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   `registry_setting`** — the key→path mapping (e.g. `ANGEE_STORAGE_BACKEND_CLASSES`)
   is supplied by the owning addon's `autoconfig`, so every settings module that
   installs the addon must carry a **non-empty** mapping, including a bare module
-  that skips the composer (`tests/settings.py` declares both
-  `ANGEE_STORAGE_BACKEND_CLASSES` and `ANGEE_INTEGRATION_IMPLS`). An empty
+  that skips the composer (`tests/settings.py` declares storage, integration,
+  VCS, inference, and OAuth provider registries explicitly). An empty
   registry raises `ImproperlyConfigured` at import — give the addon a
   noop/null-object default so the set is never empty. The column stores the key
   (`local`), never a dotted path.

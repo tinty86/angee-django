@@ -1,25 +1,19 @@
 import * as React from "react";
 import {
-  Button,
   Column,
   DataPage,
   Field,
   Form,
-  Glyph,
   Group,
   GroupListView,
   List,
   useEnumOptions,
-  useImplCategory,
   useImplPrefill,
-  usePrompt,
-  useToast,
   type DataToolbarGroupOption,
 } from "@angee/base";
 import { useAuthoredMutation, type Row } from "@angee/sdk";
 
-import { IntegrateConnectAccountComplete } from "../connect/documents.public";
-import { connectCallbackRedirectUri } from "../connect/redirects";
+import { canConnectRecord, ConnectOAuthButton } from "../connect/ConnectOAuthButton";
 import { ConnectIntegration } from "../documents";
 import { useIntegrateT } from "../i18n";
 
@@ -29,7 +23,6 @@ const CONNECT_NEXT = "/integrate";
 export function IntegrationsPage(): React.ReactElement {
   const t = useIntegrateT();
   const implClassOptions = useEnumOptions(MODEL, "implClass");
-  const implClassCategory = useImplCategory(MODEL, "implClass");
   const implClassPrefill = useImplPrefill(MODEL, "implClass");
 
   // Aggregate on the real groupable axes (impl_class / vendor / status); the
@@ -117,43 +110,11 @@ export function IntegrationsPage(): React.ReactElement {
           />
           <Field name="status" widget="statusbar" editOnly />
         </Group>
-        <Group label={t("integrate.integrations.inference")} columns={2}>
-          <Field
-            name="name"
-            label={t("integrate.integrations.providerName")}
-            createOnly
-            showWhen={(values) => implClassCategory(values.implClass) === "inference"}
-          />
-          <Field
-            name="baseUrl"
-            label={t("integrate.integrations.baseUrl")}
-            createOnly
-            showWhen={(values) => implClassCategory(values.implClass) === "inference"}
-          />
-          <Field
-            name="relatedConfig"
-            label={t("integrate.integrations.providerConfig")}
-            widget="json"
-            createOnly
-            showWhen={(values) => implClassCategory(values.implClass) === "inference"}
-          />
-        </Group>
-        <Group label={t("integrate.integrations.vcs")} columns={2}>
-          <Field
-            name="webhookSecret"
-            label={t("integrate.integrations.webhookSecret")}
-            widget="text"
-            kind="string"
-            createOnly
-            showWhen={(values) => implClassCategory(values.implClass) === "vcs"}
-          />
-        </Group>
         <Group label={t("integrate.integrations.authentication")} columns={2}>
           <Field name="credential" editOnly />
           <Field name="account" editOnly />
         </Group>
         <Group label={t("integrate.integrations.runtime")} columns={2}>
-          <Field name="config" widget="json" />
           <Field name="lastUsedAt" readOnly />
           <Field name="lastUsedStatus" readOnly />
           <Field name="useCount24h" readOnly />
@@ -173,126 +134,29 @@ function IntegrationConnectButton({
   refresh: () => void;
 }): React.ReactElement | null {
   const t = useIntegrateT();
-  const prompt = usePrompt();
-  const toast = useToast();
-  const [connectIntegration, connectState] = useAuthoredMutation(
-    ConnectIntegration,
-  );
-  const [connectAccountComplete, completeState] = useAuthoredMutation(
-    IntegrateConnectAccountComplete,
-  );
+  const [connectIntegration] = useAuthoredMutation(ConnectIntegration);
   const id = typeof row.id === "string" ? row.id : "";
   if (!id) return null;
 
-  const connect = async (): Promise<void> => {
-    const result = await connectIntegration({
-      integrationId: id,
-      redirectUri: connectCallbackRedirectUri(),
-      next: CONNECT_NEXT,
-    });
-    const payload = result?.connectIntegration;
-    if (payload?.error) throw new Error(payload.error);
-    if (payload?.attached) {
-      refresh();
-      toast.success({ title: t("integrate.integrations.connect.connected") });
-      return;
-    }
-    if (!payload?.authorizeUrl) {
-      throw new Error(t("integrate.integrations.connect.startError"));
-    }
-    if (payload.mode !== "manual") {
-      window.location.assign(payload.authorizeUrl);
-      return;
-    }
-    const entered = await prompt({
-      title: t("integrate.integrations.action.connect"),
-      body: (
-        <span>
-          <a
-            href={payload.authorizeUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
-            {t("integrate.providers.connect.openAuthorize")}
-          </a>
-          {t("integrate.providers.connect.instructions")}
-        </span>
-      ),
-      fields: [
-        {
-          name: "pasted",
-          label: t("integrate.providers.connect.codeLabel"),
-          placeholder: t("integrate.providers.connect.codePlaceholder"),
-        },
-      ],
-    });
-    if (!entered) return;
-    const { code, state } = parseManualCode(
-      entered.pasted,
-      payload.state ?? "",
-      t,
-    );
-    if (!payload.redirectUri) {
-      throw new Error(t("integrate.providers.connect.stateIncomplete"));
-    }
-    const completed = await connectAccountComplete({
-      code,
-      state,
-      redirectUri: payload.redirectUri,
-    });
-    const done = completed?.connectAccountComplete;
-    if (done?.error) throw new Error(done.error);
-    refresh();
-    toast.success({ title: t("integrate.integrations.connect.connected") });
-  };
-
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="primary"
-      loading={connectState.fetching || completeState.fetching}
-      onClick={() => {
-        void connect().catch((error) => {
-          toast.danger({
-            title: t("integrate.integrations.action.connect"),
-            description:
-              error instanceof Error
-                ? error.message
-                : t("integrate.integrations.connect.startError"),
-          });
+    <ConnectOAuthButton
+      label={t("integrate.integrations.action.connect")}
+      connectedTitle={t("integrate.integrations.connect.connected")}
+      startErrorTitle={t("integrate.integrations.connect.startError")}
+      next={CONNECT_NEXT}
+      onConnected={refresh}
+      start={async ({ redirectUri, next }) => {
+        const result = await connectIntegration({
+          integrationId: id,
+          redirectUri,
+          next,
         });
+        return result?.connectIntegration;
       }}
-    >
-      <Glyph name="link" />
-      {t("integrate.integrations.action.connect")}
-    </Button>
+    />
   );
 }
 
 export function canConnectIntegration(row: Row): boolean {
-  return row.credential === null || normalizeValue(row.status) === "draft";
-}
-
-function normalizeValue(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function parseManualCode(
-  pastedValue: unknown,
-  expectedState: string,
-  t: (key: string) => string,
-): { code: string; state: string } {
-  const pasted = String(pastedValue ?? "").trim();
-  const hash = pasted.lastIndexOf("#");
-  const code = hash > 0 ? pasted.slice(0, hash) : "";
-  const state = hash > 0 ? pasted.slice(hash + 1) : "";
-  if (!code || !state) {
-    throw new Error(t("integrate.providers.connect.codeIncomplete"));
-  }
-  if (expectedState && state !== expectedState) {
-    throw new Error(t("integrate.providers.connect.codeMismatch"));
-  }
-  return { code, state };
+  return canConnectRecord(row);
 }

@@ -3,7 +3,7 @@
 An :class:`Agent` is a definition the operator later renders into a workspace and
 service. It draws on three catalogues this addon also owns: :class:`Skill` rows
 discovered from an ``integrate.Source``, :class:`MCPServer`/:class:`MCPTool` rows,
-and an :class:`InferenceProvider` related model over an ``Integration`` with its
+and an :class:`InferenceProvider` integration child with its
 :class:`InferenceModel` rows. Templates are agents with
 ``is_template`` set. This addon keeps definitions only; the operator owns lifecycle.
 """
@@ -23,11 +23,11 @@ from rebac.managers import RebacManager
 
 from angee.agents.backends import InferenceBackend, InferenceRequest, InferenceResponse
 from angee.agents.skills import parse_skill_meta
-from angee.base.fields import SqidField, StateField
+from angee.base.fields import ImplClassField, SqidField, StateField
+from angee.base.impl import ImplDefaultsMixin
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeManager, AngeeModel
 from angee.integrate.credentials import CredentialKind
-from angee.integrate.models import IntegrationMixin
 
 
 class InferenceModelUse(models.TextChoices):
@@ -103,28 +103,36 @@ class RuntimeStatus(models.TextChoices):
     WARNING = "warning", "Warning"
 
 
-class InferenceProvider(IntegrationMixin):
-    """The inference related model over an ``Integration`` — an LLM provider account.
+class InferenceProvider(ImplDefaultsMixin, AngeeModel):
+    """An LLM provider account, materialized as an integration child row.
 
-    It draws its API credential from ``self.integration.credential`` and resolves
-    the row-selected :class:`~angee.agents.backends.InferenceBackend` from
-    ``self.integration.impl``. Django keeps the catalogue; the backend lists the
+    It draws its API credential from its inherited integration credential and
+    resolves its provider-specific :class:`~angee.agents.backends.InferenceBackend`
+    from ``backend_class``. Django keeps the catalogue; the backend lists the
     provider's models into :class:`InferenceModel` rows.
     """
 
     runtime = True
+    extends = "integrate.Integration"
 
-    sqid = SqidField(real_field_name="id", prefix="ipr", min_length=8)
+    backend_class = ImplClassField(
+        base_class=InferenceBackend,
+        registry_setting="ANGEE_INFERENCE_BACKEND_CLASSES",
+        default="manual",
+    )
+    """Registry key for the inference backend this provider uses."""
     name = models.CharField(max_length=128)
     base_url = models.URLField(blank=True)
     """Base endpoint for OpenAI-compatible providers; blank uses the backend default."""
+    credential_env = models.CharField(max_length=128, blank=True)
+    """Environment variable name used when rendering this provider's credential."""
     config = models.JSONField(default=dict, blank=True)
     """Provider-scoped settings used by inference implementations."""
 
     objects = AngeeManager()
 
     class Meta:
-        """Django model options for the inference provider related model."""
+        """Django model options for the inference provider child model."""
 
         abstract = True
         ordering = ("name",)
@@ -137,22 +145,31 @@ class InferenceProvider(IntegrationMixin):
         return self.name or f"provider:{self.public_id}"
 
     @property
-    def impl(self) -> InferenceBackend:
-        """Return the implementation bound to this provider's credential and endpoint.
+    def backend(self) -> InferenceBackend:
+        """Return the backend bound to this provider's credential and endpoint.
 
         Resolved fresh per access (unlike ``storage.Backend.storage``, which caches):
         the built-in ``manual`` backend holds no client, and a vendor backend reads
-        the live credential off the integration each call, so a rotated key takes
+        the live credential off this provider each call, so a rotated key takes
         effect at once and the backend owns any client lifetime it needs.
         """
 
-        return cast(InferenceBackend, self.integration.impl)
+        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
+        backend_class = cast(type[InferenceBackend], field.resolve_class(self.backend_class))
+        return backend_class(self)
 
     def refresh_models(self) -> int:
         """Re-list this provider's models into :class:`InferenceModel` rows."""
 
         model = apps.get_model("agents", "InferenceModel")
         return int(model.objects.sync_from_provider(self))
+
+    def materialize_backend_defaults(self, *, provided: frozenset[str] = frozenset()) -> None:
+        """Apply this provider backend's defaults to every unprovided provider field."""
+
+        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
+        backend_class = cast(type[InferenceBackend], field.resolve_class(self.backend_class))
+        backend_class.materialize(self, provided=provided | {"backend_class"})
 
     def chat(
         self,
@@ -176,21 +193,19 @@ class InferenceProvider(IntegrationMixin):
             tools=tools,
             options={} if options is None else dict(options),
         )
-        return self.impl.chat(request)
+        return self.backend.chat(request)
 
     def service_environment(self) -> dict[str, str]:
         """Return credential-backed environment variables for rendered services."""
 
-        integration = getattr(self, "integration", None)
-        if integration is None:
+        env_name = str(getattr(self, "credential_env", "") or "").strip()
+        if not env_name:
             return {}
-        return integration.credential_env_value()
-
-    @property
-    def credential(self) -> Any:
-        """Return the API credential backing this provider, drawn from its integration."""
-
-        return getattr(self.integration, "credential", None)
+        credential = getattr(self, "credential", None)
+        if credential is None:
+            return {}
+        secret = str(credential.secret_value() or "")
+        return {env_name: secret} if secret else {}
 
 
 class InferenceModelManager(AngeeManager):
@@ -203,7 +218,7 @@ class InferenceModelManager(AngeeManager):
         never broken by a transient provider response; deprecation is a status edit.
         """
 
-        specs = list(provider.impl.list_models())
+        specs = list(provider.backend.list_models())
         with system_context(reason="agents.inference_model.sync"), transaction.atomic():
             for spec in specs:
                 self.update_or_create(provider=provider, name=spec.handle, defaults=spec.upsert_defaults())
@@ -823,8 +838,8 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
 
         A per-agent ``inference_credential`` override wins (e.g. a connected Anthropic OAuth
         account the user pointed this agent at); otherwise the model's catalogue credential
-        (the model→provider→integration→credential chain the catalogue owns), asked of the
-        model rather than walked here.
+        (the model→provider→credential chain the catalogue owns), asked of the model rather
+        than walked here.
         """
 
         override = getattr(self, "inference_credential", None)

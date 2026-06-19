@@ -16,10 +16,7 @@ import { OAuthConnectCallbackPage } from "./connect/OAuthConnectCallbackPage";
 import { CredentialsPage } from "./connect/views/CredentialsPage";
 import { ExternalAccountsPage } from "./connect/views/ExternalAccountsPage";
 import { ProvidersPage } from "./connect/views/ProvidersPage";
-import {
-  CONNECT_CALLBACK_PATH,
-  LEGACY_CONNECT_CALLBACK_PATH,
-} from "./connect/redirects";
+import { CONNECT_CALLBACK_PATH } from "./connect/redirects";
 import { enIntegrateMessages } from "./i18n";
 import { IntegrationsPage } from "./views/IntegrationsPage";
 import { RepositoriesPage } from "./views/RepositoriesPage";
@@ -135,18 +132,10 @@ const integrateRoutes: readonly BaseAddonRoute[] = [
   // The account-connect callback: the provider redirects back here after the user
   // approves. It stays on the authenticated `console` shell (unlike the public
   // sign-in callback) because the connect flow's actor is an already-signed-in
-  // admin linking an outbound account — there is no pre-session bootstrap. Path
-  // strings are stable (registered with providers); the legacy `/iam/oauth/callback`
-  // alias predates the iam→integrate move.
+  // admin linking an outbound account — there is no pre-session bootstrap.
   {
     name: "integrate.connect.callback",
     path: CONNECT_CALLBACK_PATH,
-    shell: "console",
-    component: OAuthConnectCallbackPage,
-  },
-  {
-    name: "integrate.connect.callback.legacy",
-    path: LEGACY_CONNECT_CALLBACK_PATH,
     shell: "console",
     component: OAuthConnectCallbackPage,
   },
@@ -259,5 +248,16 @@ const integrate = defineBaseAddon({
     integrateTemplate: LayoutTemplate,
   },
 });
+
+export {
+  canConnectRecord,
+  ConnectOAuthButton,
+  parseManualCode,
+  type OAuthConnectPayload,
+} from "./connect/ConnectOAuthButton";
+export {
+  CONNECT_CALLBACK_PATH,
+  connectCallbackRedirectUri,
+} from "./connect/redirects";
 
 export default integrate;

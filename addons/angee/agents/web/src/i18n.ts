@@ -47,6 +47,17 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.inference.provider": "Provider",
   "agents.inference.capability": "Capability",
   "agents.inference.status": "Status",
+  "agents.inference.credential": "Credential",
+  "agents.inference.connect.action": "Connect",
+  "agents.inference.connect.startError": "Could not start provider connection.",
+  "agents.inference.connect.connected": "Provider connected.",
+  "agents.inference.connect.openAuthorize": "Open the authorization page",
+  "agents.inference.connect.instructions": ", approve, then paste the code it shows below.",
+  "agents.inference.connect.codeLabel": "Authorization code",
+  "agents.inference.connect.codePlaceholder": "code#state",
+  "agents.inference.connect.codeIncomplete": "Paste the authorization code and state as code#state.",
+  "agents.inference.connect.codeMismatch": "The pasted state does not match this connection attempt.",
+  "agents.inference.connect.stateIncomplete": "The connection state is incomplete. Start again.",
 
   // AgentProvisioning — the embedded provisioning panel.
   "agents.provisioning.title": "Provisioning",

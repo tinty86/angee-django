@@ -10,8 +10,8 @@ class IntegrateGithubConfig(AppConfig):
 
     Carries no models, schema, or permissions of its own: it contributes the
     :class:`~angee.integrate_github.backend.GitHubBackend` into
-    ``ANGEE_INTEGRATION_IMPLS`` (via ``autoconfig``), named per
-    ``Integration.impl_class`` row.
+    ``ANGEE_VCS_BACKEND_CLASSES`` (via ``autoconfig``), named per
+    ``VcsBridge.backend_class`` row.
     """
 
     default = True

@@ -26,6 +26,9 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/integrate':
+        specifier: workspace:*
+        version: link:../../integrate/web
       '@angee/operator':
         specifier: workspace:*
         version: link:../../operator/web

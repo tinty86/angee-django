@@ -32,20 +32,25 @@ from angee.agents.autoconfig import SETTINGS as _AGENTS_SETTINGS
 from angee.agents.backends import InferenceBackend
 from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
+from angee.base.fields import ImplClassField
 from angee.base.mixins import actor_user_id
 from angee.graphql.actions import ActionResult, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
+from angee.iam.identity import user_from_global_id as _user_from_global_id
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.schema import UserType
+from angee.integrate.oauth.errors import OAuthFlowError
 from angee.integrate.schema import (
+    ConnectIntegrationResult,
     CredentialType,
-    IntegrationType,
+    ExternalAccountType,
     SourceType,
     TemplateType,
     VendorType,
+    connect_integration_target,
 )
 from angee.operator.daemon import OperatorDaemon, OperatorDaemonNotFound
 
@@ -56,15 +61,22 @@ MCPServer = apps.get_model("agents", "MCPServer")
 MCPTool = apps.get_model("agents", "MCPTool")
 Agent = apps.get_model("agents", "Agent")
 Integration = apps.get_model("integrate", "Integration")
+OAuthClient = apps.get_model("integrate", "OAuthClient")
 
 
 @strawberry_django.type(InferenceProvider)
 class InferenceProviderType(AngeeNode):
-    """Admin projection of an inference provider related model."""
+    """Admin projection of an inference provider child model."""
 
-    integration: IntegrationType
+    vendor: VendorType
+    credential: CredentialType | None
+    account: ExternalAccountType | None
+    owner: UserType
+    backend_class: auto
+    status: auto
     name: auto
     base_url: auto
+    credential_env: auto
     config: JSON
     created_at: auto
     updated_at: auto
@@ -72,14 +84,14 @@ class InferenceProviderType(AngeeNode):
 
 @strawberry_django.type(Integration, name="IntegrationType", extend=True)
 class IntegrationInferenceProviderExtension:
-    """Contributes the inference provider related model onto integrate's IntegrationType."""
+    """Contributes the inference provider child onto integrate's IntegrationType."""
 
     @strawberry_django.field(only=["id"])
     def inference_provider(self) -> InferenceProviderType | None:
-        """Return this integration's inference provider related model when present."""
+        """Return this integration's inference provider child when present."""
 
         try:
-            return cast(InferenceProviderType, cast(Any, self).agents_inferenceprovider)
+            return cast(InferenceProviderType, cast(Any, self).inferenceprovider)
         except ObjectDoesNotExist:
             return None
 
@@ -211,9 +223,15 @@ class AgentSession:
 class InferenceProviderInput:
     """Fields accepted when creating an inference provider."""
 
-    integration: relay.GlobalID
-    name: str
+    vendor: relay.GlobalID
+    owner: relay.GlobalID
+    credential: relay.GlobalID | None = None
+    account: relay.GlobalID | None = strawberry.UNSET
+    backend_class: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+    name: str = ""
     base_url: str = ""
+    credential_env: str = ""
     # UNSET (not None): an omitted field must fall back to the model default, not
     # overwrite a non-null column with null (see docs/backend/guidelines.md Pitfalls).
     config: JSON | None = strawberry.UNSET
@@ -224,8 +242,15 @@ class InferenceProviderPatch:
     """Fields accepted when updating an inference provider."""
 
     id: relay.GlobalID
+    vendor: relay.GlobalID | None = strawberry.UNSET
+    owner: relay.GlobalID | None = strawberry.UNSET
+    credential: relay.GlobalID | None = strawberry.UNSET
+    account: relay.GlobalID | None = strawberry.UNSET
+    backend_class: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
     name: str | None = strawberry.UNSET
     base_url: str | None = strawberry.UNSET
+    credential_env: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
 
 
@@ -506,33 +531,91 @@ _AGENT_MUTATION = crud(
 """Admin agent CRUD: owner is field-backed REBAC; written elevated."""
 
 
-def _require_inference_integration(integration: Any) -> None:
-    """Raise when an integration's implementation is not an inference backend."""
+def _provider_backend_key(value: str | None) -> str:
+    """Return an inference backend key, defaulting to manual."""
 
-    impl_class = Integration.objects.impl_class_for_key(str(getattr(integration, "impl_class", "")))
+    if value is None or value is strawberry.UNSET:
+        key = "manual"
+    else:
+        field = cast(ImplClassField, InferenceProvider._meta.get_field("backend_class"))
+        key = str(field.key_for(value) or "")
+    field = cast(ImplClassField, InferenceProvider._meta.get_field("backend_class"))
+    impl_class = field.resolve_class(key)
     if not issubclass(impl_class, InferenceBackend):
-        raise ValueError(f"Integration {integration.sqid} does not use an inference implementation.")
+        raise ValueError(f"Backend {key!r} is not an inference backend.")
+    return key
+
+
+def _provider_oauth_client(provider: Any) -> Any:
+    """Return the OAuth client selected by this provider's backend."""
+
+    hint = str(getattr(provider.backend, "oauth_client", "") or "").strip()
+    if not hint:
+        raise OAuthFlowError("provider_not_connectable", 400, "Inference provider has no OAuth client.")
+    with system_context(reason="agents.graphql.connect_inference_provider.oauth_client"):
+        oauth_client = OAuthClient.objects.filter(slug=hint, environment="prod").first()
+        if oauth_client is None:
+            oauth_client = OAuthClient.objects.filter(slug=hint).order_by("environment").first()
+    if oauth_client is None or not oauth_client.is_enabled:
+        raise OAuthFlowError("provider_not_connectable", 400, "Inference provider has no enabled OAuth client.")
+    return oauth_client
 
 
 @strawberry.type
 class InferenceProviderCreateMutation:
-    """Admin create for an inference provider, validating the owning integration impl."""
+    """Admin create for an inference provider child row."""
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def create_inference_provider(self, data: InferenceProviderInput) -> InferenceProviderType:
-        """Create an inference provider only for integrations backed by ``InferenceBackend``."""
+        """Create an inference provider directly."""
 
-        integration = resolve_action_target(
-            Integration,
-            data.integration,
-            reason="agents.graphql.inference_provider.create.integration",
+        vendor = resolve_action_target(
+            apps.get_model("integrate", "Vendor"),
+            data.vendor,
+            reason="agents.graphql.inference_provider.create.vendor",
         )
-        _require_inference_integration(integration)
+        owner = _user_from_global_id(data.owner)
+        credential = (
+            None
+            if data.credential is None
+            else resolve_action_target(
+                apps.get_model("integrate", "Credential"),
+                data.credential,
+                reason="agents.graphql.inference_provider.create.credential",
+            )
+        )
+        account = (
+            strawberry.UNSET
+            if data.account is strawberry.UNSET
+            else (
+                None
+                if data.account is None
+                else resolve_action_target(
+                    apps.get_model("integrate", "ExternalAccount"),
+                    data.account,
+                    reason="agents.graphql.inference_provider.create.account",
+                )
+            )
+        )
         attrs: dict[str, Any] = {
-            "integration": integration,
-            "name": data.name,
-            "base_url": data.base_url,
+            "vendor": vendor,
+            "owner": owner,
+            "backend_class": _provider_backend_key(data.backend_class),
         }
+        if credential is not None:
+            attrs["credential"] = credential
+            if account is strawberry.UNSET:
+                account = getattr(credential, "external_account", None)
+        if account is not strawberry.UNSET:
+            attrs["account"] = account
+        if data.name:
+            attrs["name"] = data.name
+        if data.base_url:
+            attrs["base_url"] = data.base_url
+        if data.credential_env:
+            attrs["credential_env"] = data.credential_env
+        if data.status not in (strawberry.UNSET, None):
+            attrs["status"] = data.status
         if data.config is not strawberry.UNSET:
             attrs["config"] = data.config
         with system_context(reason="agents.graphql.inference_provider.create"), transaction.atomic():
@@ -540,15 +623,107 @@ class InferenceProviderCreateMutation:
         return cast(InferenceProviderType, provider)
 
 
+@strawberry.type
+class InferenceProviderConnectMutation:
+    """Authenticated OAuth connect for an inference provider child row."""
+
+    @strawberry.mutation
+    def connect_inference_provider(
+        self,
+        info: strawberry.Info,
+        id: relay.GlobalID,
+        redirect_uri: str = "",
+        next: str = "/agents/providers",
+    ) -> ConnectIntegrationResult:
+        """Attach the current user's OAuth credential to this inference provider."""
+
+        try:
+            provider = resolve_action_target(
+                InferenceProvider,
+                id,
+                reason="agents.graphql.connect_inference_provider",
+            )
+            return connect_integration_target(
+                info,
+                provider,
+                _provider_oauth_client(provider),
+                redirect_uri=redirect_uri,
+                next_path=next,
+            )
+        except OAuthFlowError as error:
+            return ConnectIntegrationResult(error=error.provider_message or str(error), error_code=error.code)
+
+
+@strawberry.type
+class InferenceProviderUpdateMutation:
+    """Admin update for an inference provider child row."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def update_inference_provider(self, data: InferenceProviderPatch) -> InferenceProviderType:
+        """Update a provider, rematerializing backend defaults when the backend changes."""
+
+        provider = resolve_action_target(
+            InferenceProvider,
+            data.id,
+            reason="agents.graphql.inference_provider.update",
+        )
+        provided: set[str] = set()
+        backend_changed = False
+        with system_context(reason="agents.graphql.inference_provider.update"), transaction.atomic():
+            if data.vendor is not strawberry.UNSET:
+                provider.vendor = resolve_action_target(
+                    apps.get_model("integrate", "Vendor"),
+                    data.vendor,
+                    reason="agents.graphql.inference_provider.update.vendor",
+                )
+                provided.add("vendor")
+            if data.owner is not strawberry.UNSET:
+                provider.owner = _user_from_global_id(data.owner)
+                provided.add("owner")
+            if data.credential is not strawberry.UNSET:
+                provider.credential = (
+                    None
+                    if data.credential is None
+                    else resolve_action_target(
+                        apps.get_model("integrate", "Credential"),
+                        data.credential,
+                        reason="agents.graphql.inference_provider.update.credential",
+                    )
+                )
+                provided.add("credential")
+            if data.backend_class is not strawberry.UNSET:
+                backend_key = _provider_backend_key(data.backend_class)
+                backend_changed = backend_key != provider.backend_class
+                provider.backend_class = backend_key
+            if data.status not in (strawberry.UNSET, None):
+                provider.status = data.status
+                provided.add("status")
+            if data.name is not strawberry.UNSET:
+                provider.name = data.name or ""
+                provided.add("name")
+            if data.base_url is not strawberry.UNSET:
+                provider.base_url = data.base_url or ""
+                provided.add("base_url")
+            if data.credential_env is not strawberry.UNSET:
+                provider.credential_env = data.credential_env or ""
+                provided.add("credential_env")
+            if data.config is not strawberry.UNSET:
+                provider.config = data.config
+                provided.add("config")
+            if backend_changed:
+                provider.materialize_backend_defaults(provided=frozenset(provided))
+            provider.save()
+        return cast(InferenceProviderType, provider)
+
+
 _INFERENCE_PROVIDER_MUTATION = crud(
     InferenceProviderType,
-    update=InferenceProviderPatch,
     delete=True,
     permission_classes=_ADMIN_PERMISSION_CLASSES,
     name="inference_provider",
     write_context="agents.graphql.inference_provider",
 )
-"""Admin inference-provider update/delete; create validates the owning Integration impl."""
+"""Admin inference-provider delete; create/update validate backend ownership explicitly."""
 
 _INFERENCE_MODEL_MUTATION = crud(
     InferenceModelType,
@@ -596,10 +771,10 @@ _SKILL_MUTATION = crud(
 
 # The inference-credential chains ``_render_plan`` walks: the per-agent override
 # (``inference_credential``, with its ``oauth_client`` for an OAuth refresh) and the
-# model→provider→integration→credential fallback — joined up front so provisioning reads
+# model→provider→credential fallback — joined up front so provisioning reads
 # the credential in one query instead of lazy FK fetches.
 _PROVISION_CHAIN = (
-    "model__provider__integration__credential",
+    "model__provider__credential",
     "inference_credential__oauth_client",
 )
 
@@ -1019,26 +1194,14 @@ _CONSOLE_TYPES: list[type] = [
 ]
 
 
-@strawberry.input(name="IntegrationInput", extend=True)
-class IntegrationInferenceInput:
-    """Inference create fields contributed onto integrate's ``IntegrationInput``.
-
-    Native Strawberry input extension lets the create mutation accept provider
-    fields without ``integrate`` naming them. ``related_config`` maps to the
-    provider's own ``config`` (distinct from the Integration's ``config``).
-    """
-
-    name: str = ""
-    base_url: str = ""
-    related_config: JSON | None = strawberry.UNSET
-
-
 schemas = {
     "console": {
         "query": [AgentsConsoleQuery],
         "mutation": [
             _AGENT_MUTATION,
             InferenceProviderCreateMutation,
+            InferenceProviderConnectMutation,
+            InferenceProviderUpdateMutation,
             _INFERENCE_PROVIDER_MUTATION,
             _INFERENCE_MODEL_MUTATION,
             _MCP_SERVER_MUTATION,
@@ -1050,7 +1213,6 @@ schemas = {
         "subscription": [changes(Agent, field="agentChanged")],
         "types": _CONSOLE_TYPES,
         "type_extensions": [IntegrationInferenceProviderExtension],
-        "input_extensions": [IntegrationInferenceInput],
     },
 }
 """GraphQL contributions installed by the agents addon."""

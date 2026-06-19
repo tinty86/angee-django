@@ -6,7 +6,7 @@ verifies inbound push webhooks. It never clones: git transport is the operator's
 job. The outbound HTTP lives in a model-free helper (mirroring
 ``webhooks.PinnedWebhookClient``) that reuses ``integrate.net`` for the SSRF gate;
 the API base is admin-configured (``api.github.com`` by default, a GHE host via
-``Integration.config``), so the host is trusted rather than user-supplied per
+``VcsBridge.config``), so the host is trusted rather than user-supplied per
 request.
 """
 
@@ -62,7 +62,7 @@ class GitHubBackend(VCSBackend):
     def api_base(self) -> str:
         """Return the REST API base URL (``api.github.com`` or a configured GHE host)."""
 
-        base = str(self.integration.config.get("github_api_base") or DEFAULT_API_BASE)
+        base = str(self.bridge.config.get("github_api_base") or DEFAULT_API_BASE)
         return base.rstrip("/")
 
     def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
@@ -153,7 +153,7 @@ class GitHubBackend(VCSBackend):
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "angee-integrate-github",
         }
-        headers.update(self.integration.credential.auth_headers())
+        headers.update(self.bridge.credential.auth_headers())
         return headers
 
     def _get(self, path: str) -> Any:

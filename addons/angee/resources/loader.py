@@ -645,7 +645,7 @@ def build_resource(
                 attribute=None,
                 column_name="_xref",
                 readonly=True,
-            )
+            ),
         },
     )
     return cast(

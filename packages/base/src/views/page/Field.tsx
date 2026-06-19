@@ -33,8 +33,9 @@ export interface FieldProps {
    * Seed sibling fields when this field's value changes — the impl-defaults
    * mechanism. Returns a `{fieldName: value}` map (camelCase form field names) the
    * form applies as the chosen preset, overwriting those fields (so boolean defaults
-   * land too). Pair with `useImplPrefill(model, field)` for an `ImplClassField`; keep
-   * it on a create-only field so it never rewrites a saved record.
+   * land too). Pair with `useImplPrefill(model, field)` for an `ImplClassField`.
+   * Mark the field `createOnly` when saved rows must not be re-seeded; leave it
+   * editable when changing the impl should rematerialize defaults in the form.
    */
   prefill?: (value: unknown) => Record<string, unknown> | null | undefined;
   /**

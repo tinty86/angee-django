@@ -19,9 +19,9 @@ way `integrate_github` adds a VCS client — agents ships only the `none` null c
 
 | Concern | Owner we plug into |
 |---|---|
-| Skill discovery from a repo | `integrate.Source` + `VCSIntegration.discover(source, marker, parse)` + `source_kind` output-model registration + `Manager.sync_from_source` |
-| Skill *sources* (the repos + typeahead) | `integrate` VCS console (`Source`/`Repository`/`VCSIntegration`, `searchRepositories`, `addRepository`, `refreshSource`) |
-| Inference provider over a vendor account | `integrate.Capability` (over `integrate.Integration`) + `iam.Credential` for the API key + `ImplClassField` for the backend impl (storage-backend pattern) |
+| Skill discovery from a repo | `integrate.Source` + `VcsBridge.discover(source, marker, parse)` + `source_kind` output-model registration + `Manager.sync_from_source` |
+| Skill *sources* (the repos + typeahead) | `integrate` VCS console (`Source`/`Repository`/`VcsBridge`, `searchRepositories`, `addRepository`, `refreshSource`) |
+| Inference provider over a vendor account | `agents.InferenceProvider` as an `integrate.Integration` MTI child + `integrate.Credential` for the API key + `ImplClassField` for the backend impl (storage-backend pattern) |
 | Model maker / branding | `integrate.Vendor` (already seeds anthropic/openai/google) as `InferenceModel.publisher` |
 | MCP auth secrets | `iam.Credential` (`STATIC_TOKEN`/`OAUTH`) |
 | Console / GraphQL | Strawberry `schemas` `console` bucket, `crud(...)`, `AngeeNode`, `ActionResult`, admin-gated by `iam.permissions.ADMIN_PERMISSION_CLASSES`; `@angee/base` DataPage + `@angee/sdk` `useAuthoredMutation` |
@@ -29,12 +29,12 @@ way `integrate_github` adds a VCS client — agents ships only the `none` null c
 
 ## Models (`agents`)
 
-- **`InferenceProvider(integrate.Capability)`** `ipr_` — concrete capability over an
+- **`InferenceProvider(integrate.Integration)`** `ipr_` — concrete MTI child over
   `Integration`. `name`, `base_url`, `backend_class` (`ImplClassField` →
   `InferenceBackend`, registry `ANGEE_INFERENCE_BACKEND_CLASSES`, default `manual`).
   `backend` property resolves the impl; `refresh_models()` upserts its models from
-  `backend.list_models()`. Credential drawn from `self.integration.credential`.
-  rebac `agents/inference_provider` (field-backed on `integration`).
+  `backend.list_models()`. Credential drawn from the inherited `credential` field.
+  rebac `agents/inference_provider` (field-backed on the MTI parent link).
 - **`InferenceModel`** `imd_` — `provider` FK (CASCADE), `publisher` FK →
   `integrate.Vendor` (null), `name` (wire handle), `display_name`, `description`,
   `model_use` (`InferenceModelUse`: chat/completion/embedding/multimodal/generation/
@@ -196,7 +196,7 @@ idempotency guard (refuse provisioning an agent that already holds a workspace);
 secret/auth predicate agreement (advertise `auth_mode`/`secret_name` only when a
 usable secret exists); find-the-owner (`InferenceProvider.credential`/
 `InferenceModel.credential` accessors — `Agent` no longer walks the
-model→provider→integration→credential chain); typed `_RenderPlan` dataclass (was a
+model→provider→credential chain); typed `_RenderPlan` dataclass (was a
 stringly-typed dict); dropped unearned daemon params (`name`/`purge`/explicit
 `start`); URL-encoded path segments; reconciled the `OperatorConfig`/`OperatorDaemon`/
 `mark_provisioned` docstrings to the server-orchestrated reality; failure-path test.
@@ -333,15 +333,15 @@ The rendered service is exactly right: `route:{port:3007,auth:forward}` (central
 **Template discovery — solved with a `local` VCS backend** (per the architect): the
 templates are in VCS, so `integrate.vcs.backend.LocalVCSBackend` (registered as `local`
 in `ANGEE_VCS_BACKEND_CLASSES`) inventories a working tree from
-`integration.config["local_root"]` — Django discovers the agent templates through the
-exact `VCSIntegration(local) → Source(kind=template) → TemplateManager.sync_from_source
+`VcsBridge.config["local_root"]` — Django discovers the agent templates through the
+exact `VcsBridge(local) → Source(kind=template) → TemplateManager.sync_from_source
 → Template` flow, no network. Unit-tested.
 
 ### Remaining to render end-to-end (Django → daemon)
 - **Stack restart** to load the new Django code (the `local` backend + the
   `resolve_template_ref` fix + the `LOCAL` enum). The template fixes are already live
   (the daemon reads `templates/` from the symlink).
-- **Seed the local template source**: a `VCSIntegration(backend_class="local",
+- **Seed the local template source**: a `VcsBridge(backend_class="local",
   config={"local_root": <repo>})` + `discoverRepositories` + a `kind=template` Source +
   `refreshSource` → `Template` rows (via the console/CLI, or a resources fixture for the
   example). Then an agent's `workspace_template`/`service_template` FKs point at them.

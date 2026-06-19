@@ -1,7 +1,7 @@
 """Tests for the VCS inventory flow — discover/import/search/refresh/sync.
 
 Uses the in-memory ``StubVCSBackend`` (registered as ``stub`` in the test
-``ANGEE_INTEGRATION_IMPLS``); canned host data rides on the integration config.
+``ANGEE_VCS_BACKEND_CLASSES``); canned host data rides on the VCS bridge config.
 REBAC-guarded reads run under ``system_context`` (writes already elevate
 themselves).
 """
@@ -70,14 +70,10 @@ def vcs_tables(transactional_db: Any) -> Iterator[None]:
                     schema_editor.delete_model(model)
 
 
-def _vcs_integration(slug: str, *, config: dict[str, Any], impl_class: str = "stub") -> Any:
-    """Create a VCS bridge whose host (or local) data rides on the integration config."""
+def _vcs_integration(slug: str, *, config: dict[str, Any], backend_class: str = "stub") -> Any:
+    """Create a VCS integration child whose host/local data rides on config."""
 
-    integration = make_integration(slug, impl_class=impl_class)
-    with system_context(reason="test vcs setup"):
-        integration.config = config
-        integration.save(update_fields=["config", "updated_at"])
-        return VcsBridge.objects.create(integration=integration)
+    return make_integration(slug, backend_class=backend_class, model=VcsBridge, config=config)
 
 
 def _repo_names() -> set[str]:
@@ -98,8 +94,8 @@ def test_discover_repositories_reconciles_and_prunes(vcs_tables: None) -> None:
     assert _repo_names() == {"acme/widgets", "acme/gadgets"}
 
     with system_context(reason="test"):
-        vcs.integration.config = {"stub_repos": REPOS[:1]}
-        vcs.integration.save(update_fields=["config", "updated_at"])
+        vcs.config = {"stub_repos": REPOS[:1]}
+        vcs.save(update_fields=["config", "updated_at"])
     vcs.discover_repositories()
     assert _repo_names() == {"acme/widgets"}
 
@@ -180,7 +176,7 @@ def test_local_backend_materializes_templates_through_the_source_flow(vcs_tables
     vcs = _vcs_integration(
         "local",
         config={"local_root": str(tmp_path), "local_name": "checkout"},
-        impl_class="local",
+        backend_class="local",
     )
 
     assert vcs.discover_repositories() == 1

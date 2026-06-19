@@ -1,12 +1,8 @@
-"""Inference implementation protocol and the bundled built-in backend.
+"""Inference backend protocol and the bundled built-in backend.
 
-An inference backend is an ``Integration`` implementation with an
-``InferenceProvider`` related model. A vendor backend (openai, anthropic, …) wraps an
-HTTP client and lists the provider's models live; it ships in its own addon and
-registers its key in ``ANGEE_INTEGRATION_IMPLS``. The bundled
-:class:`ManualInferenceBackend` is built in and uses no client — its catalogue is
-curated by hand. This module stays ORM-free; the backend reads its credential
-from the integration and endpoint from the provider related model it is bound to.
+An inference provider row selects one backend via ``backend_class``. Vendor backend
+addons (openai, anthropic, …) wrap official SDK clients and list models live; the
+built-in manual backend has no client and leaves the catalogue hand-curated.
 """
 
 from __future__ import annotations
@@ -15,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from angee.integrate.impl import IntegrationImpl
+from angee.base.impl import ImplBase
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,28 +75,25 @@ class InferenceResponse:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
-class InferenceBackend(IntegrationImpl):
-    """The strategy one inference integration resolves to.
+class InferenceBackend(ImplBase):
+    """The strategy one inference provider resolves to.
 
-    Subclasses read the API credential from ``integration.credential`` and the
-    endpoint from the ``provider`` related model's ``base_url``.
+    Subclasses read the API credential, endpoint, and config directly from the
+    provider row that selected them.
     """
 
     category = "inference"
-    related_model = "agents.InferenceProvider"
-    related_create_fields = ("name", "base_url", "config")
-    related_create_input_fields = {"config": "related_config"}
     label = "Inference"
     icon = "sparkles"
     defaults = {
+        "name": "Manual",
         "status": "draft",
     }
 
-    def __init__(self, integration: Any, related: Any | None = None) -> None:
-        """Bind this backend to its integration and provider related model."""
+    def __init__(self, provider: Any) -> None:
+        """Bind this backend to its provider row."""
 
-        super().__init__(integration, related)
-        self.provider = related
+        self.provider = provider
 
     def list_models(self) -> Sequence[InferenceModelSpec]:
         """Return the provider's advertised models for catalogue upsert."""
@@ -113,20 +106,6 @@ class InferenceBackend(IntegrationImpl):
         del request
         raise NotImplementedError("InferenceBackend subclasses must implement chat().")
 
-    @classmethod
-    def related_create_values(cls, integration: Any, values: dict[str, Any]) -> dict[str, Any]:
-        """Return inference-provider fields, defaulting the required display name."""
-
-        attrs = super().related_create_values(integration, values)
-        name = str(attrs.get("name") or "").strip()
-        if not name:
-            vendor = getattr(integration, "vendor", None)
-            vendor_label = str(getattr(vendor, "display_name", "") or getattr(vendor, "slug", "") or "").strip()
-            name = f"{vendor_label} {cls.label}".strip() or cls.label
-            attrs["name"] = name
-        return attrs
-
-
 class ManualInferenceBackend(InferenceBackend):
     """Built-in backend with no client — its catalogue is curated by hand.
 
@@ -135,9 +114,8 @@ class ManualInferenceBackend(InferenceBackend):
     backend addon supplies the live-listing alternative.
     """
 
-    # Vendor-neutral: a base addon never pins a product OAuth client. The connect
-    # flow falls back to the integration's vendor slug
-    # (see ``_oauth_client_for_integration``); a vendor backend addon sets its own.
+    # Vendor-neutral: a base addon never pins a product OAuth client. Provider
+    # connect is available only when a vendor backend addon sets this slug.
     key = "manual"
     label = "Manual inference"
     oauth_client = ""

@@ -4,16 +4,16 @@ This addon owns the integration layer end to end. The connection substrate — t
 ``OAuthClient`` registration, the user's ``ExternalAccount`` at a provider, and the
 per-user ``Credential`` material — authenticates everything above it. On top of
 that sit the third-party ``Vendor`` catalogue, the first-class ``Integration``
-an integration runs over, optional related rows (``VcsBridge``,
-``agents.InferenceProvider``), the host-agnostic VCS inventory
-(``VcsBridge`` + ``Repository``/``Source``/``Template``), and outbound
-``WebhookSubscription``.
+an integration runs over, concrete child integration kinds such as ``VcsBridge``,
+addon-owned children such as ``agents.InferenceProvider``, the
+host-agnostic VCS inventory (``VcsBridge`` + ``Repository``/``Source``/
+``Template``), and outbound ``WebhookSubscription``.
 
 This addon is pure OAuth: it connects *out* to external systems and never
 authenticates a session. OIDC login fields and ID-token verification live one
 level up in ``iam_integrate_oidc``, which extends this OAuth base and composes the
 ``iam`` user. Host-specific VCS backends live in their own addons
-(``integrate_github``) and are named per ``Integration.impl_class`` row; this
+(``integrate_github``) and are named per ``VcsBridge.backend_class`` row; this
 addon never imports them.
 """
 
@@ -1086,29 +1086,6 @@ class IntegrationStatus(models.TextChoices):
 class IntegrationManager(AngeeManager):
     """Manager factories for invariants that span Integration and its impl row."""
 
-    def create_with_impl(
-        self,
-        *,
-        related_input: Any | None = None,
-        related_unset: Any = None,
-        **attrs: Any,
-    ) -> Any:
-        """Create an integration and its implementation-owned related row atomically."""
-
-        field = cast(ImplClassField, self.model._meta.get_field("impl_class"))
-        impl_key = field.key_for(attrs.get("impl_class") or "none") or "none"
-        attrs["impl_class"] = impl_key
-        impl_class = cast(type[IntegrationImpl], field.resolve_class(impl_key))
-        with transaction.atomic():
-            integration = self.create(**attrs)
-            related_values = (
-                {}
-                if related_input is None
-                else impl_class.related_create_values_from_input(integration, related_input, unset=related_unset)
-            )
-            impl_class.create_related_row(integration, related_values)
-        return integration
-
     def impl_class_for_key(self, key: str) -> type[IntegrationImpl]:
         """Return the implementation class registered for ``key`` on this model."""
 
@@ -1122,8 +1099,8 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
     The first-class "what we're connected to and what runs over it": it draws a
     ``credential`` (and optionally an ``account``) from the connection substrate to
     authenticate, points at a catalogue ``vendor``, and stores the implementation
-    key that owns its behavior. Implementations that need extra persisted fields
-    attach one optional one-to-one related row.
+    key that owns integration-level behavior. Domain-specific state and config live
+    on concrete child models.
     """
 
     runtime = True
@@ -1155,8 +1132,6 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
         related_name="integrations",
     )
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="integrations")
-    config = models.JSONField(default=dict, blank=True)
-    """Integration-scoped settings (endpoints, options)."""
     status = StateField(choices_enum=IntegrationStatus, default=IntegrationStatus.DRAFT)
     last_used_at = models.DateTimeField(null=True, blank=True)
     last_used_status = models.CharField(max_length=64, blank=True)
@@ -1174,14 +1149,6 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
         ordering = ("-updated_at",)
         rebac_resource_type = "integrate/integration"
         rebac_id_attr = "sqid"
-        constraints = (
-            # One integration per (owner, vendor, implementation kind). A
-            # credential can be attached later, so it cannot identify the row.
-            models.UniqueConstraint(
-                fields=("owner", "vendor", "impl_class"),
-                name="uniq_integrate_integration_owner_vendor_impl",
-            ),
-        )
 
     def __str__(self) -> str:
         """Return a stable vendor-qualified integration label."""
@@ -1189,52 +1156,13 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
         vendor_slug = getattr(getattr(self, "vendor", None), "slug", "?")
         return f"{vendor_slug}:{self.public_id}"
 
-    # ``config`` key the self-service credential handoff stores the env var name
-    # under; rendered-service consumers read it back via ``credential_env_value``.
-    CREDENTIAL_ENV_CONFIG_KEY = "credential_env"
-
-    def set_credential_env(self, env_name: str) -> None:
-        """Record (or clear) the env var name the credential secret is exposed under.
-
-        The integration owns this ``config`` key: callers pass the operator's
-        chosen name and persist the row, rather than poking ``config`` directly.
-        """
-
-        config = dict(self.config or {})
-        env_name = env_name.strip()
-        if env_name:
-            config[self.CREDENTIAL_ENV_CONFIG_KEY] = env_name
-        else:
-            config.pop(self.CREDENTIAL_ENV_CONFIG_KEY, None)
-        self.config = config
-
-    def credential_env_value(self) -> dict[str, str]:
-        """Return the ``{env_name: secret}`` this integration exposes to services, or ``{}``.
-
-        Owns the projection of its own ``config`` key and ``credential`` secret so
-        callers (e.g. ``agents.InferenceProvider.service_environment``) never decode
-        the config shape or read the credential from outside.
-        """
-
-        config = self.config if isinstance(self.config, dict) else {}
-        env_name = str(config.get(self.CREDENTIAL_ENV_CONFIG_KEY) or "").strip()
-        if not env_name:
-            return {}
-        credential = getattr(self, "credential", None)
-        if credential is None:
-            return {}
-        secret = str(credential.secret_value() or "")
-        if not secret:
-            return {}
-        return {env_name: secret}
-
     @property
     def impl(self) -> IntegrationImpl:
-        """Return this row's implementation bound to its declared related model."""
+        """Return this row's integration-level implementation."""
 
         field = cast(ImplClassField, type(self)._meta.get_field("impl_class"))
         impl_class = cast(type[IntegrationImpl], field.resolve_class(self.impl_class))
-        return impl_class(self, impl_class.related_row(self))
+        return impl_class(self)
 
     def attach_credential(self, credential: Any) -> None:
         """Attach a live credential and activate this draft integration."""
@@ -1275,30 +1203,17 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
             )
 
 
-class IntegrationMixin(SqidMixin, AuditMixin, AngeeModel):
-    """Abstract base for optional one-to-one integration related models."""
+class Bridge(AngeeModel):
+    """Abstract base for child models that synchronize or subscribe to vendor data.
 
-    # The field owner declares the reverse accessor; ``Integration.impl`` asks
-    # Django relation metadata for the concrete name.
-    integration = models.OneToOneField(
-        "integrate.Integration",
-        on_delete=models.CASCADE,
-        related_name="%(app_label)s_%(class)s",
-    )
-
-    class Meta:
-        """Django model options for abstract related-model inheritance."""
-
-        abstract = True
-
-
-class Bridge(IntegrationMixin):
-    """Abstract base for related models that synchronize or subscribe to vendor data.
-
-    Another pure base: a domain bridge that materializes declares
-    ``runtime = True`` on that class.
+    Pure bridge state and behavior. A materialized bridge extends
+    ``integrate.Integration`` so common identity, credential, status, and audit
+    fields stay on the integration parent row while bridge-specific settings stay
+    on the child.
     """
 
+    config = models.JSONField(default=dict, blank=True)
+    """Bridge-scoped settings used by the selected VCS backend."""
     cursor = models.JSONField(default=dict, blank=True)
     poll_interval = models.PositiveIntegerField(default=300)
     subscription_state = models.JSONField(default=dict, blank=True)
@@ -1329,7 +1244,7 @@ class Bridge(IntegrationMixin):
         self.last_sync_items = result
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
-            self.integration.report_status(status=IntegrationStatus.ACTIVE)
+            cast(Any, self).report_status(status=IntegrationStatus.ACTIVE)
             self.save(
                 update_fields=[
                     "cursor",
@@ -1348,7 +1263,7 @@ class Bridge(IntegrationMixin):
         self.last_sync_status = "error"
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
-            self.integration.report_status(status=IntegrationStatus.ERROR, error=error_message)
+            cast(Any, self).report_status(status=IntegrationStatus.ERROR, error=error_message)
             self.save(
                 update_fields=[
                     "last_sync_status",
@@ -1405,11 +1320,11 @@ class RepoVisibility(models.TextChoices):
 
 
 class VcsBridge(Bridge):
-    """The VCS sync related model over an ``Integration``.
+    """The VCS sync child model over ``Integration``.
 
     A :class:`Bridge`: the scheduler refreshes its repositories' sources over the
     host REST API and an inbound push webhook triggers the same refresh. The
-    host-specific wire format is the integration's non-model
+    host-specific wire format is the integration child row's non-model
     :class:`~angee.integrate.vcs.backend.VCSBackend` implementation — so
     github/gitlab/bitbucket share this one table, differing only in behavior.
     Django keeps the inventory only; the operator performs every git operation,
@@ -1417,15 +1332,21 @@ class VcsBridge(Bridge):
     """
 
     runtime = True
+    extends = "integrate.Integration"
 
-    sqid = SqidField(real_field_name="id", prefix="vcs", min_length=8)
+    backend_class = ImplClassField(
+        base_class=VCSBackend,
+        registry_setting="ANGEE_VCS_BACKEND_CLASSES",
+        default="local",
+    )
+    """Registry key for the VCS backend bound to this bridge."""
     webhook_secret = EncryptedField(blank=True)
     """Shared secret for verifying inbound push webhooks (per account, not per repo)."""
 
     objects = RebacManager()
 
     class Meta:
-        """Django model options for the VCS bridge related model."""
+        """Django model options for the VCS bridge child model."""
 
         abstract = True
         rebac_resource_type = "integrate/vcs_integration"
@@ -1437,16 +1358,25 @@ class VcsBridge(Bridge):
         return f"vcs:{self.public_id}"
 
     @property
-    def impl(self) -> VCSBackend:
-        """Return the host backend bound to this bridge's integration."""
+    def backend(self) -> VCSBackend:
+        """Return this bridge's selected VCS backend."""
 
-        return cast(VCSBackend, self.integration.impl)
+        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
+        backend_class = cast(type[VCSBackend], field.resolve_class(self.backend_class))
+        return backend_class(self)
+
+    def materialize_backend_defaults(self, *, provided: frozenset[str] = frozenset()) -> None:
+        """Apply this VCS backend's defaults to every unprovided bridge field."""
+
+        field = cast(ImplClassField, type(self)._meta.get_field("backend_class"))
+        backend_class = cast(type[VCSBackend], field.resolve_class(self.backend_class))
+        backend_class.materialize(self, provided=provided | {"backend_class"})
 
     def repositories_by_org(self) -> dict[str, list[Any]]:
         """Return every visible repository grouped and sorted by owning org."""
 
         groups: dict[str, list[Any]] = {}
-        for descriptor in self.impl.ls_repos():
+        for descriptor in self.backend.ls_repos():
             groups.setdefault(descriptor.org, []).append(descriptor)
         return {org: sorted(repos, key=lambda item: item.name) for org, repos in sorted(groups.items())}
 
@@ -1459,7 +1389,7 @@ class VcsBridge(Bridge):
         manager supplies only its ``marker`` filename and ``parse`` function.
         """
 
-        backend = self.impl
+        backend = self.backend
         repository = source.repository
         ref = source.ref or repository.default_branch
         descriptors: list[dict[str, Any]] = []
@@ -1490,29 +1420,29 @@ class VcsBridge(Bridge):
     def verify_webhook(self, request: Any) -> bool:
         """Return whether an inbound push webhook is authentic for this integration."""
 
-        return self.impl.verify_webhook(self, request)
+        return self.backend.verify_webhook(self, request)
 
     def search_repositories(self, query: str) -> list[Any]:
         """Return host repositories whose name matches ``query`` (the add typeahead)."""
 
-        return self.impl.search_repos(query, org=self._search_scope())
+        return self.backend.search_repos(query, org=self._search_scope())
 
     def import_repository(self, name: str) -> Any:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.add(self, self.impl.get_repo(name))
+        return repository_model.objects.add(self, self.backend.get_repo(name))
 
     def discover_repositories(self, *, org: str = "") -> int:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
         repository_model = apps.get_model("integrate", "Repository")
-        return repository_model.objects.reconcile(self, self.impl.ls_repos(org=org))
+        return repository_model.objects.reconcile(self, self.backend.ls_repos(org=org))
 
     def _search_scope(self) -> str:
         """Return the org/user the typeahead search scopes to (from ``config.github_org``)."""
 
-        return str(self.integration.config.get("github_org") or "")
+        return str(cast(Any, self).config.get("github_org") or "")
 
 
 class RepositoryManager(RebacManager):

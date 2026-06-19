@@ -151,12 +151,13 @@ def test_runtime_emits_only_models_marked_runtime(tmp_path: Path) -> None:
     assert "class SkippedRuntimeThing" not in source
 
 
-def test_runtime_rejects_materialized_extensions(tmp_path: Path) -> None:
-    """Extensions use ``extends`` and must not also declare ``runtime = True``."""
+def test_runtime_renders_materialized_child_extension(tmp_path: Path) -> None:
+    """``extends`` + ``runtime = True`` emits a concrete MTI child model."""
 
-    class BadExtension(AngeeModel):
+    class RuntimeChild(AngeeModel):
         runtime = True
         extends = "tests.DecoratedRevisionThing"
+        child_value = models.CharField(max_length=16)
 
         class Meta:
             abstract = True
@@ -166,11 +167,73 @@ def test_runtime_rejects_materialized_extensions(tmp_path: Path) -> None:
         label="tests",
         name=__name__,
         module=sys.modules[__name__],
-        models_module=SimpleNamespace(BadExtension=BadExtension),
+        models_module=SimpleNamespace(
+            DecoratedRevisionThing=DecoratedRevisionThing,
+            RuntimeChild=RuntimeChild,
+        ),
     )
 
-    with pytest.raises(ImproperlyConfigured, match="runtime = True and extends"):
-        Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("tests/models.py")]
+
+    assert "from runtime.tests.models import DecoratedRevisionThing" not in source
+    assert "class DecoratedRevisionThing(AbstractDecoratedRevisionThing):" in source
+    assert "class RuntimeChild(DecoratedRevisionThing, AbstractRuntimeChild):" in source
+
+
+def test_runtime_renders_materialized_child_extension_across_apps(tmp_path: Path) -> None:
+    """Materialized children import the generated parent from the target runtime app."""
+
+    target_module = ModuleType("tests.target.models")
+    child_module = ModuleType("tests.child.models")
+    TargetRuntime = type(
+        "TargetRuntime",
+        (AngeeModel,),
+        {
+            "__module__": target_module.__name__,
+            "runtime": True,
+            "name": models.CharField(max_length=32),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "target"}),
+        },
+    )
+    RuntimeChild = type(
+        "RuntimeChild",
+        (AngeeModel,),
+        {
+            "__module__": child_module.__name__,
+            "runtime": True,
+            "extends": "target.TargetRuntime",
+            "child_value": models.CharField(max_length=16),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "child"}),
+        },
+    )
+    target_module.TargetRuntime = TargetRuntime
+    child_module.RuntimeChild = RuntimeChild
+
+    runtime = Runtime(
+        (
+            SimpleNamespace(
+                label="target",
+                name="tests.target",
+                module=ModuleType("tests.target"),
+                models_module=target_module,
+            ),
+            SimpleNamespace(
+                label="child",
+                name="tests.child",
+                module=ModuleType("tests.child"),
+                models_module=child_module,
+            ),
+        ),
+        runtime_dir=tmp_path / "runtime",
+    )
+
+    sources = runtime.render_sources()
+    child_source = sources[Path("child/models.py")]
+
+    assert "from runtime.target.models import TargetRuntime as TargetRuntime" in child_source
+    assert "from tests.child.models import RuntimeChild as AbstractRuntimeChild" in child_source
+    assert "class RuntimeChild(TargetRuntime, AbstractRuntimeChild):" in child_source
+    assert "class TargetRuntime(AbstractTargetRuntime):" in sources[Path("target/models.py")]
 
 
 def test_runtime_rejects_mismatched_runtime_model_label(tmp_path: Path) -> None:

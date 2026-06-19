@@ -76,7 +76,7 @@ definition integrate/webhook_subscription {
 }
 
 definition integrate/vcs_integration {
-    relation integration: integrate/integration // rebac:field=integration
+    relation integration: integrate/integration // rebac:field=integration_ptr
     relation admin: angee/role // rebac:const=admin
 
     permission create = admin->member

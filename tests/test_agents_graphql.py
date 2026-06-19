@@ -38,13 +38,16 @@ from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
     Credential,
+    Integration,
+    OAuthClient,
     SchemaAddon,
+    Vendor,
     execute_schema,
     make_integration,
 )
 from tests.conftest import _create_missing_tables as _create_tables
 from tests.conftest import result_data as _data
-from tests.test_agents import InferenceModel, InferenceProvider, Skill
+from tests.test_agents import InferenceModel, InferenceProvider, Skill, _provider
 from tests.test_integrate_vcs import REPOS, VCS_TEST_MODELS, Repository, Source, Template, _vcs_integration
 
 User = get_user_model()
@@ -182,9 +185,7 @@ def test_refresh_provider_models_is_admin_gated(agents_console_tables: None) -> 
 
     admin = _platform_admin("agt-refresh-admin")
     plain = User.objects.create_user(username="agt-refresh-plain", email="plain@example.com")
-    integration = make_integration("agt-refresh", impl_class="manual")
-    with system_context(reason="test.agents.refresh.seed"):
-        provider = InferenceProvider.objects.create(integration=integration, name="P")
+    provider = _provider("agt-refresh", name="P")
     provider_id = _gid("InferenceProviderType", provider.sqid)
     query = "mutation($id: ID!){ refreshProviderModels(id: $id){ ok message } }"
 
@@ -197,11 +198,9 @@ def test_inference_models_query_accepts_provider_id_filter(agents_console_tables
     """The model catalogue list supports toolbar provider facet filters."""
 
     admin = _platform_admin("agt-model-filter-admin")
-    integration_a = make_integration("agt-model-filter-a", impl_class="manual")
-    integration_b = make_integration("agt-model-filter-b", impl_class="manual")
+    provider_a = _provider("agt-model-filter-a", name="Anthropic")
+    provider_b = _provider("agt-model-filter-b", name="Manual")
     with system_context(reason="test.agents.model_filter.seed"):
-        provider_a = InferenceProvider.objects.create(integration=integration_a, name="Anthropic")
-        provider_b = InferenceProvider.objects.create(integration=integration_b, name="Manual")
         InferenceModel.objects.create(provider=provider_a, name="claude-sonnet-4-6")
         InferenceModel.objects.create(provider=provider_a, name="claude-opus-4-8")
         InferenceModel.objects.create(provider=provider_b, name="manual-model")
@@ -236,11 +235,9 @@ def test_inference_model_groups_aggregate_runs_for_provider_and_capability(
     """The model catalogue exposes grouped buckets for list/board views."""
 
     admin = _platform_admin("agt-model-groups-admin")
-    integration_a = make_integration("agt-model-groups-a", impl_class="manual")
-    integration_b = make_integration("agt-model-groups-b", impl_class="manual")
+    provider_a = _provider("agt-model-groups-a", name="Anthropic")
+    provider_b = _provider("agt-model-groups-b", name="Manual")
     with system_context(reason="test.agents.model_groups.seed"):
-        provider_a = InferenceProvider.objects.create(integration=integration_a, name="Anthropic")
-        provider_b = InferenceProvider.objects.create(integration=integration_b, name="Manual")
         InferenceModel.objects.create(provider=provider_a, name="claude-sonnet-4-6", model_use="chat")
         InferenceModel.objects.create(provider=provider_a, name="claude-embed-4-6", model_use="embedding")
         InferenceModel.objects.create(provider=provider_b, name="manual-model", model_use="chat")
@@ -289,49 +286,143 @@ def test_inference_model_groups_aggregate_runs_for_provider_and_capability(
     assert provider_filters == {provider_a.pk, provider_b.pk}
 
 
-def test_create_inference_provider_requires_inference_impl(agents_console_tables: None) -> None:
-    """InferenceProvider create is guarded by the owning Integration impl class."""
+def test_create_inference_provider_creates_child_row(agents_console_tables: None) -> None:
+    """InferenceProvider create writes the provider child row directly."""
 
     admin = _platform_admin("agt-provider-create-admin")
-    none_integration = make_integration("agt-provider-none")
-    vcs_integration = make_integration("agt-provider-vcs", impl_class="stub")
-    manual_integration = make_integration("agt-provider-manual", impl_class="manual")
+    seed = make_integration("agt-provider-manual")
     console = _schema()
     mutation = """
-        mutation CreateProvider($integration: ID!) {
+        mutation CreateProvider($vendor: ID!, $owner: ID!) {
           createInferenceProvider(
-            data: {integration: $integration, name: "Provider", baseUrl: "https://api.example.test"}
+            data: {
+              vendor: $vendor
+              owner: $owner
+              backendClass: "manual"
+              name: "Provider"
+              baseUrl: "https://api.example.test"
+              credentialEnv: "MODEL_API_KEY"
+            }
           ) {
             name
             baseUrl
-            integration { implClass }
+            backendClass
+            credentialEnv
+            status
           }
         }
     """
-
-    for integration in (none_integration, vcs_integration):
-        denied = _execute(
-            console,
-            mutation,
-            {"integration": _gid("IntegrationType", integration.sqid)},
-            user=admin,
-        )
-        assert denied.errors is not None
-        assert "does not use an inference implementation" in denied.errors[0].message
 
     created = _data(
         _execute(
             console,
             mutation,
-            {"integration": _gid("IntegrationType", manual_integration.sqid)},
+            {
+                "vendor": _gid("VendorType", seed.vendor.sqid),
+                "owner": relay.to_base64("UserType", str(seed.owner.pk)),
+            },
             user=admin,
         )
     )["createInferenceProvider"]
     assert created == {
         "name": "Provider",
         "baseUrl": "https://api.example.test",
-        "integration": {"implClass": "MANUAL"},
+        "backendClass": "MANUAL",
+        "credentialEnv": "MODEL_API_KEY",
+        "status": "DRAFT",
     }
+    with system_context(reason="test.agents.provider_mti.verify"):
+        provider = InferenceProvider.objects.get(name="Provider")
+        integration = Integration.objects.get(pk=provider.pk)
+        assert provider.owner_id == integration.owner_id
+        assert provider.vendor_id == integration.vendor_id
+        assert provider.backend_class == "manual"
+
+
+def test_update_inference_provider_backend_rematerializes_defaults(agents_console_tables: None) -> None:
+    """Changing a provider backend applies the new backend defaults on the owner row."""
+
+    admin = _platform_admin("agt-provider-update-admin")
+    with system_context(reason="test.agents.provider_update.seed"):
+        anthropic = Vendor.objects.create(slug="anthropic", display_name="Anthropic")
+    provider = _provider(
+        "agt-provider-update",
+        backend_class="manual",
+        name="Custom",
+        credential_env="CUSTOM_KEY",
+    )
+    mutation = """
+        mutation UpdateProvider($id: ID!) {
+          updateInferenceProvider(data: {id: $id, backendClass: "anthropic"}) {
+            backendClass
+            name
+            credentialEnv
+            vendor { slug }
+          }
+        }
+    """
+
+    updated = _data(
+        _execute(
+            _schema(),
+            mutation,
+            {"id": _gid("InferenceProviderType", provider.sqid)},
+            user=admin,
+        )
+    )["updateInferenceProvider"]
+
+    assert updated == {
+        "backendClass": "ANTHROPIC",
+        "name": "Anthropic",
+        "credentialEnv": "ANTHROPIC_API_KEY",
+        "vendor": {"slug": "anthropic"},
+    }
+    provider.refresh_from_db()
+    assert provider.vendor_id == anthropic.pk
+
+
+def test_connect_inference_provider_uses_provider_backend_oauth_client(agents_console_tables: None) -> None:
+    """Provider connect resolves OAuth from provider.backend, not Integration.impl."""
+
+    del agents_console_tables
+    provider = _provider("agt-provider-connect", backend_class="anthropic", name="Anthropic")
+    provider_id = _gid("InferenceProviderType", provider.sqid)
+    with system_context(reason="test.agents.provider_connect.seed"):
+        oauth_client = OAuthClient.objects.create(
+            slug="anthropic-personal",
+            display_name="Anthropic Personal",
+            client_id="anthropic-client",
+        )
+        credential = Credential.objects.upsert_for_user(
+            provider.owner,
+            oauth_client,
+            CredentialKind.OAUTH,
+            {"access_token": "anthropic-token"},
+        )
+    mutation = """
+        mutation ConnectProvider($id: ID!) {
+          connectInferenceProvider(id: $id) {
+            attached
+            error
+            integration { status credential { displayName } }
+          }
+        }
+    """
+
+    result = _data(_execute(_schema(), mutation, {"id": provider_id}, user=provider.owner))[
+        "connectInferenceProvider"
+    ]
+
+    assert result == {
+        "attached": True,
+        "error": None,
+        "integration": {
+            "status": "ACTIVE",
+            "credential": {"displayName": "Anthropic Personal"},
+        },
+    }
+    provider.refresh_from_db()
+    assert provider.credential_id == credential.pk
 
 
 def test_create_mcp_server_keeps_defaults_for_omitted_optionals(agents_console_tables: None) -> None:
@@ -363,7 +454,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
 
     admin = _platform_admin("agt-render-admin")
     plain = User.objects.create_user(username="agt-render-plain", email="render@example.com")
-    integration = make_integration("agt-render", impl_class="manual")
+    provider = _provider("agt-render", name="P")
     vcs = _vcs_integration("agt-render-tpl", config={"stub_repos": REPOS})
     vcs.discover_repositories()
     with system_context(reason="test.agents.render.seed"):
@@ -376,7 +467,7 @@ def test_provision_agent_renders_via_daemon_and_is_admin_gated(agents_console_ta
             source=source, kind="service", name="claude-code", path="services/claude-code"
         )
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P"),
+            provider=provider,
             name="claude-opus-4-8",
         )
         agent = Agent.objects.create(
@@ -761,10 +852,10 @@ def test_provision_agent_refuses_when_inference_credential_has_no_secret(
     """
 
     admin = _platform_admin("agt-nokey-admin")
-    integration = make_integration("agt-nokey", material={"api_key": ""}, impl_class="manual")
+    provider = _provider("agt-nokey", material={"api_key": ""}, name="P")
     with system_context(reason="test.agents.nokey.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P"),
+            provider=provider,
             name="claude-opus-4-8",
         )
     agent = _provisionable_agent(admin, "NoKey", slug="agt-nokey-tpl", model=model)
@@ -807,11 +898,11 @@ def test_agent_inference_credential_override_wins_over_model_chain(agents_consol
     """
 
     owner = User.objects.create_user(username="agt-ov-owner", email="ov@example.com")
-    model_integration = make_integration("agt-ov-model", material={"api_key": ""}, impl_class="manual")
-    oauth_integration = make_integration("agt-ov-oauth", kind=CredentialKind.OAUTH, impl_class="manual")
+    provider = _provider("agt-ov-model", material={"api_key": ""}, name="P")
+    oauth_integration = make_integration("agt-ov-oauth", kind=CredentialKind.OAUTH)
     with system_context(reason="test.agents.override.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=model_integration, name="P"),
+            provider=provider,
             name="claude-opus-4-8",
         )
         # Without an override the model's empty placeholder credential is unusable.
@@ -842,10 +933,10 @@ def test_agent_chat_endpoint_mints_route_token_and_is_admin_gated(
 
     admin = _platform_admin("agt-chat-admin")
     plain = User.objects.create_user(username="agt-chat-plain", email="chat@example.com")
-    integration = make_integration("agt-chat-provider", impl_class="manual")
+    provider = _provider("agt-chat-provider", name="P")
     with system_context(reason="test.agents.chat.seed"):
         model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=integration, name="P"),
+            provider=provider,
             name="claude-opus-4-8",
         )
         agent = Agent.objects.create(name="Chatty", owner=admin, service="svc-chat", model=model)
@@ -1110,18 +1201,18 @@ def test_provision_service_inputs_credential_drives_auth_mode(agents_console_tab
     """The credential kind picks the auth mode (prefer OAuth) and the model rides along."""
 
     owner = User.objects.create_user(username="agt-svci-owner", email="svci@example.com")
-    static_integration = make_integration("agt-svc-static", impl_class="manual")
-    oauth_integration = make_integration("agt-svc-oauth", kind=CredentialKind.OAUTH, impl_class="manual")
+    static_provider = _provider("agt-svc-static", name="S")
+    oauth_provider = _provider("agt-svc-oauth", kind=CredentialKind.OAUTH, name="O")
     with system_context(reason="test.agents.provision_inputs.service"):
         static_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=static_integration, name="S"),
+            provider=static_provider,
             name="claude-3",
         )
         static_agent = Agent.objects.create(name="Static", owner=owner, model=static_model)
         static_inputs = static_agent.provision_service_inputs()
 
         oauth_model = InferenceModel.objects.create(
-            provider=InferenceProvider.objects.create(integration=oauth_integration, name="O"),
+            provider=oauth_provider,
             name="claude-opus-4-8",
         )
         oauth_agent = Agent.objects.create(name="OAuth", owner=owner, model=oauth_model)

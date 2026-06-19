@@ -10,12 +10,15 @@ import {
   GroupListView,
   List,
   useEnumOptions,
+  useImplPrefill,
   type DataToolbarFilterOption,
   type DataToolbarGroupOption,
 } from "@angee/base";
-import { useActionMutation, useResourceList } from "@angee/sdk";
+import { canConnectRecord, ConnectOAuthButton } from "@angee/integrate";
+import { useActionMutation, useAuthoredMutation, useResourceList, type Row } from "@angee/sdk";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
+import { ConnectInferenceProvider } from "../documents";
 import { useAgentsT } from "../i18n";
 
 const PROVIDER_MODEL = "agents.InferenceProvider";
@@ -24,6 +27,8 @@ const MODEL_MODEL = "agents.InferenceModel";
 export function InferenceProvidersPage(): React.ReactElement {
   const t = useAgentsT();
   const [refreshProviderModels] = useActionMutation<ActionFieldName>("refreshProviderModels");
+  const backendClassOptions = useEnumOptions(PROVIDER_MODEL, "backendClass");
+  const backendClassPrefill = useImplPrefill(PROVIDER_MODEL, "backendClass");
 
   const refreshModels = React.useCallback(
     async (ctx: ActionContext) => {
@@ -36,23 +41,75 @@ export function InferenceProvidersPage(): React.ReactElement {
   );
 
   return (
-    <DataPage model={PROVIDER_MODEL} placement="inline" routed>
+    <DataPage
+      model={PROVIDER_MODEL}
+      placement="inline"
+      routed
+      cardActions={(row, context) =>
+        canConnectProvider(row) ? <ProviderConnectButton row={row} refresh={context.refresh} /> : null
+      }
+    >
       <List model={PROVIDER_MODEL}>
         <Column field="name" />
-        <Column field="integration.implLabel" header="Implementation" />
-        <Column field="integration.status" header="Status" widget="statusBadge" />
+        <Column field="backendClass" />
+        <Column field="status" widget="statusBadge" />
+        <Column field="credential.displayName" header={t("agents.inference.credential")} />
       </List>
       <Form model={PROVIDER_MODEL}>
         <Field name="name" title />
-        <Field name="integration" createOnly />
         <Group label={t("agents.inference.backend")} columns={2}>
+          <Field name="owner" />
+          <Field
+            name="backendClass"
+            widget="select"
+            options={backendClassOptions}
+            prefill={backendClassPrefill}
+          />
+          <Field name="vendor" />
+          <Field name="credential" />
+          <Field name="account" />
+          <Field name="status" widget="statusbar" />
+        </Group>
+        <Group label={t("agents.inference.provider")} columns={2}>
           <Field name="baseUrl" />
+          <Field name="credentialEnv" />
         </Group>
         <Field name="config" widget="json" />
         <Action id="refresh-models" label={t("agents.inference.refreshModels")} icon="refresh" run={refreshModels} />
       </Form>
     </DataPage>
   );
+}
+
+function ProviderConnectButton({
+  row,
+  refresh,
+}: {
+  row: Row;
+  refresh: () => void;
+}): React.ReactElement | null {
+  const t = useAgentsT();
+  const [connectProvider] = useAuthoredMutation(ConnectInferenceProvider);
+  const id = typeof row.id === "string" ? row.id : "";
+  if (!id) return null;
+
+  return (
+    <ConnectOAuthButton
+      label={t("agents.inference.connect.action")}
+      connectedTitle={t("agents.inference.connect.connected")}
+      startErrorTitle={t("agents.inference.connect.startError")}
+      next="/agents/providers"
+      onConnected={refresh}
+      start={async ({ redirectUri, next }) => {
+        const result = await connectProvider({ id, redirectUri, next });
+        return result?.connectInferenceProvider;
+      }}
+    />
+  );
+}
+
+function canConnectProvider(row: Row): boolean {
+  return canConnectRecord(row);
 }
 
 export function InferenceModelsPage(): React.ReactElement {

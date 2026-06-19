@@ -44,15 +44,11 @@ class NotesConfig(AppConfig):
             },
             "resources/demo/081_integrate.vendor.yaml",
             {
-                "path": "resources/demo/082_integrate.integration.yaml",
+                "path": "resources/demo/083_integrate.vcsbridge.yaml",
                 "depends_on": (
                     "resources/demo/080_integrate.credential.yaml",
                     "resources/demo/081_integrate.vendor.yaml",
                 ),
-            },
-            {
-                "path": "resources/demo/083_integrate.vcsbridge.yaml",
-                "depends_on": "resources/demo/082_integrate.integration.yaml",
             },
             {
                 "path": "resources/demo/084_integrate.repository.yaml",

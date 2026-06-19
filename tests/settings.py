@@ -34,8 +34,12 @@ ANGEE_RUNTIME_MODULE = "tests.runtime"
 ANGEE_STORAGE_BACKEND_CLASSES = {"local": "angee.storage.backends.LocalBackend"}
 ANGEE_INTEGRATION_IMPLS = {
     "none": "angee.integrate.impl.NullIntegrationImpl",
+}
+ANGEE_VCS_BACKEND_CLASSES = {
     "local": "angee.integrate.vcs.backend.LocalVCSBackend",
     "stub": "tests.conftest.StubVCSBackend",
+}
+ANGEE_INFERENCE_BACKEND_CLASSES = {
     "manual": "angee.agents.backends.ManualInferenceBackend",
     "anthropic": "angee.agents_integrate_anthropic.backend.AnthropicInferenceBackend",
     "openai": "angee.agents_integrate_openai.backend.OpenAIInferenceBackend",

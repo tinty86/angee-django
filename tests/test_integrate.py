@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from django.db import models
 
-from angee.integrate.impl import IntegrationImpl
-from angee.integrate.models import Bridge, IntegrationMixin, IntegrationStatus
+from angee.integrate.models import Bridge, IntegrationStatus
 from tests.conftest import Integration
 
 
-class ConcreteBridge(Bridge):
+class ConcreteBridge(Integration, Bridge):
     """Concrete bridge used only to inspect inherited field declarations."""
 
     class Meta(Bridge.Meta):
@@ -22,37 +21,11 @@ class ConcreteBridge(Bridge):
         rebac_id_attr = "sqid"
 
 
-class RenamedRelated(models.Model):
-    """Related model whose reverse accessor intentionally breaks the default pattern."""
-
-    integration = models.OneToOneField(
-        Integration,
-        on_delete=models.CASCADE,
-        related_name="renamed_related",
-    )
-
-    class Meta:
-        """Django model options for the reverse-accessor test double."""
-
-        app_label = "tests"
-
-
-class RenamedRelatedImpl(IntegrationImpl):
-    """Implementation that returns a model object directly for accessor tests."""
-
-    @classmethod
-    def related_model_class(cls) -> type[models.Model]:
-        """Return the related model under test."""
-
-        return RenamedRelated
-
-
 def test_integrate_bases_are_abstract() -> None:
-    """IntegrationMixin and Bridge are abstract inheritance bases only."""
+    """Bridge is an abstract inheritance base only."""
 
-    assert IntegrationMixin._meta.abstract is True
     assert Bridge._meta.abstract is True
-    assert issubclass(Bridge, IntegrationMixin)
+    assert "integration" not in {field.name for field in Bridge._meta.local_fields}
 
 
 def test_bridge_declares_runtime_contract_methods() -> None:
@@ -70,11 +43,13 @@ def test_concrete_bridge_inherits_scheduler_field() -> None:
     assert isinstance(field, models.DateTimeField)
 
 
-def test_integration_impl_asks_django_for_related_accessor() -> None:
-    """Changing the field-owned related name updates implementation lookup."""
+def test_concrete_bridge_uses_django_mti_parent_link() -> None:
+    """A concrete bridge is a Django MTI child of Integration."""
 
-    assert RenamedRelatedImpl.related_accessor_name() == "renamed_related"
-    assert RenamedRelatedImpl.related_accessor_name() != "tests_renamedrelated"
+    parent_link = ConcreteBridge._meta.get_field("integration_ptr")
+
+    assert parent_link.primary_key is True
+    assert parent_link.remote_field.model is Integration
 
 
 def test_report_status_records_integration_telemetry() -> None:

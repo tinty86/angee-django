@@ -32,9 +32,8 @@ class AnthropicInferenceBackend(SDKInferenceBackend):
     oauth_client = "anthropic-personal"
     defaults = {
         "vendor": "anthropic",
-        "config": {
-            "credential_env": "ANTHROPIC_API_KEY",
-        },
+        "name": "Anthropic",
+        "credential_env": "ANTHROPIC_API_KEY",
     }
     default_broker_name = DEFAULT_BROKER_NAME
     default_model_limit = DEFAULT_MODEL_LIMIT

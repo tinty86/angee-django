@@ -40,7 +40,7 @@ class SDKInferenceBackend(InferenceBackend):
     def _credential_auth(self) -> dict[str, str]:
         """Return SDK auth kwargs for the attached credential kind."""
 
-        credential = getattr(self.integration, "credential", None)
+        credential = getattr(self.provider, "credential", None)
         if credential is None:
             raise ValueError(f"{self.label} inference requires an attached credential.")
         ensure_fresh = getattr(credential, "ensure_fresh", None)
@@ -135,11 +135,11 @@ class SDKInferenceBackend(InferenceBackend):
         ]
 
     def _config_value(self, key: str, *, default: Any = None) -> Any:
-        """Return one provider config value, falling back to integration config."""
+        """Return one provider config value."""
 
-        for owner in (getattr(self.provider, "config", None), getattr(self.integration, "config", None)):
-            if isinstance(owner, Mapping) and key in owner:
-                return owner[key]
+        config = getattr(self.provider, "config", None)
+        if isinstance(config, Mapping) and key in config:
+            return config[key]
         return default
 
     def _config_int(self, key: str, *, default: int) -> int:

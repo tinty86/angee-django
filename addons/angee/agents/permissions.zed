@@ -15,7 +15,7 @@ definition agents/agent {
 }
 
 definition agents/inference_provider {
-    relation integration: integrate/integration // rebac:field=integration
+    relation integration: integrate/integration // rebac:field=integration_ptr
     relation admin: angee/role // rebac:const=admin
 
     permission create = admin->member

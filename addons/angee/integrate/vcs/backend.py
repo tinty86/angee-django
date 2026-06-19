@@ -1,7 +1,7 @@
 """The host-agnostic git implementation contract.
 
-A :class:`VCSBackend` is an ``Integration`` implementation that reads a repository
-through a ``VcsBridge`` related model — either a host's remote over its REST API
+A :class:`VCSBackend` is a ``VcsBridge`` backend that reads a repository
+through the bridge child model — either a host's remote over its REST API
 (``integrate_github.GitHubBackend``) or a local working tree
 (:class:`LocalVCSBackend`) — listing repositories, walking trees, reading blobs,
 and resolving refs. A host backend never clones (git transport belongs to the
@@ -69,13 +69,11 @@ class VCSBackend(BridgeImpl):
     """Abstract REST backend for a git host, bound to one ``Integration``.
 
     Concrete hosts implement the primitives below; ``VcsBridge`` calls into
-    them. The constructor receives the integration so the backend can read its
-    credential (``integration.credential.auth_headers()``) and config.
+    them. The constructor receives the VCS integration child so the backend can
+    read its credential and bridge-owned config.
     """
 
     category = "vcs"
-    related_model = "integrate.VcsBridge"
-    related_create_fields = ("webhook_secret",)
     label = "VCS"
     icon = "git-branch"
 
@@ -119,7 +117,7 @@ class LocalVCSBackend(VCSBackend):
     """Reads a repository straight from a local working tree — for dev/offline inventory.
 
     Where a host backend reads a remote over REST, this walks the filesystem under
-    ``integration.config["local_root"]``, so templates (or skills) committed in the
+    ``VcsBridge.config["local_root"]``, so templates (or skills) committed in the
     local checkout are inventoried through the same ``VcsBridge → Source →
     Template`` flow as a hosted remote, with no network. It reads the *working tree*;
     ``ref`` is informational — there is one repo and no commit to resolve.
@@ -210,9 +208,9 @@ class LocalVCSBackend(VCSBackend):
         than hardcoding an absolute path; an absolute ``local_root`` is used as-is.
         """
 
-        root = str(self.integration.config.get("local_root") or "").strip()
+        root = str(self.bridge.config.get("local_root") or "").strip()
         if not root:
-            raise FileNotFoundError("LocalVCSBackend requires integration.config['local_root'].")
+            raise FileNotFoundError("LocalVCSBackend requires VcsBridge.config['local_root'].")
         path = pathlib.Path(root)
         if not path.is_absolute():
             path = pathlib.Path(settings.BASE_DIR) / path
@@ -222,7 +220,7 @@ class LocalVCSBackend(VCSBackend):
         """Project the configured local checkout into a :class:`RepoDescriptor`."""
 
         root = self._root
-        config = self.integration.config
+        config = self.bridge.config
         return RepoDescriptor(
             name=str(config.get("local_name") or root.name),
             org=str(config.get("local_org") or "local"),

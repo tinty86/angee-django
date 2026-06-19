@@ -8,6 +8,11 @@ Companion to `.agents/plans/iam-integrate-oidc-split.md` (the backend split, DON
 Scope: **frontend only.** The backend three-addon split stays as verified; this
 realigns the React packages to it.
 
+2026-06 clean-MTI update: outbound connect now uses the integrate-owned
+canonical callback path `/integrate/oauth/callback`. The old `/callback` and
+`/iam/oauth/callback` aliases were intentionally removed as part of the
+pre-1.0 break; provider registrations must use the canonical integrate path.
+
 ## Decision (by the architect, over several iterations)
 
 The frontend splits **by direction**, not 1:1 with the backend addons:
@@ -76,9 +81,10 @@ both callbacks (no cross-addon web-import precedent; duplication is the DRY smel
   no discovery; readiness = `isEnabled && clientId && authorizeEndpoint && tokenEndpoint`.
 - `OidcClient.oauthClient` is a relation on read but `ID!` on write → `many2one`,
   `createOnly` (absent from `OidcClientPatch`).
-- Callback path strings are unchanged (`/sso/callback`, `/callback`, legacy
-  `/login/callback`, `/iam/oauth/callback`) to preserve provider redirect
-  registrations; only route *names* change (`iam.connect.*` → `integrate.connect.*`).
+- Callback path strings were originally unchanged, but the clean-MTI pre-1.0
+  pass superseded that compatibility note for outbound connect:
+  `/integrate/oauth/callback` is now canonical, and legacy outbound aliases are
+  removed. Inbound sign-in callbacks remain owned by `iam`.
 
 ## Verify (DoD)
 

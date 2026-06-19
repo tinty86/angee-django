@@ -22,17 +22,11 @@ class AgentsIntegrateAnthropicConfig(AppConfig):
                 "adopt": ("user", "name"),
             },
             {
-                "path": "resources/demo/020_integrate.integration.yaml",
+                "path": "resources/demo/030_agents.inferenceprovider.yaml",
                 "depends_on": (
                     "resources/demo/010_integrate.credential.yaml",
                     "integrate:resources/master/010_integrate.vendor.yaml",
                 ),
-                "adopt": ("owner", "vendor", "impl_class"),
-            },
-            {
-                "path": "resources/demo/030_agents.inferenceprovider.yaml",
-                "depends_on": "resources/demo/020_integrate.integration.yaml",
-                "adopt": "integration",
             },
             {
                 "path": "resources/demo/040_agents.inferencemodel.yaml",

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@angee/base": "workspace:*",
+    "@angee/integrate": "workspace:*",
     "@angee/operator": "workspace:*",
     "@angee/sdk": "workspace:*",
     "@assistant-ui/react": "^0.12.0",

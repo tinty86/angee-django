@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from django.db import connection, models
+from django.db import connection
 from django.utils import timezone
 from rebac import system_context
 
@@ -17,15 +17,14 @@ from angee.integrate.scheduler import run_due_bridges
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
+    Integration,
     _create_missing_tables,
     make_integration,
 )
 
 
-class SchedulerBridge(Bridge):
+class SchedulerBridge(Integration, Bridge):
     """Concrete bridge fixture driven by the integrate scheduler tests."""
-
-    config = models.JSONField(default=dict, blank=True)
 
     class Meta(Bridge.Meta):
         """Django model options for the scheduler bridge fixture."""
@@ -93,22 +92,22 @@ def test_run_due_bridges_runs_only_due_rows(scheduler_tables: None) -> None:
 
     del scheduler_tables
     now = timezone.now()
-    due_integration = make_integration("due-only")
-    future_integration = make_integration("future-only")
-    unscheduled_integration = make_integration("unscheduled-only")
     with system_context(reason="test integrate scheduler setup"):
-        due = SchedulerBridge.objects.create(
-            integration=due_integration,
+        due = make_integration(
+            "due-only",
+            model=SchedulerBridge,
             config={"items": 2},
             next_sync_at=now - timedelta(seconds=1),
         )
-        future = SchedulerBridge.objects.create(
-            integration=future_integration,
+        future = make_integration(
+            "future-only",
+            model=SchedulerBridge,
             config={"items": 3},
             next_sync_at=now + timedelta(seconds=1),
         )
-        unscheduled = SchedulerBridge.objects.create(
-            integration=unscheduled_integration,
+        unscheduled = make_integration(
+            "unscheduled-only",
+            model=SchedulerBridge,
             config={"items": 4},
             next_sync_at=None,
         )
@@ -130,14 +129,15 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
 
     del scheduler_tables
     now = timezone.now()
-    integration = make_integration("success-telemetry")
     with system_context(reason="test integrate scheduler setup"):
-        bridge = SchedulerBridge.objects.create(
-            integration=integration,
+        bridge = make_integration(
+            "success-telemetry",
+            model=SchedulerBridge,
             config={"items": 7},
             poll_interval=42,
             next_sync_at=now,
         )
+        integration = Integration.objects.get(pk=bridge.pk)
 
     result = run_due_bridges(now=now)
 
@@ -160,14 +160,15 @@ def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: 
 
     del scheduler_tables
     now = timezone.now()
-    integration = make_integration("error-rollup")
     with system_context(reason="test integrate scheduler setup"):
-        bridge = SchedulerBridge.objects.create(
-            integration=integration,
+        bridge = make_integration(
+            "error-rollup",
+            model=SchedulerBridge,
             config={"mode": "error"},
             poll_interval=17,
             next_sync_at=now,
         )
+        integration = Integration.objects.get(pk=bridge.pk)
 
     result = run_due_bridges(now=now)
 
@@ -190,14 +191,15 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
 
     del scheduler_tables
     first_now = timezone.now()
-    integration = make_integration("recovery")
     with system_context(reason="test integrate scheduler setup"):
-        bridge = SchedulerBridge.objects.create(
-            integration=integration,
+        bridge = make_integration(
+            "recovery",
+            model=SchedulerBridge,
             config={"mode": "error"},
             poll_interval=23,
             next_sync_at=first_now,
         )
+        integration = Integration.objects.get(pk=bridge.pk)
 
     error_result = run_due_bridges(now=first_now)
 

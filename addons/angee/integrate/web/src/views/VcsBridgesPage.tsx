@@ -6,6 +6,8 @@ import {
   Field,
   Form,
   List,
+  useEnumOptions,
+  useImplPrefill,
   type ActionContext,
 } from "@angee/base";
 import { runActionResult, useActionMutation, useAuthoredMutation } from "@angee/sdk";
@@ -17,13 +19,14 @@ import { IntegrateDiscoverRepositories } from "../documents";
 const MODEL = "integrate.VcsBridge";
 
 /**
- * VCS bridges: related rows that bind an existing `Integration` to repository
- * discovery and source sync.
+ * VCS bridges own repository discovery and source sync for one integration child row.
  */
 export function VcsBridgesPage(): React.ReactElement {
   const t = useIntegrateT();
   const [syncVcs] = useActionMutation<ActionFieldName>("syncVcsIntegration");
   const [discover] = useAuthoredMutation(IntegrateDiscoverRepositories);
+  const backendClassOptions = useEnumOptions(MODEL, "backendClass");
+  const backendClassPrefill = useImplPrefill(MODEL, "backendClass");
 
   const sync = React.useCallback(
     async (ctx: ActionContext) => {
@@ -48,20 +51,26 @@ export function VcsBridgesPage(): React.ReactElement {
     <DataPage model={MODEL} placement="inline" routed>
       <List model={MODEL}>
         <Column field="displayName" />
+        <Column field="backendClass" header={t("integrate.vcs.backendClass")} />
         <Column
-          field="integration.implLabel"
-          header={t("integrate.integrations.implClass")}
-        />
-        <Column
-          field="integration.status"
+          field="status"
           header={t("integrate.col.status")}
           widget="statusBadge"
         />
         <Column field="lastSyncCompletedAt" />
       </List>
       <Form model={MODEL}>
-        {/* The implementation lives on the owning Integration. */}
-        <Field name="integration" createOnly />
+        <Field name="owner" />
+        <Field name="vendor" />
+        <Field
+          name="backendClass"
+          widget="select"
+          options={backendClassOptions}
+          prefill={backendClassPrefill}
+        />
+        <Field name="credential" />
+        <Field name="status" widget="statusbar" />
+        <Field name="config" widget="json" />
         <Field name="lastSyncStatus" readOnly />
         {/* Write-only signing secret — set on create, never read back. */}
         <Field name="webhookSecret" widget="text" kind="string" createOnly />

@@ -734,7 +734,7 @@ describe("FormView", () => {
     });
   });
 
-  test("overwrites pre-seeded sibling fields from impl prefill only while creating", async () => {
+  test("overwrites pre-seeded sibling fields from impl prefill while editable", async () => {
     const implFields = [
       { name: "displayName", label: "Display Name", title: true },
       {
@@ -794,7 +794,56 @@ describe("FormView", () => {
 
     await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
     expect(sdkMocks.mutate).toHaveBeenCalledWith({
-      data: { providerType: "oidc", id: "client-1" },
+      data: {
+        providerType: "oidc",
+        isEnabled: false,
+        authorizeEndpoint: "/auth",
+        id: "client-1",
+      },
+    });
+  });
+
+  test("does not apply impl prefill on edit when the impl field is create-only", async () => {
+    sdkMocks.record = {
+      id: "client-1",
+      displayName: "Client",
+      providerType: "generic",
+      isEnabled: true,
+      authorizeEndpoint: "",
+    };
+    renderWithProviders(
+      <FormView
+        model="OAuthClient"
+        id="client-1"
+        fields={[
+          { name: "displayName", label: "Display Name", title: true },
+          {
+            name: "providerType",
+            label: "Provider Type",
+            createOnly: true,
+            prefill: (value) =>
+              value === "oidc" ? { isEnabled: false, authorizeEndpoint: "/auth" } : null,
+          },
+          { name: "isEnabled", label: "Enabled", widget: "switch" },
+          { name: "authorizeEndpoint", label: "Authorize Endpoint" },
+        ]}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Display Name") as HTMLInputElement).value,
+      ).toBe("Client"),
+    );
+    expect(screen.getByText("generic")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Authorize Endpoint"), {
+      target: { value: "/manual" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
+    expect(sdkMocks.mutate).toHaveBeenCalledWith({
+      data: { authorizeEndpoint: "/manual", id: "client-1" },
     });
   });
 
@@ -1206,7 +1255,10 @@ describe("FormView", () => {
       graphQLErrors: [
         {
           extensions: {
-            validationErrors: { title: ["This field cannot be blank."] },
+            validationErrors: {
+              title: ["This field cannot be blank."],
+              environment: ["This field cannot be blank."],
+            },
             formErrors: [],
           },
         },
@@ -1218,8 +1270,10 @@ describe("FormView", () => {
 
     await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
     await screen.findByText("This field cannot be blank.");
-    // Only field errors → the banner prompts the user to fix highlighted fields.
-    expect(screen.getByText("Please fix the highlighted fields.")).toBeTruthy();
+    // Only field errors → the banner names declared labels and raw server-only keys.
+    expect(
+      screen.getByText("Please fix the highlighted fields: Title, environment."),
+    ).toBeTruthy();
   });
 });
 

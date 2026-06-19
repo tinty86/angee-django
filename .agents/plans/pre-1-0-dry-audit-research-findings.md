@@ -59,6 +59,8 @@ architect direction before preserving the current shape.
 
 ### CRUD Update Mutation Owner
 
+- **Status:** Researched 2026-06-19. Do not delete the Angee update mutation
+  yet; the deletion depends on an upstream strawberry-django hook.
 - **Finding:** `_AngeeUpdateMutation` subclasses and partially copies
   strawberry-django internals to alter target lookup for REBAC/write scope.
 - **Greenfield:** `crud()` is a thin wrapper around
@@ -66,13 +68,25 @@ architect direction before preserving the current shape.
   naming only.
 - **True owner:** `strawberry-django` for mutation mechanics;
   `django-zed-rebac` for read/write/field-redaction semantics.
+- **Decision:** propose a strawberry-django `DjangoUpdateMutation`
+  target-queryset or target-resolver hook that applies to both ID-targeted and
+  filter/list updates. Angee should then pass its REBAC write queryset instead
+  of subclassing/copying mutation internals.
 - **Deletion:** remove custom update mutation internals if a library hook or
   upstream patch can provide write-queryset/target lookup.
 - **Guardrail:** regression for updating a field-gated REBAC model where read
   redaction must not block write target lookup.
+- **Evidence:** local copy surface is concentrated in `angee/graphql/crud.py`
+  around `_AngeeUpdateMutation`, `_update_mutation`, and `_resolve_for_write`.
+  The Angee-specific policy worth keeping is `_write_queryset()`, which scopes
+  through REBAC while allowing field-denied values during write target lookup.
+- **Verification:** researcher ran focused CRUD/REBAC/OIDC/agent update tests;
+  result was 15 passed.
 
 ### OAuth/OIDC Protocol Owner
 
+- **Status:** Researched 2026-06-19. Proposed next step is a guarded Authlib
+  spike, not immediate adoption.
 - **Finding:** Angee hand-owns OAuth authorize/token/refresh/revoke/userinfo
   mechanics. `docs/stack.md` has PyJWT for JWT/JOSE but no OAuth client owner.
 - **Greenfield:** `OAuthClient` stores config and policy; a library such as
@@ -80,36 +94,63 @@ architect direction before preserving the current shape.
   REBAC, and UI payloads.
 - **True owner:** likely Authlib for OAuth/OIDC protocol if accepted; PyJWT/OIDC
   Core for ID token validation.
+- **Decision:** Authlib is a good candidate for wire mechanics, but Angee must
+  keep row ownership, browser-flow state, account/credential persistence, login
+  policy, REBAC ownership, resource-seeded provider facts, and GraphQL payloads.
+  Authlib is currently only transitive through FastMCP; accepting it requires a
+  direct `docs/stack.md` and dependency-manifest change.
 - **Deletion:** shrink `OAuthClientProtocol` and OIDC protocol glue to row
   projection/result adaptation.
 - **Guardrail:** parity tests for manual redirect, PKCE, nonce, honest
   User-Agent, refresh rotation, userinfo enrichment, and provider error shaping.
+- **Evidence:** likely deletion areas include authorize URL construction,
+  token/refresh/revoke POST mechanics, response decoding, discovery/userinfo
+  fetches, and possibly JOSE verification if Authlib also replaces PyJWT there.
+- **Open question:** decide whether Authlib owns only OAuth2 client mechanics
+  while PyJWT remains JOSE owner, or whether Authlib should own OIDC/JWT too.
 
 ### Inference Provider Creation Owner
 
-- **Finding:** standalone `createInferenceProvider` repeats integration impl
-  checks and related-row creation.
+- **Status:** Implemented for the clean MTI slice on 2026-06-19.
+- **Finding:** the old standalone `createInferenceProvider` repeated
+  integration impl checks and related-row creation.
 - **Locked direction:** integration kinds use Django multi-table inheritance
   child models. `Integration` is the shared parent connection row;
   `InferenceProvider` is the concrete child row. Provider SDK/protocol choice
   lives on `InferenceProvider.backend_class` as an `ImplClassField`.
 - **Dependency decision:** run an early spike on `django-polymorphic` as the
-  parent-query/downcasting owner. Add it to `docs/stack.md` and the dependency
-  graph only if it works cleanly with Angee emitted runtime models, REBAC
-  managers, strawberry-django, resources, migrations, and aggregate/list queries.
+  parent-query/downcasting owner. **Result 2026-06-19: rejected for this slice.**
+  Do not add it to `docs/stack.md` or the dependency graph. The spike found that
+  it needs local REBAC/polymorphic manager glue plus a custom metaclass bridge,
+  while native Django MTI keeps the dependency surface smaller.
+- **Composer prerequisite:** implemented 2026-06-19. `extends = "app.Model"` plus
+  `runtime = True` now emits a materialized Django multi-table-inheritance child
+  whose generated concrete class inherits the target's generated runtime model
+  and the child source model.
+- **Production proof:** implemented 2026-06-19. `integrate.VcsBridge` and
+  `agents.InferenceProvider` are Django MTI children of `Integration`; `Bridge`
+  and inference no longer own manual `integration = OneToOneField(...)`
+  companion rows; scheduler, VCS inventory, GraphQL sync, provider service env,
+  model sync, and agents skill-source tests pass against the child shape.
 - **Greenfield:** create the concrete inference integration child once. OpenAI,
   Anthropic, manual, DeepSeek, and other adapters are backend-class values with
   default-bearing/inheritable impl classes, not `Integration.impl_class` values.
 - **True owner:** Django multi-table inheritance for persisted parent/child
-  shape; `django-polymorphic` only if the spike proves it should own
-  parent-to-child query behavior; `InferenceProvider` for provider-specific
+  shape; Angee owns the smallest parent-to-kind resolution seam where parent
+  list rows need concrete behavior; `InferenceProvider` owns provider-specific
   config, refresh, service env, model catalogue, and `backend_class`.
-- **Deletion:** delete or demote `InferenceProviderInput` and
-  `createInferenceProvider`; delete `IntegrationImpl.related_model` and related
-  row creation helpers when child creation owns the flow.
+- **Deletion:** `IntegrationImpl.related_model`, related row creation helpers,
+  `IntegrationMixin`, and `Integration.config` are removed. Keep
+  `createInferenceProvider` only as a direct child-row mutation until a shared
+  parent-detail create flow deletes frontend/API surface instead of moving it.
 - **Guardrail:** tests for concrete child creation through the integration
   surface, backend defaults/materialization, parent listing, child detail routing,
   permissions, and SDL.
+- **Spike evidence:** dependency install with `uv add django-polymorphic
+  --no-sources --no-install-local` succeeded in the spike workspace, but the
+  model proof failed on Angee ownership boundaries: REBAC metaclass conflict and
+  required local queryset-manager/metaclass bridge. Reopen only if native Django
+  MTI plus a tiny Angee-owned parent-to-child seam proves insufficient.
 
 ### Inference Model Alias Rows
 
@@ -149,6 +190,8 @@ architect direction before preserving the current shape.
 
 ### Frontend I18n Runtime
 
+- **Status:** Researched 2026-06-19. This is a green implementation slice:
+  i18next is already declared, but SDK runtime still hand-rolls its job.
 - **Finding:** `docs/stack.md` names i18next as runtime owner, but SDK currently
   owns custom lookup/interpolation/fallback logic and base still has hardcoded
   shared strings.
@@ -156,12 +199,25 @@ architect direction before preserving the current shape.
   lookup, interpolation, fallback, and pluralization; Angee hooks are thin.
 - **True owner:** i18next; `@angee/sdk` composition seam; `@angee/base` string
   bundles.
+- **Decision:** add an SDK `createAngeeI18n(resources)` around
+  `i18next.createInstance`, with `keySeparator: false`, single-brace
+  interpolation, `initAsync: false`, and per-addon namespace resources. Keep the
+  Angee manifest/composition convention, but let i18next own lookup,
+  interpolation, fallback/default values, language state, and future
+  pluralization.
 - **Deletion:** delete custom interpolation/fallback after wiring i18next.
 - **Guardrail:** runtime i18n tests, translated Form/List smoke, hardcoded
   shared-string search.
+- **Evidence:** `packages/sdk/src/i18n.ts` implements regex interpolation and
+  fallback; `packages/sdk/src/runtime.ts` does plain dictionary lookup even
+  though `packages/sdk/package.json` already declares i18next.
+- **Follow-up cleanup:** move base hardcoded widget/list/form strings into
+  translation resources after the runtime owner is fixed.
 
 ### SDK GraphQL Transport For Operator
 
+- **Status:** Researched 2026-06-19. This is a green implementation slice after
+  one cache-behavior decision.
 - **Finding:** operator duplicates `subscriptionExchange`, retry/fatal close
   logic, and direct query/mutation wrappers because SDK cannot pass WebSocket
   auth params.
@@ -169,13 +225,23 @@ architect direction before preserving the current shape.
   clients with auth/subscription params.
 - **True owner:** urql/graphql-ws externally; `@angee/sdk` transport seam
   internally.
+- **Decision:** add SDK support for `wsConnectionParams` and likely a tiny
+  `cacheMode: "document"` option before deleting the operator-local client fork.
+  Operator remains owner of daemon endpoint/token discovery and refresh; the raw
+  service-log socket remains operator-owned because it is not GraphQL WS.
 - **Deletion:** expose SDK `wsConnectionParams` or subscription auth options,
   then delete operator client fork.
 - **Guardrail:** SDK client tests for WS params/retry behavior; grep guard for
   direct `graphql-ws` / `subscriptionExchange` outside SDK.
+- **Evidence:** duplicated code is in `addons/angee/operator/web/src/data/operator-client.ts`;
+  the only operator-specific GraphQL WS fact is bearer `connectionParams`.
+- **Risk:** verify operator daemon queries behave with SDK cache settings before
+  removing the document-cache-oriented local factory.
 
 ### Data View Row Mechanics
 
+- **Status:** Researched 2026-06-19. Implement as several narrow slices, not a
+  one-shot table rewrite.
 - **Finding:** filtering, lookup matching, sorting, grouping, selection, and
   pagination are partly Angee-owned even though stack names TanStack
   Table/Virtual for much of this.
@@ -184,10 +250,21 @@ architect direction before preserving the current shape.
   TanStack where native behavior fits.
 - **True owner:** TanStack Table/Virtual externally; `@angee/base` owns
   URL/search and Angee declarations.
+- **Decision:** start by adding TanStack accessors and controlled table-state
+  adapters for row-backed views. Then move client filter/sort/pagination,
+  selection, and in-memory grouping to TanStack row models where semantics match.
+  Keep server-backed GraphQL/resource semantics, URL/search state, toolbar
+  vocabulary, group labels, and board layout in Angee.
 - **Deletion:** consolidate toolbar/state adapter and push row-backed transforms
   into controlled TanStack row models.
 - **Guardrail:** List/Rows sorting, filtering, grouping, selection, visibility,
   and virtualization browser smoke.
+- **Evidence:** manual row transforms live in
+  `packages/base/src/views/data-view-surface.ts`; `ListInternals.tsx` currently
+  builds display columns without accessors, so TanStack cannot yet own
+  meaningful sort/filter/group mechanics.
+- **Risk:** never run TanStack client filtering over a server page while totals
+  still describe the backend result; that would silently lie to the user.
 
 ### Storage/Knowledge Explorer Shape
 
@@ -337,13 +414,13 @@ rule applies.
 Run these before implementation:
 
 1. [x] `angee.graphql / output type extension / native strawberry-django extend=True`
-2. `angee.graphql / CRUD update / upstream hook vs custom mutation`
-3. `integrate / OAuth protocol / Authlib stack decision`
-4. `agents+integrate / integration child models / django-polymorphic spike`
+2. [x] `angee.graphql / CRUD update / upstream hook vs custom mutation`
+3. [x] `integrate / OAuth protocol / Authlib stack decision`
+4. [x] `agents+integrate / integration child models / django-polymorphic spike`
 5. `agents / inference model catalogue / broker handle binding`
-6. `@angee/sdk / operator GraphQL transport / WS auth options`
-7. `@angee/base / i18n / i18next runtime wiring`
-8. `@angee/base / data-view row mechanics / TanStack delegation`
+6. [x] `@angee/sdk / operator GraphQL transport / WS auth options`
+7. [x] `@angee/base / i18n / i18next runtime wiring`
+8. [x] `@angee/base / data-view row mechanics / TanStack delegation`
 9. `storage+knowledge / explorer shape / backend scoped query + base explorer`
 10. `integrate / source-kind pages / shared source page primitive`
 11. `integrate / VCS naming / bridge vs integration`

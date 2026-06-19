@@ -1,4 +1,4 @@
-"""Model discovery for concrete integration bridge related models."""
+"""Model discovery for concrete integration bridge child models."""
 
 from __future__ import annotations
 

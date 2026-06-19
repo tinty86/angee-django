@@ -203,24 +203,18 @@ def test_anthropic_addon_owns_demo_provider_chain() -> None:
 
     assert [item["path"] for item in manifest["demo"]] == [
         "resources/demo/010_integrate.credential.yaml",
-        "resources/demo/020_integrate.integration.yaml",
         "resources/demo/030_agents.inferenceprovider.yaml",
         "resources/demo/040_agents.inferencemodel.yaml",
     ]
     assert manifest["demo"][0]["adopt"] == ("user", "name")
-    assert manifest["demo"][1]["adopt"] == ("owner", "vendor", "impl_class")
-    assert manifest["demo"][2]["adopt"] == "integration"
-    assert manifest["demo"][3]["adopt"] == ("provider", "name")
-    integration_rows = _resource_rows(config, "demo", "resources/demo/020_integrate.integration.yaml")
-    assert integration_rows["integration_anthropic_demo"]["owner"] == "iam.user_admin"
-    assert integration_rows["integration_anthropic_demo"]["credential"] == (
+    assert "adopt" not in manifest["demo"][1]
+    assert manifest["demo"][2]["adopt"] == ("provider", "name")
+    provider_rows = _resource_rows(config, "demo", "resources/demo/030_agents.inferenceprovider.yaml")
+    assert provider_rows["provider_anthropic_demo"]["owner"] == "iam.user_admin"
+    assert provider_rows["provider_anthropic_demo"]["credential"] == (
         "agents_integrate_anthropic.cred_anthropic_demo"
     )
-    assert integration_rows["integration_anthropic_demo"]["impl_class"] == "anthropic"
-    provider_rows = _resource_rows(config, "demo", "resources/demo/030_agents.inferenceprovider.yaml")
-    assert provider_rows["provider_anthropic_demo"]["integration"] == (
-        "agents_integrate_anthropic.integration_anthropic_demo"
-    )
+    assert provider_rows["provider_anthropic_demo"]["backend_class"] == "anthropic"
     model_rows = _resource_rows(config, "demo", "resources/demo/040_agents.inferencemodel.yaml")
     assert model_rows["model_claude_demo"]["provider"] == "agents_integrate_anthropic.provider_anthropic_demo"
 
@@ -236,20 +230,16 @@ def test_openai_addon_owns_demo_provider_chain() -> None:
 
     assert [item["path"] for item in manifest["demo"]] == [
         "resources/demo/010_integrate.credential.yaml",
-        "resources/demo/020_integrate.integration.yaml",
         "resources/demo/030_agents.inferenceprovider.yaml",
         "resources/demo/040_agents.inferencemodel.yaml",
     ]
     assert manifest["demo"][0]["adopt"] == ("user", "name")
-    assert manifest["demo"][1]["adopt"] == ("owner", "vendor", "impl_class")
-    assert manifest["demo"][2]["adopt"] == "integration"
-    assert manifest["demo"][3]["adopt"] == ("provider", "name")
-    integration_rows = _resource_rows(config, "demo", "resources/demo/020_integrate.integration.yaml")
-    assert integration_rows["integration_openai_demo"]["owner"] == "iam.user_admin"
-    assert integration_rows["integration_openai_demo"]["credential"] == "agents_integrate_openai.cred_openai_demo"
-    assert integration_rows["integration_openai_demo"]["impl_class"] == "openai"
+    assert "adopt" not in manifest["demo"][1]
+    assert manifest["demo"][2]["adopt"] == ("provider", "name")
     provider_rows = _resource_rows(config, "demo", "resources/demo/030_agents.inferenceprovider.yaml")
-    assert provider_rows["provider_openai_demo"]["integration"] == "agents_integrate_openai.integration_openai_demo"
+    assert provider_rows["provider_openai_demo"]["owner"] == "iam.user_admin"
+    assert provider_rows["provider_openai_demo"]["credential"] == "agents_integrate_openai.cred_openai_demo"
+    assert provider_rows["provider_openai_demo"]["backend_class"] == "openai"
     model_rows = _resource_rows(config, "demo", "resources/demo/040_agents.inferencemodel.yaml")
     assert model_rows["model_openai_demo"]["provider"] == "agents_integrate_openai.provider_openai_demo"
 
@@ -288,12 +278,12 @@ def test_openai_backend_uses_static_credentials_not_oauth_connect() -> None:
     assert OpenAIInferenceBackend.oauth_client == ""
 
 
-def test_openai_autoconfig_contributes_integration_impl_registry() -> None:
+def test_openai_autoconfig_contributes_inference_backend_registry() -> None:
     """The OpenAI addon uses the composer-owned SETTINGS contract."""
 
     from angee.agents_integrate_openai.autoconfig import SETTINGS
 
-    assert SETTINGS["ANGEE_INTEGRATION_IMPLS.openai"] == (
+    assert SETTINGS["ANGEE_INFERENCE_BACKEND_CLASSES.openai"] == (
         "angee.agents_integrate_openai.backend.OpenAIInferenceBackend"
     )
 

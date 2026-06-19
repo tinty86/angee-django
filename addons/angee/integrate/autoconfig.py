@@ -13,16 +13,19 @@ SETTINGS = {
     "ANGEE_OAUTH_PROVIDER_TYPES": {
         "generic_oauth2": "angee.integrate.oauth.providers.GenericOAuth2",
     },
-    # The ``Integration.impl_class`` registry: each key an ``Integration`` row may
-    # name → the dotted path of the ``IntegrationImpl`` it resolves to. ``none`` is
-    # the neutral draft/null-object implementation (``ImplClassField`` requires a
-    # non-empty registry), and ``local`` inventories a local working tree with no
-    # network (dev/offline template + skill discovery); host/domain addons add
-    # their own impls with yamlconf dotted keys
-    # (``"ANGEE_INTEGRATION_IMPLS.github": "…"``).
+    # The ``Integration.impl_class`` registry: each key a parent-only
+    # ``Integration`` row may name → the dotted path of its integration-level
+    # behavior. ``none`` is the neutral draft/null-object implementation
+    # (``ImplClassField`` requires a non-empty registry). Concrete child models
+    # own their domain backend field/registry (e.g. ``VcsBridge.backend_class``).
     # See ``angee.base.fields.ImplClassField``.
     "ANGEE_INTEGRATION_IMPLS": {
         "none": "angee.integrate.impl.NullIntegrationImpl",
+    },
+    # VCS bridge backends. ``local`` inventories a local working tree with no
+    # network (dev/offline template + skill discovery); host addons add their own
+    # backends with yamlconf dotted keys (``"ANGEE_VCS_BACKEND_CLASSES.github"``).
+    "ANGEE_VCS_BACKEND_CLASSES": {
         "local": "angee.integrate.vcs.backend.LocalVCSBackend",
     },
 }

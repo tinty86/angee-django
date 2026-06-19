@@ -8,9 +8,9 @@ Django child models. A child model owns the fields, actions, tabs, and related
 tables for that kind. If several adapters share one child shape, that child
 carries a role-named `backend_class` `ImplClassField`.
 
-Primary target: `agents.InferenceProvider` becomes an `Integration` child model,
-and OpenAI/Anthropic/manual/OpenAI-compatible providers become inference
-`backend_class` values.
+Status for the clean MTI slice: composer MTI support, `VcsBridge`, and
+`InferenceProvider` are implemented. OpenAI/Anthropic/manual/OpenAI-compatible
+providers are inference `backend_class` values, not integration impls.
 
 ## Locked Decisions
 
@@ -19,11 +19,13 @@ and OpenAI/Anthropic/manual/OpenAI-compatible providers become inference
   `InferenceProvider`, `VcsBridge`, and future mutually exclusive integration
   kinds are child rows.
 - Do not use `Integration.impl_class` or `IntegrationImpl.related_model` to
-  decide which related row exists. That was manual polymorphism and is
-  superseded by Django model inheritance.
-- Keep `ImplClassField`, but use it as the backend/adapter-type pattern on the
-  concrete owner row. The field name must describe the role, for example
-  `backend_class` on `InferenceProvider` or `provider_type` on `OAuthClient`.
+  decide which child row exists. That was manual polymorphism and is superseded
+  by Django model inheritance.
+- Keep `ImplClassField`, but never let it create companion rows. A concrete
+  owner may use a role-named field such as `InferenceProvider.backend_class` or
+  `VcsBridge.backend_class`. `Integration.impl_class` may remain only for
+  parent-level adapter behavior that genuinely belongs to the shared
+  integration identity.
 - Backend impl classes are default-bearing and inheritable. For example an
   OpenAI-compatible inference backend base can provide shared protocol/default
   behavior, while `openai`, `deepseek`, and similar keys specialize labels,
@@ -37,11 +39,23 @@ and OpenAI/Anthropic/manual/OpenAI-compatible providers become inference
 
 ## Dependency Spike
 
-Run an early spike on `django-polymorphic` as the parent-query and downcasting
-owner. Do not add it to `docs/stack.md`, `pyproject.toml`, or `uv.lock` until
-the spike proves it plays cleanly with Angee's emitted runtime models, REBAC
-managers, strawberry-django types/resolvers, resources, migrations, and
-aggregate/list queries.
+**Status:** rejected for this slice after spike on 2026-06-19.
+
+The spike tested `django-polymorphic` as the parent-query and downcasting owner.
+It should not be added to `docs/stack.md`, `pyproject.toml`, or `uv.lock` for
+the integration child-model refactor.
+
+Evidence:
+
+- `django-polymorphic` does not compose as a drop-in owner with Angee's current
+  REBAC model bases. The spike only got past import by adding local
+  REBAC/polymorphic queryset-manager glue and a custom metaclass bridge.
+- The first spike also exposed a composer blocker: materialized children could
+  not yet inherit the generated runtime parent across app labels. That blocker
+  is now fixed by the composer support for `extends + runtime = True`.
+- With the composer blocker removed, the dependency still does not buy enough:
+  accepting it would reintroduce REBAC/polymorphic manager glue before native
+  Django MTI has been tried on the real integration models.
 
 Accept `django-polymorphic` only if it reduces local code and keeps these
 surfaces boring:
@@ -57,10 +71,18 @@ surfaces boring:
 - aggregate/list/group queries over `Integration` still work for status, vendor,
   owner, kind, and child-type grouping.
 
-If the spike fails any of those without a small owner-level fix, keep native
-Django multi-table inheritance and add the smallest Angee-owned parent-to-child
-resolution seam instead. Record the rejected dependency decision in this file
-and keep `docs/stack.md` unchanged.
+The composer prerequisite is now implemented: `extends = "app.Model"` plus
+`runtime = True` emits a materialized Django multi-table-inheritance child whose
+generated concrete class inherits the target's generated runtime model and the
+child source model. Reopen `django-polymorphic` only if native Django MTI plus a
+small owner-level resolution seam proves insufficient after real integration
+models are converted.
+
+Smallest accepted parent-to-child alternative: keep parent list/group/aggregate
+fields owned by `Integration`, keep concrete behavior on the child owner, and add
+one tiny Angee-owned resolution seam on the owner object such as
+`integration.kind_row()` / `integration.provider` instead of caller-side shape
+inspection.
 
 ## Architecture Gate
 
@@ -75,7 +97,7 @@ Owner map:
   VCS bridge fields, sync state, webhook verification, repository discovery.
 - Child-model `backend_class` fields own interchangeable SDK/protocol adapters
   within one concrete kind, for example OpenAI/Anthropic/manual inference
-  backends on `InferenceProvider`.
+  backends on `InferenceProvider` and local/GitHub VCS backends on `VcsBridge`.
 - `extends = "app.Model"` remains additive only: downstream fields on the same
   row, such as OIDC login fields on `OAuthClient`.
 - Resources own shipped seed data. They should seed concrete child rows once the
@@ -88,24 +110,26 @@ Sibling inventory:
 - `iam_integrate_oidc` uses `extends = "integrate.OAuthClient"` for additive
   fields on the same OAuth client row. Keep this pattern.
 - `storage.Backend.backend_class` uses `ImplClassField` for behavior over a
-  common persisted shape. This is the model for `InferenceProvider.backend_class`.
-- Current `Integration.impl_class + IntegrationImpl.related_model` manually
-  creates one-to-one related rows (`InferenceProvider`, `VcsBridge`). This is the
-  pattern to delete and replace with child models.
+  common persisted shape. This is the model for `InferenceProvider.backend_class`
+  and `VcsBridge.backend_class`.
+- Deleted `IntegrationImpl.related_model` manually created one-to-one related
+  rows (`InferenceProvider`, `VcsBridge`). Keep that path gone.
 
 Dependency check:
 
 - Django multi-table inheritance is the accepted model shape and needs no new
   dependency.
-- `django-polymorphic` is only accepted after the dependency spike. If accepted,
-  add it to `docs/stack.md`, `pyproject.toml`, and `uv.lock` in the same change.
-- Do not build a local downcasting registry before the spike result is known.
+- `django-polymorphic` was rejected for this slice by the 2026-06-19 spike. Do
+  not add it to `docs/stack.md`, `pyproject.toml`, or `uv.lock`.
+- Do not build a local downcasting registry. If resolving from parent to
+  concrete owner is needed before true MTI is implemented, put one small method
+  on the owner object instead.
 
 Naming check:
 
-- Avoid generic `impl_class` for integration kinds. The child model is the
-  integration implementation. Adapter selection inside the child is named by
-  role: `backend_class`, `provider_type`, etc.
+- The child model names the integration kind. Adapter selection inside the child
+  is named by role (`backend_class`, `provider_type`, etc.). Do not use an
+  implementation key as a hidden child-row discriminator.
 
 ## Desired Shape
 
@@ -116,25 +140,29 @@ class Integration(...):
     credential = ...
     account = ...
     status = ...
+    # no generic config bucket
 
 
 class InferenceProvider(Integration):
     backend_class = ImplClassField(
         base_class=InferenceBackend,
-        registry_setting="ANGEE_INFERENCE_BACKENDS",
-        default="openai",
+        registry_setting="ANGEE_INFERENCE_BACKEND_CLASSES",
+        default="manual",
     )
     name = ...
     base_url = ...
+    credential_env = ...
     config = ...
 
 
 class VcsBridge(Integration):
     backend_class = ImplClassField(
         base_class=VCSBackend,
-        registry_setting="ANGEE_VCS_BACKENDS",
+        registry_setting="ANGEE_VCS_BACKEND_CLASSES",
+        default="local",
     )
     webhook_secret = ...
+    config = ...
     cursor = ...
 
 
@@ -157,57 +185,79 @@ class DeepSeekInferenceBackend(OpenAICompatibleInferenceBackend):
 ## Implementation Plan
 
 1. Lock the child-model contract for integrations.
-   - Make `Integration` the Django multi-table inheritance parent model.
-   - Run the `django-polymorphic` spike before choosing the parent-query owner.
-   - Add `django-polymorphic` to the locked backend stack and dependency graph
-     only if the spike passes.
+   - [x] Teach the composer that `extends = "app.Model"` plus `runtime = True`
+     emits a materialized Django multi-table-inheritance child.
+   - [x] Make `Integration` the Django multi-table inheritance parent model for
+     the first real child, `integrate.VcsBridge`.
+   - [x] Apply the same parent/child shape to `agents.InferenceProvider`.
+   - [x] Use the 2026-06-19 `django-polymorphic` spike result: reject the dependency
+     for this slice and try native Django MTI first.
    - Keep parent queries stable for existing list/group/permission surfaces.
    - Verify base-list to child-detail resolution uses the chosen owner rather
      than ad hoc caller-side shape inspection.
 
 2. Move inference implementation selection.
-   - Add `InferenceProvider.backend_class`.
-   - Move OpenAI/Anthropic/manual registry entries from unified
+   - [x] Add `InferenceProvider.backend_class`.
+   - [x] Move OpenAI/Anthropic/manual registry entries from unified
      `ANGEE_INTEGRATION_IMPLS` to an inference-specific registry.
-   - Move `InferenceBackend` behavior so it binds to `InferenceProvider` directly,
+   - [x] Move `InferenceBackend` behavior so it binds to `InferenceProvider` directly,
      not to `Integration + related`.
 
 3. Convert `InferenceProvider` from one-to-one related model to child model.
-   - Preserve common `Integration` fields on the parent.
-   - Preserve inference fields and methods on the child.
-   - Make model refresh/chat/service env ask the child owner directly.
+   - [x] Preserve common `Integration` fields on the parent.
+   - [x] Preserve inference fields and methods on the child.
+   - [x] Make model refresh/chat/service env ask the child owner directly.
 
-4. Convert VCS bridge to the same shape if the inference migration proves the
-   contract.
-   - `VcsBridge` becomes an `Integration` child.
-   - VCS host adapter moves to `VcsBridge.backend_class`.
-   - Repository/source/template relations keep pointing at the concrete bridge
-     owner.
+4. Convert VCS bridge to the same shape.
+   - [x] `VcsBridge` becomes an `Integration` child.
+   - [x] Move VCS backend selection to role-named `VcsBridge.backend_class`.
+   - [x] Split `Bridge` away from the manual `IntegrationMixin` one-to-one base.
+   - [x] Repository/source/template relations keep pointing at the concrete
+     bridge owner.
+   - [x] Move VCS options (`local_root`, `github_org`, backend test data) to
+     child-owned `VcsBridge.config`.
 
 5. Collapse setup UX into one Integration form.
-   - Parent integration list remains the navigation surface.
-   - Opening a row displays common fields plus child tabs.
-   - Inference tabs show Provider, Auth, Models, Advanced.
-   - Backend choices prefill child fields through the existing impl metadata path.
+   - [x] Parent integration list remains the navigation surface.
+   - [x] VCS and inference child pages create direct child rows.
+   - [ ] Follow up: collapse child-specific setup into one parent-detail form
+     only if it deletes frontend route/form code.
 
 6. Update resources and demo seeds.
-   - Seed concrete child model rows instead of an integration row plus related row.
-   - Keep catalogue model resources pure metadata.
-   - Regenerate runtime/schema artifacts from source.
+   - [x] Seed concrete child model rows instead of an integration row plus related row.
+   - [x] Keep catalogue model resources pure metadata.
+   - [x] Regenerate runtime/schema artifacts from source during verification.
 
 7. Delete obsolete glue.
-   - Remove `IntegrationImpl.related_model`, related-row creation helpers, and
+   - [x] Remove `IntegrationImpl.related_model`, related-row creation helpers, and
      duplicated GraphQL create mutations once child creation owns the flow.
-   - Remove `Integration.impl_class` if it only selected the integration kind.
-   - Remove top-level CRUD pages that expose implementation child rows as separate
-     setup destinations when the Integration form owns them.
+   - [x] Remove `Integration.config`, `set_credential_env()`, and
+     `credential_env_value()`.
+   - [x] Remove `IntegrationMixin`.
+   - [ ] Remove child CRUD pages only after a shared parent-detail composition
+     deletes code and preserves list/group/board affordances.
+
+## Remaining Follow-Ups
+
+- Native parent list rows still need a tiny owner-level route from a generic
+  `Integration` to its concrete child when the UI opens a row from the parent
+  list. Add that only when the frontend detail composition needs it.
+- Reopen `django-polymorphic` only if native Django MTI plus that small owner
+  seam grows more code than the dependency would delete.
+- Do not add migrations or compatibility shims for the pre-1.0 database; runtime
+  and DB are disposable for this refactor.
 
 ## Verification
 
-- Backend tests for child creation, parent listing, permission scope, delete
-  cascades, and backend-class defaults.
-- GraphQL SDL check after runtime build.
-- Resource load for install/demo tiers.
-- Frontend unit tests for Integration form tabs and backend prefill.
-- Browser check that creating an inference integration happens through one form
-  and no separate provider form is required.
+- [x] `uv run examples/notes-angee/manage.py angee build`
+- [x] Fresh generated runtime migrations + `uv run examples/notes-angee/manage.py migrate`
+- [x] `uv run examples/notes-angee/manage.py rebac sync`
+- [x] `uv run examples/notes-angee/manage.py resources load`
+- [x] `uv run examples/notes-angee/manage.py resources load --include-demo`
+- [x] `uv run examples/notes-angee/manage.py check`
+- [x] `uv run examples/notes-angee/manage.py schema --check`
+- [x] `uv run pytest tests addons/angee/resources/tests`
+- [x] `uv run ruff check $(git diff --name-only -- '*.py')`
+- [ ] Browser check that creating an inference integration happens through one
+  form and no separate provider form is required; this remains tied to the
+  follow-up parent-detail composition.

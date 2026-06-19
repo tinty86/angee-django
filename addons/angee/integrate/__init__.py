@@ -1,4 +1,4 @@
-"""Thin runtime seam — Integration plus abstract related-model/Bridge bases.
+"""Thin runtime seam — Integration plus concrete child bridge bases.
 
-Owns shared integration substrate; concrete related models live in domain addons.
+Owns shared integration substrate; concrete child models live in domain addons.
 """

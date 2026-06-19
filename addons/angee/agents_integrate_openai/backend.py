@@ -46,9 +46,8 @@ class OpenAIInferenceBackend(SDKInferenceBackend):
     oauth_client = ""
     defaults = {
         "vendor": "openai",
-        "config": {
-            "credential_env": "OPENAI_API_KEY",
-        },
+        "name": "OpenAI",
+        "credential_env": "OPENAI_API_KEY",
     }
     default_broker_name = DEFAULT_BROKER_NAME
     oauth_auth_kwarg = ""

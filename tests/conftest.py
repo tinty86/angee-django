@@ -176,7 +176,7 @@ INTEGRATE_TEST_MODELS = (Vendor, Integration)
 """Concrete integration catalogue/integration models created on demand by integrate fixtures."""
 
 
-class VcsBridge(AbstractVcsBridge):
+class VcsBridge(Integration, AbstractVcsBridge):
     """Concrete VCS bridge used by source-addon tests.
 
     ``angee.integrate.schema`` binds the VCS console types at import time via
@@ -246,14 +246,17 @@ def make_integration(
     kind: Any = CredentialKind.STATIC_TOKEN,
     material: dict[str, Any] | None = None,
     impl_class: str = "none",
+    backend_class: str | None = None,
+    model: type[Any] = Integration,
+    **attrs: Any,
 ) -> Any:
-    """Create the iam credential chain and an integrate ``Integration`` for tests.
+    """Create the iam credential chain and an integration model row for tests.
 
-    Builds owner → OAuth client → credential → vendor → integration so a
-    capability/bridge fixture has an integration to run over. ``kind``/``material``
-    pick the credential kind (default a static token); pass
-    ``kind=CredentialKind.OAUTH`` for an OAuth-backed integration. Requires the iam
-    + integrate test tables (see ``INTEGRATE_TEST_MODELS``).
+    Builds owner → OAuth client → credential → vendor → model row. ``kind``/
+    ``material`` pick the credential kind (default a static token); pass
+    ``kind=CredentialKind.OAUTH`` for an OAuth-backed integration. ``model`` may
+    be a concrete MTI child such as ``VcsBridge``; VCS child rows choose
+    ``backend_class`` while parent-only integrations choose ``impl_class``.
     """
 
     if material is None:
@@ -268,33 +271,39 @@ def make_integration(
         )
         credential = Credential.objects.upsert_for_user(user, oauth_client, kind, material)
         vendor = Vendor.objects.create(slug=slug, display_name=slug.title())
-        return Integration.objects.create(
-            vendor=vendor,
-            credential=credential,
-            owner=user,
-            impl_class=impl_class,
-            status="active",
-        )
+        values = {
+            "vendor": vendor,
+            "credential": credential,
+            "owner": user,
+            "status": "active",
+            **attrs,
+        }
+        field_names = {field.name for field in model._meta.fields}
+        if "backend_class" in field_names:
+            values["backend_class"] = backend_class or ("local" if impl_class == "none" else impl_class)
+        else:
+            values["impl_class"] = impl_class
+        return model.objects.create(**values)
 
 
 class StubVCSBackend(VCSBackend):
-    """In-memory VCS backend for tests; canned data rides on ``integration.config``.
+    """In-memory VCS backend for tests; canned data rides on ``VcsBridge.config``.
 
-    Registered as the ``stub`` key in the test ``ANGEE_INTEGRATION_IMPLS`` so an
-    ``Integration(impl_class="stub")`` resolves to it. Each test injects
-    ``stub_repos``/``stub_tree``/``stub_blobs`` through the integration config.
+    Registered as the ``stub`` key in the test ``ANGEE_VCS_BACKEND_CLASSES`` so a
+    ``VcsBridge(backend_class="stub")`` resolves to it. Each test injects
+    ``stub_repos``/``stub_tree``/``stub_blobs`` through the bridge config.
     """
 
     def ls_repos(self, *, org: str = "") -> list[RepoDescriptor]:
         """Return the configured repositories (filtered to ``org`` when given)."""
 
-        repos = [RepoDescriptor(**spec) for spec in self.integration.config.get("stub_repos", [])]
+        repos = [RepoDescriptor(**spec) for spec in self.bridge.config.get("stub_repos", [])]
         return [repo for repo in repos if not org or repo.org == org]
 
     def get_repo(self, name: str) -> RepoDescriptor:
         """Return one configured repository by name or raise."""
 
-        for spec in self.integration.config.get("stub_repos", []):
+        for spec in self.bridge.config.get("stub_repos", []):
             if spec["name"] == name:
                 return RepoDescriptor(**spec)
         raise FileNotFoundError(name)
@@ -309,14 +318,14 @@ class StubVCSBackend(VCSBackend):
 
         del repository, ref, recursive
         prefix = path.strip("/")
-        entries = [TreeEntry(**spec) for spec in self.integration.config.get("stub_tree", [])]
+        entries = [TreeEntry(**spec) for spec in self.bridge.config.get("stub_tree", [])]
         return [entry for entry in entries if not prefix or entry.path == prefix or entry.path.startswith(f"{prefix}/")]
 
     def cat_file(self, repository: Any, *, ref: str, path: str) -> bytes:
         """Return the configured blob bytes for ``path`` or raise."""
 
         del repository, ref
-        blobs = self.integration.config.get("stub_blobs", {})
+        blobs = self.bridge.config.get("stub_blobs", {})
         if path in blobs:
             return str(blobs[path]).encode("utf-8")
         raise FileNotFoundError(path)
@@ -337,8 +346,8 @@ class StubVCSBackend(VCSBackend):
 class StubInferenceBackend(InferenceBackend):
     """In-memory inference backend for tests; canned models ride on ``provider.config``.
 
-    Registered as the ``stub_inference`` key in the test ``ANGEE_INTEGRATION_IMPLS`` so
-    an ``Integration(impl_class="stub_inference")`` resolves to it. Each test injects
+    Registered as the ``stub_inference`` key in the test ``ANGEE_INFERENCE_BACKEND_CLASSES`` so
+    an ``InferenceProvider(backend_class="stub_inference")`` resolves to it. Each test injects
     ``stub_models`` (a list of ``InferenceModelSpec`` kwargs) through the provider config.
     """
 

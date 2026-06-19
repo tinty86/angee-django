@@ -46,7 +46,6 @@ from angee.integrate.oauth import flow, state
 from angee.integrate.oauth.client import OAuthClientProtocol
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, INVALID_STATE, OAuthFlowError
 from angee.integrate.registry import bridge_models
-from angee.integrate.vcs.backend import VCSBackend
 
 Vendor = apps.get_model("integrate", "Vendor")
 Integration = apps.get_model("integrate", "Integration")
@@ -573,14 +572,14 @@ def _current_user_integration(
     impl_key = impl_field.key_for(impl_class) or ""
     if not (vendor_key and impl_key):
         raise ValueError("connectIntegration requires integrationId or vendorSlug and implClass.")
-    _integration_impl_class(impl_key)
+    impl_field.resolve_class(impl_key)
     vendor = _vendor_by_slug(vendor_key)
     with system_context(reason="integrate.graphql.connect_integration.draft"):
         integration = Integration.objects.filter(owner=user, vendor=vendor, impl_class=impl_key).first()
         if integration is not None:
             return integration
         try:
-            integration = Integration.objects.create_with_impl(
+            integration = Integration.objects.create(
                 owner=user,
                 vendor=vendor,
                 impl_class=impl_key,
@@ -605,6 +604,58 @@ def _attach_completed_integration(integration_sqid: str, user: Any, credential: 
     if credential.user_id != user.pk:
         raise PermissionDenied("Credential does not belong to the current user.")
     integration.attach_credential(credential)
+
+
+def connect_integration_target(
+    info: strawberry.Info,
+    integration: Any,
+    oauth_client: Any,
+    *,
+    redirect_uri: str,
+    next_path: str,
+) -> ConnectIntegrationResult:
+    """Attach the user's live credential to an integration-like MTI row or start OAuth."""
+
+    user = _session_user(info)
+    if integration.owner_id != user.pk:
+        raise PermissionDenied("Integration does not belong to the current user.")
+    credential = Credential.objects.live_oauth_for_user(user, oauth_client)
+    if credential is not None:
+        if credential.user_id != user.pk:
+            raise PermissionDenied("Credential does not belong to the current user.")
+        integration.attach_credential(credential)
+        return ConnectIntegrationResult(integration=cast("IntegrationType", integration), attached=True)
+    if not redirect_uri:
+        raise OAuthFlowError("redirect_uri_required", 400, "OAuth redirect URI is required.")
+    if oauth_client.configuration_state != "ready":
+        raise OAuthFlowError(
+            CLIENT_NOT_CONFIGURED,
+            400,
+            f"OAuth client is not fully configured ({oauth_client.configuration_state}).",
+        )
+    request = _request(info)
+    state_token, record, effective_redirect_uri, mode = flow.issue_flow(
+        request,
+        oauth_client,
+        redirect_uri,
+        user_id=str(user.pk),
+        next_path=flow.coerce_next_path(next_path, request),
+        flow=state.StateFlow.CONNECT,
+        integration_id=str(integration.sqid),
+    )
+    authorize_url = OAuthClientProtocol(oauth_client).authorize_url(
+        state=state_token,
+        redirect_uri=effective_redirect_uri,
+        scopes=oauth_client.default_scope_values,
+        code_challenge=flow.pkce_challenge(record.code_verifier),
+    )
+    return ConnectIntegrationResult(
+        integration=cast("IntegrationType", integration),
+        authorize_url=authorize_url,
+        state=state_token,
+        mode=mode,
+        redirect_uri=effective_redirect_uri,
+    )
 
 
 @strawberry.type
@@ -707,7 +758,6 @@ class ConnectionMutation:
         """Attach this user's live credential to an integration, or start OAuth."""
 
         user = _session_user(info)
-        request = _request(info)
         try:
             integration = _current_user_integration(
                 user,
@@ -716,48 +766,15 @@ class ConnectionMutation:
                 impl_class=impl_class,
             )
             oauth_client = _oauth_client_for_integration(integration)
-            credential = Credential.objects.live_oauth_for_user(user, oauth_client)
-            if credential is not None:
-                if credential.user_id != user.pk:
-                    raise PermissionDenied("Credential does not belong to the current user.")
-                integration.attach_credential(credential)
-                return ConnectIntegrationResult(
-                    integration=cast("IntegrationType", integration),
-                    attached=True,
-                )
-
-            if not redirect_uri:
-                raise OAuthFlowError("redirect_uri_required", 400, "OAuth redirect URI is required.")
-            if oauth_client.configuration_state != "ready":
-                raise OAuthFlowError(
-                    CLIENT_NOT_CONFIGURED,
-                    400,
-                    f"OAuth client is not fully configured ({oauth_client.configuration_state}).",
-                )
-            state_token, record, effective_redirect_uri, mode = flow.issue_flow(
-                request,
+            return connect_integration_target(
+                info,
+                integration,
                 oauth_client,
-                redirect_uri,
-                user_id=str(user.pk),
-                next_path=flow.coerce_next_path(next, request),
-                flow=state.StateFlow.CONNECT,
-                integration_id=str(integration.sqid),
-            )
-            authorize_url = OAuthClientProtocol(oauth_client).authorize_url(
-                state=state_token,
-                redirect_uri=effective_redirect_uri,
-                scopes=oauth_client.default_scope_values,
-                code_challenge=flow.pkce_challenge(record.code_verifier),
+                redirect_uri=redirect_uri,
+                next_path=next,
             )
         except OAuthFlowError as error:
             return ConnectIntegrationResult(error=_flow_error_message(error), error_code=error.code)
-        return ConnectIntegrationResult(
-            integration=cast("IntegrationType", integration),
-            authorize_url=authorize_url,
-            state=state_token,
-            mode=mode,
-            redirect_uri=effective_redirect_uri,
-        )
 
     @strawberry.mutation
     def connect_account_complete(
@@ -1008,7 +1025,6 @@ class IntegrationType(AngeeNode):
     owner: UserType
     impl_class: auto
     status: auto
-    config: JSON
     last_used_at: auto
     last_used_status: auto
     use_count_24h: auto
@@ -1019,10 +1035,10 @@ class IntegrationType(AngeeNode):
 
     @strawberry_django.field(only=["id"])
     def bridge(self) -> VcsBridgeType | None:
-        """Return this integration's VCS bridge related model when present."""
+        """Return this integration's VCS child row when present."""
 
         try:
-            return cast("VcsBridgeType", cast(Any, self).integrate_vcsbridge)
+            return cast("VcsBridgeType", getattr(cast(Any, self), "vcsbridge"))
         except ObjectDoesNotExist:
             return None
 
@@ -1043,7 +1059,7 @@ class IntegrationType(AngeeNode):
         """Return this integration implementation's board grouping category.
 
         Reads the class-level metadata off the resolved impl class — no instance,
-        no related model fetch — so a board/list render does not N+1 over related models.
+        no child model fetch — so a board/list render does not N+1 over child models.
         """
 
         impl_class = _integration_impl_class(cast(Any, self).impl_class)
@@ -1158,15 +1174,8 @@ class IntegrationInput:
     owner: relay.GlobalID
     credential: relay.GlobalID | None = None
     account: relay.GlobalID | None = strawberry.UNSET
-    # UNSET (not None): an omitted field must fall back to the model default, not
-    # overwrite it with null — `status`/`config` are non-null columns.
     impl_class: str | None = strawberry.UNSET
-    config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
-    # VcsBridge (integrate's own related model) create field. Downstream addons add
-    # related-model create fields with native Strawberry ``input_extensions`` — so
-    # integrate names none of them here (e.g. agents adds name/base_url/related_config).
-    webhook_secret: str = ""
 
 
 @strawberry.input
@@ -1178,7 +1187,6 @@ class IntegrationPatch:
     credential: relay.GlobalID | None = strawberry.UNSET
     account: relay.GlobalID | None = strawberry.UNSET
     owner: relay.GlobalID | None = strawberry.UNSET
-    config: JSON | None = strawberry.UNSET
     status: str | None = strawberry.UNSET
 
 
@@ -1259,11 +1267,11 @@ _VENDOR_MUTATION = crud(
 
 @strawberry.type
 class IntegrationCreateMutation:
-    """Admin create for an Integration and its optional implementation related model."""
+    """Admin create for a generic Integration parent row."""
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def create_integration(self, data: IntegrationInput) -> IntegrationType:
-        """Create a draft integration and related row in one transaction."""
+        """Create a draft integration parent row."""
 
         vendor = resolve_action_target(
             Vendor,
@@ -1303,16 +1311,10 @@ class IntegrationCreateMutation:
             attrs["credential"] = credential
         if account is not strawberry.UNSET:
             attrs["account"] = account
-        if data.config not in (strawberry.UNSET, None):
-            attrs["config"] = data.config
         if data.status not in (strawberry.UNSET, None):
             attrs["status"] = data.status
         with system_context(reason="integrate.graphql.integration.create"):
-            integration = Integration.objects.create_with_impl(
-                related_input=data,
-                related_unset=strawberry.UNSET,
-                **attrs,
-            )
+            integration = Integration.objects.create(**attrs)
         return cast(IntegrationType, integration)
 
 
@@ -1324,7 +1326,7 @@ _INTEGRATION_MUTATION = crud(
     name="integration",
     write_context="integrate.graphql.integration",
 )
-"""Admin integration update/delete; create writes the related model through IntegrationCreateMutation."""
+"""Admin integration update/delete; generic create writes the parent row only."""
 
 _WEBHOOK_MUTATION = crud(
     WebhookSubscriptionType,
@@ -1362,7 +1364,9 @@ def _create_impl_key(value: str | None) -> str:
     if value is None or value is strawberry.UNSET:
         return "none"
     field = cast(Any, Integration._meta.get_field("impl_class"))
-    return str(field.key_for(value) or "none")
+    key = str(field.key_for(value) or "none")
+    field.resolve_class(key)
+    return key
 
 
 @strawberry.type
@@ -1375,7 +1379,6 @@ class IntegrationCredentialMutation:
         info: strawberry.Info,
         credential: relay.GlobalID,
         vendor_slug: str,
-        credential_env: str = "",
     ) -> IntegrationType:
         """Create or update this user's integration from a connected credential.
 
@@ -1397,22 +1400,25 @@ class IntegrationCredentialMutation:
             raise PermissionDenied("Credential does not belong to the current user.")
         vendor = _vendor_by_slug(vendor_slug)
         with system_context(reason="integrate.graphql.integration_from_credential"), transaction.atomic():
-            # Race-safe upsert keyed by the (owner, vendor, impl_class) unique
-            # constraint: two concurrent submits converge on the one row instead
-            # of both missing a get-then-insert and creating duplicates.
-            integration, _created = Integration.objects.update_or_create(
-                owner=user,
-                vendor=vendor,
-                impl_class="none",
-                defaults={
-                    "credential": oauth_credential,
-                    "account": oauth_credential.external_account,
-                    "status": "active",
-                },
+            # Self-service links reuse the user's draft row for this vendor; concrete
+            # child models own any domain-specific uniqueness.
+            integration = (
+                Integration.objects.filter(owner=user, vendor=vendor, impl_class="none").order_by("pk").first()
             )
-            if credential_env:
-                integration.set_credential_env(credential_env)
-                integration.save(update_fields=["config", "updated_at"])
+            if integration is None:
+                integration = Integration.objects.create(
+                    owner=user,
+                    vendor=vendor,
+                    impl_class="none",
+                    credential=oauth_credential,
+                    account=oauth_credential.external_account,
+                    status="active",
+                )
+            else:
+                integration.credential = oauth_credential
+                integration.account = oauth_credential.external_account
+                integration.status = "active"
+                integration.save(update_fields=["credential", "account", "status", "updated_at"])
         return cast(IntegrationType, integration)
 
 
@@ -1431,7 +1437,7 @@ class IntegrationActionMutation:
         items = 0
         with system_context(reason="integrate.graphql.sync_integration"):
             for model in bridge_models():
-                for bridge in model._default_manager.filter(integration=integration).order_by("pk"):
+                for bridge in model._default_manager.filter(pk=integration.pk).order_by("pk"):
                     ran += 1
                     bridge.mark_sync_started(now=now)
                     try:
@@ -1504,20 +1510,26 @@ class WebhookActionMutation:
 
 @strawberry_django.type(VcsBridge)
 class VcsBridgeType(AngeeNode):
-    """Admin projection of a VCS bridge related model."""
+    """Admin projection of a VCS bridge child model."""
 
-    integration: IntegrationType
+    vendor: VendorType
+    credential: CredentialType | None
+    account: ExternalAccountType | None
+    owner: UserType
+    backend_class: auto
+    status: auto
+    config: JSON
     last_sync_completed_at: auto
     last_sync_status: auto
     created_at: auto
     updated_at: auto
 
-    @strawberry_django.field(only=["integration"])
+    @strawberry_django.field(only=["backend_class", "status"])
     def display_name(self) -> str:
         """Return a human label for the record header and relation pickers."""
 
-        integration = cast(Any, self).integration
-        return f"{integration.impl_class} ({integration.status})"
+        bridge = cast(Any, self)
+        return f"{bridge.backend_class} ({bridge.status})"
 
 
 @strawberry_django.type(Repository)
@@ -1593,17 +1605,30 @@ class RepoCandidate:
 
 @strawberry.input
 class VcsBridgeInput:
-    """Fields accepted when creating a VCS bridge related model."""
+    """Fields accepted when creating a VCS bridge child row."""
 
-    integration: relay.GlobalID
+    vendor: relay.GlobalID
+    owner: relay.GlobalID
+    credential: relay.GlobalID | None = None
+    account: relay.GlobalID | None = strawberry.UNSET
+    backend_class: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+    config: JSON | None = strawberry.UNSET
     webhook_secret: str = ""
 
 
 @strawberry.input
 class VcsBridgePatch:
-    """Fields accepted when updating a VCS bridge related model."""
+    """Fields accepted when updating a VCS bridge child model."""
 
     id: relay.GlobalID
+    vendor: relay.GlobalID | None = strawberry.UNSET
+    credential: relay.GlobalID | None = strawberry.UNSET
+    account: relay.GlobalID | None = strawberry.UNSET
+    owner: relay.GlobalID | None = strawberry.UNSET
+    backend_class: str | None = strawberry.UNSET
+    status: str | None = strawberry.UNSET
+    config: JSON | None = strawberry.UNSET
     webhook_secret: str | None = strawberry.UNSET
 
 
@@ -1685,39 +1710,142 @@ class VCSConsoleQuery:
             return [_repo_candidate(descriptor) for descriptor in vcs.search_repositories(query)]
 
 
-def _require_vcs_integration(integration: Any) -> None:
-    """Raise when an integration's implementation is not a VCS backend."""
+def _vcs_backend_key(value: str | None) -> str:
+    """Return a VCS backend key, defaulting to the local dev backend."""
 
-    impl_class = _integration_impl_class(str(getattr(integration, "impl_class", "")))
-    if not issubclass(impl_class, VCSBackend):
-        raise ValueError(f"Integration {integration.sqid} does not use a VCS implementation.")
+    field = cast(Any, VcsBridge._meta.get_field("backend_class"))
+    if value is None or value is strawberry.UNSET:
+        key = "local"
+    else:
+        key = str(field.key_for(value) or "")
+    field.resolve_class(key)
+    return key
 
 
 @strawberry.type
 class VcsBridgeCreateMutation:
-    """Admin create for a VCS bridge, validating the owning integration impl."""
+    """Admin create for a VCS bridge child, validating the parent integration impl."""
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def create_vcs_integration(self, data: VcsBridgeInput) -> VcsBridgeType:
-        """Create a VCS bridge only for integrations backed by ``VCSBackend``."""
+        """Create a VCS child row directly."""
 
-        integration = resolve_action_target(
-            Integration,
-            data.integration,
-            reason="integrate.graphql.vcs_integration.create.integration",
+        vendor = resolve_action_target(
+            Vendor,
+            data.vendor,
+            reason="integrate.graphql.vcs_integration.create.vendor",
         )
-        _require_vcs_integration(integration)
-        with system_context(reason="integrate.graphql.vcs_integration.create"), transaction.atomic():
-            bridge = VcsBridge.objects.create(
-                integration=integration,
-                webhook_secret=data.webhook_secret,
+        owner = _user_from_global_id(data.owner)
+        credential = (
+            None
+            if data.credential is None
+            else resolve_action_target(
+                Credential,
+                data.credential,
+                reason="integrate.graphql.vcs_integration.create.credential",
             )
+        )
+        account = (
+            strawberry.UNSET
+            if data.account is strawberry.UNSET
+            else (
+                None
+                if data.account is None
+                else resolve_action_target(
+                    ExternalAccount,
+                    data.account,
+                    reason="integrate.graphql.vcs_integration.create.account",
+                )
+            )
+        )
+        attrs: dict[str, Any] = {
+            "vendor": vendor,
+            "owner": owner,
+            "backend_class": _vcs_backend_key(data.backend_class),
+            "webhook_secret": data.webhook_secret,
+        }
+        if credential is not None:
+            attrs["credential"] = credential
+        if account is not strawberry.UNSET:
+            attrs["account"] = account
+        if data.config is not strawberry.UNSET:
+            attrs["config"] = data.config
+        if data.status not in (strawberry.UNSET, None):
+            attrs["status"] = data.status
+        with system_context(reason="integrate.graphql.vcs_integration.create"), transaction.atomic():
+            bridge = VcsBridge.objects.create(**attrs)
+        return cast(VcsBridgeType, bridge)
+
+
+@strawberry.type
+class VcsBridgeUpdateMutation:
+    """Admin update for a VCS bridge child, validating backend-owned fields."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def update_vcs_integration(self, data: VcsBridgePatch) -> VcsBridgeType:
+        """Update a VCS child row, rematerializing backend defaults on backend change."""
+
+        bridge = resolve_action_target(
+            VcsBridge,
+            data.id,
+            reason="integrate.graphql.vcs_integration.update",
+        )
+        provided: set[str] = set()
+        backend_changed = False
+        with system_context(reason="integrate.graphql.vcs_integration.update"), transaction.atomic():
+            if data.vendor is not strawberry.UNSET:
+                bridge.vendor = resolve_action_target(
+                    Vendor,
+                    data.vendor,
+                    reason="integrate.graphql.vcs_integration.update.vendor",
+                )
+                provided.add("vendor")
+            if data.owner is not strawberry.UNSET:
+                bridge.owner = _user_from_global_id(data.owner)
+                provided.add("owner")
+            if data.credential is not strawberry.UNSET:
+                bridge.credential = (
+                    None
+                    if data.credential is None
+                    else resolve_action_target(
+                        Credential,
+                        data.credential,
+                        reason="integrate.graphql.vcs_integration.update.credential",
+                    )
+                )
+                provided.add("credential")
+            if data.account is not strawberry.UNSET:
+                bridge.account = (
+                    None
+                    if data.account is None
+                    else resolve_action_target(
+                        ExternalAccount,
+                        data.account,
+                        reason="integrate.graphql.vcs_integration.update.account",
+                    )
+                )
+                provided.add("account")
+            if data.backend_class is not strawberry.UNSET:
+                backend_key = _vcs_backend_key(data.backend_class)
+                backend_changed = backend_key != bridge.backend_class
+                bridge.backend_class = backend_key
+            if data.status is not strawberry.UNSET:
+                bridge.status = data.status
+                provided.add("status")
+            if data.config is not strawberry.UNSET:
+                bridge.config = data.config
+                provided.add("config")
+            if data.webhook_secret is not strawberry.UNSET:
+                bridge.webhook_secret = data.webhook_secret or ""
+                provided.add("webhook_secret")
+            if backend_changed:
+                bridge.materialize_backend_defaults(provided=frozenset(provided))
+            bridge.save()
         return cast(VcsBridgeType, bridge)
 
 
 _VCS_INTEGRATION_MUTATION = crud(
     VcsBridgeType,
-    update=VcsBridgePatch,
     delete=True,
     permission_classes=_ADMIN_PERMISSION_CLASSES,
     name="vcs_integration",
@@ -1841,8 +1969,9 @@ schemas = {
         ],
     },
     "console": {
-        # The impl-picker lookup (Integration.impl_class / OAuthClient.provider_type
-        # live here); a generic framework query contributed where its models do.
+        # The impl-picker lookup (Integration.impl_class / VcsBridge.backend_class /
+        # OAuthClient.provider_type live here); a generic framework query contributed
+        # where its models do.
         "query": [ConsoleImplChoicesQuery, IntegrateConnectionConsoleQuery, IntegrateConsoleQuery, VCSConsoleQuery],
         "mutation": [
             _OAUTH_CLIENT_MUTATION,
@@ -1854,6 +1983,7 @@ schemas = {
             _INTEGRATION_MUTATION,
             _WEBHOOK_MUTATION,
             VcsBridgeCreateMutation,
+            VcsBridgeUpdateMutation,
             _VCS_INTEGRATION_MUTATION,
             _SOURCE_MUTATION,
             _REPOSITORY_MUTATION,

@@ -1,9 +1,8 @@
-// The browser-facing callback paths for the outbound account-connect flow. The
-// path strings are stable (provider redirect-uri registrations point at them); only
-// the route names moved from `iam.connect.*` to `integrate.connect.*`.
+// The browser-facing callback path for the outbound account-connect flow. It lives
+// under integrate so OAuth client registrations and provider connect flows share
+// one canonical URL.
 
-export const CONNECT_CALLBACK_PATH = "/callback";
-export const LEGACY_CONNECT_CALLBACK_PATH = "/iam/oauth/callback";
+export const CONNECT_CALLBACK_PATH = "/integrate/oauth/callback";
 
 /** The absolute callback URL used when connecting an external account. */
 export function connectCallbackRedirectUri(): string {

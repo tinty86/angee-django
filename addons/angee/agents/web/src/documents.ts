@@ -56,6 +56,28 @@ export const RenderAgentPrompt = graphql(`
   }
 `);
 
+export const ConnectInferenceProvider = graphql(`
+  mutation ConnectInferenceProvider(
+    $id: ID!
+    $redirectUri: String!
+    $next: String!
+  ) {
+    connectInferenceProvider(
+      id: $id
+      redirectUri: $redirectUri
+      next: $next
+    ) {
+      attached
+      authorizeUrl
+      error
+      mode
+      state
+      redirectUri
+      integration { id status }
+    }
+  }
+`);
+
 // The view envelope the chat sends to `renderAgentPrompt`: what the user is looking at.
 export interface AgentChatView extends Record<string, unknown> {
   kind: "record" | "list" | "dashboard";

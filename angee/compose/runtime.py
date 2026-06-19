@@ -62,6 +62,8 @@ class Runtime:
         self.runtime_dir = runtime_dir
         self.runtime_module = runtime_module
         self.sources_by_label = self._sources_by_label()
+        self.source_models_by_composition_label = self._source_models_by_composition_label()
+        self._check_runtime_parent_targets()
         self.extensions = self._extensions_for()
         self._check_field_collisions()
         self.labels = tuple(sorted(self.sources_by_label))
@@ -240,11 +242,13 @@ class Runtime:
 
         This is what makes a source addon's abstract models real. For each
         source model it emits a concrete class that imports the abstract source
-        (aliased ``Abstract<Name>``) and any ``extends`` extension bases, lists
-        the extension bases ahead of the source in the MRO, and pins
-            ``Meta.abstract = False`` with ``app_label = label`` — so the generated
-            class registers under the source addon's label when the composer imports
-            ``runtime.<label>.models``. Library-owned ``Meta`` facts ride along
+        (aliased ``Abstract<Name>``), any same-row ``extends`` extension bases,
+        and, for ``runtime = True`` materialized children, the concrete generated
+        parent model named by ``extends``. It lists extension bases first, then
+        the concrete parent when present, then the source, and pins
+        ``Meta.abstract = False`` with ``app_label = label`` — so the generated
+        class registers under the source addon's label when the composer imports
+        ``runtime.<label>.models``. Library-owned ``Meta`` facts ride along
         (``db_table``, ``swappable``, REBAC options), and ``HistoryMixin``
         models gain a ``HistoricalRecords`` field. Field collisions across the
         composed bases are rejected at construction
@@ -262,15 +266,21 @@ class Runtime:
             tuple[
                 type[AngeeModel],
                 str,
+                str | None,
                 tuple[tuple[type[models.Model], str], ...],
                 tuple[ModelDecorator, ...],
             ]
         ] = []
-        for model_class in source_models:
+        for model_class in self._ordered_source_models(label, source_models):
             source_alias = f"Abstract{model_class.__name__}"
             imports.extend(self._class_import(model_class, source_alias))
             if issubclass(model_class, HistoryMixin):
                 imports.append("from simple_history.models import HistoricalRecords")
+            runtime_parent_alias = self._runtime_parent_alias(model_class)
+            if runtime_parent_alias is not None:
+                runtime_parent_import = self._runtime_parent_import(label, model_class, runtime_parent_alias)
+                if runtime_parent_import is not None:
+                    imports.append(runtime_parent_import)
             extension_bases = tuple(
                 base
                 for extension in self.extensions.get(
@@ -290,6 +300,7 @@ class Runtime:
                 (
                     model_class,
                     source_alias,
+                    runtime_parent_alias,
                     tuple(aliased_extensions),
                     decorators,
                 )
@@ -297,9 +308,12 @@ class Runtime:
 
         lines.extend(sorted(set(imports)))
         lines.append("")
-        for model_class, source_alias, extension_aliases, decorators in render_plans:
+        for model_class, source_alias, runtime_parent_alias, extension_aliases, decorators in render_plans:
             meta_name = f"_{model_class.__name__}Meta"
-            base_names = [alias for _extension, alias in extension_aliases] + [source_alias]
+            base_names = [alias for _extension, alias in extension_aliases]
+            if runtime_parent_alias is not None:
+                base_names.append(runtime_parent_alias)
+            base_names.append(source_alias)
             meta_lines = [
                 "        abstract = False",
                 f"        app_label = {label!r}",
@@ -456,23 +470,33 @@ class Runtime:
     def _extensions_for(
         self,
     ) -> dict[str, tuple[type[AngeeModel], ...]]:
-        """Return model extensions grouped by target composition label."""
+        """Return same-row model extensions grouped by target composition label."""
 
-        known_targets = {
-            model.get_composition_label() for source_models in self.sources_by_label.values() for model in source_models
-        }
         grouped: dict[str, list[type[AngeeModel]]] = {}
         for extension in (extension for addon in self.addons for extension in self.model_contributions(addon)[1]):
             extension_model = cast(type[AngeeModel], extension)
             target = extension_model.get_extension_target()
             if target is None:
                 continue
-            if target not in known_targets:
+            if target not in self.source_models_by_composition_label:
                 raise ImproperlyConfigured(
                     f"{extension.__module__}.{extension.__name__} extends unknown model {target!r}"
                 )
             grouped.setdefault(target, []).append(extension_model)
         return {target: tuple(classes) for target, classes in grouped.items()}
+
+    def _check_runtime_parent_targets(self) -> None:
+        """Raise when a materialized child extends an unknown source model."""
+
+        for source_models in self.sources_by_label.values():
+            for model_class in source_models:
+                target = model_class.get_extension_target()
+                if target is None:
+                    continue
+                if target not in self.source_models_by_composition_label:
+                    raise ImproperlyConfigured(
+                        f"{model_class.__module__}.{model_class.__name__} extends unknown model {target!r}"
+                    )
 
     def _check_field_collisions(self) -> None:
         """Raise when composed bases declare the same direct field."""
@@ -504,6 +528,22 @@ class Runtime:
             models_for_label = grouped.setdefault(addon.label, [])
             models_for_label.extend(cast(type[AngeeModel], model) for model in self.model_contributions(addon)[0])
         return {label: tuple(source_models) for label, source_models in sorted(grouped.items()) if source_models}
+
+    def _source_models_by_composition_label(self) -> dict[str, type[AngeeModel]]:
+        """Return emitted source models keyed by normalized composition label."""
+
+        models_by_label: dict[str, type[AngeeModel]] = {}
+        for source_models in self.sources_by_label.values():
+            for model_class in source_models:
+                label = model_class.get_composition_label()
+                previous = models_by_label.setdefault(label, model_class)
+                if previous is not model_class:
+                    raise ImproperlyConfigured(
+                        f"Runtime composes duplicate source model label {label!r}: "
+                        f"{previous.__module__}.{previous.__name__} and "
+                        f"{model_class.__module__}.{model_class.__name__}"
+                    )
+        return models_by_label
 
     def _actual_source_paths(self) -> set[Path]:
         """Return generated source paths currently on disk."""
@@ -583,6 +623,61 @@ class Runtime:
         """Return import lines needed to reference ``model_class``."""
 
         return [f"from {model_class.__module__} import {model_class.__name__} as {alias}"]
+
+    def _runtime_parent_alias(
+        self,
+        model_class: type[AngeeModel],
+    ) -> str | None:
+        """Return the concrete runtime parent alias for a materialized child."""
+
+        target = model_class.get_extension_target()
+        if target is None or not model_class.is_runtime_model():
+            return None
+        return self.source_models_by_composition_label[target].__name__
+
+    def _runtime_parent_import(
+        self,
+        label: str,
+        model_class: type[AngeeModel],
+        alias: str,
+    ) -> str | None:
+        """Return the import line for a materialized child's concrete parent."""
+
+        target = model_class.get_extension_target()
+        if target is None:
+            raise ImproperlyConfigured(
+                f"{model_class.__module__}.{model_class.__name__} has no runtime parent target"
+            )
+        parent = self.source_models_by_composition_label[target]
+        if parent._meta.app_label == label:
+            return None
+        return f"from {self.runtime_module}.{parent._meta.app_label}.models import {parent.__name__} as {alias}"
+
+    def _ordered_source_models(
+        self,
+        label: str,
+        source_models: tuple[type[AngeeModel], ...],
+    ) -> tuple[type[AngeeModel], ...]:
+        """Return source models with same-app runtime parents emitted first."""
+
+        remaining = sorted(source_models, key=lambda cls: cls._meta.object_name)
+        ordered: list[type[AngeeModel]] = []
+        ordered_set: set[type[AngeeModel]] = set()
+        while remaining:
+            progressed = False
+            for model_class in tuple(remaining):
+                target = model_class.get_extension_target()
+                parent = self.source_models_by_composition_label.get(target) if target else None
+                if parent is not None and parent._meta.app_label == label and parent not in ordered_set:
+                    continue
+                ordered.append(model_class)
+                ordered_set.add(model_class)
+                remaining.remove(model_class)
+                progressed = True
+            if not progressed:
+                blocked = ", ".join(model.__name__ for model in remaining)
+                raise ImproperlyConfigured(f"Runtime app {label!r} has cyclic materialized child models: {blocked}")
+        return tuple(ordered)
 
     def _rebac_meta_source(self, model_class: type[models.Model]) -> list[str]:
         """Return concrete Meta lines for REBAC model options."""
@@ -704,10 +799,9 @@ class Runtime:
                     models_owned.append(model_class)
             else:
                 if model_class.is_runtime_model():
-                    raise ImproperlyConfigured(
-                        f"{model_class._meta.label} declares both runtime = True and extends"
-                    )
-                extensions.append(model_class)
+                    models_owned.append(model_class)
+                else:
+                    extensions.append(model_class)
         return (
             tuple(sorted(models_owned, key=lambda cls: cls._meta.object_name)),
             tuple(extensions),

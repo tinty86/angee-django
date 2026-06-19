@@ -33,12 +33,12 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  window.history.replaceState(null, "", "/callback");
+  window.history.replaceState(null, "", "/integrate/oauth/callback");
 });
 
 describe("OAuthConnectCallbackPage", () => {
   test("treats a payload without an error as success and redirects to next", async () => {
-    window.history.replaceState(null, "", "/callback?code=connect-ok&state=s1");
+    window.history.replaceState(null, "", "/integrate/oauth/callback?code=connect-ok&state=s1");
     mocks.mutate.mockResolvedValue({
       connectAccountComplete: {
         next: "/integrate/accounts",
@@ -61,7 +61,7 @@ describe("OAuthConnectCallbackPage", () => {
   });
 
   test("renders the provider error message when the payload carries an error", async () => {
-    window.history.replaceState(null, "", "/callback?code=connect-bad&state=s2");
+    window.history.replaceState(null, "", "/integrate/oauth/callback?code=connect-bad&state=s2");
     mocks.mutate.mockResolvedValue({
       connectAccountComplete: {
         next: "",

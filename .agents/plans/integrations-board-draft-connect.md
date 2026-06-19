@@ -1,5 +1,14 @@
 # Integrations: board + rich list, draft integrations, one-click connect
 
+Status: SUPERSEDED for backend/model/registry/connect architecture. Keep only
+the UX intent (grouped integrations list/board, draft rows, one-click connect).
+The implementation owner map is now
+`.agents/plans/integration-child-model-backends.md`: `Integration` is the
+Django multi-table inheritance parent, concrete integration kinds are child
+models, and child rows own `backend_class` / config when they need backend-
+specific state. Do not implement the companion-row or unified parent
+`impl_class` design described below.
+
 > Superseded architecture note: the backend shape in this plan used
 > `Integration.impl_class + 1:1 companion models`. That direction is now
 > replaced by

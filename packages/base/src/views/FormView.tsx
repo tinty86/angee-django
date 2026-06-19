@@ -475,7 +475,7 @@ export function FormView({
           formErrors.length > 0
             ? formErrors.join(" ")
             : Object.keys(fieldErrors).length > 0
-              ? "Please fix the highlighted fields."
+              ? fieldValidationSummary(fieldErrors, fieldByName)
               : "Could not save record.",
         );
       }
@@ -637,10 +637,10 @@ export function FormView({
   // Apply a field's `prefill` seeds (the impl-defaults mechanism): picking an impl
   // loads its full preset, so every declared default lands — including booleans the
   // model leaves `false` (e.g. `login_enabled`), which a blank-only merge would skip.
-  // The impl field is create-only, so this fires only while the row is new and never
-  // overwrites a saved record's edits.
+  // Create-only impl fields seed only while new; editable impl fields may deliberately
+  // reseed sibling fields on saved rows (e.g. switching an inference backend).
   function applyFieldPrefill(field: FieldDescriptor, value: unknown): void {
-    if (!isCreate) return;
+    if (!isCreate && field.createOnly) return;
     const seeds = field.prefill?.(value);
     if (!seeds) return;
     for (const [name, seed] of Object.entries(seeds)) {
@@ -1540,6 +1540,18 @@ function gridFieldClass(field: FieldDescriptor): string | undefined {
 
 function fieldErrorMessages(errors: readonly unknown[]): string[] {
   return errors.map(fieldErrorMessage);
+}
+
+function fieldValidationSummary(
+  fieldErrors: Record<string, readonly string[]>,
+  fieldByName: ReadonlyMap<string, FormField>,
+): string {
+  const fields = Object.keys(fieldErrors).map(
+    (name) => fieldByName.get(name)?.label || name,
+  );
+  return fields.length > 0
+    ? `Please fix the highlighted fields: ${fields.join(", ")}.`
+    : "Please fix the highlighted fields.";
 }
 
 function fieldErrorMessage(error: unknown): string {

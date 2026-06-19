@@ -24,15 +24,12 @@ export const enIntegrateMessages: Record<string, string> = {
   "integrate.integrations.inference": "Inference provider",
   "integrate.integrations.vcs": "VCS bridge",
   "integrate.integrations.implClass": "Implementation",
-  "integrate.integrations.providerName": "Provider name",
-  "integrate.integrations.baseUrl": "Base URL",
-  "integrate.integrations.providerConfig": "Provider config",
-  "integrate.integrations.webhookSecret": "Webhook secret",
   "integrate.integrations.action.connect": "Connect",
   "integrate.integrations.connect.startError": "Could not start integration connection.",
   "integrate.integrations.connect.connected": "Integration connected.",
 
   // VCS bridge page.
+  "integrate.vcs.backendClass": "Backend",
   "integrate.vcs.discover": "Discover repositories",
 
   // Repositories page detail groups.

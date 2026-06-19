@@ -54,11 +54,11 @@ dev = [
 ]
 
 [tool.uv.sources]
-# Developing against the local django-zed-rebac checkout while a create-gating fix
-# lands; switch back to the published pin once it ships.
-# django-zed-rebac = { path = "../django-zed-rebac", editable = true }
-strawberry-graphql = { path = "../strawberry" }
-strawberry-graphql-django = { path = "../strawberry-django" }
+# Developing against the Angee Strawberry forks while input-object extension fixes
+# land upstream; keep these branch pins explicit so every environment resolves the
+# same GraphQL behavior.
+strawberry-graphql = { git = "ssh://git@github.com/ang-ee/strawberry.git", branch = "codex/input-object-extensions" }
+strawberry-graphql-django = { git = "ssh://git@github.com/ang-ee/strawberry-django.git", branch = "codex/input-object-extensions" }
 
 [tool.hatch.build.targets.wheel]
 # Two source roots merge into the one `angee` PEP 420 namespace: the framework

@@ -122,6 +122,14 @@ modules for emitted labels, and imports generated model modules. Source-model
 declarations such as runtime models, extension targets, composition labels, and
 extension bases are owned by the base model classes they live on.
 
+`extends` has two runtime shapes:
+
+- `extends = "app.Model"` with `runtime = False` contributes a same-row abstract
+  extension base that the composer folds into the target runtime model.
+- `extends = "app.Model"` with `runtime = True` emits a materialized Django
+  multi-table-inheritance child whose generated concrete class inherits the
+  target's generated runtime model and the child source model.
+
 The composer owns only the generated Python runtime source map. Django owns
 runtime migrations after `makemigrations`. GraphQL SDL under `runtime/schemas/`
 and TypeScript codegen output under `runtime/gql/` are owned by their GraphQL and

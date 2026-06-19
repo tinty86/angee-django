@@ -119,14 +119,16 @@ describe("integrate addon manifest", () => {
     const route = (integrate.routes ?? []).find(
       (item) => item.name === "integrate.connect.callback",
     );
-    const legacy = (integrate.routes ?? []).find(
-      (item) => item.name === "integrate.connect.callback.legacy",
-    );
-    expect(route?.path).toBe("/callback");
+    expect(route?.path).toBe("/integrate/oauth/callback");
     expect(route?.shell).toBe("console");
     expect(route?.component).toBeTypeOf("function");
-    expect(legacy?.path).toBe("/iam/oauth/callback");
-    expect(legacy?.component).toBe(route?.component);
+    expect(
+      (integrate.routes ?? []).some((item) =>
+        item.name.startsWith("integrate.connect.callback.") ||
+        item.path === "/callback" ||
+        item.path === "/iam/oauth/callback",
+      ),
+    ).toBe(false);
   });
 
   test("nests each connect record route under its list, no component", () => {

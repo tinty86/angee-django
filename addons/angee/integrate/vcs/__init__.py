@@ -5,6 +5,6 @@ parser (:mod:`templates`). It owns *enumeration over a host's REST API*; it neve
 clones — git transport (clone/fetch/worktree) is the operator's job. Host-specific
 backends (e.g. GitHub) live in their own addon and subclass
 :class:`~angee.integrate.vcs.backend.VCSBackend`, registered into
-``ANGEE_INTEGRATION_IMPLS`` and named per ``Integration.impl_class`` row by an
+``ANGEE_VCS_BACKEND_CLASSES`` and named per ``VcsBridge.backend_class`` row by an
 ``ImplClassField``.
 """
