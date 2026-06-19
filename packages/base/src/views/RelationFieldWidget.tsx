@@ -3,8 +3,6 @@ import { useMemo, type ReactElement } from "react";
 import {
   useModelMetadata,
   useModelRoute,
-  useResourceList,
-  type Row,
 } from "@angee/sdk";
 
 import { recordPath } from "./DataPageRouted";
@@ -13,10 +11,7 @@ import {
   type RelationFieldInfo,
 } from "./model-metadata-defaults";
 import { RelationPicker } from "./RelationPicker";
-
-// Relation pickers list a bounded set; a record beyond this is found by search
-// once the option set is paged (a later refinement), not silently dropped here.
-const RELATION_OPTION_LIMIT = 200;
+import { useRelationOptions } from "./relation-options";
 
 export interface RelationFieldWidgetProps {
   value?: string | null;
@@ -42,18 +37,7 @@ export function RelationFieldWidget({
   placeholder,
   "aria-label": ariaLabel,
 }: RelationFieldWidgetProps): ReactElement {
-  const list = useResourceList(relation.model, {
-    fields: [relation.labelField],
-    pageSize: RELATION_OPTION_LIMIT,
-  });
-  const options = useMemo(
-    () =>
-      list.rows.map((row: Row) => ({
-        value: String(row.id ?? ""),
-        label: String(row[relation.labelField] ?? row.id ?? ""),
-      })),
-    [list.rows, relation.labelField],
-  );
+  const { list, options } = useRelationOptions(relation);
 
   const relatedMetadata = useModelMetadata(relation.model);
   const createFields = useMemo(

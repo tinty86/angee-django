@@ -8,10 +8,10 @@ import {
   Group,
   GroupListView,
   List,
+  useRelationFacet,
   useRecordActionMutation,
   useEnumOptions,
   useImplPrefill,
-  type DataToolbarFilterOption,
   type DataToolbarGroupOption,
 } from "@angee/base";
 import {
@@ -19,7 +19,7 @@ import {
   ConnectOAuthButton,
   connectCallbackPathForRecord,
 } from "@angee/integrate";
-import { useAuthoredMutation, useResourceList, type Row } from "@angee/sdk";
+import { useAuthoredMutation, type Row } from "@angee/sdk";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectInferenceProvider } from "../documents";
@@ -116,38 +116,14 @@ export function inferenceConnectCallbackPath(
 export function InferenceModelsPage(): React.ReactElement {
   const t = useAgentsT();
   const modelUseOptions = useEnumOptions(MODEL_MODEL, "modelUse");
-  const providers = useResourceList(PROVIDER_MODEL, {
-    fields: ["id", "name"],
-    pageSize: 100,
+  const providerFacet = useRelationFacet(MODEL_MODEL, {
+    field: "provider",
+    filterField: "providerId",
+    label: t("agents.inference.provider"),
   });
-  const providerFilters = React.useMemo<readonly DataToolbarFilterOption[]>(
-    () =>
-      providers.rows
-        .flatMap((provider) => {
-          const id = typeof provider.id === "string" ? provider.id : "";
-          const name = typeof provider.name === "string" ? provider.name : "";
-          if (!id || !name) return [];
-          return [{
-            id: `provider:${id}`,
-            label: name,
-            chipLabel: name,
-            filter: { providerId: { exact: id } },
-          }];
-        })
-        .sort((left, right) => String(left.label).localeCompare(String(right.label))),
-    [providers.rows],
-  );
   const groupOptions = React.useMemo<readonly DataToolbarGroupOption[]>(
     () => [
-      {
-        id: "provider.name",
-        label: t("agents.inference.provider"),
-        group: {
-          field: "provider.name",
-          aggregateField: "provider",
-          aggregateKey: "providerId",
-        },
-      },
+      ...(providerFacet.groupOption ? [providerFacet.groupOption] : []),
       {
         id: "modelUse",
         label: t("agents.inference.capability"),
@@ -159,7 +135,7 @@ export function InferenceModelsPage(): React.ReactElement {
         group: { field: "status" },
       },
     ],
-    [t],
+    [providerFacet.groupOption, t],
   );
 
   return (
@@ -167,7 +143,8 @@ export function InferenceModelsPage(): React.ReactElement {
       <List
         model={MODEL_MODEL}
         list={GroupListView}
-        filters={providerFilters}
+        filters={providerFacet.filters}
+        filterFields={providerFacet.filterFields}
         groupOptions={groupOptions}
         defaultGroups={{
           list: { field: "modelUse" },

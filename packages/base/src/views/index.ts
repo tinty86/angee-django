@@ -120,6 +120,11 @@ export {
   type RecordActionRunner,
   type UseRecordActionOptions,
 } from "./record-action";
+export {
+  useRelationFacet,
+  type RelationFacet,
+  type RelationFacetOptions,
+} from "./relation-facet";
 export { enumValueLabel, statusLabel } from "./ListInternals";
 export * from "./data-view-model";
 export * from "./data-view-context";

@@ -30,10 +30,14 @@ providers are inference `backend_class` values, not integration impls.
   hook per action. Implemented as `useRecordAction` /
   `useRecordActionMutation` in `@angee/base`, then wired into agents and
   integrate record actions.
-- [ ] Make relation facets/group options a base/DataPage primitive before
+- [x] Make relation facets/group options a base/DataPage primitive before
   hand-authoring more inference list filters. The provider/model-capability
   filters should reuse relation metadata and the same relation option-fetch path
-  as fields, not page-local list queries.
+  as fields, not page-local list queries. Implemented the first reusable seam as
+  `useRelationFacet` in `@angee/base`; `InferenceModelsPage` now asks for a
+  provider relation facet instead of fetching and mapping providers itself. The
+  facet keeps the filter field explicit until relation-filter metadata has a
+  schema owner.
 - [ ] Standardize relation-id filters. Prefer a strawberry-django-native
   relation filter shape from the frontend primitive; if not enough, add one
   relay/global-id relation lookup helper in `angee.graphql` and reuse it across
