@@ -58,6 +58,14 @@ GraphQL SDL, codegen stubs, migrations). Output, not source.
 **Model extension** — an abstract source model with `extends = "app.Model"`.
 The composer emits it as an additional base for the target model.
 
+**Child model** — a concrete Django model that specializes a parent model when a
+row is exactly one concrete kind of that parent. The parent owns common identity
+and lifecycle; the child owns kind-specific fields, behavior, tabs, and actions.
+
+**Backend class** — an `ImplClassField` value on a concrete owner model that
+selects an interchangeable strategy/client/backend while the row's persisted
+shape stays the same.
+
 **`Meta`** — Django's model options class. Keep Angee facts out of `Meta` unless
 the owning library explicitly supports them, such as `rebac_resource_type`.
 

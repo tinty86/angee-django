@@ -1,5 +1,15 @@
 # Integrations: board + rich list, draft integrations, one-click connect
 
+> Superseded architecture note: the backend shape in this plan used
+> `Integration.impl_class + 1:1 companion models`. That direction is now
+> replaced by
+> `.agents/plans/integration-child-model-backends.md`: `Integration` is a Django
+> multi-table inheritance parent, concrete integration kinds are child models,
+> `django-polymorphic` is only a spike candidate for parent-query/downcasting,
+> and `ImplClassField` survives only as a role-named backend/adapter selector on
+> the concrete child row. Keep the board/connect UX goals here, but do not
+> implement the companion-model backend reseam below.
+
 ## Context
 
 We want an integrations surface where you can **pre-create "draft" integrations of every kind**, see at a glance **what's connected / what needs attention**, **group by vendor capability**, and **connect with one click** — a board view (and rich grouped list) like the `Integrate / Overview` reference, but for the integrations themselves.
@@ -9,7 +19,11 @@ The current model blocks this, so the plan is **a model reseam first, then the v
 1. **`Integration` and `Capability` are near-duplicate layers.** `Integration` (`addons/angee/integrate/models.py:1061`) is a *hub* that requires a working `credential` (PROTECT FK, line 1078) and carries a `capability_statuses` rollup (line 1090, `note_capability_status` line 1160). Capabilities (`Capability` abstract line 1203, `Bridge` line 1259, concrete `VCSIntegration` line 1381, `agents.InferenceProvider` `addons/angee/agents/models.py:102`) are *children* FK'd back to it. There is no "draft" state and no first-class "capability" to group on.
 2. **The shared `BoardView` has no per-card action** (`packages/base/src/views/BoardView.tsx:229`; card = title + 3 columns wrapped in one navigating `<button>` at line 294), so one-click "Connect" needs an extension at its owner (`@angee/base`).
 
-**Decision (agreed in planning):** collapse the seam so **`Integration` *is* the capability**, discriminated by an **`impl_class`** field; each kind that needs extra persisted fields links a **1:1 companion model** (a `Bridge`, an `InferenceProvider`, …) — the idiom `OidcClient` uses to refine `OAuthClient` (`addons/angee/iam_integrate_oidc/models.py:34`). The substrate (`OAuthClient`/`ExternalAccount`/`Credential`) stays shared; `Integration.credential` becomes nullable (a draft has none). This is mostly a **deletion** (the rollup) plus a flattening.
+**Superseded decision (historical context only):** this plan originally collapsed
+the seam so **`Integration` *is* the capability**, discriminated by an
+**`impl_class`** field, with each kind that needs extra persisted fields linked
+as a **1:1 companion model**. Do not implement that backend shape; use the
+polymorphic child-model direction linked above.
 
 ---
 

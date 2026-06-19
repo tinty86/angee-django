@@ -78,16 +78,28 @@ architect direction before preserving the current shape.
 ### Inference Provider Creation Owner
 
 - **Finding:** standalone `createInferenceProvider` repeats integration impl
-  checks and related-row creation already owned by `IntegrationImpl` /
-  `IntegrationManager`.
-- **Greenfield:** create an inference integration once; provider related row is
-  emitted by the selected impl through `createIntegration` plus inference input.
-- **True owner:** `angee.integrate.IntegrationImpl` / `IntegrationManager`;
-  provider row owns provider-specific config, refresh, and service env.
+  checks and related-row creation.
+- **Locked direction:** integration kinds use Django multi-table inheritance
+  child models. `Integration` is the shared parent connection row;
+  `InferenceProvider` is the concrete child row. Provider SDK/protocol choice
+  lives on `InferenceProvider.backend_class` as an `ImplClassField`.
+- **Dependency decision:** run an early spike on `django-polymorphic` as the
+  parent-query/downcasting owner. Add it to `docs/stack.md` and the dependency
+  graph only if it works cleanly with Angee emitted runtime models, REBAC
+  managers, strawberry-django, resources, migrations, and aggregate/list queries.
+- **Greenfield:** create the concrete inference integration child once. OpenAI,
+  Anthropic, manual, DeepSeek, and other adapters are backend-class values with
+  default-bearing/inheritable impl classes, not `Integration.impl_class` values.
+- **True owner:** Django multi-table inheritance for persisted parent/child
+  shape; `django-polymorphic` only if the spike proves it should own
+  parent-to-child query behavior; `InferenceProvider` for provider-specific
+  config, refresh, service env, model catalogue, and `backend_class`.
 - **Deletion:** delete or demote `InferenceProviderInput` and
-  `createInferenceProvider`.
-- **Guardrail:** keep impl validation tests; add a guard that `createIntegration`
-  creates provider rows from extension input.
+  `createInferenceProvider`; delete `IntegrationImpl.related_model` and related
+  row creation helpers when child creation owns the flow.
+- **Guardrail:** tests for concrete child creation through the integration
+  surface, backend defaults/materialization, parent listing, child detail routing,
+  permissions, and SDL.
 
 ### Inference Model Alias Rows
 
@@ -296,8 +308,9 @@ rule applies.
 
 ## Green Patterns To Preserve
 
-- `IntegrationImpl` / `ImplClassField` / related model metadata is a clean owner
-  placement and should not be abstracted further without new evidence.
+- `ImplClassField` remains a clean owner placement for backend/adapter choice on
+  the concrete row. `IntegrationImpl.related_model` is superseded by the locked
+  Django child-model direction and should not be preserved as a green pattern.
 - `rebac_aggregate_builder` is thin useful glue around
   `strawberry-django-aggregates` plus REBAC policy.
 - MCP server lifecycle and ASGI mount composition are broadly healthy:
@@ -316,7 +329,7 @@ Run these before implementation:
 1. `angee.graphql / output type extension / native strawberry-django extend=True`
 2. `angee.graphql / CRUD update / upstream hook vs custom mutation`
 3. `integrate / OAuth protocol / Authlib stack decision`
-4. `agents+integrate / inference provider creation / createIntegration path`
+4. `agents+integrate / integration child models / django-polymorphic spike`
 5. `agents / inference model catalogue / broker handle binding`
 6. `@angee/sdk / operator GraphQL transport / WS auth options`
 7. `@angee/base / i18n / i18next runtime wiring`

@@ -208,24 +208,41 @@ Rules that follow from the layering:
   field-backed relations (`// rebac:field=...`) when a relationship is already
   represented by a Django FK or one-to-one field. See the REBAC section below for
   this project's fail-closed posture and its traps.
-- For a vendor-backed capability, keep catalogue models pure metadata, put the
-  provider implementation choice on the connection as an `ImplClassField` (see
-  the next rule; never on the catalogue), give each host its own addon, name
-  things in the domain's own terms, and keep side-effecting work on the operator
-  — Django stays the catalogue.
+- For a vendor-backed capability, keep catalogue models pure metadata, model the
+  connection shape at the row that stores its fields, and put the provider
+  adapter choice on that owning row as a `backend_class`-style `ImplClassField`
+  only when the persisted shape is otherwise the same. Name things in the
+  domain's own terms, and keep side-effecting work on the operator — Django
+  stays the catalogue.
 - **Choosing how a row selects per-variant behaviour.** Classify by what varies:
-  - *Persisted fields differ per variant* → **subclass or attach the model that
-    owns those fields**; discover concrete runtime families through the app
-    registry where needed (e.g. `integrate.Bridge`/`Source` +
-    `integrate/registry.py`). Data and behaviour stay on the owning model.
-  - *Only behaviour differs, open set (addons contribute impls)* → **one concrete
-    model + `angee.base.fields.ImplClassField`** naming a non-model
-    strategy/client/backend class. One table (unified list/reconcile, no field
-    duplication); the impl is an **explicit per-row** choice, **never** derived
-    from a vendor slug (a vendor can have several impls/accounts).
+  - *The row is one mutually exclusive concrete kind of a parent concept* →
+    **Django child model**. The parent owns common identity, permissions,
+    lifecycle, listing, and cross-kind actions; each concrete child owns its
+    fields, tabs, actions, and row behavior. Use this when a parent plus required
+    one-to-one "related model" would otherwise be manual polymorphism.
+  - *A downstream addon adds optional capability fields to the same kind of row*
+    → **model `extends`**. The base row remains the same domain object; extension
+    fields are additive and may be blank/off. OIDC login fields on
+    `integrate.OAuthClient` are the canonical shape.
+  - *Only behaviour differs, open set (addons contribute impls) while persisted
+    fields stay the same* → **one concrete model +
+    `angee.base.fields.ImplClassField`** naming a non-model
+    strategy/client/backend class. Name the field by the role it plays
+    (`backend_class`, `provider_type`), not by a generic "implementation" label.
+    One table (unified list/reconcile, no field duplication); the impl is an
+    **explicit per-row** choice, **never** derived from a vendor slug (a vendor
+    can have several impls/accounts).
   - *Only behaviour differs, closed framework-known set* → a `StateField` + an
     eager **handler registry** (`iam.credentials.register_handler`/`handler_for`).
     The row stores the enum value; the kind projects as a GraphQL enum.
+- **Integration implementations are concrete integration children.** The
+  top-level `integrate.Integration` row is the shared connection identity and
+  lifecycle. Concrete integration kinds such as inference providers and VCS
+  bridges are child models; their forms open from the integration surface and
+  contribute implementation-specific tabs/related tables. A child model may carry
+  its own `backend_class` when several SDK/protocol adapters share that child's
+  persisted shape. Do not store a second generic `impl_class` on the child: the
+  child model is the integration implementation; the backend field is the adapter.
 - **A row-selected impl is stored as a registry key, never a dotted path.**
   `ImplClassField(base_class=…, registry_setting=…)` stores a short key and
   resolves it against a Django setting mapping keys to dotted import paths; an
@@ -255,11 +272,13 @@ Rules that follow from the layering:
   source); the runtime class is the post-composition source of truth for fields,
   relations, and choices. A registry-backed enum (`ImplClassField`) is read off the
   runtime field, so the GraphQL enum already reflects every addon's contributions.
-- **Extension is symmetric across four axes — extend, never edit the owner — and
-  the schema is built after the runtime is composed, so all four apply
+- **Extension is symmetric across five axes — extend, never edit the owner — and
+  the schema is built after the runtime is composed, so all five apply
   post-composition with the dependency staying one-way (downstream reaches up; the
-  upstream never references down).** Add a *field* to another addon's model with an
-  `extends = "app.Model"` source model; add a *value* to an open enum with an
+  upstream never references down).** Add a *concrete subtype* of a parent row with
+  a Django child model when exactly one concrete kind applies; add a *field* to
+  another addon's model with an `extends = "app.Model"` source model when the same
+  row gains optional capability fields; add a *value* to an open enum with an
   `ImplClassField` registry (settings-keyed, one impl class per key — use it only
   when each key has genuinely distinct implementation code, not as a workaround for
   a closed `TextChoices`); add a *field onto another addon's GraphQL type* with
