@@ -69,6 +69,52 @@ Success is **less code, fewer choices, and more obvious ownership**.
 The strongest success signal: a future feature takes fewer lines than the
 previous one because the framework has learned the pattern.
 
+## Non-Mechanical Execution Guard
+
+This plan must not become a checklist that polishes the current architecture
+while preserving an earlier wrong fork in the road. Treat this as the final
+greenfield refactor window before committing to the 1.0 architecture.
+
+For every major slice, reviewers must inspect the decision history, not only the
+current files:
+
+- **Do not inherit the current shape as a premise.** Ask what the architecture
+  would look like if the feature were built today from Django, React, the locked
+  stack, and Angee's owner rules.
+- **Find the earliest wrong fork.** Look for the point where code chose a local
+  helper, custom registry, bespoke page, duplicated model, alternate naming
+  vocabulary, or Angee abstraction instead of the framework/library owner.
+- **Compare against a greenfield alternative.** For each slice, write down the
+  smallest plausible design if we deleted the current implementation and rebuilt
+  it on the right owners.
+- **Prefer fewer concepts over cleaner versions of the same concepts.** A
+  refactor that makes a wrong abstraction tidier is still wrong if deleting the
+  abstraction would reduce the surface.
+- **Escalate lower-surface alternatives.** If the greenfield alternative is
+  plausibly less LOC, fewer files, fewer concepts, fewer public APIs, or fewer
+  integration points, stop the implementation slice and present the option to the
+  human architect before coding.
+- **No owner is out of reach.** The right owner may be an addon, Angee core,
+  `@angee/base`, `@angee/sdk`, `angee.graphql`, `angee.compose`, a locked
+  dependency wrapper, a new upstream issue/PR, or in an extreme case even Django
+  itself. Do not rule out a deeper owner because it feels too large; record the
+  true owner and escalate the scope decision to the human architect.
+- **Use tests as evidence, not permission.** Passing tests prove behavior; they
+  do not prove the owner is right. A tested workaround can still be deleted.
+
+Each drawing-board review must answer:
+
+- [ ] What would we build if this did not exist yet?
+- [ ] Which current abstractions would disappear in that version?
+- [ ] Which dependency or Angee owner would carry the behavior instead?
+- [ ] Is the true owner outside this repository, and does that require an
+  upstream issue, patch, fork, or dependency change?
+- [ ] How many routes/files/classes/hooks/schema roots/settings would be deleted
+  or merged?
+- [ ] What compatibility or migration cost blocks deletion?
+- [ ] Does the lower-surface option need human architect approval before we
+  continue?
+
 ## Omission
 
 Call the immediate omission **view composition drift**.
@@ -244,6 +290,10 @@ deletion opportunities instead of producing one broad audit blob.
   `.agents/plans/addon-deletion-research-checklist.md`
 - [ ] Per-library leverage and framework-concern research:
   `.agents/plans/library-leverage-research-checklist.md`
+- [ ] Reviewer slicing strategy:
+  `.agents/plans/reviewer-slicing-strategy.md`
+- [ ] Refactoring workflow:
+  `.agents/plans/refactoring-workflow.md`
 
 Each researcher must answer:
 
@@ -255,6 +305,26 @@ Each researcher must answer:
 - [ ] Which focused test or guardrail prevents the code from being reintroduced?
 
 ## Fix Waves
+
+### Wave -1: Drawing-Board Architecture Review
+
+- [ ] Split review work using `.agents/plans/reviewer-slicing-strategy.md` so no
+  reviewer owns a slice broad enough to skip details.
+- [ ] For each addon/library slice, produce a greenfield alternative before
+  implementation work starts.
+- [ ] Identify the earliest wrong fork in the road: wrong owner, wrong
+  dependency boundary, wrong model split, wrong page primitive, wrong naming
+  vocabulary, or unnecessary abstraction.
+- [ ] Compare current cleanup vs greenfield rebuild on:
+  - [ ] LOC and file count.
+  - [ ] Number of public concepts/APIs.
+  - [ ] Number of owner boundaries crossed.
+  - [ ] Amount of addon-local glue.
+  - [ ] Test and migration cost.
+- [ ] Escalate any plausible lower-surface alternative to the human architect
+  before preserving the current shape.
+- [ ] Record accepted/rejected greenfield alternatives in the relevant inventory
+  or checklist file.
 
 ### Wave 0: Inventory And Baseline
 
@@ -334,6 +404,17 @@ Each researcher must answer:
 
 ## Parallel Work Shape
 
+- **Agent R: Drawing-board reviewers.**
+  - Write set: relevant `.agents/plans/**` inventory/checklist files only.
+  - Runs before implementation agents for each slice.
+  - Reconstructs the greenfield design, identifies earlier wrong forks, and
+    escalates lower-surface alternatives to the human architect.
+  - Uses `.agents/plans/reviewer-slicing-strategy.md` to keep reviews scoped to
+    one owner, one concern, and one concrete question.
+  - Uses `.agents/plans/refactoring-workflow.md` to move from ideation to
+    production-ready code without skipping decision, verification, or deletion
+    gates.
+
 - **Agent A: Inventory.**
   - Write set: `.agents/plans/view-composition-inventory.md`,
     `.agents/plans/naming-decomposition-inventory.md`.
@@ -379,6 +460,10 @@ Each researcher must answer:
 
 - [ ] Every model-backed console page either uses the thin pattern or has a
   documented exception.
+- [ ] Every major slice has a drawing-board review that considered deletion or a
+  greenfield rebuild before preserving the current architecture.
+- [ ] Any plausible lower-surface alternative was presented to the human
+  architect before implementation continued.
 - [ ] Every page that shows records has the expected standard affordances for its
   resource kind.
 - [ ] No addon page reimplements generic filter/group/board/form/list behavior.
