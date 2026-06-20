@@ -31,7 +31,7 @@ from angee.agents.autoconfig import SETTINGS as _AGENTS_SETTINGS
 from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
-from angee.graphql.actions import ActionResult, resolve_action_target
+from angee.graphql.actions import ActionResult, action_target, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
 from angee.graphql.ids import PublicID
@@ -795,8 +795,7 @@ class InferenceActionMutation:
     def refresh_provider_models(self, id: PublicID) -> ActionResult:
         """Re-list one provider's models into the catalogue now."""
 
-        provider = resolve_action_target(InferenceProvider, id, reason="agents.graphql.refresh_provider_models")
-        with system_context(reason="agents.graphql.refresh_provider_models"):
+        with action_target(InferenceProvider, id, reason="agents.graphql.refresh_provider_models") as provider:
             try:
                 count = provider.refresh_models()
             except Exception as error:  # noqa: BLE001 — backend failure is the result, not a 500

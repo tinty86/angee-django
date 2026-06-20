@@ -23,7 +23,7 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.fields import ImplClassField
-from angee.graphql.actions import ActionResult, resolve_action_target
+from angee.graphql.actions import ActionResult, action_target, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
 from angee.graphql.deletion import DeletePreview, delete_by_public_id
@@ -752,12 +752,11 @@ class ConnectionMutation:
         the operator never types them by hand. Requires a discovery URL on the row.
         """
 
-        oauth_client = resolve_action_target(
+        with action_target(
             OAuthClient,
             id,
             reason="integrate.graphql.discover_oauth_endpoints",
-        )
-        with system_context(reason="integrate.graphql.discover_oauth_endpoints"):
+        ) as oauth_client:
             if not str(getattr(oauth_client, "discovery_url", "") or ""):
                 return ActionResult(ok=False, message="Set a discovery URL first.")
             try:
@@ -1475,12 +1474,11 @@ class IntegrationActionMutation:
     def sync_integration(self, id: PublicID) -> ActionResult:
         """Run every bridge of one integration now (eager variant of the scheduler)."""
 
-        integration = resolve_action_target(Integration, id, reason="integrate.graphql.sync_integration")
-        now = timezone.now()
         ran = 0
         errors = 0
         items = 0
-        with system_context(reason="integrate.graphql.sync_integration"):
+        with action_target(Integration, id, reason="integrate.graphql.sync_integration") as integration:
+            now = timezone.now()
             for model in bridge_models():
                 for bridge in model._default_manager.filter(pk=integration.pk).order_by("pk"):
                     ran += 1
@@ -1501,8 +1499,7 @@ class IntegrationActionMutation:
     def test_connection(self, id: PublicID) -> ActionResult:
         """Probe the integration's credential so the operator sees it is usable."""
 
-        integration = resolve_action_target(Integration, id, reason="integrate.graphql.test_connection")
-        with system_context(reason="integrate.graphql.test_connection"):
+        with action_target(Integration, id, reason="integrate.graphql.test_connection") as integration:
             credential = integration.credential
             if credential is None:
                 return ActionResult(ok=False, message="No credential is attached.")
@@ -1521,8 +1518,11 @@ class WebhookActionMutation:
     def test_webhook_delivery(self, id: PublicID) -> ActionResult:
         """Send a test event to one subscription and report the delivery outcome."""
 
-        subscription = resolve_action_target(WebhookSubscription, id, reason="integrate.graphql.test_webhook_delivery")
-        with system_context(reason="integrate.graphql.test_webhook_delivery"):
+        with action_target(
+            WebhookSubscription,
+            id,
+            reason="integrate.graphql.test_webhook_delivery",
+        ) as subscription:
             ok, message = subscription.deliver_test()
         return ActionResult(ok=ok, message=message)
 
@@ -1530,8 +1530,11 @@ class WebhookActionMutation:
     def rotate_webhook_secret(self, id: PublicID) -> RotatedSecret:
         """Roll one subscription's signing secret and return the new value once."""
 
-        subscription = resolve_action_target(WebhookSubscription, id, reason="integrate.graphql.rotate_webhook_secret")
-        with system_context(reason="integrate.graphql.rotate_webhook_secret"):
+        with action_target(
+            WebhookSubscription,
+            id,
+            reason="integrate.graphql.rotate_webhook_secret",
+        ) as subscription:
             secret = subscription.rotate_secret()
         return RotatedSecret(ok=True, secret=secret)
 
@@ -1736,12 +1739,11 @@ class VCSConsoleQuery:
     def search_repositories(self, vcs_bridge_id: PublicID, query: str) -> list[RepoCandidate]:
         """Return host repositories matching ``query`` for the add typeahead."""
 
-        vcs = resolve_action_target(
+        with action_target(
             VcsBridge,
             vcs_bridge_id,
             reason="integrate.graphql.search_repositories",
-        )
-        with system_context(reason="integrate.graphql.search_repositories"):
+        ) as vcs:
             return [_repo_candidate(descriptor) for descriptor in vcs.search_repositories(query)]
 
 
@@ -1907,16 +1909,14 @@ class VCSActionMutation:
     def add_repository(self, vcs_bridge_id: PublicID, name: str) -> RepositoryType:
         """Inventory one repository by its host ``name`` (a picked typeahead result)."""
 
-        vcs = resolve_action_target(VcsBridge, vcs_bridge_id, reason="integrate.graphql.add_repository")
-        with system_context(reason="integrate.graphql.add_repository"):
+        with action_target(VcsBridge, vcs_bridge_id, reason="integrate.graphql.add_repository") as vcs:
             return cast(RepositoryType, vcs.import_repository(name))
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def discover_repositories(self, vcs_bridge_id: PublicID, org: str = "") -> ActionResult:
         """Inventory every repository the account exposes (bulk import; prunes vanished)."""
 
-        vcs = resolve_action_target(VcsBridge, vcs_bridge_id, reason="integrate.graphql.discover_repositories")
-        with system_context(reason="integrate.graphql.discover_repositories"):
+        with action_target(VcsBridge, vcs_bridge_id, reason="integrate.graphql.discover_repositories") as vcs:
             count = vcs.discover_repositories(org=org)
         return ActionResult(ok=True, message=f"Inventoried {count} repository(ies).")
 
@@ -1924,9 +1924,8 @@ class VCSActionMutation:
     def sync_vcs_bridge(self, id: PublicID) -> ActionResult:
         """Refresh every repository's sources for one VCS bridge now."""
 
-        vcs = resolve_action_target(VcsBridge, id, reason="integrate.graphql.sync_vcs_bridge")
-        now = timezone.now()
-        with system_context(reason="integrate.graphql.sync_vcs_bridge"):
+        with action_target(VcsBridge, id, reason="integrate.graphql.sync_vcs_bridge") as vcs:
+            now = timezone.now()
             try:
                 result = vcs.run_sync(now=now)
             except Exception as error:  # noqa: BLE001 — sync failure is the result, not a 500
@@ -1937,8 +1936,7 @@ class VCSActionMutation:
     def refresh_source(self, id: PublicID) -> ActionResult:
         """Re-enumerate one source's output rows now."""
 
-        source = resolve_action_target(Source, id, reason="integrate.graphql.refresh_source")
-        with system_context(reason="integrate.graphql.refresh_source"):
+        with action_target(Source, id, reason="integrate.graphql.refresh_source") as source:
             count = source.refresh()
         return ActionResult(ok=True, message=f"Synced {count} item(s).")
 
