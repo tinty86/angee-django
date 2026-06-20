@@ -1,19 +1,12 @@
 import {
   formatDate as formatBaseDate,
-  isImageMime,
   statusTone as resolveStatusTone,
   type Tone,
 } from "@angee/base";
 
-// Presentational mappings for file rows: a mime → glyph name, the upload-state
-// → stage badge, and a date display. Byte sizes reuse `formatSize` from
-// `@angee/base` (the preview model owns it) — this module never re-coins it.
-
-/** Registry glyph for a file's mime — `image` (addon-registered) or the
- * base `file` fallback. */
-export function fileIconName(mime: string | null | undefined): string {
-  return mime && isImageMime(mime) ? "image" : "file";
-}
+// Presentational mappings for file rows: the upload-state → stage badge and a
+// date display. Byte sizes reuse `formatSize` from `@angee/base` (the preview
+// model owns it) — this module never re-coins it.
 
 export interface FileStage {
   label: string;

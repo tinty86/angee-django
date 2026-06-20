@@ -212,6 +212,9 @@ Success:
 - [ ] If custom session-auth backend selection becomes a goal, lift the canonical
       OIDC login backend string to an IAM-owned constant; E7 intentionally keeps
       the current ModelBackend contract.
+- [ ] Storage MIME catalogue glyph coverage: register every `icon_key` emitted by
+      `010_storage.mimetype.yaml` and add a manifest/catalogue coverage test. E13
+      only moved file-row glyph choice to `MimeType.icon_key` with a safe fallback.
 
 ## Running Scoreboard
 
@@ -232,3 +235,4 @@ Update after every slice commit.
 | E10 Move webhook delivery telemetry to model | same commit | +4 prod, +39 tests | webhook action delegates delivery telemetry to subscription | `WebhookSubscription.deliver_recorded()`/`deliver_test()` own delivery status recording | backend + architecture pass | `ruff`; focused webhook pytest |
 | E11 Unify gated-read exposure guard | same commit | -3 | aggregate/history schema surfaces stop duplicating gated-read intersections | `angee.graphql.access.assert_no_gated_read_fields()` owns unsafe exposure rejection | backend + architecture pass | `ruff`; aggregate/GraphQL pytest |
 | E12 Share `dedupeBy` utility | same commit | -10 source | base views/preferences reuse one first-wins dedupe mechanic without changing domain merge rules | `packages/base/src/lib/dedupe.ts` owns by-key array dedupe inside base | frontend + architecture pass | base typecheck; base vitest |
+| E13 Use MIME catalogue file glyphs | same commit | -5 source | storage file rows carry catalogue glyph facts; views render row-owned icons | `MimeType.icon_key` owns file glyph choice; MIME checks only decide thumbnail rendering | frontend + architecture pass; registry coverage deferred | storage typecheck/test; `git diff --check` |

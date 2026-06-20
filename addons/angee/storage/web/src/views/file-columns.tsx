@@ -9,7 +9,7 @@ import {
 import type { ReactElement } from "react";
 
 import type { StorageFileRow } from "../data/file-rows";
-import { fileIconName, fileStage, formatDate } from "../lib/file-display";
+import { fileStage, formatDate } from "../lib/file-display";
 
 /** Columns for the file list — name (with type glyph), type, stage, size,
  * owner, and modified date. Stays presentational; the page owns selection. `t`
@@ -23,7 +23,7 @@ export function fileColumns(
       header: t("storage.column.name"),
       render: (row) => (
         <span className="flex min-w-0 items-center gap-2">
-          <Glyph decorative name={fileIconName(row.mime)} className="text-fg-muted" />
+          <Glyph decorative name={row.icon} fallbackName="file" className="text-fg-muted" />
           <span className="truncate font-medium text-fg">{row.name}</span>
         </span>
       ),
@@ -70,7 +70,7 @@ export function fileGalleryCard(row: StorageFileRow): ReactElement {
             className="size-full object-cover"
           />
         ) : (
-          <Glyph decorative name={fileIconName(row.mime)} className="size-9 text-fg-subtle" />
+          <Glyph decorative name={row.icon} fallbackName="file" className="size-9 text-fg-subtle" />
         )}
       </div>
       <div className="p-2">
