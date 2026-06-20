@@ -50,6 +50,27 @@ class SqidField(SqidsField):
     field-backed arrows query — and upstream encodes unconditionally there.
     """
 
+    def __init__(self, *args: Any, prefix: str = "", **kwargs: Any) -> None:
+        """Normalize Angee public-id prefixes to the canonical ``abc_`` shape."""
+
+        self._angee_declared_prefix = prefix
+        super().__init__(*args, prefix=self._canonical_prefix(prefix), **kwargs)
+
+    def deconstruct(self) -> tuple[str | None, str, list[Any], dict[str, Any]]:
+        """Serialize the full public-id contract for generated/runtime models."""
+
+        name, path, args, kwargs = super().deconstruct()
+        kwargs["real_field_name"] = self.real_field_name
+        if self._angee_declared_prefix:
+            kwargs["prefix"] = self._angee_declared_prefix
+        if self.min_length is not None:
+            kwargs["min_length"] = self.min_length
+        if self.alphabet is not None:
+            kwargs["alphabet"] = self.alphabet
+        if self._explicit_sqids_instance is not None:
+            kwargs["sqids_instance"] = self._explicit_sqids_instance
+        return name, path, args, kwargs
+
     def from_db_value(self, value: Any, expression: Any, connection: Any, *args: Any) -> Any:
         """Return the encoded public id, passing NULL columns through."""
 
@@ -64,6 +85,14 @@ class SqidField(SqidsField):
             return ""
         encoded_value = self.sqids_instance.encode([int(value)])
         return f"{self.prefix}{encoded_value}" if encoded_value is not None else ""
+
+    @staticmethod
+    def _canonical_prefix(prefix: str) -> str:
+        """Return ``prefix`` with Angee's public-id separator."""
+
+        if not prefix:
+            return ""
+        return prefix if prefix.endswith("_") else f"{prefix}_"
 
 
 class StateField(TextChoicesField):

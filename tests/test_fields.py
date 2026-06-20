@@ -367,7 +367,7 @@ def test_sqid_field_passes_null_joins_through() -> None:
     class SqidNode(models.Model):
         """Concrete self-referencing model used for sqid join tests."""
 
-        sqid = SqidField(real_field_name="id", prefix="tst", min_length=8)
+        sqid = SqidField(real_field_name="id", prefix="tst_", min_length=8)
         parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True)
 
         class Meta:
@@ -385,6 +385,47 @@ def test_sqid_field_passes_null_joins_through() -> None:
 
         assert values[root.pk] is None
         assert values[child.pk] == root.sqid
+        assert str(root.sqid).startswith("tst_")
     finally:
         with connection.schema_editor() as schema_editor:
             schema_editor.delete_model(SqidNode)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sqid_field_canonical_prefix_uses_separator() -> None:
+    """Bare declarations still expose public ids as ``prefix_value``."""
+
+    class BarePrefixNode(models.Model):
+        """Concrete model used for prefix normalization tests."""
+
+        sqid = SqidField(real_field_name="id", prefix="bare", min_length=8)
+
+        class Meta:
+            """Django model options for the test model."""
+
+            app_label = "auth"
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(BarePrefixNode)
+    try:
+        node = BarePrefixNode.objects.create()
+
+        assert BarePrefixNode._meta.get_field("sqid").prefix == "bare_"
+        assert str(node.sqid).startswith("bare_")
+        assert BarePrefixNode.objects.get(sqid=node.sqid) == node
+        assert BarePrefixNode.objects.filter(sqid=str(node.sqid).replace("bare_", "bare", 1)).first() is None
+    finally:
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(BarePrefixNode)
+
+
+def test_sqid_field_deconstruct_preserves_public_id_contract() -> None:
+    """Generated/runtime model state carries sqid prefix and encoder settings."""
+
+    field = SqidField(real_field_name="id", prefix="abc_", min_length=8)
+    _, _, _, kwargs = field.deconstruct()
+
+    assert field.prefix == "abc_"
+    assert kwargs["prefix"] == "abc_"
+    assert kwargs["real_field_name"] == "id"
+    assert kwargs["min_length"] == 8

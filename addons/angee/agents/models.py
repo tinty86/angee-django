@@ -228,7 +228,7 @@ class InferenceModel(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="imd", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="imd_", min_length=8)
     provider = models.ForeignKey("agents.InferenceProvider", on_delete=models.CASCADE, related_name="models")
     publisher = models.ForeignKey(
         "integrate.Vendor",
@@ -332,7 +332,7 @@ class Skill(SqidMixin, AuditMixin, AngeeModel):
     source_kind = "skill"
     """Binds the ``skill`` source kind to this output model (see ``integrate.Source``)."""
 
-    sqid = SqidField(real_field_name="id", prefix="skl", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="skl_", min_length=8)
     source = models.ForeignKey("integrate.Source", on_delete=models.CASCADE, related_name="skills")
     name = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
@@ -365,7 +365,7 @@ class MCPServer(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="mcp", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="mcp_", min_length=8)
     name = models.CharField(max_length=200, unique=True)
     description = models.TextField(blank=True)
     placement = StateField(choices_enum=MCPPlacement, default=MCPPlacement.EXTERNAL)
@@ -456,7 +456,7 @@ class MCPTool(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="mct", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="mct_", min_length=8)
     server = models.ForeignKey("agents.MCPServer", on_delete=models.CASCADE, related_name="tools")
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -492,7 +492,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="agt", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="agt_", min_length=8)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     is_template = models.BooleanField(default=False, db_index=True)

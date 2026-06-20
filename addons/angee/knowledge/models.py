@@ -71,7 +71,7 @@ class Vault(SqidMixin, AuditMixin, AngeeModel, HistoryMixin):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="vlt", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="vlt_", min_length=8)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -148,7 +148,7 @@ class Page(SqidMixin, AuditMixin, AngeeModel, HistoryMixin):
         FOLDER = "folder", "Folder"
         TEMPLATE = "template", "Template"
 
-    sqid = SqidField(real_field_name="id", prefix="pg", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="pg_", min_length=8)
     vault = models.ForeignKey(
         "knowledge.Vault",
         on_delete=models.CASCADE,
@@ -248,7 +248,7 @@ class MarkdownPage(SqidMixin, AuditMixin, AngeeModel, RevisionMixin):
     excerpt_chars: ClassVar[int] = 180
     """Number of body characters surfaced by :attr:`excerpt`."""
 
-    sqid = SqidField(real_field_name="id", prefix="mdp", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="mdp_", min_length=8)
     page = models.OneToOneField(
         "knowledge.Page",
         on_delete=models.CASCADE,
@@ -353,7 +353,7 @@ class Link(SqidMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="lnk", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="lnk_", min_length=8)
     source_page = models.ForeignKey(
         "knowledge.Page",
         on_delete=models.CASCADE,

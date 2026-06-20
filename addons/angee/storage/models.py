@@ -104,7 +104,7 @@ class Backend(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="bkd", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="bkd_", min_length=8)
     slug = models.SlugField(unique=True)
     label = models.CharField(max_length=200)
     backend_class = ImplClassField(base_class=StorageBackend, registry_setting="ANGEE_STORAGE_BACKEND_CLASSES")
@@ -176,7 +176,7 @@ class Drive(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="drv", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="drv_", min_length=8)
     backend = models.ForeignKey(
         "storage.Backend",
         on_delete=models.PROTECT,
@@ -298,7 +298,7 @@ class Folder(SqidMixin, AuditMixin, AngeeModel):
 
         TRASH = "trash", "Trash"
 
-    sqid = SqidField(real_field_name="id", prefix="fld", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="fld_", min_length=8)
     drive = models.ForeignKey(
         "storage.Drive",
         on_delete=models.PROTECT,
@@ -396,7 +396,7 @@ class MimeType(SqidMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="mim", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="mim_", min_length=8)
     mime_type = models.CharField(max_length=200, unique=True)
     category = models.CharField(max_length=32, db_index=True)
     label = models.CharField(max_length=200)
@@ -624,7 +624,7 @@ class File(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="fil", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="fil_", min_length=8)
     drive = models.ForeignKey(
         "storage.Drive",
         on_delete=models.PROTECT,
@@ -1001,7 +1001,7 @@ class FileAttachment(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="fat", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="fat_", min_length=8)
     file = models.ForeignKey(
         "storage.File",
         on_delete=models.CASCADE,

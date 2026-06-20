@@ -226,7 +226,7 @@ class OAuthClient(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="clt", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="clt_", min_length=8)
     slug = models.SlugField()
     provider_type = ImplClassField(
         base_class=OAuthProviderType,
@@ -601,7 +601,7 @@ class ExternalAccount(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="eac", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="eac_", min_length=8)
     oauth_client = models.ForeignKey(
         "integrate.OAuthClient",
         on_delete=models.PROTECT,
@@ -863,7 +863,7 @@ class Credential(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="crd", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="crd_", min_length=8)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -1042,7 +1042,7 @@ class Vendor(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="vnd", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="vnd_", min_length=8)
     slug = models.SlugField(unique=True)
     display_name = models.CharField(max_length=128)
     website_url = models.URLField(blank=True)
@@ -1105,7 +1105,7 @@ class Integration(SqidMixin, ImplDefaultsMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="int", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="int_", min_length=8)
     vendor = models.ForeignKey("integrate.Vendor", on_delete=models.PROTECT, related_name="integrations")
     impl_class = ImplClassField(
         base_class=IntegrationImpl,
@@ -1492,7 +1492,7 @@ class Repository(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="repo", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="repo_", min_length=8)
     vcs_bridge = models.ForeignKey(
         "integrate.VcsBridge",
         on_delete=models.CASCADE,
@@ -1543,7 +1543,7 @@ class Source(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="src", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="src_", min_length=8)
     repository = models.ForeignKey("integrate.Repository", on_delete=models.CASCADE, related_name="sources")
     kind = models.CharField(max_length=64)
     """The source kind (e.g. ``template``, ``skill``); resolves to an output model."""
@@ -1650,7 +1650,7 @@ class Template(SqidMixin, AuditMixin, AngeeModel):
     source_kind = "template"
     """Binds the ``template`` source kind to this output model (see ``registry``)."""
 
-    sqid = SqidField(real_field_name="id", prefix="tpl", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="tpl_", min_length=8)
     source = models.ForeignKey("integrate.Source", on_delete=models.CASCADE, related_name="templates")
     name = models.CharField(max_length=255, blank=True)
     kind = models.CharField(max_length=64, blank=True)
@@ -1753,7 +1753,7 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
 
     runtime = True
 
-    sqid = SqidField(real_field_name="id", prefix="whs", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="whs_", min_length=8)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

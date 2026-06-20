@@ -117,7 +117,7 @@ class User(SqidMixin, AbstractBaseUser, RebacPermissionsMixin, AngeeModel):
 
     username_validator = UnicodeUsernameValidator()
 
-    sqid = SqidField(real_field_name="id", prefix="usr", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="usr_", min_length=8)
     username = models.CharField(
         max_length=150,
         unique=True,

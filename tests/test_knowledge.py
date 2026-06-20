@@ -32,7 +32,7 @@ def test_create_for_sets_owner_and_audit_stamps(knowledge_tables: None) -> None:
 
     assert vault.owner == alice
     assert vault.created_by == alice
-    assert str(vault.sqid).startswith("vlt")
+    assert str(vault.sqid).startswith("vlt_")
 
 
 def test_factory_rows_stay_gated_after_creation(knowledge_tables: None) -> None:

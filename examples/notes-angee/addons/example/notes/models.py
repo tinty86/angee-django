@@ -35,7 +35,7 @@ class Note(SqidMixin, AuditMixin, AngeeModel, HistoryMixin, RevisionMixin):
         ACTIVE = "active", "Active"
         ARCHIVED = "archived", "Archived"
 
-    sqid = SqidField(real_field_name="id", prefix="nte", min_length=8)
+    sqid = SqidField(real_field_name="id", prefix="nte_", min_length=8)
     title = models.CharField(max_length=160)
     body = models.TextField(blank=True, default="")
     word_count = models.PositiveIntegerField(default=0, db_index=True)
