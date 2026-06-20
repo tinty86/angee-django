@@ -3,6 +3,8 @@ import {
   clampPageSize,
 } from "@angee/sdk";
 
+import { dedupeBy } from "../lib/dedupe";
+
 export const DATA_VIEW_KINDS = ["list", "board"] as const;
 export const DATA_VIEW_GROUP_GRANULARITIES = [
   "day",
@@ -397,16 +399,7 @@ export class DataViewState {
   static normaliseGroupStack(
     groups: readonly DataViewGroup[],
   ): readonly DataViewGroup[] {
-    const seen = new Set<string>();
-    const normalised: DataViewGroup[] = [];
-    for (const group of groups) {
-      const next = DataViewState.normaliseGroup(group);
-      const key = serializeDataViewGroup(next);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      normalised.push(next);
-    }
-    return normalised;
+    return dedupeBy(groups.map((group) => DataViewState.normaliseGroup(group)), serializeDataViewGroup);
   }
 
   private with(initial: DataViewInitialState): DataViewState {

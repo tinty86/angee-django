@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type UserPreferences, useUserPreferences } from "@angee/sdk";
 
+import { dedupeBy } from "../lib/dedupe";
+
 export const APP_RAIL_PREFERENCES_KEY = "chrome.rail";
 
 export interface AppRailPreferences {
@@ -76,12 +78,5 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function stringList(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const item of value) {
-    if (typeof item !== "string" || seen.has(item)) continue;
-    seen.add(item);
-    result.push(item);
-  }
-  return result;
+  return dedupeBy(value.filter((item): item is string => typeof item === "string"), (item) => item);
 }
