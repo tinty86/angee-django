@@ -37,7 +37,7 @@ import {
 } from "./data-view-context";
 import { useResourceListState, useSyncPageSize } from "./data-view-surface";
 import {
-  type DataViewFilter,
+  Filter,
   type DataViewDefaultGroups,
   type DataViewGroup,
   type DataViewKind,
@@ -811,7 +811,7 @@ function ListStateProbe<TRow extends Row>({
     return [...paths];
   }, [columns, fields]);
   const mergedFilter = React.useMemo(
-    () => mergeFilters(filter, dataView.state.filter),
+    () => Filter.combineOptional(filter, dataView.state.filter),
     [dataView.state.filter, filter],
   );
   const sortOrder = dataView.state.resourceOrder();
@@ -1000,14 +1000,6 @@ function buildRecordNavigation<TRow extends Row>({
             }
           : undefined,
   };
-}
-
-function mergeFilters<TRow extends Row>(
-  base: ListViewProps<TRow>["filter"],
-  view: DataViewFilter,
-): ListViewProps<TRow>["filter"] {
-  if (!base) return Object.keys(view).length > 0 ? view : undefined;
-  return { ...base, ...view };
 }
 
 function listStatesEqual<TRow extends Row>(
