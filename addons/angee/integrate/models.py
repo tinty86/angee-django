@@ -109,6 +109,13 @@ class OAuthClientQuerySet(RebacQuerySet[Any]):
 
         return cast(OAuthClientQuerySet, self)
 
+    def enabled_for_slug(self, slug: str, *, environment: str = "prod") -> Any | None:
+        """Return the preferred OAuth client for a slug when that row is enabled."""
+
+        client = self.filter(slug=slug, environment=environment).first()
+        client = client or self.filter(slug=slug).order_by("environment").first()
+        return client if client is not None and client.is_enabled else None
+
 
 class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # type: ignore[misc]
     """Manager for settings-sourced OAuth client registration.
@@ -1717,36 +1724,12 @@ class WebhookSubscriptionManager(RebacManager):
             for subscription in self.filter(enabled=True).order_by("pk"):
                 if not subscription.matches(kind=kind, impl_app=impl_app, integration=integration):
                     continue
-                try:
-                    status = subscription.deliver(body)
-                except Exception as exc:
-                    logger.exception("Webhook delivery failed for subscription %s.", subscription.public_id)
-                    subscription.record_delivery_failure(
-                        status=self._failure_status(exc),
-                        error=self._error_message(exc),
-                    )
-                    errors += 1
-                else:
-                    subscription.record_delivery(status)
+                ok, _message = subscription.deliver_recorded(body)
+                if ok:
                     delivered += 1
+                else:
+                    errors += 1
         return {"delivered": delivered, "errors": errors}
-
-    @staticmethod
-    def _failure_status(exc: Exception) -> str:
-        """Return an HTTP status string from a delivery exception when available."""
-
-        if isinstance(exc, WebhookDeliveryError):
-            return exc.status
-        return ""
-
-    @staticmethod
-    def _error_message(exc: Exception) -> str:
-        """Return a compact telemetry message for a delivery exception."""
-
-        if isinstance(exc, ValidationError):
-            return "; ".join(str(message) for message in exc.messages)
-        return f"{type(exc).__name__}: {exc}"
-
 
 class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
     """Outbound webhook endpoint owned by one user."""
@@ -1808,6 +1791,46 @@ class WebhookSubscription(SqidMixin, AuditMixin, AngeeModel):
         """POST one signed event body to this subscription's pinned target; raise on non-2xx."""
 
         return PinnedWebhookClient(str(self.target_url)).post(secret=str(self.secret), body=body)
+
+    def deliver_recorded(self, body: bytes) -> tuple[bool, str]:
+        """Deliver one body, persist telemetry, and return ``(ok, status_or_error)``."""
+
+        try:
+            status = self.deliver(body)
+        except Exception as exc:  # noqa: BLE001 — delivery failure is telemetry, not a caller exception.
+            logger.exception("Webhook delivery failed for subscription %s.", self.public_id)
+            message = self._delivery_error_message(exc)
+            self.record_delivery_failure(status=self._delivery_failure_status(exc), error=message)
+            return False, message
+        self.record_delivery(status)
+        return True, status
+
+    def deliver_test(self) -> tuple[bool, str]:
+        """Send a test event, persist telemetry, and return an action result tuple."""
+
+        body = json.dumps(
+            {"type": "test", "subscription": self.public_id},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        ok, result = self.deliver_recorded(body)
+        return (True, f"Delivered (status {result}).") if ok else (False, f"Delivery failed: {result}")
+
+    @staticmethod
+    def _delivery_failure_status(exc: Exception) -> str:
+        """Return an HTTP status string from a delivery exception when available."""
+
+        if isinstance(exc, WebhookDeliveryError):
+            return exc.status
+        return ""
+
+    @staticmethod
+    def _delivery_error_message(exc: Exception) -> str:
+        """Return a compact telemetry message for a delivery exception."""
+
+        if isinstance(exc, ValidationError):
+            return "; ".join(str(message) for message in exc.messages)
+        return f"{type(exc).__name__}: {exc}"
 
     def rotate_secret(self) -> str:
         """Generate a new signing secret, persist it, and return the plaintext once.

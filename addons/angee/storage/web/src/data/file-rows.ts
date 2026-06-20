@@ -31,6 +31,7 @@ export interface StorageFileRow extends Record<string, unknown> {
   filename: string;
   mime: string;
   mimeLabel: string;
+  icon: string;
   uploadState: string;
   sizeBytes: number;
   owner: string;
@@ -66,6 +67,7 @@ export function fileRows(
       filename: file.filename,
       mime: file.mimeType?.mimeType ?? "",
       mimeLabel: file.mimeType?.label || file.mimeType?.mimeType || "—",
+      icon: file.mimeType?.iconKey || "file",
       uploadState: file.uploadState,
       sizeBytes: file.sizeBytes,
       owner: file.createdByLabel ?? "—",

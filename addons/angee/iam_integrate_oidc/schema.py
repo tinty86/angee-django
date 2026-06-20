@@ -13,7 +13,6 @@ from typing import Any, cast
 import strawberry
 import strawberry_django
 from django.apps import apps
-from django.conf import settings
 from django.contrib.auth import login as auth_login
 from django.db.models import Q
 from rebac import system_context
@@ -176,23 +175,6 @@ def _flow_error_message(error: OAuthFlowError) -> str:
     return error.provider_message or str(error)
 
 
-def _session_backend(user: Any) -> str:
-    """Return the Django auth backend path to store in the login session.
-
-    Django requires an explicit backend when a user did not come from
-    ``authenticate()`` and multiple backends are installed. Prefer the non-REBAC
-    backend for normal session auth.
-    """
-
-    bound = getattr(user, "backend", None)
-    if bound:
-        return str(bound)
-    for path in getattr(settings, "AUTHENTICATION_BACKENDS", ()):
-        if "rebac" not in path.lower():
-            return str(path)
-    return "django.contrib.auth.backends.ModelBackend"
-
-
 @strawberry.type
 class OidcLoginQuery:
     """Public picker of login-capable OIDC providers."""
@@ -248,7 +230,7 @@ class OidcLoginMutation:
                 redirect_uri=redirect_uri,
             )
             with system_context(reason="iam_integrate_oidc.login"):
-                auth_login(request, result.user, backend=_session_backend(result.user))
+                auth_login(request, result.user)
         except OAuthFlowError as error:
             return LoginCompletePayload(ok=False, error=_flow_error_message(error), error_code=error.code)
         return LoginCompletePayload(

@@ -1,10 +1,11 @@
-"""REBAC read gating for model change payloads."""
+"""REBAC read gating for GraphQL schema surfaces and change payloads."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from rebac import ObjectRef, SubjectRef
 from rebac.backends import backend
@@ -12,6 +13,13 @@ from rebac.field_visibility import check_field_access, gated_read_fields
 from rebac.resources import model_resource_type
 
 from angee.graphql.events import ChangeEvent, ChangePayload
+
+
+def assert_no_gated_read_fields(
+    model: type[models.Model], field_names: Iterable[str], owner: str, reason: str
+) -> None:
+    if gated := sorted(gated_read_fields(model) & set(field_names)):
+        raise ImproperlyConfigured(f"{model._meta.label}: {owner} {gated} are field-gated reads; {reason}")
 
 
 class ChangeReadGate:

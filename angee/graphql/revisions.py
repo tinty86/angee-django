@@ -14,7 +14,7 @@ from strawberry.scalars import JSON
 
 from angee.base.mixins import RevisionMixin
 from angee.base.models import instance_from_public_id
-from angee.graphql.access import gated_read_fields
+from angee.graphql.access import assert_no_gated_read_fields
 from angee.graphql.ids import PublicID
 from angee.graphql.introspection import django_model, surface_name
 
@@ -128,12 +128,7 @@ def _revision_type(model: type[models.Model], singular: str) -> Any:
 def _validate_revision_visibility(model: type[models.Model]) -> None:
     """Fail before schema build when revision snapshots would bypass redaction."""
 
-    gated = sorted(gated_read_fields(model) & set(model.revisioned_fields))
-    if gated:
-        raise ImproperlyConfigured(
-            f"{model._meta.label}: revisioned_fields {gated} are field-gated "
-            "reads; exposing revision snapshots would leak gated values"
-        )
+    assert_no_gated_read_fields(model, model.revisioned_fields, "revisioned_fields", "snapshots leak gated values")
 
 
 def _list_annotation(item_type: Any) -> Any:

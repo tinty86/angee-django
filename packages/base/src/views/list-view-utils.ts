@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ModelFieldMetadata, ModelMetadata, Row } from "@angee/sdk";
 
+import { dedupeBy } from "../lib/dedupe";
 import type {
   DataToolbarCustomFilter,
   DataToolbarCustomFilterChip,
@@ -342,14 +343,7 @@ function mergeById<TOption extends { id: string }>(
   explicit: readonly TOption[] | undefined,
   inferred: readonly TOption[],
 ): readonly TOption[] {
-  const merged: TOption[] = [];
-  const seen = new Set<string>();
-  for (const option of [...(explicit ?? []), ...inferred]) {
-    if (seen.has(option.id)) continue;
-    seen.add(option.id);
-    merged.push(option);
-  }
-  return merged;
+  return dedupeBy([...(explicit ?? []), ...inferred], (option) => option.id);
 }
 
 function isFacetFilter(

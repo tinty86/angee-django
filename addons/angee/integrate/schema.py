@@ -9,7 +9,6 @@ related row.
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
 
 import strawberry
@@ -537,15 +536,13 @@ def _oauth_client_for_integration(integration: Any) -> Any:
         vendor = getattr(integration, "vendor", None)
         hint = str(getattr(vendor, "slug", "") or "")
     if not hint:
-        raise OAuthFlowError("integration_not_connectable", 400, "Integration has no OAuth client.")
+        raise OAuthFlowError("oauth_client_not_connectable", 400, "Integration has no OAuth client.")
     vendor_slug = str(getattr(getattr(integration, "vendor", None), "slug", "") or "")
     slug = hint.format(vendor=vendor_slug)
     with system_context(reason="integrate.graphql.connect_integration.oauth_client"):
-        oauth_client = OAuthClient.objects.filter(slug=slug, environment="prod").first()
-        if oauth_client is None:
-            oauth_client = OAuthClient.objects.filter(slug=slug).order_by("environment").first()
-    if oauth_client is None or not oauth_client.is_enabled:
-        raise OAuthFlowError("integration_not_connectable", 400, "Integration has no enabled OAuth client.")
+        oauth_client = OAuthClient.objects.enabled_for_slug(slug)
+    if oauth_client is None:
+        raise OAuthFlowError("oauth_client_not_connectable", 400, "Integration has no enabled OAuth client.")
     return oauth_client
 
 
@@ -1487,20 +1484,9 @@ class WebhookActionMutation:
         """Send a test event to one subscription and report the delivery outcome."""
 
         subscription = resolve_action_target(WebhookSubscription, id, reason="integrate.graphql.test_webhook_delivery")
-        body = json.dumps(
-            {"type": "test", "subscription": subscription.public_id},
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
         with system_context(reason="integrate.graphql.test_webhook_delivery"):
-            try:
-                status = subscription.deliver(body)
-            except Exception as error:  # noqa: BLE001 — delivery failure is the result, not a 500
-                message = "; ".join(error.messages) if hasattr(error, "messages") else str(error)
-                subscription.record_delivery_failure(status="", error=message)
-                return ActionResult(ok=False, message=f"Delivery failed: {message}")
-            subscription.record_delivery(status)
-        return ActionResult(ok=True, message=f"Delivered (status {status}).")
+            ok, message = subscription.deliver_test()
+        return ActionResult(ok=ok, message=message)
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def rotate_webhook_secret(self, id: PublicID) -> RotatedSecret:

@@ -12,10 +12,11 @@ from typing import Any
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, connection, models
+from import_export.results import Result, RowResult
 from rebac import system_context
 
 from angee.base.models import AngeeModel
-from angee.resources.entries import EntryGraph, ResourceEntry
+from angee.resources.entries import EntryGraph, LoadResult, ResourceEntry
 from angee.resources.exceptions import ResourceLoadError
 from angee.resources.fetch import _PublicUrlRedirectHandler, fetch_url
 from angee.resources.models import Resource
@@ -71,6 +72,19 @@ def entry(
         tier,
         declaration,
     )
+
+
+def test_load_result_counts_import_export_totals() -> None:
+    """Load accounting delegates row-type counts to django-import-export."""
+
+    result = Result()
+    result.totals[RowResult.IMPORT_TYPE_NEW] = 2
+    result.totals[RowResult.IMPORT_TYPE_UPDATE] = 3
+    result.totals[RowResult.IMPORT_TYPE_SKIP] = 5
+
+    counted = LoadResult(created=1, updated=1, skipped=1).with_result(result)
+
+    assert counted == LoadResult(created=3, updated=4, skipped=6)
 
 
 def test_resource_entry_reads_structured_rows_and_fields(
@@ -954,6 +968,93 @@ def test_resource_adoption_uses_explicit_unique_field(
         with system_context(reason="explicit adoption assertions"):
             assert ExplicitAdoptUser.objects.count() == 1
         assert ExplicitAdoptLedger.objects.get(xref="existing").target_id
+    finally:
+        with connection.schema_editor() as schema_editor:
+            for model in reversed(models_to_create):
+                schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resource_adoption_repairs_stale_ledger_target(tmp_path: Path) -> None:
+    """A stale ledger target is repaired through the declared adoption key."""
+
+    class StaleLedgerUser(AngeeModel):
+        """Model with a unique natural key and a mutable seeded value."""
+
+        username = models.CharField(max_length=40, unique=True)
+        label = models.CharField(max_length=80, blank=True)
+
+        class Meta:
+            """Django model options for the stale-ledger adoption test model."""
+
+            app_label = "base"
+
+    class StaleLedger(Resource):
+        """Concrete resource ledger for stale-ledger adoption tests."""
+
+        class Meta(Resource.Meta):
+            """Django model options for the test ledger."""
+
+            app_label = "base"
+            abstract = False
+
+    resource_dir = tmp_path / "resources"
+    resource_dir.mkdir()
+    (resource_dir / "010_base.staleledgeruser.csv").write_text(
+        "_xref,username,label\nadmin,admin,Seeded\n",
+        encoding="utf-8",
+    )
+    owner = addon(
+        tmp_path,
+        manifest={
+            "master": (),
+            "install": (
+                {
+                    "path": "resources/010_base.staleledgeruser.csv",
+                    "adopt": "username",
+                },
+            ),
+            "demo": (),
+        },
+    )
+
+    models_to_create = (StaleLedgerUser, StaleLedger)
+    with connection.schema_editor() as schema_editor:
+        for model in models_to_create:
+            schema_editor.create_model(model)
+    try:
+        existing = StaleLedgerUser.objects.create(username="admin", label="Existing")
+        StaleLedger.objects.create(
+            source_addon=owner.name,
+            source_path="resources/010_base.staleledgeruser.csv",
+            tier=Resource.Tier.INSTALL,
+            xref="admin",
+            content_hash="sha256:stale",
+            target_model=StaleLedgerUser._meta.label,
+            target_id="usr_stale",
+        )
+
+        result = StaleLedger.objects.load_addons(
+            (owner,),
+            tiers=[Resource.Tier.INSTALL],
+        )
+
+        assert result.created == 0
+        assert result.updated == 1
+        assert result.skipped == 0
+        existing.refresh_from_db()
+        assert existing.label == "Seeded"
+        with system_context(reason="stale-ledger adoption assertions"):
+            assert StaleLedgerUser.objects.count() == 1
+        assert StaleLedger.objects.get(xref="admin").target_id == existing.public_id
+
+        second = StaleLedger.objects.load_addons(
+            (owner,),
+            tiers=[Resource.Tier.INSTALL],
+        )
+        assert second.created == 0
+        assert second.updated == 0
+        assert second.skipped == 1
     finally:
         with connection.schema_editor() as schema_editor:
             for model in reversed(models_to_create):

@@ -209,6 +209,12 @@ Success:
 - [ ] Graphlib topo-sort stability before E23.
 - [ ] Whether G3 knowledge decomposition is in this DRY wave or a product feature wave.
 - [ ] Whether E27 build-time metadata waits for G1 typed operations.
+- [ ] If custom session-auth backend selection becomes a goal, lift the canonical
+      OIDC login backend string to an IAM-owned constant; E7 intentionally keeps
+      the current ModelBackend contract.
+- [ ] Storage MIME catalogue glyph coverage: register every `icon_key` emitted by
+      `010_storage.mimetype.yaml` and add a manifest/catalogue coverage test. E13
+      only moved file-row glyph choice to `MimeType.icon_key` with a safe fallback.
 
 ## Running Scoreboard
 
@@ -219,3 +225,15 @@ Update after every slice commit.
 | S0 GraphQL sqid IDs | `3502d73c` | +824 incl. plan/tests | raw public IDs, no Relay wrappers | public-id helpers + typed details own identity | pass | pytest/schema/typecheck |
 | S0 sqid separator | `b26257d4` | +70 | canonical `abc_...` sqids | `SqidField` owns separator | pass | pytest/schema/ruff |
 | E1 Delete `FROZEN_TIERS` | same commit | -3 | resources addon keeps only live tier facts | resource skip behavior remains owned by `_skip_decision`/ledger hash logic | backend + architecture pass | `ruff`; resources pytest |
+| E2 Reuse `groupFieldLabel` owner | same commit | -4 source | toolbar composes shared list label owner | `ListInternals.groupFieldLabel` remains the only group-field casing rule | frontend + architecture pass | base typecheck/test |
+| E3 Extract `useSyncPageSize` | same commit | -8 source | list surfaces share page-size sync instead of duplicating effects | `data-view-surface` owns URL/page-size synchronization once | frontend + architecture pass | base typecheck/test |
+| E4 Native SDK page iteration | same commit | -9 prod, +32 tests | provider addons iterate SDK pages directly and sync later-page models | OpenAI/Anthropic SDK `SyncPage.__iter__` owns pagination | backend + architecture pass | `ruff`; agents pytest |
+| E5 Drop redundant Meta re-emission | same commit | -24 prod, +25 tests | composer emits fewer Django-owned facts | Django `Meta` inheritance owns `db_table`/`swappable`; composer keeps REBAC Meta re-emission only | backend + architecture pass | `ruff`; compose pytest; build check |
+| E6 Use import-export result totals | same commit | -11 prod, +14 tests | resources load reports import-export-owned accounting | `Result.totals` owns created/updated/skipped row counts | backend + architecture pass | `ruff`; resources pytest |
+| E7 Use Django login backend contract | same commit | -14 prod, +1 test | OIDC login returns a session-ready user | Django `login()` reads `user.backend`; no settings scan | backend + architecture pass | `ruff`; OIDC/IAM pytest |
+| E8 Centralize OAuth client slug lookup | same commit | +3 prod, +56 tests | connect surfaces ask OAuthClient owner for provider-slug clients | `OAuthClientQuerySet.enabled_for_slug()` owns prod-first/fallback lookup | backend + architecture pass | `ruff`; focused connect pytest |
+| E10 Move webhook delivery telemetry to model | same commit | +4 prod, +39 tests | webhook action delegates delivery telemetry to subscription | `WebhookSubscription.deliver_recorded()`/`deliver_test()` own delivery status recording | backend + architecture pass | `ruff`; focused webhook pytest |
+| E11 Unify gated-read exposure guard | same commit | -3 | aggregate/history schema surfaces stop duplicating gated-read intersections | `angee.graphql.access.assert_no_gated_read_fields()` owns unsafe exposure rejection | backend + architecture pass | `ruff`; aggregate/GraphQL pytest |
+| E12 Share `dedupeBy` utility | same commit | -10 source | base views/preferences reuse one first-wins dedupe mechanic without changing domain merge rules | `packages/base/src/lib/dedupe.ts` owns by-key array dedupe inside base | frontend + architecture pass | base typecheck; base vitest |
+| E13 Use MIME catalogue file glyphs | same commit | -5 source | storage file rows carry catalogue glyph facts; views render row-owned icons | `MimeType.icon_key` owns file glyph choice; MIME checks only decide thumbnail rendering | frontend + architecture pass; registry coverage deferred | storage typecheck/test; `git diff --check` |
+| E14 Add storage download cache contract | same commit | +18 prod, +63 tests | storage download response advertises validators and token-carrier-safe private caching | Django cache helpers own ETag/conditional/Vary mechanics; `content_hash` and token TTL supply facts | backend + architecture pass after fixes | `ruff`; storage pytest |

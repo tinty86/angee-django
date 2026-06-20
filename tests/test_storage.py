@@ -349,6 +349,69 @@ def test_proxy_upload_view_streams_for_actor_and_rejects_reuse_and_anon(drive: A
 
 
 @pytest.mark.django_db(transaction=True)
+def test_proxy_download_sets_content_cache_headers_and_honors_etag(
+    drive: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Content-addressed downloads advertise and honor validators."""
+
+    from django.test import RequestFactory
+
+    from angee.storage import views
+    from angee.storage.uploads import DOWNLOAD_TOKEN_HEADER, DOWNLOAD_TOKEN_MAX_AGE
+
+    row = _proxy_upload(drive, PNG_BYTES)
+    token = row.issue_download_token()
+    request = RequestFactory().get(f"/storage/download/{row.filename}?token={token}")
+
+    ok = views.download(request, row.filename)
+    assert ok.status_code == 200
+    etag = ok["ETag"]
+    assert etag == f'"{PNG_SHA256}"'
+    assert f"max-age={DOWNLOAD_TOKEN_MAX_AGE}" in ok["Cache-Control"]
+    assert "private" in ok["Cache-Control"]
+    assert "immutable" in ok["Cache-Control"]
+    assert _header_values(ok["Vary"]) == {DOWNLOAD_TOKEN_HEADER.lower(), "authorization"}
+    ok.close()
+
+    header_token = views.download(
+        RequestFactory().get(
+            f"/storage/download/{row.filename}",
+            HTTP_X_ANGEE_DOWNLOAD_TOKEN=token,
+        ),
+        row.filename,
+    )
+    assert header_token.status_code == 200
+    assert _header_values(header_token["Vary"]) == {DOWNLOAD_TOKEN_HEADER.lower(), "authorization"}
+    header_token.close()
+
+    cached = RequestFactory().get(
+        f"/storage/download/{row.filename}?token={token}",
+        HTTP_IF_NONE_MATCH=etag,
+    )
+    monkeypatch.setattr(File, "open_stream", lambda self: pytest.fail("304 must not reopen stored bytes"))
+    not_modified = views.download(cached, row.filename)
+    assert not_modified.status_code == 304
+    assert not_modified["ETag"] == etag
+    assert "immutable" in not_modified["Cache-Control"]
+    assert _header_values(not_modified["Vary"]) == {DOWNLOAD_TOKEN_HEADER.lower(), "authorization"}
+
+    failed_precondition = views.download(
+        RequestFactory().get(
+            f"/storage/download/{row.filename}?token={token}",
+            HTTP_IF_MATCH='"not-the-content-hash"',
+        ),
+        row.filename,
+    )
+    assert failed_precondition.status_code == 412
+    assert "immutable" not in failed_precondition.get("Cache-Control", "")
+
+
+def _header_values(value: str) -> set[str]:
+    return {part.strip().lower() for part in value.split(",")}
+
+
+@pytest.mark.django_db(transaction=True)
 def test_users_get_a_trash_smart_folder(storage_tables: None) -> None:
     """Creating a user creates exactly one owned Trash smart folder."""
 

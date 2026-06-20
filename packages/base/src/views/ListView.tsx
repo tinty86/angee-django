@@ -7,6 +7,7 @@ import {
   type UseAggregateOptions,
 } from "@angee/sdk";
 
+import { dedupeBy } from "../lib/dedupe";
 import {
   ControlBand,
   controlBandItemClassName,
@@ -543,12 +544,5 @@ function mergeGroupOptions(
   explicit: readonly DataToolbarGroupOption[] | undefined,
   inferred: readonly DataToolbarGroupOption[],
 ): readonly DataToolbarGroupOption[] {
-  const merged: DataToolbarGroupOption[] = [];
-  const seen = new Set<string>();
-  for (const option of [...(explicit ?? []), ...inferred]) {
-    if (seen.has(option.id)) continue;
-    seen.add(option.id);
-    merged.push(option);
-  }
-  return merged;
+  return dedupeBy([...(explicit ?? []), ...inferred], (option) => option.id);
 }
