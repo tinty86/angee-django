@@ -128,6 +128,20 @@ export interface RowsDataViewSurface<TRow extends StringIdRow = StringIdRow>
   sourceRows: readonly TRow[];
 }
 
+function useSyncPageSize(
+  dataView: DataViewContextValue,
+  pageSize: number | undefined,
+): void {
+  const handledPageSizeRef = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => {
+    if (handledPageSizeRef.current === pageSize) return;
+    handledPageSizeRef.current = pageSize;
+    if (pageSize !== undefined && dataView.state.pageSize !== pageSize) {
+      dataView.setPageSize(pageSize);
+    }
+  }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
+}
+
 export function useDataViewSurface<TRow extends Row = Row>({
   model,
   columns,
@@ -141,18 +155,7 @@ export function useDataViewSurface<TRow extends Row = Row>({
   enabled = true,
   onListStateChange,
 }: UseDataViewSurfaceProps<TRow>): DataViewSurface<TRow> {
-  const handledPageSizeRef = React.useRef<number | undefined>(undefined);
-  React.useEffect(() => {
-    if (pageSize === undefined) {
-      handledPageSizeRef.current = undefined;
-      return;
-    }
-    if (handledPageSizeRef.current === pageSize) return;
-    handledPageSizeRef.current = pageSize;
-    if (dataView.state.pageSize !== pageSize) {
-      dataView.setPageSize(pageSize);
-    }
-  }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
+  useSyncPageSize(dataView, pageSize);
 
   const requestedFields = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
@@ -237,18 +240,7 @@ export function useRowsDataViewSurface<
   error = null,
   onListStateChange,
 }: UseRowsDataViewSurfaceProps<TRow>): RowsDataViewSurface<TRow> {
-  const handledPageSizeRef = React.useRef<number | undefined>(undefined);
-  React.useEffect(() => {
-    if (pageSize === undefined) {
-      handledPageSizeRef.current = undefined;
-      return;
-    }
-    if (handledPageSizeRef.current === pageSize) return;
-    handledPageSizeRef.current = pageSize;
-    if (dataView.state.pageSize !== pageSize) {
-      dataView.setPageSize(pageSize);
-    }
-  }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
+  useSyncPageSize(dataView, pageSize);
 
   const filteredRows = React.useMemo(
     () => applyClientFilter(rows, columns, dataView.state.filter),

@@ -220,3 +220,4 @@ Update after every slice commit.
 | S0 sqid separator | `b26257d4` | +70 | canonical `abc_...` sqids | `SqidField` owns separator | pass | pytest/schema/ruff |
 | E1 Delete `FROZEN_TIERS` | same commit | -3 | resources addon keeps only live tier facts | resource skip behavior remains owned by `_skip_decision`/ledger hash logic | backend + architecture pass | `ruff`; resources pytest |
 | E2 Reuse `groupFieldLabel` owner | same commit | -4 source | toolbar composes shared list label owner | `ListInternals.groupFieldLabel` remains the only group-field casing rule | frontend + architecture pass | base typecheck/test |
+| E3 Extract `useSyncPageSize` | same commit | -8 source | list surfaces share page-size sync instead of duplicating effects | `data-view-surface` owns URL/page-size synchronization once | frontend + architecture pass | base typecheck/test |
