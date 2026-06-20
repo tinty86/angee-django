@@ -424,6 +424,34 @@ def test_connect_inference_provider_uses_provider_backend_oauth_client(agents_co
     assert provider.credential_id == credential.pk
 
 
+def test_connect_inference_provider_uses_shared_oauth_client_error_code(
+    agents_console_tables: None,
+) -> None:
+    """Provider connect reports the shared OAuth-client lookup error code."""
+
+    del agents_console_tables
+    provider = _provider("agt-provider-missing-oauth", backend_class="anthropic", name="Anthropic")
+    mutation = """
+        mutation ConnectProvider($id: ID!) {
+          connectInferenceProvider(id: $id) {
+            attached
+            error
+            errorCode
+          }
+        }
+    """
+
+    result = _data(_execute(_schema(), mutation, {"id": _public_id(provider.sqid)}, user=provider.owner))[
+        "connectInferenceProvider"
+    ]
+
+    assert result == {
+        "attached": False,
+        "error": "Inference provider has no enabled OAuth client.",
+        "errorCode": "oauth_client_not_connectable",
+    }
+
+
 def test_create_mcp_server_keeps_defaults_for_omitted_optionals(agents_console_tables: None) -> None:
     """A create omitting optional non-null fields leaves them at the model default.
 

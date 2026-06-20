@@ -505,13 +505,11 @@ def _provider_oauth_client(provider: Any) -> Any:
 
     hint = str(getattr(provider.backend, "oauth_client", "") or "").strip()
     if not hint:
-        raise OAuthFlowError("provider_not_connectable", 400, "Inference provider has no OAuth client.")
+        raise OAuthFlowError("oauth_client_not_connectable", 400, "Inference provider has no OAuth client.")
     with system_context(reason="agents.graphql.connect_inference_provider.oauth_client"):
-        oauth_client = OAuthClient.objects.filter(slug=hint, environment="prod").first()
-        if oauth_client is None:
-            oauth_client = OAuthClient.objects.filter(slug=hint).order_by("environment").first()
-    if oauth_client is None or not oauth_client.is_enabled:
-        raise OAuthFlowError("provider_not_connectable", 400, "Inference provider has no enabled OAuth client.")
+        oauth_client = OAuthClient.objects.enabled_for_slug(hint)
+    if oauth_client is None:
+        raise OAuthFlowError("oauth_client_not_connectable", 400, "Inference provider has no enabled OAuth client.")
     return oauth_client
 
 

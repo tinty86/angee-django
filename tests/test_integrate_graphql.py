@@ -538,6 +538,34 @@ def test_connect_integration_reuses_existing_row_with_enum_impl_class(
         ).count() == 1
 
 
+def test_connect_integration_uses_shared_oauth_client_error_code(
+    integrate_console_tables: None,
+) -> None:
+    """Integration connect reports the shared OAuth-client lookup error code."""
+
+    console_schema = _schema()
+    owner = User.objects.create_user(username="missing-oauth-owner", email="owner@example.com")
+    with system_context(reason="test.integrate.missing_oauth.seed"):
+        Vendor.objects.create(slug="missing-oauth", display_name="Missing OAuth")
+    mutation = """
+        mutation {
+          connectIntegration(vendorSlug: "missing-oauth", implClass: "NONE") {
+            attached
+            error
+            errorCode
+          }
+        }
+    """
+
+    result = _data(_execute(console_schema, mutation, user=owner))["connectIntegration"]
+
+    assert result == {
+        "attached": False,
+        "error": "Integration has no enabled OAuth client.",
+        "errorCode": "oauth_client_not_connectable",
+    }
+
+
 def test_connect_integration_rejects_child_backend_key(integrate_console_tables: None) -> None:
     """Self-service connect cannot use a child backend key as a parent implementation."""
 

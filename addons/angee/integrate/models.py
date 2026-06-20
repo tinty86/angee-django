@@ -109,6 +109,13 @@ class OAuthClientQuerySet(RebacQuerySet[Any]):
 
         return cast(OAuthClientQuerySet, self)
 
+    def enabled_for_slug(self, slug: str, *, environment: str = "prod") -> Any | None:
+        """Return the preferred OAuth client for a slug when that row is enabled."""
+
+        client = self.filter(slug=slug, environment=environment).first()
+        client = client or self.filter(slug=slug).order_by("environment").first()
+        return client if client is not None and client.is_enabled else None
+
 
 class OAuthClientManager(RebacManager.from_queryset(OAuthClientQuerySet)):  # type: ignore[misc]
     """Manager for settings-sourced OAuth client registration.
