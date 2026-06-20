@@ -2,12 +2,13 @@
 
 A directory backend parses a source into neutral ``ParsedContact`` rows; these
 managers turn one into a ``Party`` (a ``Person``) and its ``Handle`` /
-``PartyHandle`` / ``Address`` rows — deduplicating a handle by ``(platform,
-value)`` and resolving the party an existing handle already belongs to, so every
-directory source shares one write path (the map lives on the models, not in each
-backend). The resolved owner and the ``handle_count`` denormalisation are
-maintained here, in the same transaction as the link. The sync runs under
-``system_context``, so ``created_by`` is set explicitly to the directory owner.
+``PartyHandle`` / ``Address`` rows. A contact is keyed by its source UID within
+its folder (the idempotent ``(folder, source_uid)`` upsert), handles dedupe on
+``(platform, value)``, and ``handle_count`` plus the resolved ``Handle.party`` are
+maintained here in the same transaction — so every directory source shares one
+write path (the map lives on the models, not in each backend) and a re-sync
+converges instead of duplicating. The sync runs under ``system_context``, so
+``created_by`` is set explicitly to the directory owner.
 """
 
 from __future__ import annotations
@@ -55,14 +56,19 @@ class PartyHandleManager(AngeeManager):
         source: str = "manual",
         owner_id: Any = None,
     ) -> Any:
-        """Link ``handle`` to ``party`` with ``confidence``, then resolve the handle's owner."""
+        """Link ``handle`` to ``party`` with ``confidence``, then resolve the handle's owner.
 
-        link, _created = self.get_or_create(
+        Resolution only re-runs when the link is new or the handle's owner is not
+        already this party, so a re-sync of an unchanged contact does no extra work.
+        """
+
+        link, created = self.get_or_create(
             party=party,
             handle=handle,
             defaults={"confidence": confidence, "source": source, "created_by_id": owner_id},
         )
-        self.resolve(handle)
+        if created or handle.party_id != party.pk:
+            self.resolve(handle)
         return link
 
     def resolve(self, handle: Any) -> None:
@@ -88,23 +94,32 @@ class PartyHandleManager(AngeeManager):
             self._recount(resolved)
 
     def _recount(self, party: Any) -> None:
-        """Refresh ``party.handle_count`` from the handles resolved onto it."""
+        """Refresh ``party.handle_count`` from the handles resolved onto it (write only on change)."""
 
         handle_model = apps.get_model("parties", "Handle")
-        party.handle_count = handle_model.objects.filter(party_id=party.pk).count()
-        party.save(update_fields=["handle_count", "updated_at"])
+        count = handle_model.objects.filter(party_id=party.pk).count()
+        if party.handle_count != count:
+            party.handle_count = count
+            party.save(update_fields=["handle_count", "updated_at"])
 
 
 class PartyManager(AngeeManager):
-    """Factory for parties, including the directory-sync ingest."""
+    """Factory for parties, including the idempotent directory-sync ingest."""
 
-    def ingest_contact(self, parsed: ParsedContact, *, owner_id: Any) -> Any:
-        """Create or update a person and its handles/addresses from one parsed contact.
+    def ingest_contact(self, parsed: ParsedContact, *, folder: Any, owner_id: Any) -> Any:
+        """Upsert a person and its handles/addresses from one parsed contact.
 
-        Dedup is by handle: an existing handle's resolved party is reused, otherwise
-        a new ``Person`` is created. Runs in one transaction so a partial contact is
-        never half-written.
+        Keyed on ``(folder, source_uid)`` so a re-sync updates the same row instead
+        of forking a duplicate, and the whole contact is written in one transaction
+        so a partial card is never half-applied. Emails/phones still upsert as shared
+        ``Handle`` rows and link to the person, but the person's identity is the
+        source UID, not handle overlap. A contact with no ``source_uid`` has no stable
+        key and is skipped — without it the ``(folder, "")`` upsert would collapse
+        every keyless card onto one row.
         """
+
+        if not parsed.uid:
+            return None
 
         person_model = apps.get_model("parties", "Person")
         handle_model = apps.get_model("parties", "Handle")
@@ -112,55 +127,86 @@ class PartyManager(AngeeManager):
         address_model = apps.get_model("parties", "Address")
 
         with transaction.atomic():
+            person, _created = person_model.objects.update_or_create(
+                folder=folder,
+                source_uid=parsed.uid,
+                defaults={
+                    "display_name": parsed.display_name or parsed.family_name or "Unknown",
+                    "name_prefix": parsed.name_prefix,
+                    "given_name": parsed.given_name,
+                    "additional_name": parsed.additional_name,
+                    "family_name": parsed.family_name,
+                    "name_suffix": parsed.name_suffix,
+                    "nickname": parsed.nickname,
+                    "notes": parsed.notes,
+                    "raw_vcard": parsed.raw_vcard,
+                    "source_etag": parsed.etag,
+                    "created_by_id": owner_id,
+                },
+            )
+
             handles = [
                 handle_model.objects.upsert(
-                    platform="email", value=value, owner_id=owner_id, label=label, display_name=parsed.display_name
+                    platform="email", value=value, owner_id=owner_id, label=label,
+                    display_name=parsed.display_name,
                 )
                 for value, label in parsed.emails
             ] + [
                 handle_model.objects.upsert(
-                    platform="phone", value=value, owner_id=owner_id, label=label, display_name=parsed.display_name
+                    platform="phone", value=value, owner_id=owner_id, label=label,
+                    display_name=parsed.display_name,
                 )
                 for value, label in parsed.phones
             ]
-
-            party = next((handle.party for handle in handles if handle.party_id), None)
-            if party is None:
-                party = person_model.objects.create(
-                    display_name=parsed.display_name or parsed.family_name or "Unknown",
-                    name_prefix=parsed.name_prefix,
-                    given_name=parsed.given_name,
-                    additional_name=parsed.additional_name,
-                    family_name=parsed.family_name,
-                    name_suffix=parsed.name_suffix,
-                    nickname=parsed.nickname,
-                    notes=parsed.notes,
-                    raw_vcard=parsed.raw_vcard,
-                    created_by_id=owner_id,
-                )
-            elif parsed.display_name and party.display_name != parsed.display_name:
-                party.display_name = parsed.display_name
-                party.save(update_fields=["display_name", "updated_at"])
-
             for handle in handles:
                 party_handle_model.objects.link(
-                    party, handle, confidence=1.0, source="carddav", owner_id=owner_id
+                    person, handle, confidence=1.0, source="carddav", owner_id=owner_id
                 )
 
+            # Addresses carry no stable id, so mirror the parsed set wholesale —
+            # idempotent because the result is exactly the source's addresses.
+            address_model.objects.filter(party=person).delete()
             for addr in parsed.addresses:
-                address_model.objects.update_or_create(
-                    party=party,
+                address_model.objects.create(
+                    party=person,
                     label=addr.label,
+                    po_box=addr.po_box,
+                    extended=addr.extended,
                     street=addr.street,
-                    defaults={
-                        "po_box": addr.po_box,
-                        "extended": addr.extended,
-                        "city": addr.city,
-                        "region": addr.region,
-                        "postal_code": addr.postal_code,
-                        "country": addr.country,
-                        "created_by_id": owner_id,
-                    },
+                    city=addr.city,
+                    region=addr.region,
+                    postal_code=addr.postal_code,
+                    country=addr.country,
+                    created_by_id=owner_id,
                 )
 
-            return party
+            return person
+
+    def purge_missing(self, *, folder: Any, keep_uids: set[str]) -> int:
+        """Delete the folder's synced parties whose source UID is no longer present.
+
+        This is how a contact deleted on the source is mirrored locally: anything in
+        ``folder`` carrying a ``source_uid`` not in ``keep_uids`` is removed (the MTI
+        child cascades with its parent). A handle shared with a surviving party is
+        re-resolved afterwards, since its link to the deleted party cascades away.
+        """
+
+        party_handle_model = apps.get_model("parties", "PartyHandle")
+        handle_model = apps.get_model("parties", "Handle")
+        stale_pks = list(
+            self.filter(folder=folder)
+            .exclude(source_uid="")
+            .exclude(source_uid__in=keep_uids)
+            .values_list("pk", flat=True)
+        )
+        if not stale_pks:
+            return 0
+        orphaned_handle_ids = list(
+            party_handle_model.objects.filter(party_id__in=stale_pks)
+            .values_list("handle_id", flat=True)
+            .distinct()
+        )
+        deleted, _by_model = self.filter(pk__in=stale_pks).delete()
+        for handle in handle_model.objects.filter(pk__in=orphaned_handle_ids):
+            party_handle_model.objects.resolve(handle)
+        return deleted

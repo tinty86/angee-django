@@ -22,7 +22,7 @@ import ipaddress
 import json
 import socket
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any
 from urllib.parse import SplitResult, urlunsplit
@@ -39,10 +39,11 @@ _IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 @dataclass(frozen=True, slots=True)
 class HttpResponse:
-    """One outbound HTTP response: the status code and the raw body bytes."""
+    """One outbound HTTP response: the status code, raw body bytes, and headers."""
 
     status: int
     body: bytes
+    headers: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -54,6 +55,11 @@ class HttpResponse:
         """Return the body parsed as JSON (``None`` for an empty body)."""
 
         return json.loads(self.body or b"null")
+
+    def header(self, name: str) -> str:
+        """Return one response header by case-insensitive name, or ``""``."""
+
+        return self.headers.get(name.lower(), "")
 
 
 def _address_blocked(address: _IpAddress, *, allow_private: bool) -> bool:
@@ -192,7 +198,11 @@ class HttpClient:
         try:
             connection.request(method, _request_target(parsed), body=body, headers=request_headers)
             response = connection.getresponse()
-            return HttpResponse(status=_response_status(response), body=response.read())
+            return HttpResponse(
+                status=_response_status(response),
+                body=response.read(),
+                headers=_response_headers(response),
+            )
         finally:
             connection.close()
 
@@ -287,6 +297,15 @@ def _response_status(response: Any) -> int:
     if callable(getcode):
         return int(getcode())
     return 200
+
+
+def _response_headers(response: Any) -> dict[str, str]:
+    """Return response headers as a lowercased-key dict (empty for a test double without them)."""
+
+    getheaders = getattr(response, "getheaders", None)
+    if not callable(getheaders):
+        return {}
+    return {str(name).lower(): str(value) for name, value in getheaders()}
 
 
 class HttpClientMixin:

@@ -57,12 +57,7 @@ const parties = defineBaseAddon({
       OrganizationsPage,
       "parties.Organization",
     ),
-    {
-      name: "parties.directories",
-      path: "/parties/directories",
-      shell: "console",
-      component: DirectoriesPage,
-    },
+    ...consolePage("parties.directories", "/parties/directories", DirectoriesPage, "parties.Directory"),
   ],
   menus: partiesMenu,
   icons: { parties: Users, organization: Building2, "address-book": Contact },

@@ -35,6 +35,7 @@ PartyHandle = apps.get_model("parties", "PartyHandle")
 Address = apps.get_model("parties", "Address")
 Affiliation = apps.get_model("parties", "Affiliation")
 Directory = apps.get_model("parties", "Directory")
+Folder = apps.get_model("parties", "Folder")
 
 
 @strawberry_django.type(Party)
@@ -79,6 +80,7 @@ class PersonType(AngeeNode):
     nickname: auto
     birthday: auto
     anniversary: auto
+    folder: "ContactFolderType | None"
     created_at: auto
     updated_at: auto
 
@@ -165,6 +167,21 @@ class AffiliationType(AngeeNode):
     is_primary: auto
 
 
+@strawberry_django.type(Folder)
+class ContactFolderType(AngeeNode):
+    """GraphQL projection of a contact folder (a synced address book's parties).
+
+    Named distinctly from storage's file ``FolderType`` — a different concept.
+    """
+
+    name: auto
+    directory: "DirectoryType | None"
+    source_href: auto
+    ctag: auto
+    created_at: auto
+    updated_at: auto
+
+
 @strawberry_django.type(Directory)
 class DirectoryType(AngeeNode):
     """GraphQL projection of a connected contacts directory (e.g. a CardDAV source)."""
@@ -189,15 +206,16 @@ class PartiesDirectoryMutation:
         self,
         info: strawberry.Info,
         name: str,
-        url: str,
+        server_url: str,
         username: str,
         password: str,
     ) -> DirectoryType:
         """Create a Basic-auth credential and an active CardDAV directory to sync.
 
-        ``url`` is the address-book collection URL. The directory is created
-        ``active`` and owned by the calling admin; ``syncIntegration`` then pulls
-        its contacts.
+        ``server_url`` is the account/server URL — discovery finds the address
+        books, so no exact collection URL is needed. The directory is created
+        ``active`` and owned by the calling admin; ``syncIntegration`` then pulls its
+        contacts into one :class:`~angee.parties.models.Folder` per address book.
         """
 
         user = session_user(info)
@@ -217,8 +235,9 @@ class PartiesDirectoryMutation:
                 vendor=vendor,
                 owner=user,
                 credential=credential,
+                impl_class="directory",
                 backend_class="carddav",
-                config={"carddav_url": url, "display_name": name},
+                config={"server_url": server_url, "display_name": name},
                 status="active",
                 created_by_id=user.pk,
             )
@@ -391,6 +410,16 @@ class PartyOrder:
     updated_at: auto
 
 
+@strawberry_django.filter_type(Person, lookups=True)
+class PersonFilter:
+    """Field lookups accepted when filtering the people list (incl. the folder facet)."""
+
+    display_name: auto
+    folder: auto
+    created_at: auto
+    updated_at: auto
+
+
 @strawberry_django.filter_type(Handle, lookups=True)
 class HandleFilter:
     """Field lookups accepted when filtering the handles connection."""
@@ -432,7 +461,7 @@ class PartiesQuery:
         order=PartyOrder,
     )
     party: PartyType | None = detail(PartyType)
-    people: OffsetPaginated[PersonType] = strawberry_django.offset_paginated()
+    people: OffsetPaginated[PersonType] = strawberry_django.offset_paginated(filters=PersonFilter)
     person: PersonType | None = detail(PersonType)
     organizations: OffsetPaginated[OrganizationType] = strawberry_django.offset_paginated()
     organization: OrganizationType | None = detail(OrganizationType)
@@ -443,6 +472,8 @@ class PartiesQuery:
     handle: HandleType | None = detail(HandleType)
     directories: OffsetPaginated[DirectoryType] = strawberry_django.offset_paginated()
     directory: DirectoryType | None = detail(DirectoryType)
+    contact_folders: OffsetPaginated[ContactFolderType] = strawberry_django.offset_paginated()
+    contact_folder: ContactFolderType | None = detail(ContactFolderType)
     party_aggregate = _party_aggregates.aggregate_field
     party_groups = _party_aggregates.group_by_field
 
@@ -475,6 +506,7 @@ _PARTIES_SCHEMA_BUCKET = {
         AddressType,
         AffiliationType,
         DirectoryType,
+        ContactFolderType,
         *_AGGREGATE_TYPES,
     ],
 }

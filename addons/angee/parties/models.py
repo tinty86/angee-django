@@ -62,6 +62,15 @@ class Party(SqidMixin, AuditMixin, AngeeModel):
     )
     raw_vcard = models.TextField(blank=True, default="")
     extensions = models.JSONField(blank=True, default=dict)
+    folder = models.ForeignKey(
+        "parties.Folder",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="parties",
+    )
+    source_uid = models.CharField(max_length=512, blank=True, default="")
+    source_etag = models.CharField(max_length=512, blank=True, default="")
 
     objects = PartyManager()
 
@@ -72,6 +81,15 @@ class Party(SqidMixin, AuditMixin, AngeeModel):
         ordering = ("-updated_at", "display_name", "sqid")
         rebac_resource_type = "parties/party"
         rebac_id_attr = "sqid"
+        constraints = (
+            # The directory-sync idempotency key: one party per source UID per
+            # folder, so re-sync updates the same row instead of duplicating.
+            models.UniqueConstraint(
+                fields=("folder", "source_uid"),
+                condition=~models.Q(source_uid=""),
+                name="uq_party_folder_source_uid",
+            ),
+        )
 
     def __str__(self) -> str:
         """Return the party's display name for Django displays."""
@@ -348,6 +366,56 @@ class Affiliation(SqidMixin, AuditMixin, AngeeModel):
         return self.organization_name or self.title or str(self.organization_id)
 
 
+class Folder(SqidMixin, AuditMixin, AngeeModel):
+    """A group of parties — the local mirror of a synced address book.
+
+    The contacts counterpart of storage's ``Drive``/``Folder`` and knowledge's
+    ``Vault`` container idea, kept to exactly what sync needs today: the directory
+    it mirrors, the collection ``source_href`` (one folder per ``(directory,
+    source_href)`` makes the folder upsert idempotent), and the incremental cursors
+    (``ctag`` / ``sync_token``). Owned via ``created_by``; deleting a folder leaves
+    its parties (``SET_NULL`` on :attr:`Party.folder`). Manual creation and a folder
+    tree (``parent``) are deferred until a create path lands to exercise them.
+    """
+
+    runtime = True
+
+    sqid = SqidField(real_field_name="id", prefix="fol_", min_length=8)
+    name = models.CharField(max_length=200)
+    directory = models.ForeignKey(
+        "parties.Directory",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="folders",
+    )
+    source_href = models.CharField(max_length=1024, blank=True, default="")
+    ctag = models.CharField(max_length=512, blank=True, default="")
+    sync_token = models.TextField(blank=True, default="")
+
+    objects = AngeeManager()
+
+    class Meta:
+        """Django model options for the folder source model."""
+
+        abstract = True
+        ordering = ("name", "sqid")
+        rebac_resource_type = "parties/folder"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(
+                fields=("directory", "source_href"),
+                condition=~models.Q(source_href=""),
+                name="uq_folder_directory_source",
+            ),
+        )
+
+    def __str__(self) -> str:
+        """Return the folder name for Django displays."""
+
+        return self.name
+
+
 class Directory(Bridge):
     """A connected contacts source that syncs parties from an external directory.
 
@@ -392,10 +460,40 @@ class Directory(Bridge):
         return backend_class(self)
 
     def sync(self) -> int:
-        """Fetch + parse the source and map each contact onto parties (the Bridge contract)."""
+        """Discover address books and resolve every contact into parties (the Bridge contract).
 
+        Idempotent: each address book mirrors to one :class:`Folder` (keyed by its
+        ``source_href``), every contact upserts by ``(folder, source_uid)``, and a
+        contact that vanished from the source is purged from its folder — so a
+        re-sync converges to the source instead of duplicating it. A collection whose
+        ``ctag`` is unchanged is skipped wholesale.
+        """
+
+        folder_model = apps.get_model("parties", "Folder")
         party_model = apps.get_model("parties", "Party")
-        contacts = self.backend.fetch_contacts()
-        for contact in contacts:
-            party_model.objects.ingest_contact(contact, owner_id=self.owner_id)
-        return len(contacts)
+        backend = self.backend
+        resolved = 0
+        for book in backend.discover():
+            folder, _created = folder_model.objects.update_or_create(
+                directory=self,
+                source_href=book.href,
+                defaults={
+                    "name": book.name,
+                    "owner_id": self.owner_id,
+                    "created_by_id": self.owner_id,
+                },
+            )
+            if folder.ctag and folder.ctag == book.ctag:
+                continue
+            seen: set[str] = set()
+            for parsed in backend.fetch_contacts(book):
+                if not parsed.uid:
+                    continue  # no stable per-folder key → cannot upsert idempotently
+                party_model.objects.ingest_contact(parsed, folder=folder, owner_id=self.owner_id)
+                seen.add(parsed.uid)
+                resolved += 1
+            party_model.objects.purge_missing(folder=folder, keep_uids=seen)
+            folder.ctag = book.ctag
+            folder.sync_token = book.sync_token
+            folder.save(update_fields=["ctag", "sync_token", "updated_at"])
+        return resolved
