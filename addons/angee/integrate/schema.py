@@ -505,7 +505,20 @@ def _console_credentials(info: strawberry.Info) -> Any:
 def _oauth_client_from_id(oauth_client_id: PublicID) -> Any:
     """Return the OAuth client addressed by one public GraphQL id."""
 
-    return flow.oauth_client_from_id(oauth_client_id)
+    return resolve_action_target(
+        OAuthClient,
+        oauth_client_id,
+        reason="integrate.graphql.oauth_client.lookup",
+    )
+
+
+def _enabled_oauth_client_from_id(oauth_client_id: PublicID) -> Any:
+    """Return the enabled OAuth client addressed by one public GraphQL id."""
+
+    oauth_client = _oauth_client_from_id(oauth_client_id)
+    if not oauth_client.is_enabled:
+        raise ValueError("OAuth client is not enabled.")
+    return oauth_client
 
 
 def _credential_material(data: CredentialInput) -> dict[str, str]:
@@ -702,7 +715,7 @@ class ConnectionMutation:
         user = _session_user(info)
         request = _request(info)
         try:
-            oauth_client = flow.enabled_oauth_client_from_id(id)
+            oauth_client = _enabled_oauth_client_from_id(id)
             if oauth_client.configuration_state != "ready":
                 # Enabled but missing a client_id/endpoints would otherwise build an
                 # authorize URL the provider rejects opaquely; surface it as a typed
