@@ -22,7 +22,6 @@ from strawberry import auto
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.base.fields import ImplClassField
 from angee.graphql.actions import ActionResult, action_target, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
@@ -585,11 +584,9 @@ def _current_user_integration(
         return integration
 
     vendor_key = vendor_slug.strip()
-    impl_field = cast(ImplClassField, Integration._meta.get_field("impl_class"))
-    impl_key = impl_field.key_for(impl_class) or ""
-    if not (vendor_key and impl_key):
+    if not (vendor_key and impl_class.strip()):
         raise ValueError("connectIntegration requires integrationId or vendorSlug and implClass.")
-    impl_field.resolve_class(impl_key)
+    impl_key = Integration.impl_key_for("impl_class", impl_class)
     vendor = _vendor_by_slug(vendor_key)
     with system_context(reason="integrate.graphql.connect_integration.draft"):
         integration = Integration.objects.filter(owner=user, vendor=vendor, impl_class=impl_key).first()
@@ -1339,7 +1336,8 @@ class IntegrationCreateMutation:
                 )
             )
         )
-        impl_key = _create_impl_key(data.impl_class)
+        impl_value = None if data.impl_class is strawberry.UNSET else data.impl_class
+        impl_key = Integration.impl_key_for("impl_class", impl_value, default="none")
         attrs: dict[str, Any] = {
             "vendor": vendor,
             "owner": owner,
@@ -1394,17 +1392,6 @@ def _vendor_by_slug(slug: str) -> Any:
     if vendor is None:
         raise ValueError(f"Vendor {slug!r} was not found.")
     return vendor
-
-
-def _create_impl_key(value: str | None) -> str:
-    """Return the implementation key stored by an integration create."""
-
-    if value is None or value is strawberry.UNSET:
-        return "none"
-    field = cast(Any, Integration._meta.get_field("impl_class"))
-    key = str(field.key_for(value) or "none")
-    field.resolve_class(key)
-    return key
 
 
 @strawberry.type
