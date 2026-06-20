@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from django.apps import apps
 from django.http import FileResponse, HttpRequest, JsonResponse
+from django.http.response import HttpResponseBase
+from django.utils.cache import get_conditional_response, patch_cache_control, patch_vary_headers, quote_etag
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rebac import bearer_token
@@ -11,6 +13,7 @@ from rebac import bearer_token
 from angee.storage import exceptions
 from angee.storage.uploads import (
     DOWNLOAD_TOKEN_HEADER,
+    DOWNLOAD_TOKEN_MAX_AGE,
     FALLBACK_MIME,
     UPLOAD_TOKEN_HEADER,
 )
@@ -49,7 +52,7 @@ def upload(request: HttpRequest) -> JsonResponse:
 
 
 @require_http_methods(["GET"])
-def download(request: HttpRequest, filename: str) -> FileResponse | JsonResponse:
+def download(request: HttpRequest, filename: str) -> HttpResponseBase:
     """Stream one READY file's bytes for a signed proxy download token.
 
     The mirror of :func:`upload`: the token (``?token=``, the
@@ -68,8 +71,20 @@ def download(request: HttpRequest, filename: str) -> FileResponse | JsonResponse
     file_model = apps.get_model("storage", "File")
     try:
         row = file_model.objects.for_download_token(token)
-        stream = row.open_stream()
     except exceptions.UploadError as error:
         return JsonResponse({"error": str(error), "code": error.code}, status=error.status_code)
+    etag = quote_etag(row.content_hash)
+    if conditional := get_conditional_response(request, etag=etag):
+        return _download_cache_response(conditional, etag)
+    stream = row.open_stream()
     content_type = row.mime_type.mime_type if row.mime_type_id else FALLBACK_MIME
-    return FileResponse(stream, filename=row.filename, content_type=content_type)
+    response = FileResponse(stream, filename=row.filename, content_type=content_type)
+    return _download_cache_response(response, etag)
+
+
+def _download_cache_response(response: HttpResponseBase, etag: str) -> HttpResponseBase:
+    response["ETag"] = etag
+    if response.status_code in {200, 304}:
+        patch_cache_control(response, private=True, immutable=True, max_age=DOWNLOAD_TOKEN_MAX_AGE)
+        patch_vary_headers(response, [DOWNLOAD_TOKEN_HEADER, "Authorization"])
+    return response
