@@ -5,12 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from django.core.exceptions import ImproperlyConfigured
 from django.db import models
-from rebac.field_visibility import gated_read_fields
 from strawberry_django_aggregates import AggregateBuilder
 
 from angee.base.models import AngeeQuerySet, public_id_for
+from angee.graphql.access import assert_no_gated_read_fields
 from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
 
 
@@ -63,12 +62,7 @@ def rebac_aggregate_builder(
     ``AngeeQuerySet.scoped_for_aggregate`` (``model`` must be a REBAC/Angee model).
     """
 
-    gated_axes = sorted(gated_read_fields(model) & set(group_by_fields))
-    if gated_axes:
-        raise ImproperlyConfigured(
-            f"{model._meta.label}: aggregate group_by axes {gated_axes} are field-gated "
-            f"reads; exposing them as bucket keys would leak gated values"
-        )
+    assert_no_gated_read_fields(model, group_by_fields, "aggregate group_by axes", "bucket keys leak gated values")
     source = cast(AngeeQuerySet[Any], model._default_manager.all() if queryset is None else queryset)
 
     def get_queryset(info: Any) -> models.QuerySet[Any]:

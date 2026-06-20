@@ -6,7 +6,7 @@ import pytest
 from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
 
-import angee.graphql.aggregates as aggregates
+import angee.graphql.access as access
 from angee.graphql.aggregates import rebac_aggregate_builder
 
 
@@ -20,7 +20,7 @@ def test_rebac_aggregate_builder_rejects_gated_group_by_axis(
     refuses it at construction time rather than relying on author discipline.
     """
 
-    monkeypatch.setattr(aggregates, "gated_read_fields", lambda model: {"secret"})
+    monkeypatch.setattr(access, "gated_read_fields", lambda model: {"secret"})
 
     with pytest.raises(ImproperlyConfigured, match="field-gated"):
         rebac_aggregate_builder(model=Group, group_by_fields=["name", "secret"])

@@ -681,7 +681,7 @@ def test_revisions_rejects_field_gated_revision_fields(
     """Revision snapshots cannot expose fields hidden by field-level read rules."""
 
     monkeypatch.setattr(
-        "angee.graphql.revisions.gated_read_fields",
+        "angee.graphql.access.gated_read_fields",
         lambda model: frozenset({"secret", "visible"}),
     )
 
