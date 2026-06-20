@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDebouncedCallback } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation, useResourceMutation } from "@angee/sdk";
 
-import { KnowledgeUpdatePage, KnowledgeUpdatePageBody } from "./documents";
+import { KnowledgeUpdatePageBody } from "./documents";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -46,7 +46,9 @@ export function usePageEditor(
     onSavedRef.current = onSaved;
   }, [onSaved]);
 
-  const [updatePage] = useAuthoredMutation(KnowledgeUpdatePage);
+  const [updatePage] = useResourceMutation("knowledge.Page", "update", {
+    fields: ["title"],
+  });
   const [updateBody] = useAuthoredMutation(KnowledgeUpdatePageBody);
 
   const setSafeStatus = useCallback((next: SaveStatus) => {

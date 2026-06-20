@@ -6,6 +6,7 @@ const sdkMocks = vi.hoisted(() => ({
   updatePage: vi.fn(),
   updateBody: vi.fn(),
   useAuthoredMutation: vi.fn(),
+  useResourceMutation: vi.fn(),
 }));
 
 vi.mock("@angee/sdk", async (importOriginal) => {
@@ -13,6 +14,7 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   return {
     ...actual,
     useAuthoredMutation: sdkMocks.useAuthoredMutation,
+    useResourceMutation: sdkMocks.useResourceMutation,
   };
 });
 
@@ -24,17 +26,20 @@ describe("usePageEditor", () => {
     sdkMocks.updatePage.mockReset();
     sdkMocks.updateBody.mockReset();
     sdkMocks.useAuthoredMutation.mockReset();
+    sdkMocks.useResourceMutation.mockReset();
+    sdkMocks.updatePage.mockResolvedValue({ id: "pag_1", title: "Updated" });
     sdkMocks.updateBody.mockResolvedValue({
       updatePageBody: {
         ok: true,
         markdown: { bodyHash: "hash-next" },
       },
     });
+    sdkMocks.useResourceMutation.mockImplementation(() => [
+      sdkMocks.updatePage,
+      { fetching: false, error: null },
+    ]);
     sdkMocks.useAuthoredMutation.mockImplementation((document: unknown) => {
       const operationName = graphqlOperationName(document);
-      if (operationName === "KnowledgeUpdatePage") {
-        return [sdkMocks.updatePage, { fetching: false, error: null }];
-      }
       if (operationName === "KnowledgeUpdatePageBody") {
         return [sdkMocks.updateBody, { fetching: false, error: null }];
       }
@@ -75,6 +80,37 @@ describe("usePageEditor", () => {
       page: "pag_1",
       body: "Latest draft",
       expectedHash: "hash-old",
+    });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe("saved");
+  });
+
+  test("commits title changes through the SDK page update mutation", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() =>
+      usePageEditor(
+        "pag_1",
+        { title: "Page", body: "Old body", bodyHash: "hash-old" },
+        onSaved,
+      ),
+    );
+
+    act(() => {
+      result.current.setTitle("Renamed page");
+    });
+
+    await act(async () => {
+      result.current.commitTitle();
+      await Promise.resolve();
+    });
+
+    expect(sdkMocks.useResourceMutation).toHaveBeenCalledWith(
+      "knowledge.Page",
+      "update",
+      { fields: ["title"] },
+    );
+    expect(sdkMocks.updatePage).toHaveBeenCalledWith({
+      data: { id: "pag_1", title: "Renamed page" },
     });
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe("saved");
