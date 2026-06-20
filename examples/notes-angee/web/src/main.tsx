@@ -10,6 +10,7 @@ import agents from "@angee/agents";
 import iam from "@angee/iam";
 import integrate from "@angee/integrate";
 import knowledge from "@angee/knowledge";
+import messaging from "@angee/messaging";
 import operator from "@angee/operator";
 import parties from "@angee/parties";
 import platform from "@angee/platform";
@@ -49,7 +50,7 @@ createApp({
   // Platform apps cluster at the bottom of the rail (group: "platform"): IAM,
   // Integrate, then the Platform app. Operator and Resources contribute their
   // sections into Platform (parentId), so they carry no rail glyph of their own.
-  addons: [notes, authAddon, iam, parties, integrate, agents, operator, storage, knowledge, resources, platform],
+  addons: [notes, authAddon, iam, parties, messaging, integrate, agents, operator, storage, knowledge, resources, platform],
   shells: {
     console: { chrome: ConsoleShell },
     // Chrome defaults to PassthroughChrome and a public-keyed shell is
