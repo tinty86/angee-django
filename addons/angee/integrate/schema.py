@@ -545,12 +545,6 @@ def _revoke_remote_oauth_token(credential: Any) -> None:
         return
 
 
-def _flow_error_message(error: OAuthFlowError) -> str:
-    """Return the best safe human message for one OAuth flow error."""
-
-    return error.provider_message or str(error)
-
-
 def _integration_impl_class(impl_class: str) -> type[IntegrationImpl]:
     """Return the configured implementation class for one integration key."""
 
@@ -735,7 +729,7 @@ class ConnectionMutation:
                 code_challenge=flow.pkce_challenge(record.code_verifier),
             )
         except OAuthFlowError as error:
-            return OAuthStartPayload(error=_flow_error_message(error), error_code=error.code)
+            return OAuthStartPayload(error=error.public_message, error_code=error.code)
         return OAuthStartPayload(
             authorize_url=authorize_url,
             state=state_token,
@@ -796,7 +790,7 @@ class ConnectionMutation:
                 next_path=next,
             )
         except OAuthFlowError as error:
-            return ConnectIntegrationResult(error=_flow_error_message(error), error_code=error.code)
+            return ConnectIntegrationResult(error=error.public_message, error_code=error.code)
 
     @strawberry.mutation
     def connect_account_complete(
@@ -820,7 +814,7 @@ class ConnectionMutation:
             )
             _attach_completed_integration(result.integration_id, result.user, result.credential)
         except OAuthFlowError as error:
-            return ConnectAccountResult(error=_flow_error_message(error), error_code=error.code)
+            return ConnectAccountResult(error=error.public_message, error_code=error.code)
         return ConnectAccountResult(
             account=cast(ConnectedExternalAccountType, result.account),
             credential=cast(ConnectedCredentialType, result.credential),
@@ -864,7 +858,7 @@ class ConnectionMutation:
                 )
             return UnlinkAccountResult(ok=deleted > 0)
         except OAuthFlowError as error:
-            return UnlinkAccountResult(ok=False, error=_flow_error_message(error), error_code=error.code)
+            return UnlinkAccountResult(ok=False, error=error.public_message, error_code=error.code)
 
 
 @strawberry.type

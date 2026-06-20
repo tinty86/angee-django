@@ -606,7 +606,7 @@ class InferenceProviderConnectMutation:
                 next_path=next,
             )
         except OAuthFlowError as error:
-            return ConnectIntegrationResult(error=error.provider_message or str(error), error_code=error.code)
+            return ConnectIntegrationResult(error=error.public_message, error_code=error.code)
 
 
 @strawberry.type

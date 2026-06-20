@@ -58,6 +58,18 @@ def test_resolve_connect_redirect_picks_auto_or_manual() -> None:
     assert fixed.resolve_connect_redirect("https://console.example/callback") == (manual, "manual")
 
 
+def test_oauth_flow_error_public_message_prefers_safe_provider_body() -> None:
+    """The OAuth error object owns the user-facing safe fallback text."""
+
+    provider_error = OAuthFlowError(
+        TOKEN_EXCHANGE_FAILED,
+        body={"error": {"message": " Rate limited. "}},
+    )
+
+    assert provider_error.public_message == "Rate limited."
+    assert OAuthFlowError("invalid_state").public_message == "invalid_state"
+
+
 def test_oauth_protocol_discovers_missing_authorize_endpoint() -> None:
     """A discovery-only OAuth client can start an authorization flow."""
 
