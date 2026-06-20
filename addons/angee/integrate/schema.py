@@ -96,40 +96,31 @@ class ExternalAccountType(AngeeNode):
     last_used_at: auto
     created_at: auto
     updated_at: auto
+    credential_status: str
 
-    @strawberry_django.field
-    def credential_status(self) -> str:
-        """Return the current OAuth credential status, if this account has one."""
-
-        return str(cast(Any, self).credential_status)
-
-    @strawberry_django.field
+    @strawberry_django.field(only=["oauth_client__slug"])
     def provider_slug(self) -> str:
-        """Return the originating OAuth client's slug (the provider key)."""
+        """Return the originating OAuth client's slug."""
 
-        return str(getattr(cast(Any, self).oauth_client, "slug", "") or "")
+        return str(cast(Any, self).provider_slug)
 
-    @strawberry_django.field
+    @strawberry_django.field(only=["oauth_client__environment"])
     def provider_environment(self) -> str:
-        """Return the originating OAuth client's environment.
+        """Return the originating OAuth client's environment."""
 
-        ``(slug, environment)`` is the OAuth client's unique key, so the console
-        can resolve an account back to its exact client without ambiguity.
-        """
+        return str(cast(Any, self).provider_environment)
 
-        return str(getattr(cast(Any, self).oauth_client, "environment", "") or "")
-
-    @strawberry_django.field
+    @strawberry_django.field(only=["oauth_client__display_name"])
     def provider_label(self) -> str:
         """Return the originating OAuth client's display label."""
 
-        return str(getattr(cast(Any, self).oauth_client, "display_name", "") or "")
+        return str(cast(Any, self).provider_label)
 
-    @strawberry_django.field
+    @strawberry_django.field(only=["oauth_client__icon"])
     def provider_icon(self) -> str:
         """Return the originating OAuth client's branding icon."""
 
-        return str(getattr(cast(Any, self).oauth_client, "icon", "") or "")
+        return str(cast(Any, self).provider_icon)
 
 
 @strawberry_django.type(Credential)
@@ -143,6 +134,7 @@ class CredentialType(AngeeNode):
     last_refresh_at: auto
     last_refresh_status: auto
     external_account: ExternalAccountType | None
+    display_name: str
     created_at: auto
     updated_at: auto
 
@@ -152,27 +144,53 @@ class CredentialType(AngeeNode):
 
         return cast("CredentialOAuthClientType | None", cast(Any, self).oauth_client)
 
-    @strawberry_django.field(only=["oauth_client", "external_account", "name"])
+
+@strawberry_django.type(ExternalAccount)
+class ConnectedExternalAccountType(AngeeNode):
+    """Public projection of the current user's connected external account."""
+
+    external_id: auto
+    email: auto
+    display_name: auto
+    avatar_url: auto
+    status: auto
+    last_used_at: auto
+    created_at: auto
+    updated_at: auto
+
+    @strawberry_django.field(only=["credential__status"])
+    def credential_status(self) -> str:
+        """Return this account credential's current status when it is loaded."""
+
+        return str(cast(Any, self).credential_status)
+
+
+@strawberry_django.type(Credential)
+class ConnectedCredentialType(AngeeNode):
+    """Public projection of one current-user connected credential."""
+
+    kind: auto
+    name: auto
+    status: auto
+    expires_at: auto
+    last_refresh_at: auto
+    last_refresh_status: auto
+    external_account: ConnectedExternalAccountType | None
+    created_at: auto
+    updated_at: auto
+
+    @strawberry_django.field(
+        only=[
+            "name",
+            "external_account__email",
+            "external_account__display_name",
+            "external_account__external_id",
+        ]
+    )
     def display_name(self) -> str:
-        """Return a human label for the list, form title, and relation pickers.
+        """Return the public-safe connected credential label."""
 
-        The stored ``name`` is the label (OAuth rows are named on create from their
-        provider + subject; see ``CredentialManager._oauth_credential_name``). It is the
-        ``name`` column the relation-picker representation reads, so preferring it keeps
-        the picker, list, and form consistent without dereferencing related rows. A
-        legacy unnamed OAuth row falls back to ``provider: subject``.
-        """
-
-        name = str(cast(Any, self).name or "")
-        if name:
-            return name
-        client = getattr(cast(Any, self), "oauth_client", None)
-        if client is not None:
-            provider = str(getattr(client, "slug", "") or getattr(client, "display_name", "") or "credential")
-            account = getattr(cast(Any, self), "external_account", None)
-            subject = str(getattr(account, "external_id", "") or "") if account else ""
-            return f"{provider}: {subject}" if subject else provider
-        return "credential"
+        return str(cast(Any, self).connected_display_name)
 
 
 @strawberry_django.type(OAuthClient)
@@ -407,8 +425,8 @@ class OAuthStartPayload:
 class ConnectAccountResult:
     """Result returned by OAuth account-connect completion."""
 
-    account: ExternalAccountType | None = None
-    credential: CredentialType | None = None
+    account: ConnectedExternalAccountType | None = None
+    credential: ConnectedCredentialType | None = None
     user: UserType | None = None
     intent: str = "connect"
     next: str = "/"
@@ -421,7 +439,7 @@ class ConnectAccountResult:
 class ConnectIntegrationResult:
     """Result returned by one-click integration connect/attach."""
 
-    integration: "IntegrationType | None" = None
+    integration: "ConnectedIntegrationType | None" = None
     authorize_url: str = ""
     state: str = ""
     error: str | None = None
@@ -622,7 +640,7 @@ def connect_integration_target(
         if credential.user_id != user.pk:
             raise PermissionDenied("Credential does not belong to the current user.")
         integration.attach_credential(credential)
-        return ConnectIntegrationResult(integration=cast("IntegrationType", integration), attached=True)
+        return ConnectIntegrationResult(integration=cast("ConnectedIntegrationType", integration), attached=True)
     if not redirect_uri:
         raise OAuthFlowError("redirect_uri_required", 400, "OAuth redirect URI is required.")
     if oauth_client.configuration_state != "ready":
@@ -648,7 +666,7 @@ def connect_integration_target(
         code_challenge=flow.pkce_challenge(record.code_verifier),
     )
     return ConnectIntegrationResult(
-        integration=cast("IntegrationType", integration),
+        integration=cast("ConnectedIntegrationType", integration),
         authorize_url=authorize_url,
         state=state_token,
         mode=mode,
@@ -663,7 +681,7 @@ class IntegrateConnectionsQuery:
     connectable_accounts: OffsetPaginated[ConnectableAccount] = strawberry_django.offset_paginated(
         resolver=_connectable_accounts,
     )
-    my_connected_accounts: OffsetPaginated[CredentialType] = strawberry_django.offset_paginated(
+    my_connected_accounts: OffsetPaginated[ConnectedCredentialType] = strawberry_django.offset_paginated(
         resolver=_my_connected_accounts,
     )
 
@@ -798,8 +816,8 @@ class ConnectionMutation:
         except OAuthFlowError as error:
             return ConnectAccountResult(error=_flow_error_message(error), error_code=error.code)
         return ConnectAccountResult(
-            account=cast(ExternalAccountType, result.account),
-            credential=cast(CredentialType, result.credential),
+            account=cast(ConnectedExternalAccountType, result.account),
+            credential=cast(ConnectedCredentialType, result.credential),
             user=cast(UserType, result.user),
             next=result.next_path,
             claims=cast(JSON, result.claims),
@@ -1045,15 +1063,9 @@ class IntegrationType(AngeeNode):
 
     @strawberry_django.field(only=["vendor", "status"])
     def display_name(self) -> str:
-        """Return a human label for the record header and relation pickers.
+        """Return the model-owned integration display label."""
 
-        Integration has no natural string column; this gives ``recordRepresentation``
-        a value (vendor + status) to show.
-        """
-
-        vendor = getattr(cast(Any, self), "vendor", None)
-        label = str(getattr(vendor, "display_name", "") or getattr(vendor, "slug", "") or "integration")
-        return f"{label} ({cast(Any, self).status})"
+        return str(cast(Any, self).display_name)
 
     @strawberry_django.field(only=["impl_class"])
     def impl_category(self) -> str:
@@ -1089,6 +1101,28 @@ class IntegrationType(AngeeNode):
 
         vendor = getattr(cast(Any, self), "vendor", None)
         return str(getattr(vendor, "display_name", "") or getattr(vendor, "slug", "") or "")
+
+
+@strawberry_django.type(Integration)
+class ConnectedIntegrationType(AngeeNode):
+    """Public projection of a current-user integration connection."""
+
+    vendor: VendorType
+    credential: ConnectedCredentialType | None
+    account: ConnectedExternalAccountType | None
+    owner: UserType
+    impl_class: auto
+    status: auto
+    last_used_at: auto
+    last_used_status: auto
+    created_at: auto
+    updated_at: auto
+
+    @strawberry_django.field(only=["vendor", "status"])
+    def display_name(self) -> str:
+        """Return the model-owned integration display label."""
+
+        return str(cast(Any, self).display_name)
 
 
 @strawberry.input
@@ -1383,7 +1417,7 @@ class IntegrationCredentialMutation:
         info: strawberry.Info,
         credential: PublicID,
         vendor_slug: str,
-    ) -> IntegrationType:
+    ) -> ConnectedIntegrationType:
         """Create or update this user's integration from a connected credential.
 
         Self-service, not platform-admin: the authorization is *ownership of the
@@ -1423,7 +1457,7 @@ class IntegrationCredentialMutation:
                 integration.account = oauth_credential.external_account
                 integration.status = "active"
                 integration.save(update_fields=["credential", "account", "status", "updated_at"])
-        return cast(IntegrationType, integration)
+        return cast(ConnectedIntegrationType, integration)
 
 
 @strawberry.type
@@ -1917,6 +1951,8 @@ _CONSOLE_TYPES: list[type] = [
     CredentialOAuthClientType,
     ExternalAccountType,
     CredentialType,
+    ConnectedExternalAccountType,
+    ConnectedCredentialType,
     ConnectableAccount,
     OAuthStartPayload,
     ConnectAccountResult,
@@ -1924,6 +1960,7 @@ _CONSOLE_TYPES: list[type] = [
     UnlinkAccountResult,
     RevealedCredentialSecret,
     VendorType,
+    ConnectedIntegrationType,
     IntegrationType,
     _integration_aggregates.aggregate_type,
     _integration_aggregates.grouped_type,
@@ -1942,16 +1979,15 @@ schemas = {
         "query": [IntegrateConnectionsQuery],
         "mutation": [ConnectionMutation, IntegrationCredentialMutation],
         "types": [
-            CredentialOAuthClientType,
-            ExternalAccountType,
-            CredentialType,
+            ConnectedExternalAccountType,
+            ConnectedCredentialType,
             ConnectableAccount,
             OAuthStartPayload,
             ConnectAccountResult,
             ConnectIntegrationResult,
             UnlinkAccountResult,
             VendorType,
-            IntegrationType,
+            ConnectedIntegrationType,
             UserType,
         ],
     },

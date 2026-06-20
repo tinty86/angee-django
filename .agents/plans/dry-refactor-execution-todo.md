@@ -72,9 +72,10 @@ Per-slice implementation gate:
 - [ ] Locked dependencies in `docs/stack.md` own their native concerns.
 - [ ] Names are normalized across model, GraphQL, TypeScript, route, menu, file,
       and docs.
-- [ ] Net LOC trends downward across implementation slices. Growth is accepted
-      only for guardrail tests, unsafe-contract deletion, or a shared owner that
-      unlocks larger deletion.
+- [ ] Net production LOC trends downward across implementation slices. Guardrail
+      tests do not count against the deletion signal; production growth is
+      accepted only for unsafe-contract deletion or a shared owner that unlocks
+      larger deletion.
 - [ ] Every slice reports total regular tracked-file LOC versus baseline commit
       `261530412909d2d3864e83ba54dced7c9254083c`, not just local diff stats.
 
@@ -113,7 +114,7 @@ finds an earlier wrong fork.
 | S1 | bugfix | SDK write-state primitive | Make mutation loading follow the submitted promise and make `useBusyRun` overlap-safe. | frontend, architecture | LOC +3 prod; loading state stops depending on stale urql mutation flags. |
 | E16 | 3.1 | DataToolbar picker shell | Share filter/group disclosure editor shell. | frontend, architecture | LOC -18; toolbar chrome has one owner. |
 | E17 | 3.2 | `Filter` class | Move filter merge/AND algebra onto `Filter`. | frontend, architecture | LOC -38; pages call filter owner, no duplicate merge helpers. |
-| E18 | 2.4 | `ExternalAccount`/`Credential` | Move provider/display projections to model properties. | backend, architecture | LOC -8; schema fields become property dispatchers. |
+| E18 | 2.4 | `ExternalAccount`/`Credential` | Move provider/display projections to model properties. | backend, architecture | Production surface shrinks; schema fields become thin property dispatchers or annotations with safe optimizer metadata. |
 | E19 | 2.2 | `Bridge` | Add `Bridge.run_sync(*, now)` lifecycle owner. | backend, architecture | LOC -10; scheduler/actions share one sync attempt primitive. |
 | E20 | 5.2 | history binding | Replace direct simple-history binding with `HistoryMixin` if it reduces surface. | backend, architecture | LOC neutral; source models use one history owner. |
 | E21 | 9.2 | SDK schema metadata boot | Parse SDL once at boot if still needed after typed-GraphQL work. | frontend, architecture | LOC 0..-5; schema metadata boot does one type-graph build. |
@@ -286,4 +287,5 @@ Update after every slice commit.
 | E14 Add storage download cache contract | same commit | +18 prod, +63 tests | storage download response advertises validators and token-carrier-safe private caching | Django cache helpers own ETag/conditional/Vary mechanics; `content_hash` and token TTL supply facts | backend + architecture pass after fixes | `ruff`; storage pytest |
 | E15 Use SDK model dumps | `d4811bd8` | -12 prod, +27 tests; total LOC `210,558` vs baseline `206,023` (`+4,535`) | provider addons stop recursively walking arbitrary objects for SDK JSON | OpenAI/Anthropic Pydantic SDK models own nested `model_dump(mode="json")`; tests use real SDK response models | backend + architecture pass | `ruff`; agents pytest + agents GraphQL pytest |
 | S1 SDK mutation busy state | `02d5e096` | +3 prod, +82 tests, +44 plan; total LOC `210,686` vs baseline `206,023` (`+4,663`) | action/auth/resource callers keep using one SDK mutation seam; analyzer findings are queued as sliceable owner moves | `useDocumentMutation` uses `useBusyRun`; `useBusyRun` owns overlapping async busy state with a counter | frontend + architecture pass after P2 fix | SDK focused tests + full SDK test; SDK typecheck; base focused tests; `git diff --check` |
-| E17 Move filter algebra to `Filter` | this commit | -8 prod, +44 tests, +2 plan; total LOC `210,722` vs baseline `206,023` (`+4,699`) | grouped list consumes data-view filter algebra instead of carrying local merge helpers | `Filter.combine()` / `Filter.and()` own bucket filter merge and object-shaped `AND`; `stableSerialize` has one shared owner | frontend + architecture pass | full base test; base typecheck; `git diff --check` |
+| E17 Move filter algebra to `Filter` | `31c1f2a3` | -8 prod, +44 tests, +2 plan; total LOC `210,722` vs baseline `206,023` (`+4,699`) | grouped list consumes data-view filter algebra instead of carrying local merge helpers | `Filter.combine()` / `Filter.and()` own bucket filter merge and object-shaped `AND`; `stableSerialize` has one shared owner | frontend + architecture pass | full base test; base typecheck; `git diff --check` |
+| E18 Move connection display/projection facts to models | this commit | +80 prod, +122 tests, +1 document; production growth buys public/console projection split | public connected-account flows stop exposing console-rich OAuthClient/provider affordances; console fields dispatch to model-owned facts | `ExternalAccount`/`Credential`/`Integration` own display/provider labels; `Connected*` GraphQL types own public-safe API boundary | backend + architecture pass after fixes | connections/IAM/integrate focused pytest; ruff; schema/check; codegen; integrate web test/typecheck; host typecheck; `git diff --check` |

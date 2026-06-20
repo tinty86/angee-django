@@ -29,7 +29,7 @@ from angee.integrate.oauth import flow as oauth_flow
 from angee.integrate.oauth import state as oauth_state
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, OAuthFlowError
 from angee.integrate.schema import (
-    ExternalAccountType,
+    ConnectedExternalAccountType,
     OAuthClientType,
     OAuthStartPayload,
 )
@@ -92,7 +92,7 @@ class LoginCompletePayload:
 class LinkAccountResult:
     """Result returned by OIDC account-link completion."""
 
-    account: ExternalAccountType | None = None
+    account: ConnectedExternalAccountType | None = None
     user: UserType | None = None
     intent: str = ""
     next: str = "/"
@@ -288,7 +288,7 @@ class OidcLoginMutation:
         except OAuthFlowError as error:
             return LinkAccountResult(error=_flow_error_message(error), error_code=error.code)
         return LinkAccountResult(
-            account=cast(ExternalAccountType, result.account),
+            account=cast(ConnectedExternalAccountType, result.account),
             user=cast(UserType, result.user),
             intent="link",
             next=result.next_path,
@@ -353,7 +353,7 @@ _PUBLIC_TYPES: list[type] = [
     LoginCompletePayload,
     LinkAccountResult,
     OAuthStartPayload,
-    ExternalAccountType,
+    ConnectedExternalAccountType,
     UserType,
 ]
 
