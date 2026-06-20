@@ -583,13 +583,12 @@ class InferenceProviderUpdateMutation:
     def update_inference_provider(self, data: InferenceProviderPatch) -> InferenceProviderType:
         """Update a provider, rematerializing backend defaults when the backend changes."""
 
-        provider = resolve_action_target(
+        backend_changed = False
+        with action_target(
             InferenceProvider,
             data.id,
             reason="agents.graphql.inference_provider.update",
-        )
-        backend_changed = False
-        with system_context(reason="agents.graphql.inference_provider.update"), transaction.atomic():
+        ) as provider, transaction.atomic():
             provided = apply_integration_patch_fields(
                 provider,
                 data,
@@ -873,13 +872,12 @@ class AgentActionMutation:
         :meth:`deprovision_agent` is the reset for any stuck state, then provision again.
         """
 
-        agent = resolve_action_target(
+        with action_target(
             Agent,
             id,
             reason="agents.graphql.provision_agent",
             select_related=_PROVISION_CHAIN,
-        )
-        with system_context(reason="agents.graphql.provision_agent"):
+        ) as agent:
             if agent.workspace:
                 return ActionResult(ok=False, message="Agent is already provisioned — deprovision it first.")
             if agent.workspace_template is None:
@@ -932,13 +930,12 @@ class AgentActionMutation:
         daemon already removed. Re-run to retry.
         """
 
-        agent = resolve_action_target(
+        with action_target(
             Agent,
             id,
             reason="agents.graphql.reprovision_agent",
             select_related=_PROVISION_CHAIN,
-        )
-        with system_context(reason="agents.graphql.reprovision_agent"):
+        ) as agent:
             workspace = agent.workspace
             service = agent.service
             if not workspace:
@@ -1043,8 +1040,7 @@ class AgentActionMutation:
         ``ERROR``, preserving the names so the teardown can be retried.
         """
 
-        agent = resolve_action_target(Agent, id, reason="agents.graphql.deprovision_agent")
-        with system_context(reason="agents.graphql.deprovision_agent"):
+        with action_target(Agent, id, reason="agents.graphql.deprovision_agent") as agent:
             if not agent.workspace and not agent.service:
                 agent.mark_deprovisioned()
                 return ActionResult(ok=True, message="Deprovisioned.")
