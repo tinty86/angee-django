@@ -97,6 +97,7 @@ export {
   type RecordPlacement,
   type RecordSmartButtonDescriptor,
 } from "./DataPage";
+export { recordPath } from "./DataPageRouted";
 export {
   AggregatePanel,
   type AggregatePanelProps,
