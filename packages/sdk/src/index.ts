@@ -33,6 +33,8 @@ export {
   createUrqlClient,
   createCsrfTokenProvider,
   graphQLWebSocketUrl,
+  isFatalGraphQLWsClose,
+  isFatalGraphQLWsCloseCode,
   sessionAuth,
   bearerAuth,
   type AngeeUrqlClientOptions,
