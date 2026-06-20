@@ -23,7 +23,6 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.fields import ImplClassField
-from angee.base.models import instance_from_public_id
 from angee.graphql.actions import ActionResult, resolve_action_target
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.crud import crud
@@ -928,12 +927,12 @@ class IntegrateExternalAccountMutation:
     def update_external_account(self, data: ExternalAccountPatch) -> ExternalAccountType:
         """Update one external account's scalar identity fields."""
 
+        account = resolve_action_target(
+            ExternalAccount,
+            data.id,
+            reason="integrate.graphql.external_account.update",
+        )
         with system_context(reason="integrate.graphql.external_account.update"), transaction.atomic():
-            account = instance_from_public_id(
-                ExternalAccount, str(data.id), queryset=ExternalAccount._default_manager.all()
-            )
-            if account is None:
-                raise ValueError(f"External account {data.id!s} was not found")
             for field in ("email", "display_name", "avatar_url", "status"):
                 value = getattr(data, field)
                 if value is not strawberry.UNSET:
@@ -967,12 +966,12 @@ class IntegrateCredentialMutation:
     def reveal_credential(self, id: PublicID) -> RevealedCredentialSecret:
         """Return one credential's decrypted secret for an admin to copy."""
 
+        credential = resolve_action_target(
+            Credential,
+            id,
+            reason=f"integrate.graphql.credential.reveal:{str(id)}",
+        )
         with system_context(reason=f"integrate.graphql.credential.reveal:{str(id)}"):
-            credential = instance_from_public_id(
-                Credential, str(id), queryset=Credential._default_manager.all()
-            )
-            if credential is None:
-                raise ValueError(f"Credential {id!s} was not found")
             return RevealedCredentialSecret(secret=str(credential.secret_value() or ""))
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
@@ -992,12 +991,12 @@ class IntegrateCredentialMutation:
     def update_credential(self, data: CredentialPatch) -> CredentialType:
         """Update one credential's status."""
 
+        credential = resolve_action_target(
+            Credential,
+            data.id,
+            reason="integrate.graphql.credential.update",
+        )
         with system_context(reason="integrate.graphql.credential.update"), transaction.atomic():
-            credential = instance_from_public_id(
-                Credential, str(data.id), queryset=Credential._default_manager.all()
-            )
-            if credential is None:
-                raise ValueError(f"Credential {data.id!s} was not found")
             if data.status is not strawberry.UNSET and data.status is not None:
                 credential.status = data.status
                 credential.save(update_fields=["status", "updated_at"])
