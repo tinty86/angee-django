@@ -209,6 +209,9 @@ Success:
 - [ ] Graphlib topo-sort stability before E23.
 - [ ] Whether G3 knowledge decomposition is in this DRY wave or a product feature wave.
 - [ ] Whether E27 build-time metadata waits for G1 typed operations.
+- [ ] If custom session-auth backend selection becomes a goal, lift the canonical
+      OIDC login backend string to an IAM-owned constant; E7 intentionally keeps
+      the current ModelBackend contract.
 
 ## Running Scoreboard
 
@@ -224,3 +227,4 @@ Update after every slice commit.
 | E4 Native SDK page iteration | same commit | -9 prod, +32 tests | provider addons iterate SDK pages directly and sync later-page models | OpenAI/Anthropic SDK `SyncPage.__iter__` owns pagination | backend + architecture pass | `ruff`; agents pytest |
 | E5 Drop redundant Meta re-emission | same commit | -24 prod, +25 tests | composer emits fewer Django-owned facts | Django `Meta` inheritance owns `db_table`/`swappable`; composer keeps REBAC Meta re-emission only | backend + architecture pass | `ruff`; compose pytest; build check |
 | E6 Use import-export result totals | same commit | -11 prod, +14 tests | resources load reports import-export-owned accounting | `Result.totals` owns created/updated/skipped row counts | backend + architecture pass | `ruff`; resources pytest |
+| E7 Use Django login backend contract | same commit | -14 prod, +1 test | OIDC login returns a session-ready user | Django `login()` reads `user.backend`; no settings scan | backend + architecture pass | `ruff`; OIDC/IAM pytest |

@@ -832,6 +832,7 @@ def test_userinfo_claims_merge_into_login_and_link_claims(
     )
 
     assert login_result.user.pk == link_user.pk
+    assert login_result.user.backend == identity.SESSION_AUTH_BACKEND
     assert login_result.claims == expected_claims
     assert login_result.next_path == "/login-next"
     assert captured["oauth_client"] == oauth_client

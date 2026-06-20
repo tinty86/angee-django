@@ -27,6 +27,7 @@ from angee.integrate.oauth.errors import INVALID_ID_TOKEN, INVALID_STATE, OAuthF
 from angee.integrate.oauth.state import StateFlow, StateRecord
 
 IDENTITY_RESOLUTION_FAILED = "identity_resolution_failed"
+SESSION_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +37,11 @@ class LoginCompletion:
     user: AbstractBaseUser
     claims: dict[str, Any]
     next_path: str
+
+    def __post_init__(self) -> None:
+        """Bind Django's session backend contract for direct login()."""
+
+        self.user.backend = SESSION_AUTH_BACKEND
 
 
 @dataclass(frozen=True, slots=True)
