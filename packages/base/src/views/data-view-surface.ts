@@ -143,6 +143,34 @@ export function useSyncPageSize(
   }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
 }
 
+export function useResourceListState<TRow extends Row = Row>(
+  list: UseResourceListResult,
+): ListViewState<TRow> {
+  const rows = list.rows as readonly TRow[];
+  return React.useMemo<ListViewState<TRow>>(
+    () => ({
+      rows,
+      total: list.total,
+      page: list.page,
+      pageSize: list.pageSize,
+      pageCount: list.pageCount,
+      hasNext: list.hasNext,
+      hasPrev: list.hasPrev,
+      fetching: list.fetching,
+    }),
+    [
+      rows,
+      list.total,
+      list.page,
+      list.pageSize,
+      list.pageCount,
+      list.hasNext,
+      list.hasPrev,
+      list.fetching,
+    ],
+  );
+}
+
 export function useDataViewSurface<TRow extends Row = Row>({
   model,
   columns,
@@ -181,29 +209,8 @@ export function useDataViewSurface<TRow extends Row = Row>({
     page: dataView.state.page,
     enabled,
   });
-  const rows = list.rows as readonly TRow[];
-  const listState = React.useMemo<ListViewState<TRow>>(
-    () => ({
-      rows,
-      total: list.total,
-      page: list.page,
-      pageSize: list.pageSize,
-      pageCount: list.pageCount,
-      hasNext: list.hasNext,
-      hasPrev: list.hasPrev,
-      fetching: list.fetching,
-    }),
-    [
-      rows,
-      list.total,
-      list.page,
-      list.pageSize,
-      list.pageCount,
-      list.hasNext,
-      list.hasPrev,
-      list.fetching,
-    ],
-  );
+  const listState = useResourceListState<TRow>(list);
+  const rows = listState.rows;
   React.useEffect(() => {
     onListStateChange?.(listState);
   }, [listState, onListStateChange]);

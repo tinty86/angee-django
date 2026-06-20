@@ -35,7 +35,7 @@ import {
   useDataView,
   useDataViewMaybe,
 } from "./data-view-context";
-import { useSyncPageSize } from "./data-view-surface";
+import { useResourceListState, useSyncPageSize } from "./data-view-surface";
 import {
   type DataViewFilter,
   type DataViewDefaultGroups,
@@ -822,29 +822,7 @@ function ListStateProbe<TRow extends Row>({
     pageSize: dataView.state.pageSize,
     page: dataView.state.page,
   });
-  const rows = list.rows as readonly TRow[];
-  const listState = React.useMemo<ListViewState<TRow>>(
-    () => ({
-      rows,
-      total: list.total,
-      page: list.page,
-      pageSize: list.pageSize,
-      pageCount: list.pageCount,
-      hasNext: list.hasNext,
-      hasPrev: list.hasPrev,
-      fetching: list.fetching,
-    }),
-    [
-      rows,
-      list.total,
-      list.page,
-      list.pageSize,
-      list.pageCount,
-      list.hasNext,
-      list.hasPrev,
-      list.fetching,
-    ],
-  );
+  const listState = useResourceListState<TRow>(list);
   React.useEffect(() => {
     onListStateChange(listState);
   }, [listState, onListStateChange]);
