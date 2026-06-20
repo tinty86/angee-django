@@ -103,6 +103,17 @@ export interface DataViewFavorite {
   view?: DataViewKind;
 }
 
+export function dataViewFavoritesFromJson(
+  raw: string | null,
+): readonly DataViewFavorite[] {
+  try {
+    const value = raw ? JSON.parse(raw) : [];
+    return Array.isArray(value) ? value.filter(isDataViewFavorite) : [];
+  } catch {
+    return [];
+  }
+}
+
 export type DataViewAction =
   | { type: "setPage"; page: number }
   | { type: "setPageSize"; pageSize: number }
@@ -407,9 +418,12 @@ export class DataViewState {
     return this.with({ selectedIds: new Set(selectedIds) });
   }
 
-  toFavorite(label: string, id: string): DataViewFavorite {
+  toFavorite(
+    label: string,
+    existingFavorites: readonly DataViewFavorite[] = [],
+  ): DataViewFavorite {
     return {
-      id,
+      id: nextDataViewFavoriteId(label, existingFavorites),
       label,
       pageSize: this.pageSize,
       ...(this.sort ? { sort: this.sort } : {}),
@@ -675,6 +689,33 @@ function isGroupGranularity(value: string): value is DataViewGroupGranularity {
 
 function isDataViewKind(value: string): value is DataViewKind {
   return DATA_VIEW_KINDS.includes(value as DataViewKind);
+}
+
+function isDataViewFavorite(value: unknown): value is DataViewFavorite {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<DataViewFavorite>;
+  return typeof record.id === "string" && typeof record.label === "string";
+}
+
+function nextDataViewFavoriteId(
+  label: string,
+  favorites: readonly DataViewFavorite[],
+): string {
+  const base = `favorite:${slugifyFavoriteLabel(label) || "search"}`;
+  const existing = new Set(favorites.map((favorite) => favorite.id));
+  if (!existing.has(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const id = `${base}-${suffix}`;
+    if (!existing.has(id)) return id;
+  }
+}
+
+function slugifyFavoriteLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function dataViewFilterFromUnknown(value: unknown): DataViewFilter | null {

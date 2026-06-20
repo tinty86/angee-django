@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   DataViewState,
   Filter,
+  dataViewFavoritesFromJson,
   dataViewSearchToState,
   dataViewStateToSearch,
 } from "./data-view-model";
@@ -80,6 +81,35 @@ describe("data-view model", () => {
     expect(state.sort).toEqual({ field: "title", dir: "asc" });
     expect(state.filter).toEqual({ status: { exact: "ACTIVE" } });
     expect(state.view).toBe("board");
+  });
+
+  test("decodes saved favorites from persisted JSON", () => {
+    const raw = JSON.stringify([
+      { id: "favorite:open", label: "Open" },
+      { id: "favorite:closed", label: "Closed", pageSize: 20 },
+    ]);
+
+    expect(dataViewFavoritesFromJson(raw)).toEqual([
+      { id: "favorite:open", label: "Open" },
+      { id: "favorite:closed", label: "Closed", pageSize: 20 },
+    ]);
+    expect(dataViewFavoritesFromJson("{")).toEqual([]);
+    expect(dataViewFavoritesFromJson(JSON.stringify([
+      { id: "favorite:valid", label: "Valid" },
+      { id: 123, label: "Invalid" },
+      { id: "favorite:missing-label" },
+    ]))).toEqual([{ id: "favorite:valid", label: "Valid" }]);
+  });
+
+  test("allocates stable favorite ids from labels", () => {
+    const state = DataViewState.create();
+
+    expect(state.toFavorite("Two per page").id).toBe("favorite:two-per-page");
+    expect(state.toFavorite("Two per page", [
+      { id: "favorite:two-per-page", label: "Two per page" },
+      { id: "favorite:two-per-page-2", label: "Two per page" },
+    ]).id).toBe("favorite:two-per-page-3");
+    expect(state.toFavorite("   ").id).toBe("favorite:search");
   });
 
   test("round-trips groups with explicit aggregate axes", () => {
