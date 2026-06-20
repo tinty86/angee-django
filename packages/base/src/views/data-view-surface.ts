@@ -128,7 +128,7 @@ export interface RowsDataViewSurface<TRow extends StringIdRow = StringIdRow>
   sourceRows: readonly TRow[];
 }
 
-function useSyncPageSize(
+export function useSyncPageSize(
   dataView: DataViewContextValue,
   pageSize: number | undefined,
 ): void {

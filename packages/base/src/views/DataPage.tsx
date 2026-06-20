@@ -33,6 +33,7 @@ import {
   useDataView,
   useDataViewMaybe,
 } from "./data-view-context";
+import { useSyncPageSize } from "./data-view-surface";
 import {
   type DataViewFilter,
   type DataViewDefaultGroups,
@@ -773,11 +774,7 @@ function ListStateProbe<TRow extends Row>({
   dataView: ReturnType<typeof useDataView>;
   onListStateChange: (state: ListViewState<TRow>) => void;
 }): null {
-  React.useEffect(() => {
-    if (pageSize && dataView.state.pageSize !== pageSize) {
-      dataView.setPageSize(pageSize);
-    }
-  }, [dataView.setPageSize, dataView.state.pageSize, pageSize]);
+  useSyncPageSize(dataView, pageSize);
 
   const requestedFields = React.useMemo(() => {
     const paths = new Set<string>(["id"]);
