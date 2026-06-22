@@ -8,17 +8,16 @@ import {
   Group,
   GroupListView,
   List,
-  RowsListView,
+  RelatedRowsList,
   type ListColumn,
   type RecordPanelContext,
   type RecordTabDescriptor,
+  type StringIdRow,
 } from "@angee/base";
-import { useResourceList, type Row } from "@angee/sdk";
 
 const MODEL = "parties.Person";
 
-// Every resource row selects `id`; narrow to the id-bearing shape RowsListView keys on.
-type RelatedRow = Row & { id: string };
+type RelatedRow = StringIdRow;
 
 const handleColumns: readonly ListColumn<RelatedRow>[] = [
   { field: "platform" },
@@ -63,17 +62,13 @@ function PartyRelatedTab({
   columns: readonly ListColumn<RelatedRow>[];
   emptyMessage: string;
 }): React.ReactElement {
-  const { rows, fetching, error } = useResourceList(model, {
-    filter: { party: { sqid: recordId } },
-    fields,
-  });
   return (
-    <RowsListView
-      rows={rows as readonly RelatedRow[]}
+    <RelatedRowsList<RelatedRow>
+      recordId={recordId}
+      model={model}
+      fields={fields}
+      filterFor={(id) => ({ party: { sqid: id } })}
       columns={columns}
-      fetching={fetching}
-      error={error}
-      scope="local"
       emptyMessage={emptyMessage}
     />
   );

@@ -9,20 +9,19 @@ import {
   Group,
   GroupListView,
   List,
-  RowsListView,
+  RelatedRowsList,
   type ListColumn,
   type RecordPanelContext,
   type RecordTabDescriptor,
+  type StringIdRow,
 } from "@angee/base";
-import { useResourceList, type Row } from "@angee/sdk";
 
 const MODEL = "messaging.Thread";
 const MESSAGE_MODEL = "messaging.Message";
 
 const THREAD_MESSAGE_FIELDS = ["id", "subject", "preview", "status", "sentAt"];
 
-// Every resource row selects `id`; narrow to the id-bearing shape RowsListView keys on.
-type MessageRow = Row & { id: string };
+type MessageRow = StringIdRow;
 
 const threadMessageColumns: readonly ListColumn<MessageRow>[] = [
   {
@@ -45,18 +44,14 @@ const threadMessageColumns: readonly ListColumn<MessageRow>[] = [
  * the fetching/error/empty states rather than a hand-rolled list.
  */
 function ThreadMessagesTab({ recordId }: RecordPanelContext): React.ReactElement {
-  const { rows, fetching, error } = useResourceList(MESSAGE_MODEL, {
-    filter: { thread: { sqid: recordId } },
-    fields: THREAD_MESSAGE_FIELDS,
-    order: { sentAt: "ASC" },
-  });
   return (
-    <RowsListView
-      rows={rows as readonly MessageRow[]}
+    <RelatedRowsList<MessageRow>
+      recordId={recordId}
+      model={MESSAGE_MODEL}
+      fields={THREAD_MESSAGE_FIELDS}
+      filterFor={(id) => ({ thread: { sqid: id } })}
+      order={{ sentAt: "ASC" }}
       columns={threadMessageColumns}
-      fetching={fetching}
-      error={error}
-      scope="local"
       rowHref={(row) => `/messaging/inbox/${row.id}`}
       emptyMessage="No messages in this thread yet."
     />

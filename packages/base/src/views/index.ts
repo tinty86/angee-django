@@ -26,6 +26,10 @@ export {
   type RowsListViewProps,
 } from "./RowsListView";
 export {
+  RelatedRowsList,
+  type RelatedRowsListProps,
+} from "./RelatedRowsList";
+export {
   RelationPicker,
   type RelationPickerProps,
   type RelationCreateConfig,
