@@ -672,7 +672,6 @@ describe("FormView", () => {
             },
             implClass: { name: "implClass", kind: "scalar", scalar: "String" },
             implLabel: { name: "implLabel", kind: "scalar", scalar: "String" },
-            vendorLabel: { name: "vendorLabel", kind: "scalar", scalar: "String" },
             config: { name: "config", kind: "scalar", scalar: "JSON" },
             lastError: { name: "lastError", kind: "scalar", scalar: "String" },
           },
@@ -694,12 +693,10 @@ describe("FormView", () => {
         prefill: () => ({
           displayName: "Github",
           implLabel: "GitHub",
-          vendorLabel: "GitHub",
           config: {},
         }),
       },
       { name: "implLabel", label: "Implementation" },
-      { name: "vendorLabel", label: "Vendor Label" },
       { name: "config", label: "Config", widget: "json" },
       { name: "lastError", label: "Last Error", readOnly: true },
     ] satisfies readonly FormField[];

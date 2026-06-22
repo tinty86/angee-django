@@ -1276,21 +1276,6 @@ class IntegrationType(AngeeNode):
             return str(display_label())
         return str(getattr(impl_class, "label", "") or cast(Any, self).impl_class)
 
-    @strawberry_django.field(only=["vendor"])
-    def vendor_slug(self) -> str:
-        """Return the vendor slug as a flat grouping field."""
-
-        vendor = getattr(cast(Any, self), "vendor", None)
-        return str(getattr(vendor, "slug", "") or "")
-
-    @strawberry_django.field(only=["vendor"])
-    def vendor_label(self) -> str:
-        """Return the vendor display label as a flat grouping field."""
-
-        vendor = getattr(cast(Any, self), "vendor", None)
-        return str(getattr(vendor, "display_name", "") or getattr(vendor, "slug", "") or "")
-
-
 @strawberry_django.type(Integration)
 class ConnectedIntegrationType(AngeeNode):
     """Public projection of a current-user integration connection."""
@@ -1509,7 +1494,7 @@ IntegrationDataQuery, _INTEGRATION_DATA_TYPES = data_query(
     aggregate_name="integration_aggregate",
     group_name="integration_groups",
     aggregate_fields=["id"],
-    group_by_fields=["impl_class", "vendor", "status"],
+    group_by_fields=["impl_class", "vendor", "vendor__display_name", "status"],
     enable_filter_echo=True,
     permission_classes=_ADMIN_PERMISSION_CLASSES,
     aggregate_kwargs={

@@ -105,7 +105,8 @@ def test_integration_groups_aggregate_runs_with_rebac_scope(
     """The integration aggregate root executes through the Angee aggregate queryset seam."""
 
     admin = _platform_admin("conn-groups-admin")
-    make_integration("conn-groups")
+    integration = make_integration("conn-groups")
+    vendor_id = _public_id(integration.vendor)
     console_schema = _schema()
 
     grouped = _data(
@@ -116,18 +117,33 @@ def test_integration_groups_aggregate_runs_with_rebac_scope(
               integrationGroups(groupBy: $groupBy, pagination: {offset: 0, limit: 10}) {
                 totalCount
                 results {
-                  key { implClass }
+                  key { implClass vendorId vendor_DisplayName }
                   count
                 }
               }
             }
             """,
-            {"groupBy": [{"field": "IMPL_CLASS"}]},
+            {
+                "groupBy": [
+                    {"field": "VENDOR"},
+                    {"field": "VENDOR__DISPLAY_NAME"},
+                    {"field": "IMPL_CLASS"},
+                ]
+            },
             user=admin,
         )
     )["integrationGroups"]
     assert grouped["totalCount"] == 1
-    assert grouped["results"] == [{"key": {"implClass": "NONE"}, "count": 1}]
+    assert grouped["results"] == [
+        {
+            "key": {
+                "implClass": "NONE",
+                "vendorId": vendor_id,
+                "vendor_DisplayName": "Conn-Groups",
+            },
+            "count": 1,
+        }
+    ]
 
 
 def test_console_data_query_metadata_declares_integration_surface() -> None:
@@ -148,11 +164,12 @@ def test_console_data_query_metadata_declares_integration_surface() -> None:
     assert metadata.filter_fields == ("vendor", "impl_class", "status")
     assert metadata.order_fields == ("vendor", "impl_class", "status", "created_at", "updated_at")
     assert metadata.aggregate_fields == ("id",)
-    assert metadata.group_by_fields == ("impl_class", "vendor", "status")
+    assert metadata.group_by_fields == ("impl_class", "vendor", "vendor__display_name", "status")
     assert metadata.capabilities == ("list", "detail", "aggregate", "groups", "filterEcho")
     assert metadata.relation_axes[0].field == "vendor"
     assert metadata.relation_axes[0].model_label == "integrate.Vendor"
     assert metadata.relation_axes[0].public_id_field == "sqid"
+    assert metadata.relation_axes[0].label_axis == "vendor__display_name"
     serialized = console_schema._schema.extensions["angee"]["dataQueries"]
     integration = {
         item["modelLabel"]: item
@@ -164,13 +181,13 @@ def test_console_data_query_metadata_declares_integration_surface() -> None:
         "aggregateName": "integrationAggregate",
         "groupName": "integrationGroups",
     }
-    assert integration["groupByFields"] == ["implClass", "vendor", "status"]
+    assert integration["groupByFields"] == ["implClass", "vendor", "vendor_DisplayName", "status"]
     assert integration["relationAxes"] == [
         {
             "field": "vendor",
             "modelLabel": "integrate.Vendor",
             "publicIdField": "sqid",
-            "labelAxis": None,
+            "labelAxis": "vendor_DisplayName",
         }
     ]
 

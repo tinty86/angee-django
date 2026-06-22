@@ -230,7 +230,17 @@ MessageDataQuery, _MESSAGE_DATA_TYPES = data_query(
     aggregate_name="message_aggregate",
     group_name="message_groups",
     aggregate_fields=["id"],
-    group_by_fields=["thread", "sender", "channel", "status", "platform", "sent_at"],
+    group_by_fields=[
+        "thread",
+        "thread__subject",
+        "sender",
+        "sender__display_name",
+        "channel",
+        "channel__display_name",
+        "status",
+        "platform",
+        "sent_at",
+    ],
     enable_filter_echo=True,
     aggregate_kwargs={
         "name_prefix": "MessageAggregate",
@@ -247,7 +257,7 @@ ThreadDataQuery, _THREAD_DATA_TYPES = data_query(
     aggregate_name="thread_aggregate",
     group_name="thread_groups",
     aggregate_fields=["id", "message_count"],
-    group_by_fields=["channel", "modality", "visibility", "last_message_at"],
+    group_by_fields=["channel", "channel__display_name", "modality", "visibility", "last_message_at"],
     enable_filter_echo=True,
     aggregate_kwargs={
         "name_prefix": "ThreadAggregate",

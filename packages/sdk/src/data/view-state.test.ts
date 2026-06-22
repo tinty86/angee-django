@@ -116,7 +116,7 @@ describe("data-view model", () => {
     const state = DataViewState.create({
       groupStack: [
         {
-          field: "vendorLabel",
+          field: "vendor.displayName",
           aggregateField: "vendor",
           aggregateKey: "vendorId",
         },
@@ -125,9 +125,9 @@ describe("data-view model", () => {
 
     const search = dataViewStateToSearch(state);
 
-    expect(search.group).toBe("vendorLabel~vendor~vendorId");
+    expect(search.group).toBe("vendor.displayName~vendor~vendorId");
     expect(dataViewSearchToState(search).group).toEqual({
-      field: "vendorLabel",
+      field: "vendor.displayName",
       aggregateField: "vendor",
       aggregateKey: "vendorId",
     });

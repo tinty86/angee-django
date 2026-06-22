@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
 from strawberry.types import get_object_definition
 from strawberry.utils.str_converters import to_camel_case
@@ -256,13 +258,16 @@ def _relation_axes(
 ) -> tuple[DataRelationAxisMetadata, ...]:
     """Return direct FK group axes with their related model and optional label axis."""
 
-    label_axes = {path.split("__", 1)[0]: path for path in group_by_fields if "__" in path}
+    label_axes = _relation_label_axes(model, group_by_fields)
     relation_axes: list[DataRelationAxisMetadata] = []
     for path in group_by_fields:
         if "__" in path:
             continue
-        field = model._meta.get_field(path)
-        if not getattr(field, "many_to_one", False):
+        try:
+            field = model._meta.get_field(path)
+        except FieldDoesNotExist:
+            continue
+        if not _is_to_one_relation(field):
             continue
         remote_field = getattr(field, "remote_field", None)
         related_model = getattr(remote_field, "model", None)
@@ -277,6 +282,45 @@ def _relation_axes(
             )
         )
     return tuple(relation_axes)
+
+
+def _relation_label_axes(
+    model: type[models.Model],
+    group_by_fields: tuple[str, ...],
+) -> dict[str, str]:
+    """Return relation label axes keyed by their direct relation axis."""
+
+    direct_axes = {path for path in group_by_fields if "__" not in path}
+    label_axes: dict[str, str] = {}
+    for path in group_by_fields:
+        if "__" not in path:
+            continue
+        relation, _leaf = path.split("__", 1)
+        try:
+            field = model._meta.get_field(relation)
+        except FieldDoesNotExist:
+            continue
+        if not _is_to_one_relation(field):
+            continue
+        if relation not in direct_axes:
+            raise ImproperlyConfigured(
+                f"data_query({model._meta.label}) relation label axis '{path}' "
+                f"requires matching direct relation group axis '{relation}'."
+            )
+        existing = label_axes.get(relation)
+        if existing is not None and existing != path:
+            raise ImproperlyConfigured(
+                f"data_query({model._meta.label}) relation group axis '{relation}' "
+                f"declares multiple label axes: '{existing}' and '{path}'."
+            )
+        label_axes[relation] = path
+    return label_axes
+
+
+def _is_to_one_relation(field: models.Field[Any, Any]) -> bool:
+    """Return whether ``field`` is a forward to-one relation."""
+
+    return bool(getattr(field, "many_to_one", False) or getattr(field, "one_to_one", False))
 
 
 def _optional_type_name(surface: type | None) -> str | None:

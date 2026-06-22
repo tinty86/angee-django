@@ -16,6 +16,32 @@ from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
 class AngeeAggregateBuilder(AggregateBuilder):
     """Aggregate builder with Angee's relation-label echo policy."""
 
+    def _shape_grouped(
+        self,
+        grouped_type: type,
+        group_key_type: type,
+        row: dict[str, Any],
+        requested: list[tuple[Any, str | None]],
+        spec: list[tuple[str, Any]],
+        op_args: dict[str, dict[str, Any]] | None = None,
+        week_start: int = 1,
+        echo_filter: bool = False,
+    ) -> Any:
+        """Shape a grouped row and expose direct FK bucket keys as public ids."""
+
+        instance = super()._shape_grouped(
+            grouped_type,
+            group_key_type,
+            row,
+            requested,
+            spec,
+            op_args=op_args,
+            week_start=week_start,
+            echo_filter=echo_filter,
+        )
+        self._publicize_relation_key_fields(instance.key, row, spec)
+        return instance
+
     def _echo_bucket_filter(
         self,
         key_kwargs: dict[str, Any],
@@ -36,6 +62,28 @@ class AngeeAggregateBuilder(AggregateBuilder):
             (fp, grain) for fp, grain in spec if "__" not in fp or fp.split("__", 1)[0] not in direct_relations
         ]
         return super()._echo_bucket_filter(key_kwargs, echo_spec)
+
+    def _publicize_relation_key_fields(
+        self,
+        key: Any,
+        row: dict[str, Any],
+        spec: list[tuple[str, Any]],
+    ) -> None:
+        """Replace direct FK bucket key values with their public ids."""
+
+        for field_path, grain in spec:
+            if grain is not None or "__" in field_path:
+                continue
+            field, alias = self._group_axis_field_and_alias(field_path, grain)
+            if not getattr(field, "many_to_one", False):
+                continue
+            value = row.get(alias)
+            if value is None:
+                continue
+            related_model = getattr(field.remote_field, "model", None)
+            if related_model is None:
+                continue
+            setattr(key, alias, public_id_for(related_model, value))
 
 
 def data_aggregate_builder(

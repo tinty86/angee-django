@@ -33,6 +33,33 @@ class DataQueryThing(AngeeDataModel):
         app_label = "tests"
 
 
+class DataQueryParent(AngeeDataModel):
+    """Concrete parent model used by relation group-axis tests."""
+
+    sqid_prefix = "dqp_"
+
+    name = models.CharField(max_length=64)
+
+    class Meta:
+        """Django model options for the test model."""
+
+        app_label = "tests"
+
+
+class DataQueryChild(AngeeDataModel):
+    """Concrete child model used by relation group-axis tests."""
+
+    sqid_prefix = "dqc_"
+
+    name = models.CharField(max_length=64)
+    parent = models.ForeignKey(DataQueryParent, on_delete=models.CASCADE, related_name="children")
+
+    class Meta:
+        """Django model options for the test model."""
+
+        app_label = "tests"
+
+
 def test_rebac_aggregate_builder_rejects_gated_group_by_axis(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -125,6 +152,105 @@ def test_data_query_builds_native_model_data_roots() -> None:
     assert metadata.aggregate_fields == ("id",)
     assert metadata.group_by_fields == ("name",)
     assert metadata.type_names.group_by_spec == "DataQueryThingGroupBySpec"
+
+
+def test_data_query_metadata_requires_direct_relation_axis_for_relation_label() -> None:
+    """A relation label axis only describes a bucket when the relation id axis exists."""
+
+    @strawberry_django.type(DataQueryChild)
+    class DataQueryChildInvalidRelationType:
+        name: auto
+
+    with pytest.raises(ImproperlyConfigured, match="requires matching direct relation"):
+        data_query(
+            DataQueryChildInvalidRelationType,
+            type_name="DataQueryChildInvalidRelationQuery",
+            list_name="children",
+            aggregate_fields=["id"],
+            group_by_fields=["parent__name"],
+        )
+
+
+def test_data_query_metadata_rejects_multiple_relation_label_axes() -> None:
+    """One direct relation bucket gets one label axis in metadata."""
+
+    @strawberry_django.type(DataQueryChild)
+    class DataQueryChildAmbiguousRelationType:
+        name: auto
+
+    with pytest.raises(ImproperlyConfigured, match="multiple label axes"):
+        data_query(
+            DataQueryChildAmbiguousRelationType,
+            type_name="DataQueryChildAmbiguousRelationQuery",
+            list_name="children",
+            aggregate_fields=["id"],
+            group_by_fields=["parent", "parent__name", "parent__created_at"],
+        )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_data_query_groups_echo_public_relation_id() -> None:
+    """Grouped relation keys expose public ids while label axes expose display values."""
+
+    @strawberry_django.type(DataQueryChild)
+    class DataQueryChildRelationType:
+        name: auto
+
+    query, generated_types = data_query(
+        DataQueryChildRelationType,
+        type_name="DataQueryChildRelationQuery",
+        list_name="children",
+        detail_name="child",
+        aggregate_name="child_aggregate",
+        group_name="child_groups",
+        aggregate_fields=["id"],
+        group_by_fields=["parent", "parent__name"],
+    )
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(DataQueryParent)
+        schema_editor.create_model(DataQueryChild)
+
+    try:
+        parent = DataQueryParent.objects.create(name="Parent")
+        DataQueryChild.objects.create(parent=parent, name="Child")
+
+        schema = strawberry.Schema(query=query, types=list(generated_types))
+        with system_context(reason="test data query relation grouping"):
+            result = schema.execute_sync(
+                """
+                query($groupBy: [DataQueryChildGroupBySpec!]!) {
+                  childGroups(groupBy: $groupBy, pagination: {offset: 0, limit: 10}) {
+                    totalCount
+                    results {
+                      key { parentId parent_Name }
+                      count
+                    }
+                  }
+                }
+                """,
+                variable_values={"groupBy": [{"field": "PARENT"}, {"field": "PARENT__NAME"}]},
+            )
+    finally:
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(DataQueryChild)
+            schema_editor.delete_model(DataQueryParent)
+
+    assert result.errors is None
+    assert result.data == {
+        "childGroups": {
+            "totalCount": 1,
+            "results": [
+                {
+                    "key": {
+                        "parentId": parent.public_id,
+                        "parent_Name": "Parent",
+                    },
+                    "count": 1,
+                }
+            ],
+        }
+    }
 
 
 @pytest.mark.django_db(transaction=True)

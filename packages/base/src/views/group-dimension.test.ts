@@ -64,7 +64,7 @@ describe("dataViewGroupToAggregateDimension", () => {
   test("can group on one row field while querying a different aggregate axis", () => {
     expect(
       dataViewGroupToAggregateDimension({
-        field: "vendorLabel",
+        field: "vendor.displayName",
         aggregateField: "vendor",
         aggregateKey: "vendorId",
       }),
@@ -106,7 +106,7 @@ describe("groupOrderField", () => {
   test("orders by the aggregate axis when it differs from the row field", () => {
     expect(
       groupOrderField({
-        field: "vendorLabel",
+        field: "vendor.displayName",
         aggregateField: "vendor",
         aggregateKey: "vendorId",
       }),

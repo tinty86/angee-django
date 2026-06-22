@@ -39,7 +39,9 @@ describe("connect callback redirects", () => {
     expect(connectCallbackPathForRecord({ backendClass: "anthropic" })).toBe(
       CONNECT_CALLBACK_FALLBACK_PATH,
     );
-    expect(connectCallbackPathForRecord({ vendorLabel: "Anthropic" })).toBe(
+    expect(
+      connectCallbackPathForRecord({ vendor: { displayName: "Anthropic" } }),
+    ).toBe(
       CONNECT_CALLBACK_FALLBACK_PATH,
     );
     expect(
@@ -49,6 +51,8 @@ describe("connect callback redirects", () => {
 
   test("keeps the canonical callback for other connect records", () => {
     expect(connectCallbackPathForRecord({ backendClass: "openai" })).toBeUndefined();
-    expect(connectCallbackPathForRecord({ vendorLabel: "GitHub" })).toBeUndefined();
+    expect(
+      connectCallbackPathForRecord({ vendor: { displayName: "GitHub" } }),
+    ).toBeUndefined();
   });
 });

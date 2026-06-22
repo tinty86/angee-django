@@ -30,8 +30,6 @@ export function connectCallbackPathForRecord(
   return [
     record.backendClass,
     record.implClass,
-    record.vendorSlug,
-    record.vendorLabel,
     nestedValue(record.vendor, "slug"),
     nestedValue(record.vendor, "displayName"),
   ].some(isAnthropicConnectRecord)

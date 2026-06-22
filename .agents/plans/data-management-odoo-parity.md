@@ -189,8 +189,37 @@ Ninth public-identity guardrail slice completed on 2026-06-22:
       React `DataPage`/`GroupListView` page under Users. Django auth
       permissions stay unexposed because REBAC owns authorization semantics.
 
+Tenth relation-axis hardening slice completed on 2026-06-22:
+
+- [x] Fix direct relation group keys at the Angee aggregate seam so grouped
+      buckets expose the related row's public `sqid`, not the raw database pk.
+- [x] Move the integration vendor group declaration to the canonical relation
+      id + label-axis shape (`vendor` + `vendor__display_name`) and point the
+      React group option at `vendor.displayName` while still grouping/filtering
+      by `vendor`.
+- [x] Add framework validation that relation label axes require their matching
+      direct relation group axis and reject ambiguous multiple label axes.
+- [x] Audit migrated addon relation axes and add label axes where a model-owned
+      display field already exists.
+- [x] Delete stale relation/group compatibility glue only where a real caller is
+      gone.
+- [x] Run focused backend/frontend/schema checks and commit the slice.
+
 Current local verification:
 
+- [x] `uv run ruff check angee/graphql/data/metadata.py angee/graphql/data/aggregates.py addons/angee/agents/schema.py addons/angee/messaging/schema.py addons/angee/integrate/schema.py tests/test_aggregates.py tests/test_integrate_graphql.py`
+- [x] `uv run pytest tests/test_aggregates.py tests/test_integrate_graphql.py tests/test_agents_graphql.py tests/test_parties_graphql.py -q`
+- [x] `uv run examples/notes-angee/manage.py schema`
+- [x] `uv run examples/notes-angee/manage.py schema --check`
+- [x] `pnpm codegen`
+- [x] `pnpm --filter @angee/sdk test -- view-state facets model-metadata`
+- [x] `pnpm --filter @angee/base test -- group-dimension model-metadata-defaults relation-facet FormView`
+- [x] `pnpm --filter @angee/integrate test -- redirects IntegrationsPage`
+- [x] `pnpm --filter @angee/integrate typecheck`
+- [x] `pnpm --filter @angee/agents --filter @angee/messaging --filter @angee-example/notes-host typecheck`
+- [x] `pnpm --filter @angee/sdk typecheck`
+- [x] `pnpm --filter @angee/base typecheck`
+- [x] `git diff --check`
 - [x] `uv run python -m pytest tests/test_aggregates.py -q`
 - [x] `uv run python -m pytest tests/test_agents_graphql.py::test_inference_models_query_accepts_provider_sqid_filter tests/test_agents_graphql.py::test_inference_model_groups_aggregate_runs_for_provider_and_capability -q`
 - [x] `uv run examples/notes-angee/manage.py test example.notes.tests.test_iam_graphql.IAMGraphQLTests example.notes.tests.test_word_count.NoteWordCountGraphQLTests --verbosity=2`
@@ -874,7 +903,8 @@ that the data contract now owns.
 - [ ] `Integration` data contract for vendor, impl class/category, status.
 - [ ] Express `implCategory` display alias as contract metadata instead of page
       group-option glue.
-- [ ] Express `vendorLabel`/vendor relation or enum label mapping in the contract.
+- [x] Express vendor relation label mapping in the contract and delete the old
+      flat `vendorLabel` data-view path.
 - [ ] Migrate `OAuthClient`, `ExternalAccount`, `Credential`, `Source`, and other
       list roots from filter/order-only to data contracts where useful.
 - [ ] Delete manual integration group option wiring.

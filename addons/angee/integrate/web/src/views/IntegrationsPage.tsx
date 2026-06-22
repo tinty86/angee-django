@@ -44,7 +44,7 @@ export function IntegrationsPage(): React.ReactElement {
         id: "vendor",
         label: t("integrate.col.vendor"),
         group: {
-          field: "vendorLabel",
+          field: "vendor.displayName",
           aggregateField: "vendor",
           aggregateKey: "vendorId",
         },
@@ -88,7 +88,7 @@ export function IntegrationsPage(): React.ReactElement {
       >
         <Column field="displayName" />
         <Column field="implLabel" header={t("integrate.col.implementation")} />
-        <Column field="vendorLabel" header={t("integrate.col.vendor")} />
+        <Column field="vendor.displayName" header={t("integrate.col.vendor")} />
         <Column field="status" widget="statusBadge" />
         <Column
           field="credential.displayName"
