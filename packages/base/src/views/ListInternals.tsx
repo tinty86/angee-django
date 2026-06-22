@@ -290,7 +290,6 @@ export function FlatListBody<TRow extends Row>({
                       rowHref,
                       onRowClick,
                       draggableRow,
-                      measures,
                       expandedKeys,
                       onToggleGroup,
                     })
@@ -741,7 +740,6 @@ function renderListItem<TRow extends Row>({
   rowHref,
   onRowClick,
   draggableRow,
-  measures,
   expandedKeys,
   onToggleGroup,
 }: {
@@ -753,7 +751,6 @@ function renderListItem<TRow extends Row>({
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   draggableRow?: (row: TRow) => DndPayload | null;
-  measures: readonly GroupMeasure[];
   expandedKeys?: ReadonlySet<string>;
   onToggleGroup?: (key: string) => void;
 }): React.ReactElement {
@@ -766,7 +763,6 @@ function renderListItem<TRow extends Row>({
         rows={item.group.rows}
         depth={item.group.depth}
         colSpan={colSpan}
-        measures={measures}
         expanded={expandedKeys?.has(item.group.key) ?? true}
         onToggle={onToggleGroup}
       />
@@ -810,7 +806,6 @@ function GroupHeader<TRow extends Row>({
   rows,
   depth,
   colSpan,
-  measures,
   expanded,
   onToggle,
 }: {
@@ -819,15 +814,10 @@ function GroupHeader<TRow extends Row>({
   rows: readonly TableRowModel<TRow>[];
   depth: number;
   colSpan: number;
-  measures: readonly GroupMeasure[];
   expanded: boolean;
   onToggle?: (key: string) => void;
 }): React.ReactElement {
   const rowCount = rows.length;
-  const summaries = measures.flatMap((measure) => {
-    const value = measureRows(rows, measure);
-    return value == null ? [] : [formatMeasure(value, measure)];
-  });
   const indent = { paddingLeft: `calc(0.75rem + ${depth * 1.25}rem)` };
   // The chevron only appears when the header is a toggle; the lead/trailing
   // content is identical either way, so it is rendered once and the branch
@@ -846,7 +836,6 @@ function GroupHeader<TRow extends Row>({
           {rowCount.toLocaleString()}
         </span>
       </span>
-      <span className="shrink-0 text-fg-muted">{summaries.join(" · ")}</span>
     </>
   );
   return (
@@ -1110,7 +1099,7 @@ export function groupMeasuresFromColumns<TRow extends Row>(
       field: column.field,
       columnId: column.field,
       label,
-      unit: measureUnit(label),
+      unit: "",
     });
   }
   return measures;
@@ -1143,20 +1132,6 @@ function columnLabelText<TRow extends Row>(
   return groupFieldLabel(column.field);
 }
 
-function measureUnit(label: string): string {
-  const normalized = label.trim();
-  const countLabel = normalized.match(/^(.+)\s+count$/i)?.[1]?.trim();
-  return pluralize((countLabel || normalized).toLowerCase());
-}
-
-function pluralize(value: string): string {
-  if (value.endsWith("y") && !/[aeiou]y$/.test(value)) {
-    return `${value.slice(0, -1)}ies`;
-  }
-  if (value.endsWith("s")) return value;
-  return `${value}s`;
-}
-
 export function measureValue(
   bucket: AggregateBucket,
   measure: Pick<GroupMeasure, "op" | "field">,
@@ -1181,34 +1156,6 @@ function formatMeasureValue(value: unknown): string {
     return BigInt(value).toLocaleString();
   }
   return value == null ? "" : String(value);
-}
-
-function measureRows<TRow extends Row>(
-  rows: readonly TableRowModel<TRow>[],
-  measure: GroupMeasure,
-): number | null {
-  const values = rows
-    .map((row) => numericValue(readPath(row.original, measure.field)))
-    .filter((value): value is number => value !== null);
-  if (values.length === 0) return null;
-  if (measure.op === "sum") {
-    return values.reduce((total, value) => total + value, 0);
-  }
-  if (measure.op === "avg") {
-    return values.reduce((total, value) => total + value, 0) / values.length;
-  }
-  if (measure.op === "min") return Math.min(...values);
-  return Math.max(...values);
-}
-
-function numericValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "bigint") return Number(value);
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
 }
 
 function displayValue(value: unknown): React.ReactNode {

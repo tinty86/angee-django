@@ -1133,10 +1133,10 @@ describe("DataPage", () => {
     );
 
     const activeGroup = await screen.findByRole("button", { name: /Active/ });
-    expect(within(activeGroup).getByText("30 words")).toBeTruthy();
+    expect(within(activeGroup).queryByText(/\bwords\b/i)).toBeNull();
     expect(
-      (await screen.findByLabelText("Total Word Count: 43 words")).textContent,
-    ).toBe("43 words");
+      (await screen.findByLabelText("Total Word Count: 43")).textContent,
+    ).toBe("43");
     expect(
       sdkMocks.groupByCalls.some((call) =>
         call.measures?.some(

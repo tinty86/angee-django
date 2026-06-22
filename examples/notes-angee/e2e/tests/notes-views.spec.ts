@@ -6,9 +6,9 @@ const UPDATED_DAY_URL = "/notes?group=updatedAt:day";
 
 /**
  * The data-view features added this cycle: column sortability gated to orderable
- * fields, sorting the grouped field reordering the groups, per-group aggregate
- * sums plus a footer grand total, and the toolbar rendered as a flush control
- * band. Group-specific assertions opt into Updated·Day through the URL.
+ * fields, sorting the grouped field reordering the groups, column-aligned
+ * aggregate totals, and the toolbar rendered as a flush control band.
+ * Group-specific assertions opt into Updated·Day through the URL.
  */
 test.describe("notes views — sort, group order, aggregates, control band", () => {
   test.use({ storageState: roleStatePath("alice") });
@@ -76,16 +76,17 @@ test.describe("notes views — sort, group order, aggregates, control band", () 
     expect(ascFirst).not.toEqual(descFirst);
   });
 
-  test("each group header carries a word-count sum and a footer grand total", async ({ page }) => {
+  test("numeric aggregates render in the measure column, not the group header", async ({ page }) => {
     const notes = new NotesPage(page);
     await page.goto(UPDATED_DAY_URL);
 
-    // a folded group header shows its measure rollup, e.g. "… 411 words"
-    await expect(notes.groupHeaders.first()).toContainText(/\d[\d,]*\s*words/i, {
-      timeout: 25000,
-    });
-    // the footer shows the whole-list grand total
-    await expect(page.locator("tfoot")).toContainText(/[\d,]+\s*words/i);
+    await expect(notes.groupHeaders.first()).toBeVisible({ timeout: 25000 });
+    await expect(notes.groupHeaders.first()).not.toContainText(/\bwords\b/i);
+    const wordCountTotal = page
+      .locator('tfoot [aria-label^="Total Word Count:"]')
+      .first();
+    await expect(wordCountTotal).toHaveText(/^\d[\d,]*$/);
+    await expect(wordCountTotal).not.toContainText(/\bwords\b/i);
   });
 
   test("the list toolbar renders as a flush control band under the breadcrumb", async ({ page }) => {
@@ -104,13 +105,16 @@ for (const role of ["admin", "alice", "bob"] as const) {
   test.describe(`${role} — grouped aggregates`, () => {
     test.use({ storageState: roleStatePath(role) });
 
-    test("group headers show a word-count rollup and the footer a grand total", async ({ page }) => {
+    test("word-count totals stay in the numeric column", async ({ page }) => {
       const notes = new NotesPage(page);
       await page.goto(UPDATED_DAY_URL);
-      await expect(notes.groupHeaders.first()).toContainText(/\d[\d,]*\s*words/i, {
-        timeout: 25000,
-      });
-      await expect(page.locator("tfoot")).toContainText(/[\d,]+\s*words/i);
+      await expect(notes.groupHeaders.first()).toBeVisible({ timeout: 25000 });
+      await expect(notes.groupHeaders.first()).not.toContainText(/\bwords\b/i);
+      const wordCountTotal = page
+        .locator('tfoot [aria-label^="Total Word Count:"]')
+        .first();
+      await expect(wordCountTotal).toHaveText(/^\d[\d,]*$/);
+      await expect(wordCountTotal).not.toContainText(/\bwords\b/i);
     });
   });
 }

@@ -674,13 +674,6 @@ function GroupSection<TRow extends Row>({
               </span>
               <span className="inline-flex shrink-0 items-center gap-2">
                 <CountBadge value={bucket.count} />
-                {measures.map((measure) => (
-                  <GroupMeasureValue
-                    key={`${measure.op}:${measure.field}`}
-                    bucket={bucket}
-                    measure={measure}
-                  />
-                ))}
                 {!expandable ? (
                   <span className="text-13 font-normal text-fg-muted">
                     Items unavailable
@@ -807,22 +800,6 @@ function BranchGroupSection<TRow extends Row>({
       modelMetadata={modelMetadata}
       onListStateChange={onListStateChange}
     />
-  );
-}
-
-function GroupMeasureValue({
-  bucket,
-  measure,
-}: {
-  bucket: AggregateBucket;
-  measure: GroupMeasure;
-}): React.ReactElement | null {
-  const value = measureValue(bucket, measure);
-  if (value == null) return null;
-  return (
-    <span className="text-13 font-normal tabular-nums text-fg-muted">
-      {formatMeasure(value, measure)}
-    </span>
   );
 }
 
