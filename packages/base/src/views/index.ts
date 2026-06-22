@@ -124,10 +124,7 @@ export {
   type UseRecordActionOptions,
 } from "./record-action";
 export {
-  useRelationFacet,
   useRelationFacets,
-  useRelationFacetsForColumns,
-  type RelationFacet,
   type RelationFacets,
   type RelationFacetOptions,
 } from "./relation-facet";

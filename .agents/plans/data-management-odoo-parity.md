@@ -235,6 +235,22 @@ Thirteenth row-derived server-filter cleanup slice completed on 2026-06-22:
       row array is the owned data source.
 - [x] Cover both policies in the shared list metadata utility tests.
 
+Fourteenth numeric aggregate placement slice completed on 2026-06-22:
+
+- [x] Stop grouped headers from rendering measure summaries beside the row-count
+      badge; headers now show only the group label and count.
+- [x] Render aggregate measure values as bare numbers in their column-aligned
+      footer cells, so `wordCount` shows `492` rather than `492 words`.
+- [x] Update notes e2e expectations to assert numeric totals live in the Word
+      Count column, not the group header.
+
+Fifteenth relation-facet compatibility deletion slice completed on 2026-06-22:
+
+- [x] Delete the unused singular `useRelationFacet(...)` and
+      `useRelationFacetsForColumns(...)` compatibility paths.
+- [x] Keep the remaining declared `<Facet />` path as the only public relation
+      facet hook and slim its tests to that owner.
+
 Current local verification:
 
 - [x] `uv run ruff check angee/graphql/data/metadata.py angee/graphql/data/queries.py addons/angee/integrate/schema.py tests/test_aggregates.py tests/test_integrate_graphql.py`
@@ -328,6 +344,10 @@ Current local verification:
 - [x] `pnpm --filter @angee/base test -- relation-facet ListView`
 - [x] `pnpm --filter @angee/sdk typecheck`
 - [x] `pnpm --filter @angee/base typecheck`
+- [x] `git diff --check`
+- [x] `pnpm --filter @angee/base test -- DataPage relation-facet`
+- [x] `pnpm --filter @angee/base typecheck`
+- [x] `pnpm --filter @angee/e2e typecheck`
 - [x] `git diff --check`
 
 ## North Star
