@@ -1,13 +1,7 @@
-import { defineConfig } from "vitest/config";
-import { gqlAlias } from "../../../vitest.shared";
+import { defineAngeeWebVitestConfig } from "../../../vitest.shared";
 
-export default defineConfig({
-  resolve: { alias: gqlAlias },
+export default defineAngeeWebVitestConfig({
   test: {
-    environment: "node",
-    include: ["*.test.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
-    server: {
-      deps: { inline: ["@angee/logo-react"] },
-    },
+    extraInclude: ["*.test.ts"],
   },
 });

@@ -1,17 +1,3 @@
-import { defineConfig } from "vitest/config";
-import { gqlAlias } from "../../../../vitest.shared";
+import { defineAngeeWebVitestConfig } from "../../../../vitest.shared";
 
-export default defineConfig({
-  resolve: { alias: gqlAlias },
-  test: {
-    // Pure modules run under node; component suites opt into a DOM environment
-    // per-file with a `// @vitest-environment happy-dom` pragma.
-    environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    server: {
-      // The chrome barrel pulls in the logo's stylesheet; inline that dep so
-      // Vite resolves its `.css` import instead of Node's ESM loader rejecting it.
-      deps: { inline: ["@angee/logo-react"] },
-    },
-  },
-});
+export default defineAngeeWebVitestConfig();
