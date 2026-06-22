@@ -27,6 +27,10 @@ describe("iam addon manifest", () => {
       "iam.users",
       "iam.users.record",
       "iam.roles",
+      "iam.groups",
+      "iam.groups.record",
+      "iam.permissions",
+      "iam.permissions.record",
       "iam.grants",
       "iam.relationships",
       "iam.schema",
@@ -47,6 +51,12 @@ describe("iam addon manifest", () => {
     expect(record?.path).toBe("/iam/users/$id");
     expect(record?.parent).toBe("iam.users");
     expect(record?.component).toBeUndefined();
+    const groupRecord = iam.routes?.find((route) => route.name === "iam.groups.record");
+    expect(groupRecord?.path).toBe("/iam/groups/$id");
+    expect(groupRecord?.parent).toBe("iam.groups");
+    const permissionRecord = iam.routes?.find((route) => route.name === "iam.permissions.record");
+    expect(permissionRecord?.path).toBe("/iam/permissions/$id");
+    expect(permissionRecord?.parent).toBe("iam.permissions");
   });
 
   test("contributes the IAM console menu with a Roles dropdown", () => {
@@ -64,6 +74,8 @@ describe("iam addon manifest", () => {
     expect(rolesGroup?.route).toBeUndefined();
     expect(rolesGroup?.children?.map((item) => item.route)).toEqual([
       "iam.roles",
+      "iam.groups",
+      "iam.permissions",
       "iam.grants",
       "iam.relationships",
       "iam.schema",

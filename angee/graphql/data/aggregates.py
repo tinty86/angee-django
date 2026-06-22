@@ -8,7 +8,7 @@ from typing import Any, cast
 from django.db import models
 from strawberry_django_aggregates import AggregateBuilder
 
-from angee.base.models import AngeeQuerySet, public_id_for
+from angee.base.models import public_id_for
 from angee.graphql.access import assert_no_gated_read_fields
 from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
 
@@ -30,14 +30,10 @@ class AngeeAggregateBuilder(AggregateBuilder):
         """
 
         direct_relations = {
-            fp
-            for fp, _ in spec
-            if "__" not in fp and getattr(self.model._meta.get_field(fp), "many_to_one", False)
+            fp for fp, _ in spec if "__" not in fp and getattr(self.model._meta.get_field(fp), "many_to_one", False)
         }
         echo_spec = [
-            (fp, grain)
-            for fp, grain in spec
-            if "__" not in fp or fp.split("__", 1)[0] not in direct_relations
+            (fp, grain) for fp, grain in spec if "__" not in fp or fp.split("__", 1)[0] not in direct_relations
         ]
         return super()._echo_bucket_filter(key_kwargs, echo_spec)
 
@@ -46,7 +42,7 @@ def data_aggregate_builder(
     *,
     model: type[models.Model],
     group_by_fields: Sequence[str] = (),
-    queryset: AngeeQuerySet[Any] | None = None,
+    queryset: models.QuerySet[Any] | None = None,
     **kwargs: Any,
 ) -> AggregateBuilder:
     """Return an aggregate builder wired for Angee row scope and public ids."""
@@ -57,10 +53,7 @@ def data_aggregate_builder(
         "aggregate group_by axes",
         "bucket keys leak gated values",
     )
-    source = cast(
-        AngeeQuerySet[Any],
-        model._default_manager.all() if queryset is None else queryset,
-    )
+    source = model._default_manager.all() if queryset is None else queryset
     if kwargs.get("enable_filter_echo"):
         kwargs.setdefault(
             "filter_echo_relation_identity",
@@ -69,7 +62,9 @@ def data_aggregate_builder(
 
     def get_queryset(info: Any) -> models.QuerySet[Any]:
         del info
-        return source.all().scoped_for_aggregate()
+        active = source.all()
+        scope = getattr(active, "scoped_for_aggregate", None)
+        return cast(models.QuerySet[Any], scope() if callable(scope) else active)
 
     return AngeeAggregateBuilder(
         model=model,
@@ -83,7 +78,7 @@ def rebac_aggregate_builder(
     *,
     model: type[models.Model],
     group_by_fields: Sequence[str] = (),
-    queryset: AngeeQuerySet[Any] | None = None,
+    queryset: models.QuerySet[Any] | None = None,
     **kwargs: Any,
 ) -> AggregateBuilder:
     """Compatibility alias for Angee's data aggregate builder."""

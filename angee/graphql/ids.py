@@ -6,15 +6,13 @@ from collections.abc import Mapping
 from typing import Any, TypeVar, cast
 
 import strawberry
-from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from strawberry import UNSET
 from strawberry.types import get_object_definition
 from strawberry_django.utils.typing import get_django_definition
 
-from angee.base.fields import SqidField
-from angee.base.models import instance_from_public_id
-from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
+from angee.base.models import instance_from_public_id, public_data_id_owner, public_data_id_prefix
 
 PublicID = strawberry.ID
 """GraphQL ID scalar carrying an Angee public id, usually a model sqid."""
@@ -86,15 +84,16 @@ def assert_unique_sqid_prefixes(types: tuple[object, ...]) -> None:
 
     prefixes_by_owner: dict[str, type[models.Model]] = {}
     for model in _exposed_models(types):
-        field = _sqid_field(model)
-        if field is None or not field.prefix:
+        prefix = public_data_id_prefix(model)
+        if not prefix:
             continue
-        owner_model = field.model
-        existing = prefixes_by_owner.setdefault(field.prefix, owner_model)
+        owner_model = public_data_id_owner(model)
+        if owner_model is None:
+            continue
+        existing = prefixes_by_owner.setdefault(prefix, owner_model)
         if existing._meta.label != owner_model._meta.label:
             raise ImproperlyConfigured(
-                f"Sqid prefix {field.prefix!r} is declared by both "
-                f"{existing._meta.label} and {owner_model._meta.label}"
+                f"Sqid prefix {prefix!r} is declared by both {existing._meta.label} and {owner_model._meta.label}"
             )
     for left in prefixes_by_owner:
         for right in prefixes_by_owner:
@@ -139,13 +138,3 @@ def _exposed_models(types: tuple[object, ...]) -> tuple[type[models.Model], ...]
         model = django_definition.model
         models_by_label.setdefault(model._meta.label, model)
     return tuple(models_by_label.values())
-
-
-def _sqid_field(model: type[models.Model]) -> SqidField | None:
-    """Return the sqid field visible on ``model``, including MTI parents."""
-
-    try:
-        field = model._meta.get_field(PUBLIC_ID_FIELD_NAME)
-    except FieldDoesNotExist:
-        return None
-    return field if isinstance(field, SqidField) else None

@@ -174,6 +174,20 @@ Eighth all-addon adoption slice completed on 2026-06-22:
 - [x] Add a focused regression test proving `data_query(...)` forwards a custom
       list resolver to the generated paginated root.
 
+Ninth public-identity guardrail slice completed on 2026-06-22:
+
+- [x] Add `AngeeDataModel` as the canonical sqid-backed base for concrete
+      public data rows.
+- [x] Make `data_query(...)` fail fast unless the model exposes an Angee sqid
+      identity, with a named raw-pk compatibility flag for the IAM source-test
+      auth.User fallback only.
+- [x] Add `SqidProxyMixin` for Django proxy models, because Django forbids
+      field-bearing abstract bases on proxies.
+- [x] Expose Django auth `Group` and `Permission` through IAM-owned proxy models
+      with `grp_` / `prm_` public ids.
+- [x] Promote auth groups and permissions to IAM console `data_query(...)`
+      surfaces and React `DataPage`/`GroupListView` pages.
+
 Current local verification:
 
 - [x] `uv run python -m pytest tests/test_aggregates.py -q`
@@ -321,11 +335,11 @@ Naming check:
 The data-management layer should be opinionated enough that addons cannot drift
 into alternate identities or local query semantics.
 
-- [ ] Every concrete/public Angee data row has an opaque public id, exposed as
+- [x] Every concrete/public Angee data row has an opaque public id, exposed as
       `sqid` at the GraphQL boundary.
-- [ ] Raw database primary keys are never public data filters, group keys, URL
+- [x] Raw database primary keys are never public data filters, group keys, URL
       state, row ids, or addon-facing identifiers.
-- [ ] A model that can appear in a data contract must be sqid-addressable.
+- [x] A model that can appear in a data contract must be sqid-addressable.
 - [ ] A model-backed page must use the data contract and data source. A page-local
       table/filter/group implementation is a framework bug unless the surface is
       intentionally not model-backed.
@@ -352,7 +366,7 @@ class AngeeDataModel(SqidMixin, AngeeModel):
 
 Rules:
 
-- [ ] `AngeeDataModel` is the normal base for new concrete model roots.
+- [x] `AngeeDataModel` is the normal base for new concrete model roots.
 - [ ] Existing normal models should migrate from `SqidMixin, ..., AngeeModel` to
       the cleaner `..., AngeeDataModel` shape where Django MRO allows it.
 - [ ] Models with special inheritance, such as the swappable user model, may keep

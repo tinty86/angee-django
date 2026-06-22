@@ -7,14 +7,30 @@ import strawberry
 import strawberry_django
 from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
+from django.db import connection, models
+from rebac import system_context
 from strawberry import auto
 
 import angee.graphql.access as access
+from angee.base.models import AngeeDataModel
 from angee.graphql.aggregates import rebac_aggregate_builder
 from angee.graphql.data import data_query
 from angee.graphql.data.metadata import data_query_metadata
 from angee.graphql.schema import GraphQLSchemas
 from tests.conftest import SchemaAddon
+
+
+class DataQueryThing(AngeeDataModel):
+    """Concrete test model with the public identity data_query requires."""
+
+    sqid_prefix = "dqt_"
+
+    name = models.CharField(max_length=64)
+
+    class Meta:
+        """Django model options for the test model."""
+
+        app_label = "tests"
 
 
 def test_rebac_aggregate_builder_rejects_gated_group_by_axis(
@@ -63,24 +79,27 @@ def test_rebac_aggregate_builder_gate_walks_relation_leaf_axes(
 def test_data_query_builds_native_model_data_roots() -> None:
     """The data-query helper emits a normal Strawberry query surface."""
 
-    @strawberry_django.type(Group)
-    class GroupDataType:
+    @strawberry_django.type(DataQueryThing)
+    class DataQueryThingType:
         name: auto
 
-    @strawberry_django.filter_type(Group, lookups=True)
-    class GroupDataFilter:
+    @strawberry_django.filter_type(DataQueryThing, lookups=True)
+    class DataQueryThingFilter:
         name: auto
 
-    @strawberry_django.order_type(Group)
-    class GroupDataOrder:
+    @strawberry_django.order_type(DataQueryThing)
+    class DataQueryThingOrder:
         name: auto
 
     query, generated_types = data_query(
-        GroupDataType,
-        type_name="GroupDataQuery",
-        filters=GroupDataFilter,
-        order=GroupDataOrder,
-        list_name="groups",
+        DataQueryThingType,
+        type_name="DataQueryThingQuery",
+        filters=DataQueryThingFilter,
+        order=DataQueryThingOrder,
+        list_name="things",
+        detail_name="thing",
+        aggregate_name="thing_aggregate",
+        group_name="thing_groups",
         aggregate_fields=["id"],
         group_by_fields=["name"],
     )
@@ -88,57 +107,65 @@ def test_data_query_builds_native_model_data_roots() -> None:
     schema = strawberry.Schema(query=query, types=list(generated_types))
     sdl = schema.as_str()
 
-    assert "groups(" in sdl
-    assert "group(id: ID!" in sdl
-    assert "groupAggregate(" in sdl
-    assert "groupGroups(" in sdl
-    assert "input GroupGroupBySpec" in sdl
+    assert "things(" in sdl
+    assert "thing(id: ID!" in sdl
+    assert "thingAggregate(" in sdl
+    assert "thingGroups(" in sdl
+    assert "input DataQueryThingGroupBySpec" in sdl
 
     metadata = data_query_metadata(query)[0]
-    assert metadata.model_label == "auth.Group"
-    assert metadata.roots.list_name == "groups"
-    assert metadata.roots.detail_name == "group"
-    assert metadata.roots.aggregate_name == "group_aggregate"
-    assert metadata.roots.group_name == "group_groups"
+    assert metadata.model_label == "tests.DataQueryThing"
+    assert metadata.roots.list_name == "things"
+    assert metadata.roots.detail_name == "thing"
+    assert metadata.roots.aggregate_name == "thing_aggregate"
+    assert metadata.roots.group_name == "thing_groups"
     assert metadata.capabilities == ("list", "detail", "aggregate", "groups")
     assert metadata.filter_fields == ("name",)
     assert metadata.order_fields == ("name",)
     assert metadata.aggregate_fields == ("id",)
     assert metadata.group_by_fields == ("name",)
-    assert metadata.type_names.group_by_spec == "GroupGroupBySpec"
+    assert metadata.type_names.group_by_spec == "DataQueryThingGroupBySpec"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_data_query_forwards_list_kwargs_resolver() -> None:
     """Generated list roots keep resolver-owned querysets from their caller."""
 
-    @strawberry_django.type(Group)
-    class GroupResolverType:
+    @strawberry_django.type(DataQueryThing)
+    class DataQueryThingResolverType:
         name: auto
 
-    def visible_groups(info: strawberry.Info) -> object:
+    def visible_things(info: strawberry.Info) -> object:
         del info
-        return Group.objects.filter(name="visible")
+        return DataQueryThing.objects.filter(name="visible")
 
     query, generated_types = data_query(
-        GroupResolverType,
-        type_name="GroupResolverQuery",
-        list_name="groups",
+        DataQueryThingResolverType,
+        type_name="DataQueryThingResolverQuery",
+        list_name="things",
         include_detail=False,
         include_aggregate=False,
         include_groups=False,
-        list_kwargs={"resolver": visible_groups},
+        list_kwargs={"resolver": visible_things},
     )
 
-    Group.objects.create(name="visible")
-    Group.objects.create(name="hidden")
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(DataQueryThing)
 
-    schema = strawberry.Schema(query=query, types=list(generated_types))
-    result = schema.execute_sync("{ groups { totalCount results { name } } }")
+    try:
+        DataQueryThing.objects.create(name="visible")
+        DataQueryThing.objects.create(name="hidden")
+
+        schema = strawberry.Schema(query=query, types=list(generated_types))
+        with system_context(reason="test data query resolver"):
+            result = schema.execute_sync("{ things { totalCount results { name } } }")
+    finally:
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(DataQueryThing)
 
     assert result.errors is None
     assert result.data == {
-        "groups": {
+        "things": {
             "totalCount": 1,
             "results": [{"name": "visible"}],
         }
@@ -148,30 +175,48 @@ def test_data_query_forwards_list_kwargs_resolver() -> None:
 def test_data_query_requires_explicit_list_name() -> None:
     """Model list root names are public schema, so they must be declared."""
 
-    @strawberry_django.type(Group)
-    class GroupExplicitListType:
+    @strawberry_django.type(DataQueryThing)
+    class DataQueryThingExplicitListType:
         name: auto
 
     with pytest.raises(ImproperlyConfigured, match="list_name"):
         data_query(
-            GroupExplicitListType,
-            type_name="GroupExplicitListQuery",
+            DataQueryThingExplicitListType,
+            type_name="DataQueryThingExplicitListQuery",
             aggregate_fields=["id"],
             group_by_fields=["name"],
+        )
+
+
+def test_data_query_rejects_raw_pk_models() -> None:
+    """Public data surfaces must not silently fall back to Django primary keys."""
+
+    @strawberry_django.type(Group)
+    class RawPkGroupType:
+        name: auto
+
+    with pytest.raises(ImproperlyConfigured, match="sqid public id"):
+        data_query(
+            RawPkGroupType,
+            type_name="RawPkGroupQuery",
+            list_name="groups",
+            include_detail=False,
+            include_aggregate=False,
+            include_groups=False,
         )
 
 
 def test_schema_owner_collects_data_query_metadata() -> None:
     """GraphQLSchemas exposes data-query metadata by composed schema bucket."""
 
-    @strawberry_django.type(Group)
-    class GroupQueryType:
+    @strawberry_django.type(DataQueryThing)
+    class DataQueryThingOwnerType:
         name: auto
 
     query, generated_types = data_query(
-        GroupQueryType,
-        type_name="GroupOwnerQuery",
-        list_name="groups",
+        DataQueryThingOwnerType,
+        type_name="DataQueryThingOwnerQuery",
+        list_name="things",
         aggregate_fields=["id"],
         group_by_fields=["name"],
     )
@@ -189,4 +234,4 @@ def test_schema_owner_collects_data_query_metadata() -> None:
         ]
     )
 
-    assert tuple(item.model_label for item in schemas.data_queries("public")) == ("auth.Group",)
+    assert tuple(item.model_label for item in schemas.data_queries("public")) == ("tests.DataQueryThing",)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Self, TypeVar, cast
 
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
 from django.db.models.utils import make_model_tuple
 from rebac import RebacMixin, SubjectRef, check_new, current_actor, to_object_ref
@@ -14,7 +14,8 @@ from rebac.errors import MissingActorError, PermissionDenied
 from rebac.managers import RebacManager, RebacQuerySet
 from rebac.resources import model_resource_type
 
-from angee.base.mixins import TimestampMixin
+from angee.base.fields import SqidField
+from angee.base.mixins import SqidMixin, SqidProxyMixin, TimestampMixin
 
 _ModelT = TypeVar("_ModelT", bound=models.Model)
 
@@ -207,6 +208,65 @@ class AngeeModel(TimestampMixin, RebacMixin):
         return self.pk
 
 
+class AngeeDataModel(SqidMixin, AngeeModel):
+    """Abstract base for Angee rows that participate in public data contracts."""
+
+    class Meta:
+        """Django model options for Angee's public data model base."""
+
+        abstract = True
+
+
+def public_data_id_field(model: type[models.Model]) -> SqidField | None:
+    """Return the sqid field that makes ``model`` safe for public data surfaces."""
+
+    for owner in (model, *model._meta.get_parent_list()):
+        try:
+            field = owner._meta.get_field("sqid")
+        except FieldDoesNotExist:
+            continue
+        if isinstance(field, SqidField):
+            return field
+    return None
+
+
+def public_data_id_prefix(model: type[models.Model]) -> str:
+    """Return the public sqid prefix declared by ``model``."""
+
+    field = public_data_id_field(model)
+    if field is not None:
+        return field.prefix
+    if issubclass(model, SqidProxyMixin):
+        return model.public_id_prefix()
+    return ""
+
+
+def public_data_id_owner(model: type[models.Model]) -> type[models.Model] | None:
+    """Return the model class that owns ``model``'s public data identity."""
+
+    field = public_data_id_field(model)
+    if field is not None:
+        return cast(type[models.Model], field.model)
+    if issubclass(model, SqidProxyMixin):
+        return model
+    return None
+
+
+def is_public_data_model(model: type[models.Model]) -> bool:
+    """Return whether ``model`` exposes Angee's public data identity contract."""
+
+    return public_data_id_owner(model) is not None
+
+
+def public_id_value_of(instance: models.Model) -> Any:
+    """Return the model-owned public id value for ``instance`` if available."""
+
+    resolver = getattr(instance, "public_id_value", None)
+    if callable(resolver):
+        return resolver()
+    return instance.pk
+
+
 def instance_from_public_id(
     model: type[_ModelT],
     value: str,
@@ -226,11 +286,10 @@ def instance_from_public_id(
 def public_id_of(instance: models.Model) -> str:
     """Return the Angee public ID or Django primary key for ``instance``."""
 
-    if isinstance(instance, AngeeModel):
-        return instance.public_id
-    if instance.pk is None:
+    value = public_id_value_of(instance)
+    if value in (None, ""):
         return ""
-    return str(instance.pk)
+    return str(value)
 
 
 def public_id_for(model: type[models.Model], pk: Any) -> str:
@@ -302,7 +361,7 @@ def _is_contributed_extension_base(value: type) -> bool:
 
     if not issubclass(value, models.Model):
         return False
-    if value in {models.Model, TimestampMixin, RebacMixin, AngeeModel}:
+    if value in {models.Model, TimestampMixin, RebacMixin, AngeeModel, AngeeDataModel}:
         return False
     model = cast(type[models.Model], value)
     meta = model._meta

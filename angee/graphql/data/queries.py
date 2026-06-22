@@ -10,6 +10,7 @@ import strawberry_django
 from django.core.exceptions import ImproperlyConfigured
 from strawberry_django.pagination import OffsetPaginated
 
+from angee.base.models import is_public_data_model
 from angee.graphql.data.aggregates import data_aggregate_builder
 from angee.graphql.data.metadata import (
     DataQueryRoots,
@@ -41,6 +42,7 @@ def data_query(
     permission_classes: list[type] | None = None,
     list_kwargs: dict[str, Any] | None = None,
     aggregate_kwargs: dict[str, Any] | None = None,
+    allow_raw_pk_compat: bool = False,
 ) -> tuple[type, tuple[object, ...]]:
     """Return a Strawberry query type plus generated data helper types.
 
@@ -50,6 +52,11 @@ def data_query(
     """
 
     model = django_model(node)
+    _require_public_data_identity(
+        node,
+        model,
+        allow_raw_pk_compat=allow_raw_pk_compat,
+    )
     singular = name or model._meta.model_name
     list_options = dict(list_kwargs or {})
     aggregate_options = dict(aggregate_kwargs or {})
@@ -169,3 +176,21 @@ def _type_stem(name: str) -> str:
     """Return a GraphQL type-name stem for a root field name."""
 
     return "".join(part[:1].upper() + part[1:] for part in name.split("_"))
+
+
+def _require_public_data_identity(
+    node: type,
+    model: type,
+    *,
+    allow_raw_pk_compat: bool,
+) -> None:
+    """Fail fast when a model-backed public data surface lacks an sqid."""
+
+    if is_public_data_model(model):
+        return
+    if allow_raw_pk_compat:
+        return
+    raise ImproperlyConfigured(
+        f"data_query({surface_name(node)}) requires {model._meta.label} to expose an Angee sqid public id; "
+        "inherit AngeeDataModel or SqidMixin, including through a concrete parent, before creating a data surface."
+    )

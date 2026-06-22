@@ -7,16 +7,19 @@ import reversion
 from django.db import connection, models
 from rebac import MissingActorError, RebacMixin, system_context
 
-from angee.base.mixins import RevisionMixin, SqidMixin
+from angee.base.mixins import RevisionMixin
 from angee.base.models import (
+    AngeeDataModel,
     AngeeModel,
     instance_from_public_id,
+    is_public_data_model,
+    public_data_id_field,
     public_id_for,
     public_id_of,
 )
 
 
-class PublicIdThing(SqidMixin, AngeeModel):
+class PublicIdThing(AngeeDataModel):
     """Concrete test model with an Angee public identifier."""
 
     name = models.CharField(max_length=32)
@@ -57,6 +60,14 @@ def test_every_angee_model_carries_the_rebac_mixin() -> None:
     """AngeeModel wires REBAC behavior into every source model."""
 
     assert issubclass(AngeeModel, RebacMixin)
+
+
+def test_angee_data_model_carries_the_public_data_identity_contract() -> None:
+    """AngeeDataModel is the canonical base for sqid-backed data rows."""
+
+    assert issubclass(AngeeDataModel, AngeeModel)
+    assert is_public_data_model(PublicIdThing)
+    assert public_data_id_field(PublicIdThing).name == "sqid"
 
 
 @pytest.mark.django_db(transaction=True)
