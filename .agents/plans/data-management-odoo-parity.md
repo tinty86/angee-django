@@ -251,6 +251,13 @@ Fifteenth relation-facet compatibility deletion slice completed on 2026-06-22:
 - [x] Keep the remaining declared `<Facet />` path as the only public relation
       facet hook and slim its tests to that owner.
 
+Sixteenth grouped bucket measure column slice completed on 2026-06-22:
+
+- [x] Render each grouped bucket's numeric aggregate in the matching visible
+      column on the group row, so Word Count shows a per-group total.
+- [x] Keep the group row count badge with the group label and preserve the
+      group toggle's accessible name.
+
 Current local verification:
 
 - [x] `uv run ruff check angee/graphql/data/metadata.py angee/graphql/data/queries.py addons/angee/integrate/schema.py tests/test_aggregates.py tests/test_integrate_graphql.py`
@@ -346,6 +353,10 @@ Current local verification:
 - [x] `pnpm --filter @angee/base typecheck`
 - [x] `git diff --check`
 - [x] `pnpm --filter @angee/base test -- DataPage relation-facet`
+- [x] `pnpm --filter @angee/base typecheck`
+- [x] `pnpm --filter @angee/e2e typecheck`
+- [x] `git diff --check`
+- [x] `pnpm --filter @angee/base test -- DataPage`
 - [x] `pnpm --filter @angee/base typecheck`
 - [x] `pnpm --filter @angee/e2e typecheck`
 - [x] `git diff --check`

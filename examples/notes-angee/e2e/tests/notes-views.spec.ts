@@ -82,6 +82,11 @@ test.describe("notes views — sort, group order, aggregates, control band", () 
 
     await expect(notes.groupHeaders.first()).toBeVisible({ timeout: 25000 });
     await expect(notes.groupHeaders.first()).not.toContainText(/\bwords\b/i);
+    const groupWordCount = page
+      .locator('tbody [aria-label*="Word Count:"]')
+      .first();
+    await expect(groupWordCount).toHaveText(/^\d[\d,]*$/);
+    await expect(groupWordCount).not.toContainText(/\bwords\b/i);
     const wordCountTotal = page
       .locator('tfoot [aria-label^="Total Word Count:"]')
       .first();
@@ -110,6 +115,11 @@ for (const role of ["admin", "alice", "bob"] as const) {
       await page.goto(UPDATED_DAY_URL);
       await expect(notes.groupHeaders.first()).toBeVisible({ timeout: 25000 });
       await expect(notes.groupHeaders.first()).not.toContainText(/\bwords\b/i);
+      const groupWordCount = page
+        .locator('tbody [aria-label*="Word Count:"]')
+        .first();
+      await expect(groupWordCount).toHaveText(/^\d[\d,]*$/);
+      await expect(groupWordCount).not.toContainText(/\bwords\b/i);
       const wordCountTotal = page
         .locator('tfoot [aria-label^="Total Word Count:"]')
         .first();

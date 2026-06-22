@@ -6,6 +6,7 @@ import * as React from "react";
 import {
   getCoreRowModel,
   useReactTable,
+  type Column as TableColumn,
   type ColumnDef,
   type Table as TableModel,
   type VisibilityState,
@@ -137,6 +138,7 @@ export function GroupedListBody<TRow extends Row>({
     () => groupMeasuresFromColumns(columns),
     [columns],
   );
+  const visibleColumns = table.getVisibleLeafColumns();
   const grandTotal = useResourceAggregate(model, {
     filter: mergedFilter,
     measures,
@@ -187,6 +189,7 @@ export function GroupedListBody<TRow extends Row>({
             pageSize={dataView.state.pageSize}
             enabled
             tableColumns={tableColumns}
+            visibleColumns={visibleColumns}
             columnVisibility={columnVisibility}
             colSpan={colSpan}
             dataView={dataView}
@@ -220,6 +223,7 @@ export function GroupedListBody<TRow extends Row>({
 interface GroupRenderProps<TRow extends Row> {
   model: string;
   tableColumns: readonly ColumnDef<TRow>[];
+  visibleColumns: readonly TableColumn<TRow, unknown>[];
   columnVisibility: VisibilityState;
   colSpan: number;
   dataView: DataViewContextValue;
@@ -261,6 +265,7 @@ function GroupLevel<TRow extends Row>({
   regionId,
   onPagerStateChange,
   tableColumns,
+  visibleColumns,
   columnVisibility,
   colSpan,
   dataView,
@@ -425,6 +430,7 @@ function GroupLevel<TRow extends Row>({
             remainingGroups={remainingGroups}
             pageSize={pageSize}
             tableColumns={tableColumns}
+            visibleColumns={visibleColumns}
             columnVisibility={columnVisibility}
             colSpan={colSpan}
             dataView={dataView}
@@ -613,6 +619,7 @@ function GroupSection<TRow extends Row>({
   pageSize,
   emptyMessage,
   tableColumns,
+  visibleColumns,
   columnVisibility,
   colSpan,
   dataView,
@@ -640,23 +647,27 @@ function GroupSection<TRow extends Row>({
     [bucket.filter, parentFilter],
   );
   const branch = remainingAxes.length > 0;
+  const measuresByColumn = React.useMemo(
+    () => new Map(measures.map((measure) => [measure.columnId, measure])),
+    [measures],
+  );
 
   return (
     <>
       <TableBody id={bodyId}>
         <TableRow>
-          <TableCell colSpan={colSpan} className="h-9 bg-sheet-2 p-0">
+          <TableCell className="h-9 w-8 bg-sheet-2 p-0">
             <button
               id={headerId}
               type="button"
               className={cn(
-                "flex min-h-9 w-full min-w-0 items-center gap-3 px-3 py-1.5 text-left text-13 outline-none",
+                "flex min-h-9 w-full items-center justify-center px-2 text-left text-13 outline-none",
                 "focus-visible:focus-ring",
                 expandable
                   ? "text-fg hover:bg-inset"
                   : "cursor-not-allowed text-fg-muted",
               )}
-              style={depthIndentStyle(depth)}
+              aria-label={label}
               aria-expanded={expandable ? expanded : false}
               aria-controls={expandable ? regionId : undefined}
               aria-disabled={!expandable}
@@ -669,19 +680,45 @@ function GroupSection<TRow extends Row>({
               ) : (
                 <Glyph name="chevron-right" className="size-3.5 shrink-0 text-fg-muted" />
               )}
-              <span className="min-w-0 flex-1 truncate font-semibold">
-                {label}
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-2">
-                <CountBadge value={bucket.count} />
-                {!expandable ? (
-                  <span className="text-13 font-normal text-fg-muted">
-                    Items unavailable
-                  </span>
-                ) : null}
-              </span>
             </button>
           </TableCell>
+          {visibleColumns.map((column, index) => {
+            const measure = measuresByColumn.get(column.id);
+            const value = measure ? measureValue(bucket, measure) : undefined;
+            const formatted = measure && value != null
+              ? formatMeasure(value, measure)
+              : "";
+            return (
+              <TableCell
+                key={column.id}
+                className={cn(
+                  "h-9 bg-sheet-2 text-13",
+                  ALIGN_CLASS[alignOf(column.columnDef)],
+                  index === 0 ? "font-semibold" : "",
+                )}
+                style={index === 0 ? depthIndentStyle(depth) : undefined}
+                aria-label={
+                  measure
+                    ? `${label} ${measure.label}${formatted ? `: ${formatted}` : ""}`
+                    : undefined
+                }
+              >
+                {measure ? (
+                  formatted
+                ) : index === 0 ? (
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                    <span className="min-w-0 truncate">{label}</span>
+                    <CountBadge value={bucket.count} />
+                    {!expandable ? (
+                      <span className="text-13 font-normal text-fg-muted">
+                        Items unavailable
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </TableCell>
+            );
+          })}
         </TableRow>
       </TableBody>
       {branch ? (
@@ -707,6 +744,7 @@ function GroupSection<TRow extends Row>({
           onRowClick={onRowClick}
           emptyMessage={emptyMessage}
           modelMetadata={modelMetadata}
+          visibleColumns={visibleColumns}
           onListStateChange={onListStateChange}
         />
       ) : (
@@ -728,6 +766,7 @@ function GroupSection<TRow extends Row>({
           order={order}
           interactive={interactive}
           rowHref={rowHref}
+          visibleColumns={visibleColumns}
           onRowClick={onRowClick}
           onPageChange={onPageChange}
           onListStateChange={onListStateChange}
@@ -762,6 +801,7 @@ function BranchGroupSection<TRow extends Row>({
   regionId,
   emptyMessage,
   tableColumns,
+  visibleColumns,
   columnVisibility,
   colSpan,
   dataView,
@@ -787,6 +827,7 @@ function BranchGroupSection<TRow extends Row>({
       enabled={expanded}
       regionId={regionId}
       tableColumns={tableColumns}
+      visibleColumns={visibleColumns}
       columnVisibility={columnVisibility}
       colSpan={colSpan}
       dataView={dataView}

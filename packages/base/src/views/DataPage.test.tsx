@@ -1135,6 +1135,9 @@ describe("DataPage", () => {
     const activeGroup = await screen.findByRole("button", { name: /Active/ });
     expect(within(activeGroup).queryByText(/\bwords\b/i)).toBeNull();
     expect(
+      (await screen.findByLabelText("Active Word Count: 30")).textContent,
+    ).toBe("30");
+    expect(
       (await screen.findByLabelText("Total Word Count: 43")).textContent,
     ).toBe("43");
     expect(
