@@ -15,11 +15,7 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
-
-import angee.asgi as asgi_module
-from angee.asgi import _http_app, _Lifespan, _staticfiles_app
+from angee.asgi import _http_app, _Lifespan
 
 
 def _recording_app(name: str, sink: list[tuple[str, str]]) -> Any:
@@ -78,23 +74,6 @@ def test_http_app_matches_longest_prefix_first() -> None:
     asyncio.run(_call_http(app, "/a/x"))
 
     assert seen == [("nested", "/a/b/x"), ("parent", "/a/x")]
-
-
-def test_staticfiles_app_wraps_only_debug_staticfiles(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dev serves Django staticfiles; production and apps without staticfiles stay bare."""
-
-    django = _recording_app("django", [])
-    monkeypatch.setattr(asgi_module.settings, "DEBUG", False)
-    assert _staticfiles_app(django) is django
-
-    monkeypatch.setattr(asgi_module.settings, "DEBUG", True)
-    monkeypatch.setattr(asgi_module.settings, "STATIC_URL", "/static/")
-    monkeypatch.setattr(
-        asgi_module.apps,
-        "is_installed",
-        lambda name: name == "django.contrib.staticfiles",
-    )
-    assert isinstance(_staticfiles_app(django), ASGIStaticFilesHandler)
 
 
 def _mount(events: list[str], *, fail: bool = False) -> Any:

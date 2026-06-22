@@ -102,15 +102,20 @@ describe("iam addon manifest", () => {
     expect(oidc?.content).toBeDefined();
   });
 
-  test("publishes login backgrounds from the IAM static path", () => {
+  test("publishes login backgrounds as frontend build assets", () => {
     expect(IAM_LOGIN_BACKGROUND_IMAGE_URLS).toHaveLength(6);
-    expect([...IAM_LOGIN_BACKGROUND_IMAGE_URLS]).toEqual([
-      "/static/angee/iam/backgrounds/angee-children-build.webp",
-      "/static/angee/iam/backgrounds/angee-children-future.webp",
-      "/static/angee/iam/backgrounds/angee-future-city.webp",
-      "/static/angee/iam/backgrounds/angee-pond-walk.webp",
-      "/static/angee/iam/backgrounds/angee-vision-cinimatic.webp",
-      "/static/angee/iam/backgrounds/angee-vision-daytime.webp",
+    expect(IAM_LOGIN_BACKGROUND_IMAGE_URLS.map((url) => basename(new URL(url).pathname))).toEqual([
+      "angee-children-build.webp",
+      "angee-children-future.webp",
+      "angee-future-city.webp",
+      "angee-pond-walk.webp",
+      "angee-vision-cinimatic.webp",
+      "angee-vision-daytime.webp",
     ]);
+    expect(IAM_LOGIN_BACKGROUND_IMAGE_URLS.every((url) => url.startsWith("/static/"))).toBe(false);
   });
 });
+
+function basename(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}

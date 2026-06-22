@@ -2,15 +2,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { LoginPage, type LoginPageProps } from "@angee/base";
 
 const LOGIN_BACKGROUND_ROTATION_MS = 15_000;
-const IAM_STATIC_URL = "/static/angee/iam";
 
 export const IAM_LOGIN_BACKGROUND_IMAGE_URLS = [
-  `${IAM_STATIC_URL}/backgrounds/angee-children-build.webp`,
-  `${IAM_STATIC_URL}/backgrounds/angee-children-future.webp`,
-  `${IAM_STATIC_URL}/backgrounds/angee-future-city.webp`,
-  `${IAM_STATIC_URL}/backgrounds/angee-pond-walk.webp`,
-  `${IAM_STATIC_URL}/backgrounds/angee-vision-cinimatic.webp`,
-  `${IAM_STATIC_URL}/backgrounds/angee-vision-daytime.webp`,
+  new URL("./assets/backgrounds/angee-children-build.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/angee-children-future.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/angee-future-city.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/angee-pond-walk.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/angee-vision-cinimatic.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/angee-vision-daytime.webp", import.meta.url).href,
 ] as const;
 
 export interface IamLoginPageProps

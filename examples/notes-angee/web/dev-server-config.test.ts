@@ -7,8 +7,4 @@ describe("notes host Vite config", () => {
     expect(config.server?.host).toBe(true);
     expect(config.server?.strictPort).toBe(true);
   });
-
-  test("proxies Django static files for addon-owned assets", () => {
-    expect(config.server?.proxy).toHaveProperty("/static/");
-  });
 });
