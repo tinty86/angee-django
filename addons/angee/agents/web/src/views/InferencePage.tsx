@@ -12,7 +12,6 @@ import {
   useRecordActionMutation,
   useEnumOptions,
   useImplPrefill,
-  type DataToolbarGroupOption,
 } from "@angee/base";
 import {
   canConnectRecord,
@@ -107,21 +106,6 @@ function ProviderConnectButton({
 export function InferenceModelsPage(): React.ReactElement {
   const t = useAgentsT();
   const modelUseOptions = useEnumOptions(MODEL_MODEL, "modelUse");
-  const groupOptions = React.useMemo<readonly DataToolbarGroupOption[]>(
-    () => [
-      {
-        id: "modelUse",
-        label: t("agents.inference.capability"),
-        group: { field: "modelUse" },
-      },
-      {
-        id: "status",
-        label: t("agents.inference.status"),
-        group: { field: "status" },
-      },
-    ],
-    [t],
-  );
   const defaultGroups = React.useMemo(
     () => ({
       list: { field: "modelUse" },
@@ -135,7 +119,6 @@ export function InferenceModelsPage(): React.ReactElement {
       <List
         model={MODEL_MODEL}
         list={GroupListView}
-        groupOptions={groupOptions}
         defaultGroups={defaultGroups}
       >
         <Facet field="provider" label={t("agents.inference.provider")} labelField="name" />

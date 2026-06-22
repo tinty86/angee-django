@@ -67,6 +67,7 @@ import {
 import { columnsWithMetadataDefaults } from "./model-metadata-defaults";
 import type { ColumnDescriptor } from "./page";
 import { useRelationFacets } from "./relation-facet";
+import { useScalarFacets } from "./scalar-facet";
 import { useBulkDelete } from "./useBulkDelete";
 
 export type { ListViewState } from "./data-view-surface";
@@ -170,6 +171,12 @@ function ListViewBody<TRow extends Row = Row>({
     [dataView.state.filter, filter],
   );
   const declaredFacets = useRelationFacets(model, facets, mergedFilter);
+  const scalarFacets = useScalarFacets(
+    model,
+    resolvedColumns,
+    modelMetadata,
+    mergedFilter,
+  );
   const rawActiveDefaultGroup = defaultGroupForView(
     defaultGroup,
     defaultGroups,
@@ -308,17 +315,25 @@ function ListViewBody<TRow extends Row = Row>({
     () => buildFilterOptions(resolvedColumns, surface.rows, inferredFilterFields),
     [inferredFilterFields, resolvedColumns, surface.rows],
   );
+  const facetFilters = React.useMemo(
+    () => mergeFilterOptions(declaredFacets.filters, scalarFacets.filters),
+    [declaredFacets.filters, scalarFacets.filters],
+  );
   const explicitAndFacetFilters = React.useMemo(
-    () => mergeFilterOptions(explicitFilters, declaredFacets.filters),
-    [declaredFacets.filters, explicitFilters],
+    () => mergeFilterOptions(explicitFilters, facetFilters),
+    [explicitFilters, facetFilters],
   );
   const filterOptions = React.useMemo(
     () => mergeFilterOptions(explicitAndFacetFilters, inferredFilterOptions),
     [explicitAndFacetFilters, inferredFilterOptions],
   );
+  const facetFilterFields = React.useMemo(
+    () => mergeFilterFields(declaredFacets.filterFields, scalarFacets.filterFields),
+    [declaredFacets.filterFields, scalarFacets.filterFields],
+  );
   const explicitAndFacetFilterFields = React.useMemo(
-    () => mergeFilterFields(explicitFilterFields, declaredFacets.filterFields),
-    [declaredFacets.filterFields, explicitFilterFields],
+    () => mergeFilterFields(explicitFilterFields, facetFilterFields),
+    [explicitFilterFields, facetFilterFields],
   );
   const filterFields = React.useMemo(
     () => mergeFilterFields(explicitAndFacetFilterFields, inferredFilterFields),

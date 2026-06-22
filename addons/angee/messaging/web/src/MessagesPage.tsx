@@ -16,9 +16,6 @@ const MODEL = "messaging.Message";
 // Default the inbox to a by-status grouping. Hoisted to a stable reference so the
 // list does not re-seed its grouping on every render.
 const DEFAULT_GROUPS = { list: { field: "status" } } as const;
-const GROUP_OPTIONS = [
-  { id: "status", label: "Status", group: { field: "status" } },
-] as const;
 
 /**
  * The inbox: cross-thread "smart aggregation" over messages. Channel is an
@@ -33,7 +30,6 @@ export function MessagesPage(): React.ReactElement {
       <List
         model={MODEL}
         list={GroupListView}
-        groupOptions={GROUP_OPTIONS}
         defaultGroups={DEFAULT_GROUPS}
       >
         <Facet field="channel" label="Channel" labelField="displayName" />
