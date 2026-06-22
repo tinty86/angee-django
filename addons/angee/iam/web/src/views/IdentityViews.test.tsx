@@ -39,6 +39,8 @@ const sdkMocks = vi.hoisted(() => ({
     error: null as Error | null,
     refetch: vi.fn(),
   },
+  grantQueryOptions: null as unknown,
+  revokeOptions: null as unknown,
   revokeRole: vi.fn(),
   revokeState: {
     fetching: false,
@@ -50,11 +52,17 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/sdk")>();
   return {
     ...actual,
-    useAuthoredQuery: (document: unknown) => {
-      if (documentName(document) === "IamGrants") return sdkMocks.grants;
+    useAuthoredQuery: (document: unknown, _variables: unknown, options: unknown) => {
+      if (documentName(document) === "IamGrants") {
+        sdkMocks.grantQueryOptions = options;
+        return sdkMocks.grants;
+      }
       return { data: undefined, fetching: false, error: null, refetch: vi.fn() };
     },
-    useAuthoredMutation: () => [sdkMocks.revokeRole, sdkMocks.revokeState],
+    useAuthoredMutation: (_document: unknown, options: unknown) => {
+      sdkMocks.revokeOptions = options;
+      return [sdkMocks.revokeRole, sdkMocks.revokeState];
+    },
   };
 });
 
@@ -72,12 +80,14 @@ describe("IAM identity views", () => {
     sdkMocks.grants.fetching = false;
     sdkMocks.grants.error = null;
     sdkMocks.grants.refetch.mockReset();
+    sdkMocks.grantQueryOptions = null;
+    sdkMocks.revokeOptions = null;
     sdkMocks.revokeRole.mockReset();
     sdkMocks.revokeState.fetching = false;
     sdkMocks.revokeState.error = null;
   });
 
-  test("revokes a grant through the confirm dialog and refetches", async () => {
+  test("revokes a grant through the confirm dialog and declares invalidation", async () => {
     sdkMocks.grants.data = grantsData();
     sdkMocks.revokeRole.mockResolvedValue({ revokeRole: true });
 
@@ -94,7 +104,18 @@ describe("IAM identity views", () => {
         role: "iam/admin",
       }),
     );
-    expect(sdkMocks.grants.refetch).toHaveBeenCalledTimes(1);
+    expect(sdkMocks.grantQueryOptions).toEqual({
+      models: ["rebac.RelationshipRegistry"],
+    });
+    expect(sdkMocks.revokeOptions).toEqual({
+      invalidateModels: ["rebac.RelationshipRegistry"],
+      shouldInvalidate: expect.any(Function),
+    });
+    const revokeOptions = sdkMocks.revokeOptions as {
+      shouldInvalidate: (result: { revokeRole: boolean }) => boolean;
+    };
+    expect(revokeOptions.shouldInvalidate({ revokeRole: true })).toBe(true);
+    expect(revokeOptions.shouldInvalidate({ revokeRole: false })).toBe(false);
   });
 
   test("surfaces revoke errors", async () => {

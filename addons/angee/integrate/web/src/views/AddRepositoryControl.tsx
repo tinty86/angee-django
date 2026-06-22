@@ -13,7 +13,6 @@ import {
   errorMessage,
   useAuthoredMutation,
   useAuthoredQuery,
-  useModelInvalidation,
   type DocumentVariables,
 } from "@angee/sdk";
 
@@ -100,8 +99,9 @@ function AddRepositoryDialog({
   });
   const candidates = searchQuery.data?.searchRepositories ?? [];
 
-  const [addRepository] = useAuthoredMutation(IntegrateAddRepository);
-  const refreshRepositories = useModelInvalidation(REPOSITORY_MODEL);
+  const [addRepository] = useAuthoredMutation(IntegrateAddRepository, {
+    invalidateModels: [REPOSITORY_MODEL],
+  });
 
   // The repo currently being inventoried, the set already added this session, and
   // the last error — so a slow host or a denied add reads clearly in the dialog.
@@ -131,14 +131,13 @@ function AddRepositoryDialog({
       try {
         await addRepository({ vcsBridgeId, name: candidate.name });
         setAdded((prev) => new Set(prev).add(candidate.name));
-        refreshRepositories();
       } catch (cause) {
         setError(errorMessage(cause, t("integrate.addRepo.addFailed")));
       } finally {
         setAdding(null);
       }
     },
-    [addRepository, refreshRepositories, t, vcsBridgeId],
+    [addRepository, t, vcsBridgeId],
   );
 
   return (

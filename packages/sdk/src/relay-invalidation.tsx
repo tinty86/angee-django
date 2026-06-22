@@ -16,6 +16,7 @@ import { useDocumentSubscription } from "./document-subscription";
 import { makeContext } from "./make-context";
 import { createRefetchRegistry, type RefetchRegistry } from "./relay-registry";
 import { typeNameForModel } from "./selection";
+import { useStableArray } from "./stable-deps";
 
 /** The `<noun>Changed` subscription field for a model typename (`Note` → `noteChanged`). */
 function changeFieldName(typename: string): string {
@@ -132,15 +133,32 @@ export function useRegisterModelRefetch(
   refetch: () => void,
   enabled: boolean,
 ): void {
+  useRegisterModelsRefetch(modelLabel ? [modelLabel] : [], refetch, enabled);
+}
+
+/** Register one query refetch under every model it explicitly reads. */
+export function useRegisterModelsRefetch(
+  modelLabels: readonly string[],
+  refetch: () => void,
+  enabled: boolean,
+): void {
   const registry = useRegistry();
+  const stableModelLabels = useStableArray(modelLabels);
   const refetchRef = useRef(refetch);
   refetchRef.current = refetch;
   useEffect(() => {
-    if (!registry || !enabled || !modelLabel) return;
-    return registry.register(typeNameForModel(modelLabel), () =>
-      refetchRef.current(),
+    if (!registry || !enabled || stableModelLabels.length === 0) return;
+    const typenames = Array.from(
+      new Set(stableModelLabels.filter(Boolean).map(typeNameForModel)),
     );
-  }, [registry, enabled, modelLabel]);
+    const refetchRegisteredQuery = () => refetchRef.current();
+    const unregister = typenames.map((typename) =>
+      registry.register(typename, refetchRegisteredQuery),
+    );
+    return () => {
+      for (const dispose of unregister) dispose();
+    };
+  }, [registry, enabled, stableModelLabels]);
 }
 
 /** An imperative invalidator for one model — the delete-path companion. */

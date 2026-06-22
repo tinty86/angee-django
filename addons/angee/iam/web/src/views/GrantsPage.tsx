@@ -30,6 +30,8 @@ import {
 import { IAM_LIST_LIMIT } from "../list-config";
 import { useIamT } from "../i18n";
 
+const GRANT_MODEL = "rebac.RelationshipRegistry";
+
 export function GrantsPage(): ReactElement {
   const t = useIamT();
   const confirm = useConfirm();
@@ -37,8 +39,13 @@ export function GrantsPage(): ReactElement {
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const query = useAuthoredQuery(IamGrants, variables);
-  const [revokeRole, revokeState] = useAuthoredMutation(IamRevokeRole);
+  const query = useAuthoredQuery(IamGrants, variables, {
+    models: [GRANT_MODEL],
+  });
+  const [revokeRole, revokeState] = useAuthoredMutation(IamRevokeRole, {
+    invalidateModels: [GRANT_MODEL],
+    shouldInvalidate: (result) => result?.revokeRole === true,
+  });
   const [pendingGrantId, setPendingGrantId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const rows = useMemo(
@@ -65,7 +72,6 @@ export function GrantsPage(): ReactElement {
       if (result?.revokeRole === false) {
         throw new Error(t("iam.grants.revoke.error"));
       }
-      query.refetch();
     } catch (caught) {
       setActionError(errorMessage(caught, t("iam.grants.revoke.error")));
     } finally {

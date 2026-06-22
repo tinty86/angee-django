@@ -46,11 +46,13 @@ export function createRefetchRegistry(): RefetchRegistry {
       };
     },
     invalidate(typenames) {
+      const refetches = new Set<() => void>();
       for (const typename of typenames) {
         const set = handlers.get(typename);
         if (!set) continue;
-        for (const refetch of set) refetch();
+        for (const refetch of set) refetches.add(refetch);
       }
+      for (const refetch of refetches) refetch();
     },
     typenames() {
       return snapshot;

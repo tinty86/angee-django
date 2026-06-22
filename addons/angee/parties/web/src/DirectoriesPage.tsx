@@ -16,7 +16,7 @@ import {
   List,
   useRecordActionMutation,
 } from "@angee/base";
-import { errorMessage, useAuthoredMutation, useModelInvalidation } from "@angee/sdk";
+import { errorMessage, useAuthoredMutation } from "@angee/sdk";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectCardDavDirectory } from "./documents.console";
@@ -84,8 +84,9 @@ function ConnectDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): React.ReactElement {
-  const [connect, { fetching }] = useAuthoredMutation(ConnectCardDavDirectory);
-  const refresh = useModelInvalidation(MODEL);
+  const [connect, { fetching }] = useAuthoredMutation(ConnectCardDavDirectory, {
+    invalidateModels: [MODEL],
+  });
   const [name, setName] = React.useState("");
   const [serverUrl, setServerUrl] = React.useState("");
   const [username, setUsername] = React.useState("");
@@ -106,12 +107,11 @@ function ConnectDialog({
     setError(null);
     try {
       await connect({ name, serverUrl, username, password });
-      refresh();
       onOpenChange(false);
     } catch (cause) {
       setError(errorMessage(cause, "Could not connect the directory."));
     }
-  }, [connect, name, serverUrl, username, password, refresh, onOpenChange]);
+  }, [connect, name, serverUrl, username, password, onOpenChange]);
 
   const ready = serverUrl.trim() !== "" && username.trim() !== "" && password !== "";
 

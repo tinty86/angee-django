@@ -205,6 +205,7 @@ export {
   type AuthoredQueryOptions,
   type AuthoredQueryResult,
   type AuthoredMutate,
+  type AuthoredMutationOptions,
   type AuthoredSubscriptionOptions,
 } from "./authored-hooks";
 export {
@@ -232,6 +233,7 @@ export { useBusyRun, type BusyRun } from "./use-busy-run";
 export {
   RelayInvalidationProvider,
   useRegisterModelRefetch,
+  useRegisterModelsRefetch,
   useModelInvalidation,
   useInvalidateModels,
   changeSubscriptionDocument,

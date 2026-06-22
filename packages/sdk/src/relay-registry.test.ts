@@ -35,4 +35,13 @@ describe("createRefetchRegistry", () => {
     registry.invalidate(["Owner"]);
     expect(sale).not.toHaveBeenCalled();
   });
+
+  test("one refetch registered under several typenames fires once per invalidation", () => {
+    const registry = createRefetchRegistry();
+    const refetch = vi.fn();
+    registry.register("Sale", refetch);
+    registry.register("Owner", refetch);
+    registry.invalidate(["Sale", "Owner"]);
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
 });

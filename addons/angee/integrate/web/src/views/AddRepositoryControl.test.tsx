@@ -13,8 +13,8 @@ import { baseIcons } from "@angee/base";
 
 import { AddRepositoryControl } from "./AddRepositoryControl";
 
-// The mocked SDK surface: the two reads (bridge catalogue, repo search), the
-// add mutation, and the list invalidator the control fires after an add.
+// The mocked SDK surface: the two reads (bridge catalogue, repo search), and the
+// add mutation options that declare which list should refresh after an add.
 const sdkMocks = vi.hoisted(() => ({
   integrations: {
     data: undefined as unknown,
@@ -29,9 +29,9 @@ const sdkMocks = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   lastSearchVars: null as unknown,
+  addOptions: null as unknown,
   addRepository: vi.fn(),
   addState: { fetching: false, error: null as Error | null },
-  invalidate: vi.fn(),
 }));
 
 // The hooks now receive a typed `graphql()` document (a parsed `DocumentNode`),
@@ -55,8 +55,10 @@ vi.mock("@angee/sdk", async (importOriginal) => {
       }
       return { data: undefined, fetching: false, error: null, refetch: vi.fn() };
     },
-    useAuthoredMutation: () => [sdkMocks.addRepository, sdkMocks.addState],
-    useModelInvalidation: () => sdkMocks.invalidate,
+    useAuthoredMutation: (_document: unknown, options: unknown) => {
+      sdkMocks.addOptions = options;
+      return [sdkMocks.addRepository, sdkMocks.addState];
+    },
   };
 });
 
@@ -81,8 +83,8 @@ describe("AddRepositoryControl typeahead", () => {
     sdkMocks.search.data = undefined;
     sdkMocks.search.fetching = false;
     sdkMocks.lastSearchVars = null;
+    sdkMocks.addOptions = null;
     sdkMocks.addRepository.mockReset();
-    sdkMocks.invalidate.mockReset();
   });
 
   test("does not search until a repository name is typed", async () => {
@@ -126,8 +128,10 @@ describe("AddRepositoryControl typeahead", () => {
         name: "acme/widgets",
       }),
     );
-    // Adding refreshes the repository list so the new row appears.
-    await waitFor(() => expect(sdkMocks.invalidate).toHaveBeenCalled());
+    // Adding declares the repository model so authored hooks refresh the list.
+    expect(sdkMocks.addOptions).toEqual({
+      invalidateModels: ["integrate.Repository"],
+    });
     expect(await screen.findByText("Added")).toBeTruthy();
   });
 });

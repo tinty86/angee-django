@@ -9,6 +9,7 @@ import {
   useInvalidateModels,
   useModelInvalidation,
   useRegisterModelRefetch,
+  useRegisterModelsRefetch,
 } from "./relay-invalidation";
 
 // autoSubscribe is off so the test exercises the registry wiring without opening
@@ -58,6 +59,33 @@ describe("relay invalidation wiring", () => {
     );
     act(() => result.current(["notes.Note"]));
     expect(refetch).not.toHaveBeenCalled();
+  });
+
+  test("one refetch can register under several models", () => {
+    const refetch = vi.fn();
+    const { result } = renderHook(
+      () => {
+        useRegisterModelsRefetch(["notes.Note", "iam.User"], refetch, true);
+        return useInvalidateModels();
+      },
+      { wrapper },
+    );
+    act(() => result.current(["notes.Note"]));
+    act(() => result.current(["iam.User"]));
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("multi-model invalidation refetches a shared query once", () => {
+    const refetch = vi.fn();
+    const { result } = renderHook(
+      () => {
+        useRegisterModelsRefetch(["notes.Note", "iam.User"], refetch, true);
+        return useInvalidateModels();
+      },
+      { wrapper },
+    );
+    act(() => result.current(["notes.Note", "iam.User"]));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
 
