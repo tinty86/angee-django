@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useMemo, type ReactElement } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
@@ -15,6 +10,7 @@ import {
   TreeView,
   WikilinkProvider,
   useConfirm,
+  useScopedTreeExplorer,
   type WikilinkResolver,
 } from "@angee/base";
 import { useAuthoredQuery, useResourceRecord } from "@angee/sdk";
@@ -88,13 +84,6 @@ export function KnowledgePage(): ReactElement {
   });
   const detail = detailQuery.data?.page ?? null;
 
-  const [pinnedVaultId, setPinnedVaultId] = useState<string | null>(null);
-  const vaultId = pinnedVaultId ?? vaults[0]?.id ?? "";
-  const vaultOptions = useMemo(
-    () => vaults.map((vault) => ({ value: vault.id, label: vault.name })),
-    [vaults],
-  );
-
   // A page write retitles its tree node; refetch the navigator set.
   const handleSaved = useCallback(() => {
     void pagesQuery.refetch();
@@ -103,6 +92,19 @@ export function KnowledgePage(): ReactElement {
   const confirm = useConfirm();
   const pageActions = usePageActions({ onChanged: handleSaved });
   const activePage = pageById(pages, openPageId);
+  const explorer = useScopedTreeExplorer({
+    roots: vaults,
+    getRootId: (vault) => vault.id,
+    getRootLabel: (vault) => vault.name,
+    getTreeRows: useCallback(
+      (rootId: string) => pageTreeRows(pages, rootId),
+      [pages],
+    ),
+    selectedId: openPageId,
+    selectedRootId: activePage?.vault ?? null,
+  });
+  const vaultId = explorer.rootId;
+  const vaultOptions = explorer.rootOptions;
   // New pages land inside the active scope when it is a folder, else at the root.
   const handleNewPage = useCallback(
     async (kind: NewPageKind, title: string) => {
@@ -135,10 +137,7 @@ export function KnowledgePage(): ReactElement {
     closePage();
   }, [activePage, confirm, pageActions, closePage, t]);
 
-  const treeRows = useMemo(
-    () => pageTreeRows(pages, vaultId),
-    [pages, vaultId],
-  );
+  const treeRows = explorer.treeRows;
   // A `[[wikilink]]` resolves to a page by title within the vault; clicking it
   // opens that page, or renders broken when nothing matches.
   const resolveWikilink = useCallback<WikilinkResolver>(
@@ -180,13 +179,13 @@ export function KnowledgePage(): ReactElement {
         placeholder={t("knowledge.vault.placeholder")}
         searchPlaceholder={t("knowledge.vault.searchPlaceholder")}
         onChange={(value) => {
-          setPinnedVaultId(value);
+          explorer.setRootId(value);
           closePage();
         }}
         create={{ model: "Vault" }}
         onCreated={(id) => {
           void vaultsQuery.refetch();
-          setPinnedVaultId(id);
+          explorer.setRootId(id);
           closePage();
         }}
       />
@@ -196,7 +195,7 @@ export function KnowledgePage(): ReactElement {
         label="title"
         rowKey="id"
         icon="icon"
-        selectedId={openPageId ?? undefined}
+        selectedId={explorer.selectedId}
         onSelect={(row) => openPage(row.id)}
         draggableRow={pageDragPayload}
         dropAccept={KNOWLEDGE_PAGE_DND}

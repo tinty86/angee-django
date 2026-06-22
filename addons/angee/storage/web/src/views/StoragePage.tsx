@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useMemo, type ReactElement } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
@@ -12,6 +12,7 @@ import {
   SelectionBarAction,
   TreeView,
   useConfirm,
+  useScopedTreeExplorer,
   type FieldDescriptor,
   type PreviewFile,
 } from "@angee/base";
@@ -80,16 +81,25 @@ export function StoragePage(): ReactElement {
     void navigate({ to: "/storage" });
   }, [navigate]);
 
-  const [pinnedDriveId, setPinnedDriveId] = useState<string | null>(null);
-  const [scope, setScope] = useState<string>(ALL_SCOPE);
-
-  // Default to the first drive until the user picks one.
-  const driveId = pinnedDriveId ?? drives[0]?.id ?? "";
-
-  const driveOptions = useMemo(
-    () => drives.map((drive) => ({ value: drive.id, label: drive.name || drive.slug })),
-    [drives],
+  const openFile = useMemo(
+    () => fileById(files, openFileId),
+    [files, openFileId],
   );
+  const explorer = useScopedTreeExplorer({
+    roots: drives,
+    getRootId: (drive) => drive.id,
+    getRootLabel: (drive) => drive.name || drive.slug,
+    getTreeRows: useCallback(
+      (rootId: string) => folderTreeRows(folders, rootId),
+      [folders],
+    ),
+    defaultSelectedId: ALL_SCOPE,
+    selectedRootId: openFile?.drive ?? null,
+    isSelectedIdValid: (id, rows) =>
+      id === ALL_SCOPE || id === TRASH_SCOPE || rows.some((row) => row.id === id),
+  });
+  const driveId = explorer.rootId;
+  const driveOptions = explorer.rootOptions;
   // The inline drive-create form. `name` is the record title (prefilled with the
   // typed query); `backend` is the required FK, picked from the catalogue above.
   // This stays a passed `fields` (not a `forms:` registration) because its
@@ -116,27 +126,11 @@ export function StoragePage(): ReactElement {
     ],
     [backends],
   );
-  const treeRows = useMemo(
-    () => folderTreeRows(folders, driveId),
-    [folders, driveId],
-  );
-  // Clamp the scope to the active drive: if a folder scope no longer names a
-  // node in this drive's tree (e.g. the default drive shifted out from under an
-  // unpinned session), fall back to All files instead of an empty list with no
-  // highlighted node.
-  const effectiveScope =
-    scope === ALL_SCOPE ||
-    scope === TRASH_SCOPE ||
-    treeRows.some((row) => row.id === scope)
-      ? scope
-      : ALL_SCOPE;
+  const treeRows = explorer.treeRows;
+  const effectiveScope = explorer.selectedId ?? ALL_SCOPE;
   const rows = useMemo(
     () => fileRows(files, { driveId, scope: effectiveScope }),
     [files, driveId, effectiveScope],
-  );
-  const openFile = useMemo(
-    () => fileById(files, openFileId),
-    [files, openFileId],
   );
   const rowHref = useCallback(
     (row: StorageFileRow) => recordPath("/storage", row.id),
@@ -179,7 +173,7 @@ export function StoragePage(): ReactElement {
   // navigator footer offers rename + delete.
   const selectedFolder =
     effectiveScope !== ALL_SCOPE && effectiveScope !== TRASH_SCOPE
-      ? treeRows.find((row) => row.id === effectiveScope)
+      ? explorer.selectedRow
       : undefined;
   const handleRenameFolder = (name: string): void => {
     void folderActions.rename(effectiveScope, name);
@@ -193,7 +187,9 @@ export function StoragePage(): ReactElement {
       danger: true,
     });
     if (!ok) return;
-    void folderActions.remove(effectiveScope).then(() => setScope(ALL_SCOPE));
+    void folderActions
+      .remove(effectiveScope)
+      .then(() => explorer.setSelectedId(ALL_SCOPE));
   };
   // The selection bar's bulk verbs: Restore in the Trash scope, else Trash.
   const renderBulkActions = (ids: ReadonlySet<string>, clear: () => void) =>
@@ -259,8 +255,7 @@ export function StoragePage(): ReactElement {
         placeholder={t("storage.drive.placeholder")}
         searchPlaceholder={t("storage.drive.searchPlaceholder")}
         onChange={(value) => {
-          setPinnedDriveId(value);
-          setScope(ALL_SCOPE);
+          explorer.setRootId(value);
           closeDetail();
         }}
         create={{ model: "Drive", fields: driveCreateFields }}
@@ -274,7 +269,7 @@ export function StoragePage(): ReactElement {
         icon="icon"
         selectedId={effectiveScope}
         onSelect={(row) => {
-          setScope(row.id);
+          explorer.setSelectedId(row.id);
           closeDetail();
         }}
         dropAccept={STORAGE_FILE_DND}

@@ -57,6 +57,12 @@ export {
   type TreeViewProps,
 } from "./TreeView";
 export {
+  useScopedTreeExplorer,
+  type ScopedTreeExplorerController,
+  type ScopedTreeExplorerOption,
+  type UseScopedTreeExplorerOptions,
+} from "./useScopedTreeExplorer";
+export {
   GalleryView,
   type GalleryViewProps,
 } from "./GalleryView";
