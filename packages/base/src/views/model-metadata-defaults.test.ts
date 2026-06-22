@@ -224,6 +224,83 @@ describe("SDL metadata defaults", () => {
     ]);
   });
 
+  test("does not derive server selection filters from the current page rows", () => {
+    const metadata: ModelMetadata = {
+      typeName: "TicketType",
+      fields: {
+        status: {
+          name: "status",
+          kind: "enum",
+          enumName: "TicketStatus",
+          label: "Status",
+          values: [],
+        },
+      },
+      dataQuery: {
+        modelLabel: "support.Ticket",
+        appLabel: "support",
+        modelName: "ticket",
+        publicIdField: "sqid",
+        roots: {},
+        typeNames: { node: "TicketType" },
+        capabilities: ["list", "filter"],
+        filterFields: ["status"],
+        orderFields: [],
+        aggregateFields: ["id"],
+        groupByFields: [],
+        relationAxes: [],
+      },
+    };
+    const rows = [
+      { id: "one", status: "OPEN" },
+      { id: "two", status: "CLOSED" },
+    ];
+
+    const filterFields = buildFilterFields([{ field: "status" }], rows, metadata);
+
+    expect(filterFields).toEqual([{
+      id: "status",
+      field: "status",
+      label: "Status",
+      type: "selection",
+      options: [],
+    }]);
+    expect(buildFilterOptions([{ field: "status" }], rows, filterFields)).toEqual([]);
+  });
+
+  test("keeps local row selection filters row-derived", () => {
+    const rows = [
+      { id: "one", status: "OPEN" },
+      { id: "two", status: "CLOSED" },
+    ];
+    const filterFields = buildFilterFields([{ field: "status" }], rows, null);
+
+    expect(filterFields).toEqual([{
+      id: "status",
+      field: "status",
+      label: "Status",
+      type: "selection",
+      options: [
+        { value: "CLOSED", label: "Closed" },
+        { value: "OPEN", label: "Open" },
+      ],
+    }]);
+    expect(buildFilterOptions([{ field: "status" }], rows, filterFields)).toEqual([
+      {
+        id: "status:CLOSED",
+        label: "Closed",
+        chipLabel: "Closed",
+        filter: { status: { exact: "CLOSED" } },
+      },
+      {
+        id: "status:OPEN",
+        label: "Open",
+        chipLabel: "Open",
+        filter: { status: { exact: "OPEN" } },
+      },
+    ]);
+  });
+
   test("derives relation label group options from data-query relation metadata", () => {
     const handleMetadata: ModelMetadata = {
       typeName: "HandleType",

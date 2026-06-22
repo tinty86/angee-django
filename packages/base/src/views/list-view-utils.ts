@@ -258,7 +258,7 @@ function selectionOptions<TRow extends Row>(
   rows: readonly TRow[],
   field: DataToolbarFilterField,
 ): readonly { value: string; label: ReactNode }[] {
-  if (field.options && field.options.length > 0) return field.options;
+  if (field.options) return field.options;
   return statusValues(column, rows).map((value) => ({
     value,
     label: statusLabel(value),
@@ -292,7 +292,7 @@ export function buildFilterFields<TRow extends Row>(
         type: "selection",
         options: options.length > 0
           ? options
-          : column
+          : metadata === null && column
             ? statusValues(column, rows).map((value) => ({
                 value,
                 label: statusLabel(value),

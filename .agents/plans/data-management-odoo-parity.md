@@ -227,6 +227,14 @@ Twelfth facet-neutralized counts slice completed on 2026-06-22:
       and let relation facet metadata declare which field should be neutralized.
 - [x] Cover enum-style and relation-style facet neutralization in SDK/base tests.
 
+Thirteenth row-derived server-filter cleanup slice completed on 2026-06-22:
+
+- [x] Stop metadata-backed server lists from turning current page row values into
+      selection filter chips when the schema does not declare options.
+- [x] Keep row-derived selection filters for local `RowsListView` data, where the
+      row array is the owned data source.
+- [x] Cover both policies in the shared list metadata utility tests.
+
 Current local verification:
 
 - [x] `uv run ruff check angee/graphql/data/metadata.py angee/graphql/data/queries.py addons/angee/integrate/schema.py tests/test_aggregates.py tests/test_integrate_graphql.py`
@@ -250,6 +258,9 @@ Current local verification:
 - [x] `pnpm --filter @angee/integrate typecheck`
 - [x] `pnpm --filter @angee/agents --filter @angee/messaging --filter @angee-example/notes-host typecheck`
 - [x] `pnpm --filter @angee/sdk typecheck`
+- [x] `pnpm --filter @angee/base typecheck`
+- [x] `git diff --check`
+- [x] `pnpm --filter @angee/base test -- model-metadata-defaults RowsListView DataPage`
 - [x] `pnpm --filter @angee/base typecheck`
 - [x] `git diff --check`
 - [x] `uv run python -m pytest tests/test_aggregates.py -q`
@@ -886,7 +897,7 @@ Done when:
 - [x] Add backend facet query support using grouped aggregates.
 - [x] Add SDK facet hooks/data-source calls.
 - [x] Implement facet-neutralized filters.
-- [ ] Replace page-row-derived selection options.
+- [x] Replace page-row-derived selection options.
 - [x] Replace most `useRelationFacet` usage with metadata-driven facets.
 - [x] Support relation label display and public-id filters.
 - [ ] Support facet search for large relation sets.
