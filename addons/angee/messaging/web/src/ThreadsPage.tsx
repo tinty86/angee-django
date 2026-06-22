@@ -56,6 +56,7 @@ function ThreadMessagesTab({ recordId }: RecordPanelContext): React.ReactElement
       columns={threadMessageColumns}
       fetching={fetching}
       error={error}
+      scope="local"
       rowHref={(row) => `/messaging/inbox/${row.id}`}
       emptyMessage="No messages in this thread yet."
     />

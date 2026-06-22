@@ -45,7 +45,10 @@ export interface DataViewProviderProps {
   children: ReactNode;
   initialState?: DataViewInitialState;
   resource?: string;
+  scope?: DataViewProviderScope;
 }
+
+export type DataViewProviderScope = "route" | "local";
 
 const DataViewContext = createContext<DataViewContextValue | null>(null);
 type DataViewActions = Omit<
@@ -61,20 +64,34 @@ export function DataViewProvider({
   children,
   initialState,
   resource,
+  scope = "route",
 }: DataViewProviderProps): ReactNode {
+  if (scope === "local") {
+    return (
+      <LocalDataViewProvider initialState={initialState} resource={resource}>
+        {children}
+      </LocalDataViewProvider>
+    );
+  }
+  return (
+    <RouteDataViewProvider initialState={initialState} resource={resource}>
+      {children}
+    </RouteDataViewProvider>
+  );
+}
+
+function RouteDataViewProvider({
+  children,
+  initialState,
+  resource,
+}: Omit<DataViewProviderProps, "scope">): ReactNode {
   const search = useSearch({ strict: false });
-  const favoriteStorageKey = resource
-    ? `angee:data-view:${resource}:favorites`
-    : null;
   // Narrow Router navigation to functional search updates; no from is supplied
   // because the updater is route-agnostic.
   const navigate = useNavigate() as DataViewNavigate;
   const [selectedIds, setSelectedIdsState] = useState<ReadonlySet<string>>(
     () => new Set(initialState?.selectedIds ?? []),
   );
-  const [savedFavorites, setSavedFavorites] = useState<
-    readonly DataViewFavorite[]
-  >(() => readFavorites(favoriteStorageKey));
   const queryState = useMemo(
     () => dataViewSearchToState(search, initialState),
     [search, initialState],
@@ -106,6 +123,49 @@ export function DataViewProvider({
   );
 
   const actions = useMemo(() => createDataViewActions(dispatch), [dispatch]);
+  const value = useDataViewContextValue({ actions, resource, state });
+
+  return (
+    <DataViewContext.Provider value={value}>
+      {children}
+    </DataViewContext.Provider>
+  );
+}
+
+function LocalDataViewProvider({
+  children,
+  initialState,
+  resource,
+}: Omit<DataViewProviderProps, "scope">): ReactNode {
+  const [state, setState] = useState(() => DataViewState.create(initialState));
+  const dispatch = useCallback((action: DataViewAction) => {
+    setState((current) => current.reduce(action));
+  }, []);
+  const actions = useMemo(() => createDataViewActions(dispatch), [dispatch]);
+  const value = useDataViewContextValue({ actions, resource, state });
+
+  return (
+    <DataViewContext.Provider value={value}>
+      {children}
+    </DataViewContext.Provider>
+  );
+}
+
+function useDataViewContextValue({
+  actions,
+  resource,
+  state,
+}: {
+  actions: DataViewActions;
+  resource: string | undefined;
+  state: DataViewState;
+}): DataViewContextValue {
+  const favoriteStorageKey = resource
+    ? `angee:data-view:${resource}:favorites`
+    : null;
+  const [savedFavorites, setSavedFavorites] = useState<
+    readonly DataViewFavorite[]
+  >(() => readFavorites(favoriteStorageKey));
 
   useEffect(() => {
     writeFavorites(favoriteStorageKey, savedFavorites);
@@ -132,12 +192,7 @@ export function DataViewProvider({
     }),
     [actions, saveFavorite, savedFavorites, state],
   );
-
-  return (
-    <DataViewContext.Provider value={value}>
-      {children}
-    </DataViewContext.Provider>
-  );
+  return value;
 }
 
 export function useDataView(): DataViewContextValue {

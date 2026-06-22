@@ -84,6 +84,8 @@ export interface RowsListViewProps<TRow extends StringIdRow = StringIdRow> {
   ) => React.ReactNode;
   /** Make each row/card draggable by returning its dnd payload, or `null`. */
   draggableRow?: (row: TRow) => DndPayload | null;
+  /** Use local data-view state even when rendered inside another data view. */
+  scope?: "inherit" | "local";
 }
 
 /** Card presentation for {@link RowsListViewProps.gallery}; mirrors GalleryView. */
@@ -100,15 +102,19 @@ export function RowsListView<TRow extends StringIdRow = StringIdRow>(
   props: RowsListViewProps<TRow>,
 ): React.ReactElement {
   const dataView = useDataViewMaybe();
+  const scope = props.scope ?? "inherit";
   const initialState = React.useMemo(
     () => ({
       pageSize: props.pageSize,
     }),
     [props.pageSize],
   );
-  if (dataView) return <RowsListViewBody {...props} dataView={dataView} />;
+  if (scope !== "local" && dataView) {
+    return <RowsListViewBody {...props} dataView={dataView} />;
+  }
+  const providerScope = scope === "local" ? "local" : "route";
   return (
-    <DataViewProvider initialState={initialState}>
+    <DataViewProvider initialState={initialState} scope={providerScope}>
       <RowsListViewBound {...props} />
     </DataViewProvider>
   );

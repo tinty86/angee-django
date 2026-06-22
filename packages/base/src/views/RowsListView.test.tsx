@@ -38,7 +38,7 @@ const ROWS: Item[] = [
 // (never as row cells) — the assertions stay unambiguous across expand/collapse.
 const columns: readonly ListColumn<Item>[] = [{ field: "name", header: "Name" }];
 
-function renderInRouter(ui: ReactElement): void {
+function renderInRouter(ui: ReactElement, initialEntries = ["/"]): void {
   const rootRoute = createRootRoute();
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -47,7 +47,7 @@ function renderInRouter(ui: ReactElement): void {
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    history: createMemoryHistory({ initialEntries }),
     parseSearch: parseFlatSearch,
     stringifySearch: stringifyFlatSearch,
   });
@@ -116,5 +116,62 @@ describe("RowsListView filters", () => {
 
     expect(await screen.findByText("Claude")).toBeTruthy();
     expect(screen.queryByText("GPT")).toBeNull();
+  });
+
+  test("standalone rows use route-owned data-view state", async () => {
+    const routeFilter = encodeURIComponent(
+      JSON.stringify({ provider: { sqid: "ipr_anthropic" } }),
+    );
+    renderInRouter(
+      <RowsListView<Item>
+        rows={[
+          {
+            id: "1",
+            name: "Claude",
+            region: "West",
+            provider: { id: "ipr_anthropic", name: "Anthropic" },
+          },
+          {
+            id: "2",
+            name: "GPT",
+            region: "West",
+            provider: { id: "ipr_openai", name: "OpenAI" },
+          },
+        ]}
+        columns={columns}
+      />,
+      [`/?filter=${routeFilter}`],
+    );
+
+    expect(await screen.findByText("Claude")).toBeTruthy();
+    expect(screen.queryByText("GPT")).toBeNull();
+  });
+
+  test("local scope ignores an ambient data view filter", async () => {
+    renderInRouter(
+      <DataViewProvider initialState={{ filter: { provider: { sqid: "ipr_anthropic" } } }}>
+        <RowsListView<Item>
+          scope="local"
+          rows={[
+            {
+              id: "1",
+              name: "Claude",
+              region: "West",
+              provider: { id: "ipr_anthropic", name: "Anthropic" },
+            },
+            {
+              id: "2",
+              name: "GPT",
+              region: "West",
+              provider: { id: "ipr_openai", name: "OpenAI" },
+            },
+          ]}
+          columns={columns}
+        />
+      </DataViewProvider>,
+    );
+
+    expect(await screen.findByText("Claude")).toBeTruthy();
+    expect(screen.getByText("GPT")).toBeTruthy();
   });
 });

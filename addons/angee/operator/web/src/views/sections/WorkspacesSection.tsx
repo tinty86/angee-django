@@ -203,6 +203,7 @@ export function WorkspaceSources({
         columns={columns}
         emptyMessage={emptyMessage ?? t("operator.workspaceSources.empty")}
         pageSize={5}
+        scope="local"
       />
     </section>
   );

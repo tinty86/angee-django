@@ -73,6 +73,7 @@ function PartyRelatedTab({
       columns={columns}
       fetching={fetching}
       error={error}
+      scope="local"
       emptyMessage={emptyMessage}
     />
   );
