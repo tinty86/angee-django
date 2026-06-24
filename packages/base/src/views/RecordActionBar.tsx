@@ -1,5 +1,8 @@
 import * as React from "react";
-import { rowPublicId, type Row } from "@angee/data";
+import {
+  rowPublicId,
+  type Row,
+} from "@angee/resources";
 
 import { Button } from "../ui/button";
 import { DropdownMenu } from "../ui/dropdown-menu";

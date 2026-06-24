@@ -21,7 +21,7 @@ describe("resources addon manifest", () => {
     const route = resources.routes?.[0];
     expect(route?.name).toBe("resources.ledger");
     expect(route?.path).toBe("/platform/resources");
-    expect(route?.shell).toBe("console");
+    expect(route?.layout).toBe("console");
     expect(route?.component).toBeTypeOf("function");
   });
 });

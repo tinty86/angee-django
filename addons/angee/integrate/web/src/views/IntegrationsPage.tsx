@@ -1,21 +1,23 @@
 import * as React from "react";
 import {
+  rowPublicId,
+  type Row,
+} from "@angee/resources";
+import {
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
-  rowPublicId,
   useEnumOptions,
   useImplPrefill,
-  type Row,
-} from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+  } from "@angee/base";
+import { useAuthoredMutation,
+} from "@angee/data";
 
 import { canConnectRecord, ConnectOAuthButton } from "../connect/ConnectOAuthButton";
-import { connectCallbackPathForRecord } from "../connect/redirects";
 import { ConnectIntegration } from "../documents";
 import { useIntegrateT } from "../i18n";
 
@@ -36,15 +38,14 @@ export function IntegrationsPage(): React.ReactElement {
   );
 
   return (
-    <DataPage
-      model={MODEL}
+    <ResourceList
+      resource={MODEL}
       placement="inline"
       routed
       cardActions={cardActions}
     >
       <List
-        model={MODEL}
-        list={GroupListView}
+        resource={MODEL}
         defaultGroups={{
           list: { field: "impl_class" },
           board: { field: "impl_class" },
@@ -60,7 +61,7 @@ export function IntegrationsPage(): React.ReactElement {
         />
         <Column field="last_error" header={t("integrate.col.lastError")} />
       </List>
-      <Form model={MODEL} layout="tabs">
+      <Form resource={MODEL} layout="tabs">
         <Field name="display_name" title readOnly />
         <Group label={t("integrate.integrations.identity")} columns={2}>
           <Field name="owner" createOnly />
@@ -87,7 +88,7 @@ export function IntegrationsPage(): React.ReactElement {
           <Field name="last_error" readOnly />
         </Group>
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }
 
@@ -108,7 +109,6 @@ function IntegrationConnectButton({
       label={t("integrate.integrations.action.connect")}
       connectedTitle={t("integrate.integrations.connect.connected")}
       startErrorTitle={t("integrate.integrations.connect.startError")}
-      callbackPath={connectCallbackPathForRecord(row)}
       next={CONNECT_NEXT}
       onConnected={refresh}
       start={async ({ redirectUri, next }) => {
@@ -117,7 +117,7 @@ function IntegrationConnectButton({
           redirectUri,
           next,
         });
-        return result?.connectIntegration;
+        return result?.connect_integration;
       }}
     />
   );

@@ -1,7 +1,7 @@
 import {
   MetricGrid,
   RowsListView,
-  type DataToolbarGroupOption,
+  type ResourceToolbarGroupOption,
   type ListColumn,
   type MetricGridTile,
 } from "@angee/base";
@@ -90,7 +90,7 @@ export function GitOpsSection(): ReactNode {
     [t],
   );
 
-  const groupOptions = useMemo<readonly DataToolbarGroupOption[]>(
+  const groupOptions = useMemo<readonly ResourceToolbarGroupOption[]>(
     () => [
       { id: "state", label: t("operator.gitops.column.status"), group: { field: "state" } },
       { id: "slot", label: t("operator.gitops.column.slot"), group: { field: "slot" } },

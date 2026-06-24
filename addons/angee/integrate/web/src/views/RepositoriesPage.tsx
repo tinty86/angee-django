@@ -1,12 +1,12 @@
 import * as React from "react";
 import {
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
 } from "@angee/base";
 
@@ -16,7 +16,7 @@ import { AddRepositoryControl } from "./AddRepositoryControl";
 const MODEL = "integrate.Repository";
 
 const repositoryList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Facet field="vcs_bridge" label="VCS bridge" labelField="display_name" />
     <Column field="org" />
     <Column field="name" />
@@ -35,8 +35,8 @@ const repositoryList = (
 export function RepositoriesPage(): React.ReactElement {
   const t = useIntegrateT();
   return (
-    <DataPage
-      model={MODEL}
+    <ResourceList
+      resource={MODEL}
       placement="inline"
       routed
       hideCreate
@@ -44,9 +44,9 @@ export function RepositoriesPage(): React.ReactElement {
     >
       {repositoryList}
       {/* Repositories are inventoried by the add typeahead and `discover`,
-          never hand-created or edited, so the detail is read-only; DataPage
+          never hand-created or edited, so the detail is read-only; ResourceList
           still wires the per-record delete (the only Repository mutation). */}
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="vcs_bridge" readOnly />
         <Group label={t("integrate.repositories.repository")} columns={2}>
           <Field name="org" readOnly />
@@ -61,6 +61,6 @@ export function RepositoriesPage(): React.ReactElement {
         <Field name="web_url" readOnly />
         <Field name="archived" readOnly />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

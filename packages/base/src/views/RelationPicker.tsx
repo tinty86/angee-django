@@ -1,10 +1,10 @@
 import { useState, type ReactElement, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { rowPublicId } from "@angee/data";
+import { rowPublicId } from "@angee/resources";
 
 import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
-import { ControlBandProvider } from "../shell/ControlBand";
+import { ControlBandProvider } from "../layouts/ControlBand";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { TextLink } from "../ui/text-link";
@@ -18,7 +18,7 @@ import type { FieldDescriptor } from "./page";
 /** What the inline create form needs to make a new related record. */
 export interface RelationCreateConfig {
   /** Related model label, e.g. `"Drive"`. */
-  model: string;
+  resource: string;
   /**
    * Fields the inline create form renders. Optional: when the model registers a
    * create form via `defineAddon`'s `forms:`, `FormView` resolves it by model
@@ -35,7 +35,7 @@ export interface RelationCreateConfig {
 /** What the inline edit form needs to edit the *selected* related record. */
 export interface RelationEditConfig {
   /** Related model label, e.g. `"OAuthClient"`. */
-  model: string;
+  resource: string;
   /** Fields the inline edit form renders (the related model's editable fields). */
   fields?: readonly FieldDescriptor[];
   /** Dialog title; defaults to `Edit <model>`. */
@@ -155,11 +155,11 @@ export function RelationPicker({
             </Dialog.Header>
             <Dialog.Body>
               {/* Force the form's control band inline so Save lands in the dialog
-                  instead of portaling to the shell's top band. */}
+                  instead of portaling to the layout's top band. */}
               {dialog?.mode === "create" && create ? (
                 <ControlBandProvider host={undefined}>
                   <FormView
-                    model={create.model}
+                    resource={create.resource}
                     id={null}
                     fields={create.fields}
                     defaultValues={{ [prefillField]: dialog.query }}
@@ -177,7 +177,7 @@ export function RelationPicker({
               {dialog?.mode === "edit" && edit ? (
                 <ControlBandProvider host={undefined}>
                   <FormView
-                    model={edit.model}
+                    resource={edit.resource}
                     id={dialog.id}
                     fields={edit.fields}
                     onSaved={(row) => {
@@ -201,9 +201,9 @@ function dialogTitle(
   edit: RelationEditConfig | undefined,
 ): ReactNode {
   if (dialog?.mode === "edit") {
-    return edit?.title ?? `Edit ${edit?.model.toLowerCase() ?? "record"}`;
+    return edit?.title ?? `Edit ${edit?.resource.toLowerCase() ?? "record"}`;
   }
-  return create?.title ?? `New ${create?.model.toLowerCase() ?? "record"}`;
+  return create?.title ?? `New ${create?.resource.toLowerCase() ?? "record"}`;
 }
 
 /**

@@ -136,6 +136,9 @@ def test_agent_hasura_insert_update_and_delete(agents_console_tables: None) -> N
                 name
                 lifecycle
                 is_template
+                can_provision
+                can_deprovision
+                can_delete
                 owner { username }
               }
             }
@@ -149,6 +152,9 @@ def test_agent_hasura_insert_update_and_delete(agents_console_tables: None) -> N
         "name": "Composer",
         "lifecycle": "DRAFT",
         "is_template": False,
+        "can_provision": True,
+        "can_deprovision": False,
+        "can_delete": True,
         "owner": {"username": "agt-hasura-admin"},
     }
 
@@ -157,9 +163,12 @@ def test_agent_hasura_insert_update_and_delete(agents_console_tables: None) -> N
             console,
             """
             mutation Rename($id: String!) {
-              update_agents_by_pk(pk_columns: {id: $id}, _set: {name: "Renamed", lifecycle: "ready"}) {
+              update_agents_by_pk(pk_columns: {id: $id}, _set: {name: "Renamed", lifecycle: "deprovisioned"}) {
                 name
                 lifecycle
+                can_provision
+                can_deprovision
+                can_delete
               }
             }
             """,
@@ -167,7 +176,13 @@ def test_agent_hasura_insert_update_and_delete(agents_console_tables: None) -> N
             user=admin,
         )
     )["update_agents_by_pk"]
-    assert updated == {"name": "Renamed", "lifecycle": "READY"}
+    assert updated == {
+        "name": "Renamed",
+        "lifecycle": "DEPROVISIONED",
+        "can_provision": True,
+        "can_deprovision": False,
+        "can_delete": True,
+    }
 
     deleted = _data(
         _execute(
@@ -184,6 +199,37 @@ def test_agent_hasura_insert_update_and_delete(agents_console_tables: None) -> N
     assert deleted == {"id": created["id"], "name": "Renamed"}
     with system_context(reason="test.agents.hasura_delete.verify"):
         assert not Agent.objects.filter(sqid=created["id"]).exists()
+
+
+def test_agent_hasura_delete_blocks_rendered_agents(agents_console_tables: None) -> None:
+    """Agent delete policy is enforced by the backend write owner, not only the UI."""
+
+    admin = _platform_admin("agt-delete-block-admin")
+    with system_context(reason="test.agents.delete_block.seed"):
+        agent = Agent.objects.create(
+            name="Rendered",
+            owner=admin,
+            workspace="ws-rendered",
+            service="svc-rendered",
+            lifecycle="ready",
+        )
+    agent_id = _public_id(agent.sqid)
+
+    result = _execute(
+        _schema(),
+        """
+        mutation Delete($id: String!) {
+          delete_agents_by_pk(id: $id) { id name }
+        }
+        """,
+        {"id": agent_id},
+        user=admin,
+    )
+
+    assert result.errors is not None
+    assert "Deprovision this agent before deleting it." in str(result.errors[0])
+    with system_context(reason="test.agents.delete_block.verify"):
+        assert Agent.objects.filter(pk=agent.pk).exists()
 
 
 def test_agent_hasura_update_sets_many_to_many_skills(agents_console_tables: None) -> None:
@@ -1150,6 +1196,12 @@ def test_resolve_session_for_view_resolves_the_actors_running_agent(
     other = _platform_admin("agt-session-none")
     none_session = _data(_execute(console, mutation, {"view": view}, user=other))["resolveSessionForView"]
     assert none_session is None
+
+    # The side chatter is actor-scoped, not admin-scoped: a normal user with no
+    # running agent also gets null instead of a permission error.
+    viewer = User.objects.create_user(username="agt-session-viewer", email="viewer@example.com")
+    viewer_session = _data(_execute(console, mutation, {"view": view}, user=viewer))["resolveSessionForView"]
+    assert viewer_session is None
 
 
 def test_provision_workspace_inputs_from_agent_fields(agents_console_tables: None) -> None:

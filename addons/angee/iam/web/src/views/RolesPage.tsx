@@ -5,7 +5,7 @@ import {
   Code,
   type ListColumn,
 } from "@angee/base";
-import type { DocumentData } from "@angee/sdk";
+import type { DocumentData } from "@angee/refine";
 
 import { IamRoles } from "../documents";
 import {

@@ -28,7 +28,7 @@ const scalars = {
 
 // Roots that author operations for the notes example project: framework frontend
 // packages, framework addon web packages in this monorepo, this project's
-// consumer addons, and the app shell itself. Another project owns its own
+// consumer addons, and the app layout itself. Another project owns its own
 // web-package codegen config with the same filename convention but roots that
 // match its install layout.
 const DOCUMENT_ROOTS = [

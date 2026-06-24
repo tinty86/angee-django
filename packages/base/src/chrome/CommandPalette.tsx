@@ -1,10 +1,9 @@
 import { useMemo, useState, type ReactElement } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMenus } from "@angee/sdk";
 
 import { useBaseT } from "../i18n";
 import { Glyph } from "./Glyph";
-import { MenuTree, type ChromeMenuItem } from "./menu-tree";
+import { useChromeMenuTree } from "./refine-menu";
 import {
   Spotlight,
   useSpotlightShortcut,
@@ -66,12 +65,11 @@ export function CommandPalette({
 
 /** One navigate command per menu destination, grouped by its root app. */
 function useNavCommands(): readonly SpotlightCommand[] {
-  const items = useMenus() as readonly ChromeMenuItem[];
+  const menuTree = useChromeMenuTree();
   const navigate = useNavigate();
   return useMemo(
     () =>
-      MenuTree.from(items)
-        .navigableItems()
+      menuTree.navigableItems()
         .map(({ item, root, target }): SpotlightCommand => ({
           id: item.id,
           title: item.displayLabel,
@@ -82,6 +80,6 @@ function useNavCommands(): readonly SpotlightCommand[] {
             void navigate({ to: target });
           },
         })),
-    [items, navigate],
+    [menuTree, navigate],
   );
 }

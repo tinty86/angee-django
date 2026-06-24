@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import type { TypedDocumentNode } from "@angee/sdk";
+import type { TypedDocumentNode } from "@angee/refine";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { AuthoredRowsList } from "./AuthoredRowsList";
 import type { ListColumn } from "./ListInternals";
-import type { StringIdRow } from "./data-view-surface";
+import type { StringIdRow } from "./resource-view-surface";
 
 const sdkMocks = vi.hoisted(() => ({
   calls: [] as Array<{
@@ -16,8 +16,8 @@ const sdkMocks = vi.hoisted(() => ({
   }>,
 }));
 
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
+vi.mock("@angee/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/data")>();
   return {
     ...actual,
     useAuthoredRows: (

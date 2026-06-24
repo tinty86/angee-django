@@ -25,18 +25,14 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useMenus } from "@angee/sdk";
 
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { Tooltip } from "../ui/tooltip";
 import { AppChooser } from "./AppChooser";
 import { Glyph } from "./Glyph";
-import {
-  type ChromeMenuItem,
-  type ChromeMenuNode,
-  MenuTree,
-} from "./menu-tree";
+import type { ChromeMenuNode } from "./menu-tree";
+import { useChromeMenuTree } from "./refine-menu";
 import {
   moveRailItem,
   orderedRailItems,
@@ -60,8 +56,7 @@ export function AppRail({ className }: AppRailProps): ReactElement {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const menus = useMenus() as readonly ChromeMenuItem[];
-  const tree = useMemo(() => MenuTree.from(menus), [menus]);
+  const tree = useChromeMenuTree();
   const { railPreferences, setRailPreferences } = useAppRailPreferences();
   const items = useMemo(
     () => orderedRailItems(tree.railMenuItems(), railPreferences.order),

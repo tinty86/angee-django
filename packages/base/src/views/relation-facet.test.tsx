@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 
-import { renderHook } from "@testing-library/react";
-import type { ResourceFacetOption } from "@angee/data";
+import {
+  renderHook } from "@testing-library/react";
+import type { ResourceFacetOption } from "@angee/refine";
 import {
   ModelMetadataProvider,
-  type SchemaFieldMetadata,
-} from "@angee/sdk";
+} from "@angee/resources";
+import type {
+  SchemaFieldMetadata,
+} from "@angee/resources";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -50,6 +53,11 @@ describe("useRelationFacets", () => {
             { input: "PROVIDER", key: "providerId" },
             { input: "PROVIDER__NAME", key: "provider_Name" },
           ],
+          orderBy: [{
+            field: "provider_Name",
+            direction: "ASC",
+            nulls: "LAST",
+          }],
           valueKey: "providerId",
           labelKey: "provider_Name",
           pageSize: 200,
@@ -106,6 +114,11 @@ describe("useRelationFacets", () => {
             { input: "PROVIDER", key: "providerId" },
             { input: "PROVIDER__NAME", key: "provider_Name" },
           ],
+          orderBy: [{
+            field: "provider_Name",
+            direction: "ASC",
+            nulls: "LAST",
+          }],
           valueKey: "providerId",
           labelKey: "provider_Name",
           pageSize: 200,
@@ -237,7 +250,7 @@ const METADATA: SchemaFieldMetadata = {
     InferenceProviderType: {
       typeName: "InferenceProviderType",
       recordRepresentation: "name",
-      rootFields: { list: "inferenceProviders" },
+      rootFields: { list: "inference_providers" },
       fields: {
         name: { name: "name", kind: "scalar", scalar: "String" },
       },

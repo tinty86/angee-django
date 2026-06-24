@@ -1,10 +1,26 @@
-# Refine Adoption — Hasura Execution Todo
+# Refine-Native Frontend Rebuild — Hasura Execution Todo
 
 Date: 2026-06-23
 Source plan: [`refine-adoption-refactor-plan.md`](./refine-adoption-refactor-plan.md)
 
-This is the working checklist for parallel execution. Keep the narrative plan for
-architecture and rationale; keep this file for state.
+> **2026-06-24 target update:** this file remains the historical Hasura/backend
+> execution checklist. Frontend target work is governed by
+> [`refine-greenfield-rebuild-plan.md`](./refine-greenfield-rebuild-plan.md);
+> when the files conflict, the greenfield plan wins.
+
+This is the working checklist for parallel execution. The governing goal is no
+longer "adopt" or "leverage" refine inside an Angee-owned frontend. The frontend
+is being rebuilt as a refine-native application: refine owns generic app,
+resource, router, navigation, menu, breadcrumb, data, table, form, mutation,
+cache, and live mechanics; Angee projects metadata/addon declarations into
+refine and renders domain presentation over refine state.
+
+> **2026-06-24 review correction:** three independent reviews found the refactor
+> is adding new owners without deleting old ones (a dual refine+urql engine, a
+> sideways-lifted document builder in `@angee/data`, re-derived adapter names).
+> Lanes H–L are re-gated on **net deletion, not relocation** — see "Review
+> Corrections (2026-06-24)" at the end and
+> `.agents/notes/refine-adoption-library-leaning-findings.md`.
 
 ## Update Protocol
 
@@ -18,17 +34,23 @@ architecture and rationale; keep this file for state.
 
 ## Shared Rule
 
-- Prefer the stock refine/Hasura/TanStack owner for every generic data concern.
-  Angee work in this plan should be metadata, composition, authored custom
-  operations, or a small adapter/library extension at the owner level. Do not add
-  local provider dialects, local CRUD engines, or one-off grouped/list/form/table
-  implementations.
+- Use the stock refine/Hasura/TanStack owner for every generic frontend concern.
+  Angee work in this plan is metadata projection, addon composition, rendered
+  presentation, domain widgets, authored custom operations, or a small
+  adapter/library extension at the owner level.
+- No compatibility fallback. If an Angee frontend abstraction competes with
+  refine-owned app/resource/router/navigation/menu/breadcrumb/data/table/form/
+  mutation/cache/live behavior, delete it or rewrite it as a thin projection into
+  refine.
+- Do not add local provider dialects, local CRUD engines, route-static
+  breadcrumb systems, or one-off grouped/list/form/table implementations.
 
 ## Baseline Done
 
 - [x] Dialect settled on Hasura via A/B spike.
 - [x] `strawberry-django-hasura` 0.2.0 built, verified, and published to PyPI.
-- [x] `strawberry-django-aggregates` 0.7.0 published to PyPI.
+- [x] `strawberry-django-aggregates` 0.8.0 published to PyPI and consumed from
+  PyPI by Angee.
 - [x] `hasura_resource(...)` built and exported by `strawberry-django-hasura`.
 - [x] Stock `@refinedev/hasura` proof green with `idType: "String"`.
 - [x] Strawberry-Django fork pk lookup and mutation-copy fixes landed.
@@ -124,7 +146,7 @@ Source audit (2026-06-24): `strawberry-django-hasura` owns optional
 `<res>_groups(group_by, where, having, order_by, limit, offset):
 [<res>_group!]!`, where each group has `key: <Model>GroupKey!` and
 `aggregate: <Model>Aggregate!`. It composes the public
-`strawberry-django-aggregates` 0.7 typed-key seams and applies Hasura `_bool_exp`
+`strawberry-django-aggregates` 0.8 typed-key seams and applies Hasura `_bool_exp`
 through `where_to_q`; frontend authored operations now send `group_by` specs and
 select typed key fields/range siblings from metadata.
 
@@ -385,9 +407,11 @@ nested read projections reached through their owning message/thread. Live
   resource shape and narrows JSON-widened field kinds).
 - [x] Implement authored-operation helper path using `meta.gqlQuery` /
   `meta.gqlMutation`
-  (`aggregateRequest`, `groupByRequest`, and `facetsRequest` return
-  refine-native `{ dataProviderName, meta: { gqlQuery, gqlVariables } }` requests
-  over the stock Hasura provider; `deletePreviewRequest` returns
+  (`aggregateRequest` and `groupByRequest` return refine-native
+  `{ dataProviderName, meta: { gqlQuery, gqlVariables } }` requests over the
+  stock Hasura provider using generated documents; `useAngeeFacets` runs
+  TanStack `useQueries` over those generated group requests instead of a runtime
+  aliased document; `deletePreviewRequest` returns
   `{ dataProviderName, meta: { gqlMutation, gqlVariables } }` for authored
   cascade-preview mutations).
 - [x] Implement `liveProvider` over `graphql-ws` and existing `<model>Changed`
@@ -404,9 +428,10 @@ nested read projections reached through their owning message/thread. Live
   `GroupedList` now consumes NDC `_groups` buckets from `@angee/data`,
   synthesizes scalar/relation/date-granular leaf filters from resource
   metadata, maps date buckets to `[gte, lt)` ranges, and routes child group
-  `where` through `hasuraWhereFromAngeeFilter`. JSON bucket drill-down emits the
-  owner-level `jsonContains` lookup and rides the same `@angee/data` Hasura bool
-  expression path as groups/facets.
+  `where` through `hasuraWhereFromAngeeFilter`. JSON bucket drill-down emits an
+  explicit exact bucket filter so arrays and objects compile to Hasura `_eq`;
+  the owner-level `jsonContains` lookup remains available for authored
+  containment filters, not bucket equality.
 - [x] Repair stale/invalid grouped route state against resource metadata before
   rendering grouped queries. `ListView` now derives an effective group stack
   through the shared group-option owner, falls back to the legal default group
@@ -421,11 +446,10 @@ nested read projections reached through their owning message/thread. Live
 - [x] Implement `useResourceList` over refine `useList` + stock
   `@refinedev/hasura`.
   The hook derives the refine resource/provider from `angee.resources`, runs
-  through refine `useList` and the stock Hasura provider, and passes an
-  owner-authored `listRequest` through `meta.gqlQuery` / `meta.gqlVariables` so
-  field selection, Hasura `where`, and `order_by` all use the same resource
-  metadata and bool-expression contract as groups/facets. Pagination, query
-  keys, invalidation, and live refresh remain owned by refine.
+  through refine `useList` and the stock Hasura provider. 2026-06-24 greenfield
+  fold: the temporary owner-authored list document path is deleted; list callers
+  now pass provider-native `meta.fields`, `filters`, and `sorters`. Pagination,
+  query keys, invalidation, and live refresh remain owned by refine.
 - [x] Move shared `@angee/base` model list callers to the refine-backed
   `@angee/data` hook: `data-view-surface`, grouped leaf rows, related rows,
   relation options, and record-navigation sync.
@@ -540,15 +564,38 @@ nested read projections reached through their owning message/thread. Live
   `pnpm --filter @angee/base exec vitest run src/views/RowsListView.test.tsx src/views/AuthoredRowsList.test.tsx src/views/RelatedRowsList.test.tsx src/views/DeleteBulkFlow.test.tsx`,
   and
   `pnpm --filter @angee/data exec vitest run src/resources.test.ts src/provider.test.ts`.
-- [ ] Add owner-level grouped bucket ordering if the product needs sorted
-  buckets under the Hasura/operator contract; the current `_groups` roots expose
-  no `order_by`, so list sorting applies to leaf records inside expanded groups.
+- [x] Gate: direct JSON group key and JSON bucket equality drill-down passed on
+  2026-06-24. Notes marks `tags` as groupable JSON metadata, sibling
+  `strawberry-django-aggregates` emits direct `JSONField` group keys as GraphQL
+  `JSON`, and `@angee/base` uses exact JSON bucket filters for child rows.
+  Gates: sibling `strawberry-django-aggregates`
+  `uv run pytest tests/test_jsonb_groupby.py -q`;
+  Angee `uv run examples/notes-angee/manage.py test
+  example.notes.tests.test_schema_metadata -v 2`;
+  `pnpm --filter @angee/base exec vitest run src/views/group-dimension.test.ts --reporter=dot`;
+  live browser smoke for `/notes?group=tags` expanded `customer,feedback` and
+  `/notes?group=updated_at:day` expanded `January 10, 2026`, both with clean
+  fresh browser logs.
+- [x] Gate: published aggregate dependency slice passed on 2026-06-24.
+  Angee now requires `strawberry-django-aggregates>=0.8.0`, `uv.lock` resolves
+  the PyPI wheel, the local editable source override is removed, and
+  `uv run examples/notes-angee/manage.py schema --check` passed.
+- [x] Add owner-level grouped bucket ordering under the Hasura/operator
+  contract. The generated `_groups` roots now expose `order_by`; `@angee/data`
+  owns typed `GroupOrder` variables/documents, and `@angee/base` sends ascending
+  nulls-last order for active bucket key/label dimensions in grouped lists and
+  facets. Gates: `pnpm --filter @angee/data typecheck`,
+  `pnpm --filter @angee/base typecheck`,
+  `pnpm --filter @angee/data exec vitest run src/operations.test.ts`,
+  `pnpm --filter @angee/data exec vitest run src/list.test.ts src/resources.test.ts src/provider.test.ts`,
+  `pnpm --filter @angee/base exec vitest run src/views/scalar-facet.test.tsx src/views/relation-facet.test.tsx src/views/group-dimension.test.ts`,
+  and `pnpm --filter @angee/base exec vitest run src/views/DataPage.test.tsx src/views/DataPage.routed.test.tsx`.
 - [x] Gate: one model-backed list renders through refine against real backend.
   Gate: `pnpm --filter @angee-example/notes-e2e exec playwright test
   tests/notes.spec.ts -g "sees her scoped notes"` against the running local
   stack with local-network access.
-- [ ] Gate: repo-wide `pnpm run typecheck && pnpm run test && pnpm run build`
-  if still required after the first refine-rendered list.
+- [x] Gate: repo-wide frontend check passed on 2026-06-24:
+  `pnpm run typecheck`, `pnpm run test`, and `pnpm run build`.
 
 ## Lane G — Phase 3b Cross-Cutting Providers
 
@@ -603,12 +650,12 @@ nested read projections reached through their owning message/thread. Live
 
 ## Lane H — Phase 4 `@angee/base`
 
-- [ ] Rebind `ListView` / `RowsListView` / `DataPage` on
+- [x] Rebind `ListView` / `RowsListView` / `ResourceList` on
   `@refinedev/react-table`.
-- [ ] Preserve grouping.
-- [ ] Preserve board view.
-- [ ] Preserve selection.
-- [ ] Preserve keyboard and toolbar affordances.
+- [x] Preserve grouping.
+- [x] Preserve board view.
+- [x] Preserve selection.
+- [x] Preserve keyboard and toolbar affordances.
 - [x] Move board/grouped/favorites view-state to `@angee/base`.
 - [x] Delete sort/filter/paginate overlap from `data/view-state.ts`.
   SDK `data/view-state.ts`, `data/local-source.ts`, and `data/query.ts` are
@@ -620,13 +667,15 @@ nested read projections reached through their owning message/thread. Live
   src/views/DataPage.routed.test.tsx src/views/RowsListView.test.tsx
   src/views/ListView.tsx src/views/group-dimension.test.ts`, `pnpm --filter
   @angee/sdk test`, and `pnpm --filter @angee/data typecheck`.
-- [ ] Rebind `FormView` on `@refinedev/react-hook-form`.
-- [ ] Choose and wire resolver (`zodResolver` unless valibot is retained).
-- [ ] Preserve `<Field>` / `<Group>` / `showWhen` DSL.
-- [ ] Rebind `RecordView` / detail surfaces.
-- [ ] Gate: base vitest.
+- [x] Rebind `FormView` on `@refinedev/react-hook-form`.
+- [x] Choose and wire resolver (`zodResolver` unless valibot is retained).
+- [x] Preserve `<Field>` / `<Group>` / `showWhen` DSL.
+- [x] Rebind record/detail surfaces to refine form, mutation, and invalidation
+  owners.
+- [x] Gate: focused base vitest.
 - [ ] Gate: storybook.
-- [ ] Gate: model-backed `DataPage` end-to-end.
+- [x] Gate: model-backed `ResourceList` browser smoke over Notes, Storage,
+  Knowledge, Integrate, and Agents.
 
 ## Lane I — Phase 5 `@angee/runtime`
 
@@ -669,6 +718,79 @@ Addon order:
 - [ ] Messaging.
 - [ ] Operator console.
 
+Current record-action browser slice (2026-06-24):
+
+- [x] Storage: folder create/rename/delete-preview and file trash/restore are
+  green; storage schema now exposes File/Folder delete-preview roots
+  (`delete_file` / `delete_folder`) and the upload drop target no longer
+  aria-disables descendant row links.
+- [x] Knowledge: create opens the returned page id, edit/body autosave is green,
+  and delete cleans up the smoke pages; `NewPageControl` opens the shared inline
+  text action when selecting note/folder.
+- [x] Integrate: menu-render pass is green for Sources (`Delete`, `Refresh`),
+  Template source drawer (`Delete`, `Sync templates`), VCS bridge actions,
+  OAuth Providers (`Delete`, `Connect account`, `Disable`), Credentials
+  (`Reveal secret`, `Revoke`), and External Accounts (`Revoke`). Webhooks had no
+  seeded records, so only list load was verified. The local VCS bridge
+  `Sync now` action was invoked once and returned cleanly; sensitive/external
+  actions were not invoked.
+- [x] Agents: draft agent detail renders `Provision` in the toolbar, `Delete` in
+  the menu, and Service/Workspace/Chat tabs without errors; inference provider
+  menu renders `Delete` and `Refresh models`. Agent skill sources had no seeded
+  records, so only list load was verified. Provision/refresh side effects were
+  not invoked.
+
+Parallel record-action cleanup slice (2026-06-24):
+
+- [x] Integrate: remove duplicate local set-action buttons for provider/webhook
+  enable-disable and credential/account revoke. The shared resource/action
+  surface owns those row actions.
+- [x] Integrate: delete the temporary `/callback` OAuth fallback, per-record
+  callback-path inference, and `ConnectOAuthButton.callbackPath`; outbound
+  connect now uses `/integrate/oauth/callback` only.
+- [x] Integrate: callback route tests and package typecheck are green after the
+  canonical callback cleanup.
+- [x] Shared action owner: `@angee/data` `useActionMutation` accepts
+  `invalidateModels`, resolves model labels through resource metadata, and
+  invalidates refine list/many/detail caches through `useInvalidate()`.
+- [x] Agents/Integrate action callers: template/source refresh, provider-model
+  refresh, skill-source refresh, provision, and deprovision declare sibling
+  invalidation targets through the shared action hooks.
+- [x] SDK deletion: `document-query.ts`, `document-mutation.ts`,
+  `document-mutation.test.tsx`, and the public one-model
+  `useModelInvalidation` hook/test/export are deleted.
+- [x] Gates:
+  `pnpm --filter @angee/agents typecheck`,
+  `pnpm --filter @angee/integrate typecheck`,
+  `pnpm --filter @angee/data typecheck`,
+  `pnpm --filter @angee/base exec vitest run src/views/record-action.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/sdk exec vitest run src/relay-invalidation.test.tsx src/document-subscription.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/integrate test -- src/connect/redirects.test.ts src/connect/OAuthConnectCallbackPage.test.tsx src/index.test.ts`,
+  `pnpm --filter @angee/agents exec vitest run src/views/AgentProvisioning.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/sdk typecheck`, `pnpm run typecheck`, and
+  `git diff --check`.
+- [x] Integrate remaining edge: rewrite `AddRepositoryControl` bridge picker as
+  refine resource selection instead of authored local picker state.
+- [x] Agents remaining edge: move provision/deprovision/delete eligibility rules
+  to the backend/resource metadata owner so UI buttons do not hand-code lifecycle
+  policy.
+- [x] Agents remaining edge: remove the fake form/list-only workaround in
+  `SkillsPage` once `ResourceList` has an explicit list/show-only record mode.
+- [x] Gates for the list-only/AddRepository cleanup:
+  `pnpm --filter @angee/base exec vitest run src/views/ResourceList.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/integrate exec vitest run src/views/AddRepositoryControl.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/base typecheck`,
+  `pnpm --filter @angee/integrate typecheck`,
+  `pnpm --filter @angee/agents typecheck`, and `git diff --check`.
+- [x] Gates for the Agents lifecycle/delete owner cleanup:
+  `uv run pytest tests/test_agents_graphql.py::test_agent_hasura_insert_update_and_delete tests/test_agents_graphql.py::test_agent_hasura_delete_blocks_rendered_agents -q`,
+  `uv run ruff check addons/angee/agents/models.py addons/angee/agents/schema.py angee/graphql/data/hasura.py tests/test_agents_graphql.py`,
+  `uv run examples/notes-angee/manage.py schema --check`,
+  `pnpm --filter @angee/agents typecheck`,
+  `pnpm --filter @angee/agents exec vitest run src/views/AgentProvisioning.test.tsx --reporter=dot`,
+  `uv run pytest tests/test_agents_graphql.py -q`, `pnpm run typecheck`, and
+  `git diff --check`.
+
 ## Lane K — SDK Deletion
 
 - [x] Delete `resource-hooks.ts` list hook/export/tests after moving list reads
@@ -677,21 +799,65 @@ Addon order:
   orphaned read document/result helpers after rebinding callers to
   `@angee/data`.
 - [x] Replace remaining `resource-hooks.ts` mutation hook.
-- [ ] Delete `authored-hooks.ts`.
-- [ ] Delete `action-hooks.ts` and `action-result.ts`, after replacement.
-- [ ] Delete `document-query.ts`, `document-mutation.ts`,
-  `document-subscription.ts`, and `disabled-documents.ts`, after replacement.
-- [ ] Delete `stable-deps.ts`.
+- [x] Delete `authored-hooks.ts`; authored query/rows/mutation hooks now live in
+  `@angee/data`.
+- [x] Delete `action-hooks.ts` and `action-result.ts`, after replacement.
+- [x] Delete `document-query.ts` and `document-mutation.ts`, after replacement.
+- [x] Delete `document-subscription.ts` after the remaining operator
+  subscription quarantine moves. The hook and its reducer/effect test now live
+  beside the operator daemon urql transport; SDK no longer exports arbitrary
+  document subscription or typed-document helpers.
+- [x] Delete SDK `authored-subscription.ts` and its wrapper test; the remaining
+  arbitrary subscription behavior is tested directly at `document-subscription`.
+- [x] Delete SDK `disabled-documents.ts`; the remaining subscription quarantine
+  keeps its paused subscription sentinel local to `document-subscription.ts`.
+- [x] Delete SDK `stable-deps.ts`; the remaining SDK subscription/live files keep
+  their tiny equality-memo helpers local, while `@angee/data` keeps its own
+  operation-stability owner.
+- [x] Gates for SDK stable/disabled deletion:
+  `pnpm --filter @angee/sdk typecheck`,
+  `pnpm --filter @angee/sdk exec vitest run src/document-subscription.test.tsx src/relay-invalidation.test.tsx --reporter=dot`,
+  and `pnpm --filter @angee/data typecheck`.
+- [x] Gates for SDK authored-subscription wrapper deletion:
+  `pnpm --filter @angee/sdk typecheck`,
+  `pnpm --filter @angee/sdk exec vitest run src/document-subscription.test.tsx src/relay-invalidation.test.tsx --reporter=dot`,
+  and `pnpm --filter @angee/operator typecheck`.
+- [x] Gates for data/sdk dependency inversion and relay deletion:
+  `pnpm --filter @angee/data typecheck`,
+  `pnpm --filter @angee/data exec vitest run src/authored-hooks.test.ts src/operations.test.ts src/resources.test.ts src/provider.test.ts --reporter=dot`,
+  `pnpm --filter @angee/sdk typecheck`,
+  `pnpm --filter @angee/sdk exec vitest run src/model-metadata.test.tsx src/graphql-client.test.ts src/i18n.test.ts src/document-subscription.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/sdk exec vitest run src/selection.test.ts --reporter=dot`,
+  `pnpm --filter @angee/base typecheck`,
+  `pnpm --filter @angee/base exec vitest run src/createApp.test.ts --reporter=dot`,
+  `pnpm run typecheck`,
+  and `git diff --check`.
+- [x] Gates for operator subscription quarantine move:
+  `pnpm --filter @angee/operator typecheck`,
+  `pnpm --filter @angee/operator exec vitest run src/data/document-subscription.test.tsx src/index.test.ts src/views/sections/DetailSurfaceSections.test.tsx --reporter=dot`,
+  `pnpm --filter @angee/sdk typecheck`,
+  `pnpm --filter @angee/data typecheck`, and `git diff --check`.
 - [ ] Delete `graphql-client.ts`, `graphql-provider.tsx`, `cache-config.ts`,
   and `schema-object-types.ts`.
-- [ ] Delete `relay-invalidation.tsx` and `relay-registry.ts`.
-- [ ] Delete `selection.ts` after codegen `TypedDocumentNode` path is complete.
+- [x] Delete `relay-invalidation.tsx` and `relay-registry.ts`.
+  `createApp` no longer mounts `RelayInvalidationProvider`; app live refresh is
+  owned by refine `liveProvider`, resource invalidation is owned by refine
+  `useInvalidate`, and authored custom queries are tagged/invalidated through
+  TanStack Query metadata in `@angee/data`.
+- [x] Collapse SDK `selection.ts` to a re-export of `@angee/data`
+  `typeNameForModel`; no duplicate implementation remains.
 - [x] Delete heuristic root-field/input-shape inference after metadata artifact
   is used.
 - [ ] Move/thin the remaining metadata loader/validation from
   `model-metadata.tsx` into the final `@angee/data` owner.
-- [ ] Keep only thin field/widget classification that still belongs in
-  `@angee/data`.
+  Current state: generated metadata contracts/context and `typeNameForModel`
+  live in `@angee/data`; SDK re-exports them. SDK still owns the temporary SDL
+  parser (`fieldMetadataFromSchema` / `fieldMetadataFromSDL`) until the app
+  provider stops walking SDL at boot.
+- [x] Keep only thin field/widget classification that still belongs in
+  `@angee/data`; generated metadata types/context now live there. Remaining SDL
+  field classification in SDK is explicitly temporary parser debt, not a second
+  public metadata contract.
 - [x] Delete sort/filter/paginate slice of `data/view-state.ts`.
 - [x] Move board/grouped/favorites state to `@angee/base`.
 - [x] Delete `data/graphql-source.ts`; aggregate/group/facet authored requests
@@ -711,13 +877,10 @@ Addon order:
 - [x] Move/delete SDK `error-message.ts` and `use-busy-run.ts`.
   `@angee/base` feedback now owns user-facing error message fallback and
   rendered async action busy state; SDK exports, files, and tests are deleted.
-  `document-mutation.ts` keeps its submitted-promise tracking locally until the
-  authored document mutation layer is deleted.
   Gates: `pnpm --filter @angee/base exec vitest run
   src/feedback/error-message.test.ts src/feedback/use-busy-run.test.tsx
   src/auth/LoginPage.test.tsx src/auth/OAuthCallback.test.tsx
   src/views/record-action.test.tsx src/views/DeleteBulkFlow.test.tsx`,
-  `pnpm --filter @angee/sdk exec vitest run src/document-mutation.test.tsx`,
   `pnpm --filter @angee/base typecheck`, `pnpm --filter @angee/sdk typecheck`,
   `pnpm --filter @angee/storage exec vitest run src/data/actions.test.tsx`,
   `pnpm --filter @angee/knowledge exec vitest run
@@ -778,8 +941,8 @@ Addon order:
   `pnpm --filter @angee-example/notes-host typecheck`, `pnpm --filter
   @angee-example/notes-web typecheck`, and `pnpm peers check`.
 - [ ] Move/delete SDK `i18n.ts` after the runtime/addon-manifest owner leaves
-  `@angee/sdk`; it still backs `runtime.ts`, `define-addon.ts`, and addon
-  `useNamespaceT` helpers until Lane I.
+  `@angee/sdk`; current file is a bridge re-export from `@angee/data`, which now
+  owns interpolation and i18n resource primitive types.
 - [ ] Move/thin `runtime.ts` / `define-addon.ts` into `@angee/runtime`.
 - [ ] Reconcile remaining small utility: `make-context.ts`.
 - [ ] Report net line drop.
@@ -903,14 +1066,116 @@ Addon order:
 
 ## Open Decisions
 
-- [ ] `urql` transport-only vs `graphql-request` replacement.
-- [ ] `valibot` vs `zod`.
+These are no longer open — they are competing owners to delete, not choices to
+defer (see Lane L and `.agents/notes/refine-adoption-library-leaning-findings.md`).
+Closed as deletion tasks:
+
+- [x] Decision: `urql` is **not** a kept transport. `graphql-request` (the stock
+  Hasura provider transport) owns authored ops; `urql` is a competing client +
+  cache that Lane L deletes. Tracked as a Lane L deletion, not an open choice.
+- [x] Decision: `zod` owns form resolvers (`zodResolver` is wired in Lane H);
+  `valibot` is scoped to JSON-scalar narrowing only. No second validation library
+  ships. Reconcile: confirm `zod` has a live consumer or drop the `docs/stack.md`
+  row + dependency.
 - [ ] Confirm final addon migration order after notes, IAM, Storage, Knowledge,
       and Integrate.
 
 ## Parking Lot
 
-- [ ] Per-bucket `StrawberryConfig` / name-converter seam on `AngeeSchema`.
+- [x] **Promoted to Lane L (active):** per-bucket `StrawberryConfig` /
+  name-converter seam on `AngeeSchema`. Its trigger ("once every schema is
+  Hasura") has fired — Lane E reports all schemas migrated — so the per-field
+  `pin_snake_wire_names` workaround is now permanent debt, not transitional.
 - [ ] Exact SQL-like `_ilike` wildcard semantics for real-Hasura portability.
 - [ ] Per-field `Count(field) -> count_<field>` if nullable count semantics become
   user-facing.
+
+## Review Corrections (2026-06-24) — Re-Gate On Net Deletion
+
+Three independent reviews (frontend architecture, backend Django, plan) found the
+same structural problem: the refactor has been **adding the new owner without
+deleting the old one**, so several library owners are currently shadowed by Angee
+code rather than delegated to. Full findings + file:line evidence:
+[`refine-adoption-library-leaning-findings.md`](../notes/refine-adoption-library-leaning-findings.md).
+
+**Re-gate rule for Lanes H–L:** a rebind is done only when its old owner is
+**deleted in the same change** (the plan's own greenfield principle #1). A checked
+box must mean "the old owner is gone," not "the new owner also exists." Every Lane
+K/L line states the caller fan-in it clears, and "Move/reuse … in `@angee/data`"
+is not done until the SDK original is deleted (not orphaned).
+
+### Lane K re-gate — verify deletion, not relocation
+
+- [x] Reconcile the deletion ledger with the real `@angee/sdk/src` inventory:
+  `authored-subscription.ts` was public wrapper surface with no app callers and
+  is now deleted.
+- [x] Audit the sideways lifts that left duplicates in both packages.
+  `stable-deps.ts` is deleted from SDK, `selection.ts` is a bridge re-export of
+  `@angee/data` `typeNameForModel`, and `i18n.ts` is a bridge re-export of
+  `@angee/data` interpolation/resource primitives. The remaining duplicate risk
+  is the SDK SDL parser, tracked under the metadata loader line above.
+- [x] `@angee/data` must not depend on `@angee/sdk`.
+  `packages/data/package.json` no longer declares `@angee/sdk`; source grep for
+  `@angee/sdk` under `packages/data` is clean. Metadata contracts, active schema
+  context, transport auth helpers, and i18n primitives moved to `@angee/data`;
+  SDK now depends inward on data while its runtime bridge remains.
+
+### Lane L — Library-Owner Folds (keystone first)
+
+Target plan of record: [`refine-greenfield-rebuild-plan.md`](./refine-greenfield-rebuild-plan.md).
+This lane is now a historical execution checklist; when wording conflicts with
+the greenfield plan, the greenfield plan wins.
+
+The keystone unblocks most of Lane K's remaining deletions. Order matters.
+
+- [x] **Collapse the app dual live/data engine onto refine + react-query**
+  (keystone for the app/runtime path).
+  One invalidation owner: refine `liveProvider` + `useInvalidate`. Route authored
+  ops through the stock provider transport + `meta.gqlQuery` codegen documents.
+  Deleted `relay-invalidation.tsx`, `relay-registry.ts`,
+  `graphql-provider.tsx`, `graphql-client.ts`, `cache-config.ts`,
+  `schema-object-types.ts`, SDK `document-subscription.ts`, and the app urql
+  dependencies. Authored custom-query cache refresh uses TanStack Query metadata
+  plus refine resource invalidation. Remaining urql use is the operator daemon
+  quarantine, package-local to `@angee/operator`, plus the follow-up docs/stack
+  wording cleanup.
+- [x] **Project `ModelMetadata` from the backend `angee.resources` artifact;
+  delete the SDL-introspection engine** (`model-metadata.tsx`
+  `fieldMetadataFromSchema`, `graphql-provider.tsx` boot walk). `@angee/data`
+  now projects field/root/resource metadata directly from the backend artifact,
+  and the backend artifact emits enum value inventories so enum options do not
+  require SDL parsing.
+- [ ] **Land the per-bucket `SnakeNameConverter`/`hasura_config()` seam on
+  `AngeeSchema`** (promoted from the Parking Lot). Then delete
+  `hasura.py:pin_snake_wire_names` and its leaked addon call sites (`iam`,
+  `agents`, `iam_integrate_oidc` `schema.py`). The adapter already ships
+  `SnakeNameConverter`/`hasura_config`; do not keep a weaker hand-rolled copy.
+- [ ] **Read adapter/aggregates output names off the built `HasuraResource.types`
+  and the aggregates compiler** (`group_by_alias`, typed `<Model>GroupKey`,
+  `BucketRange`, `default_operators_for`) instead of re-deriving group-key /
+  bucket-range / node-prefix / scalar strings in `hasura.py` + `metadata.py`.
+  Closes the live drift risk where a frontend query key can name a field the SDL
+  no longer emits.
+- [ ] **Collapse the four Django-field `isinstance` ladders** (scalar / measure /
+  widget / kind across `hasura.py` + `metadata.py`) and the duplicated
+  `_is_to_one_relation` into one field classifier reading the post-composition
+  Strawberry surface; push valid-ops to `default_operators_for`.
+- [ ] **Push grouped-bucket drill-down predicates to the dialect owners** so the
+  frontend forwards a `where` instead of recomputing date/JSON/enum bucket math
+  in `ListInternals.tsx` (per the `docs/stack.md` Hasura Dialect Rule).
+- [ ] **Default the standard glue inside Angee's `hasura_resource(...)`** from
+  `(node, model)`: `get_queryset`, `get_aggregate_queryset` (via
+  `AngeeQuerySet.scoped_for_aggregate`), `write_backend`, `id_decode`, and the
+  FK→model decode map (derive once from `_meta`, feed both `field_id_decode` and
+  the write backend). Delete the 8 copied `_aggregate_queryset` helpers, the ~24
+  trivial `Model.objects.all()` lambdas, and the 2–3×-per-resource relation maps,
+  so each addon call reads as an allowlist declaration with real exceptions
+  (storage `FolderWriteBackend`, IAM password backend, messaging create-disabled)
+  standing out.
+- [ ] **Collapse the Angee filter dialect onto `CrudFilters`**, keeping a single
+  `CrudFilters → _bool_exp` map (delete the parallel `refineFiltersFromAngeeFilter`
+  /`hasuraLookupOperator` switch in `filter-codec.ts`).
+- [ ] **Give the metadata dataclasses their own serialization** and split
+  merge/validate/introspection out of the 1202-LOC `metadata.py` (drop the
+  hand-transcribed 120-line `serialize_data_resources` dict mirror).
+- [ ] Report net line drop per fold (each must be negative).

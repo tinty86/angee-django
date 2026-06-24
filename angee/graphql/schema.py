@@ -20,6 +20,7 @@ from strawberry.tools import merge_types
 from strawberry.types.base import get_object_definition
 from strawberry.types.execution import ExecutionContext
 from strawberry.utils.str_converters import to_camel_case
+from strawberry_django_hasura import hasura_config
 
 from angee.addons import resolve_addon_reference
 from angee.graphql.data.metadata import (
@@ -302,6 +303,7 @@ class GraphQLSchemas:
                     RebacDjangoOptimizerExtension,
                 ],
             ),
+            config=hasura_config(),
         )
         self._attach_schema_metadata(schema, name=name, resources=resources)
         return schema

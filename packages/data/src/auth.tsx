@@ -19,7 +19,10 @@ import {
   type MetaQuery,
 } from "@refinedev/core";
 
-import { createAngeeGraphQLClient, type AngeeHasuraClientOptions } from "./provider";
+import {
+  createAngeeGraphQLClient,
+  type AngeeHasuraClientOptions,
+} from "@angee/refine";
 
 export type UserPreferences = Record<string, unknown>;
 
@@ -104,7 +107,7 @@ type GraphQLRequest = <TData, TVariables extends object = Record<string, never>>
 ) => Promise<TData>;
 
 interface CurrentUserQueryResult {
-  currentUser: unknown;
+  current_user: unknown;
 }
 
 interface LoginMutationResult {
@@ -119,7 +122,7 @@ interface LogoutMutationResult {
 }
 
 interface UpdatePreferencesMutationResult {
-  updatePreferences?: unknown;
+  update_preferences?: unknown;
 }
 
 interface AngeeAuthActionResponse extends AuthActionResponse {
@@ -132,7 +135,7 @@ const PUBLIC_USER_SELECTION =
 const CURRENT_USER_SELECTION = `${PUBLIC_USER_SELECTION} roleRefs: role_refs`;
 
 export const CURRENT_USER_DOCUMENT =
-  `query angeeCurrentUser { currentUser { ${CURRENT_USER_SELECTION} } }`;
+  `query angee_current_user { current_user { ${CURRENT_USER_SELECTION} } }`;
 
 export const LOGIN_DOCUMENT =
   `mutation angeeLogin($username: String!, $password: String!) { ` +
@@ -141,8 +144,8 @@ export const LOGIN_DOCUMENT =
 export const LOGOUT_DOCUMENT = "mutation angeeLogout { logout }";
 
 export const UPDATE_PREFERENCES_DOCUMENT =
-  `mutation angeeUpdatePreferences($preferences: JSON!) { ` +
-  `updatePreferences(preferences: $preferences) { ${CURRENT_USER_SELECTION} } }`;
+  `mutation angee_update_preferences($preferences: JSON!) { ` +
+  `update_preferences(preferences: $preferences) { ${CURRENT_USER_SELECTION} } }`;
 export const UPDATE_PREFERENCES_MUTATION = parse(UPDATE_PREFERENCES_DOCUMENT);
 
 export const ANONYMOUS_AUTH: AuthState = {
@@ -175,7 +178,7 @@ export function createAngeeAuthProviderFromRequest(
   const loginPath = options.loginPath ?? "/login";
   const currentUser = async (): Promise<CurrentUserPayload | null> => {
     const data = await request<CurrentUserQueryResult>(CURRENT_USER_DOCUMENT);
-    return parseCurrentUser(recordValue(data)?.currentUser);
+    return parseCurrentUser(recordValue(data)?.current_user);
   };
   return {
     async check() {
@@ -322,7 +325,7 @@ export function useUpdatePreferences(
       await invalidateAuthStore();
       return parseCurrentUser(
         recordValue(response.data as UpdatePreferencesMutationResult)
-          ?.updatePreferences,
+          ?.update_preferences,
       );
     },
     [invalidateAuthStore, options.dataProviderName, run.mutateAsync],

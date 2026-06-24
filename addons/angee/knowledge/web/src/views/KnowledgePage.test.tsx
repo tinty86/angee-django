@@ -10,7 +10,6 @@ const routerMocks = vi.hoisted(() => ({
 
 const sdkMocks = vi.hoisted(() => ({
   useAuthoredQuery: vi.fn(),
-  useResourceRecord: vi.fn(),
   refetch: {
     detail: vi.fn(async () => undefined),
     pages: vi.fn(async () => undefined),
@@ -23,8 +22,15 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => routerMocks.params,
 }));
 
+vi.mock("@angee/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/data")>();
+  return {
+    ...actual,
+    useAuthoredQuery: sdkMocks.useAuthoredQuery,
+  };
+});
+
 vi.mock("@angee/sdk", () => ({
-  useAuthoredQuery: sdkMocks.useAuthoredQuery,
   useNamespaceT: (
     _namespace: string,
     messages: Record<string, string>,
@@ -36,14 +42,6 @@ vi.mock("@angee/sdk", () => ({
     return message;
   },
 }));
-
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
-  return {
-    ...actual,
-    useResourceRecord: sdkMocks.useResourceRecord,
-  };
-});
 
 vi.mock("@angee/base", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/base")>();
@@ -184,10 +182,6 @@ beforeEach(() => {
   for (const refetch of Object.values(sdkMocks.refetch)) {
     refetch.mockClear();
   }
-  sdkMocks.useResourceRecord.mockReturnValue({
-    fetching: false,
-    record: null,
-  });
   sdkMocks.useAuthoredQuery.mockImplementation((document) => {
     if (document === KnowledgeVaults) {
       return queryResult("vaults", {

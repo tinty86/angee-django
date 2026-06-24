@@ -2,11 +2,11 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
 } from "@angee/base";
 
@@ -15,7 +15,7 @@ import { useIamT } from "../i18n";
 const MODEL = "User";
 
 const userList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="username" />
     <Column field="email" />
     <Column field="is_staff" />
@@ -27,7 +27,7 @@ const userList = (
 export function UsersPage(): React.ReactElement {
   const t = useIamT();
   const userForm = (
-    <Form model={MODEL}>
+    <Form resource={MODEL}>
       <Field name="username" title />
       <Group label={t("iam.users.group.profile")} columns={2}>
         <Field name="email" />
@@ -72,9 +72,9 @@ export function UsersPage(): React.ReactElement {
     </Form>
   );
   return (
-    <DataPage model={MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL} placement="inline" routed>
       {userList}
       {userForm}
-    </DataPage>
+    </ResourceList>
   );
 }

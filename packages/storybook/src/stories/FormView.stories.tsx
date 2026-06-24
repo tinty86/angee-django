@@ -230,7 +230,7 @@ function FormViewFixture({
   return (
     <RuntimeFixture schemas={storySchemas}>
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         id={storyRecord.id}
         fields={fields}
         groups={groups}

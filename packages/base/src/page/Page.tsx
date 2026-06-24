@@ -30,7 +30,7 @@ export type PageProps = React.HTMLAttributes<HTMLDivElement> &
 
 /**
  * The page frame: a vertical column (header → toolbar → body, with optional
- * aside/footer) that fills its container. It is shell-agnostic — when mounted
+ * aside/footer) that fills its container. It is layout-agnostic — when mounted
  * inside a console content region that already scrolls, run `height="auto"` /
  * `overflow="visible"` so the region keeps owning the scroll and canvas
  * background; use the `fill`/`viewport` heights only when the page owns its own

@@ -1,5 +1,8 @@
 import * as React from "react";
-import { useAuthoredQuery, useModelMetadata } from "@angee/sdk";
+import { useAuthoredQuery } from "@angee/data";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 
 import type { WidgetOption } from "../widgets";
 import { BaseImplChoices, type ImplChoice } from "./documents";
@@ -15,8 +18,8 @@ import { enumValueLabel } from "./ListInternals";
  * pitfall in docs/frontend/guidelines.md). The label is the SDL description where
  * authored, otherwise the humanized member name (`enumValueLabel`).
  */
-export function useEnumOptions(model: string, field: string): readonly WidgetOption[] {
-  const metadata = useModelMetadata(model);
+export function useEnumOptions(resource: string, field: string): readonly WidgetOption[] {
+  const metadata = useModelMetadata(resource);
   return React.useMemo<readonly WidgetOption[]>(
     () =>
       (metadata?.fields[field]?.values ?? []).map((value) => ({
@@ -27,16 +30,16 @@ export function useEnumOptions(model: string, field: string): readonly WidgetOpt
   );
 }
 
-export function useImplChoices(model: string, field: string): readonly ImplChoice[] {
+export function useImplChoices(resource: string, field: string): readonly ImplChoice[] {
   const { data } = useAuthoredQuery(BaseImplChoices, {
-    model,
+    model: resource,
     field,
   });
-  return data?.implChoices ?? [];
+  return data?.impl_choices ?? [];
 }
 
-export function useImplCategory(model: string, field: string): (value: unknown) => string {
-  const choices = useImplChoices(model, field);
+export function useImplCategory(resource: string, field: string): (value: unknown) => string {
+  const choices = useImplChoices(resource, field);
   return React.useMemo(() => {
     const byKey = new Map(choices.map((choice) => [choice.key, choice.category]));
     return (value: unknown) => byKey.get(String(value)) ?? "";
@@ -45,17 +48,16 @@ export function useImplCategory(model: string, field: string): (value: unknown) 
 
 /**
  * A prefill function for an `ImplClassField` select: given the chosen impl key,
- * returns that impl's defaults keyed by *camelCase form field name*, ready to pass
- * to a `<Field prefill>`. The server (`implChoices`) owns the per-impl defaults
- * (merged along the impl MRO); this only re-keys snake_case model fields to the
- * camelCase the form uses. Picking an impl loads its full preset (overwriting those
+ * returns that impl's defaults keyed by field name, ready to pass to a `<Field prefill>`.
+ * The server (`impl_choices`) owns the per-impl defaults (merged along the impl MRO).
+ * Picking an impl loads its full preset (overwriting those
  * fields, so boolean defaults land too); the backend also materialises them on create.
  */
 export function useImplPrefill(
-  model: string,
+  resource: string,
   field: string,
 ): (value: unknown) => Record<string, unknown> | undefined {
-  const choices = useImplChoices(model, field);
+  const choices = useImplChoices(resource, field);
   return React.useMemo(() => {
     const byKey = new Map(
       choices.map((choice) => [choice.key, choice.defaults]),
@@ -63,13 +65,7 @@ export function useImplPrefill(
     return (value: unknown) => {
       const defaults = byKey.get(String(value));
       if (!defaults) return undefined;
-      return Object.fromEntries(
-        Object.entries(defaults).map(([name, seed]) => [snakeToCamel(name), seed]),
-      );
+      return defaults as Record<string, unknown>;
     };
   }, [choices]);
-}
-
-function snakeToCamel(name: string): string {
-  return name.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
 }

@@ -196,6 +196,16 @@ def test_public_resource_metadata_declares_people_surface() -> None:
         "input": "MONTH",
         "key": "created_at_month",
         "rangeKey": "created_at_month_range",
+        "filter": {
+            "kind": "range",
+            "field": "created_at",
+            "valueKey": "created_at_month",
+            "rangeKey": "created_at_month_range",
+            "lookup": None,
+            "nullLookup": "isNull",
+            "valueTransform": None,
+            "valueMap": [],
+        },
     }
     assert person["defaultMeasures"] == [{"op": "count", "field": None, "input": None}]
     assert person["aggregateMeasures"] == []

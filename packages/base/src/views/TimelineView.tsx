@@ -1,6 +1,6 @@
 import { useMemo, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
-import type { Row } from "@angee/data";
+import type { Row } from "@angee/resources";
 
 import { cn } from "../lib/cn";
 import { TimelineEntry } from "../fragments/TimelineEntry";
@@ -11,7 +11,7 @@ import type { ListEmptyState } from "./list-view-types";
 /**
  * The chronological View — rows bucketed by day (newest first), each rendered
  * as a `TimelineEntry` (the same entry the revisions aside uses). Frameless: it
- * composes inside a `DataPage` or stands alone over a row array. `renderEntry`
+ * composes inside a `ResourceList` or stands alone over a row array. `renderEntry`
  * overrides the entry body for richer rows (e.g. an avatar).
  */
 export interface TimelineViewProps<TRow extends Row = Row> {

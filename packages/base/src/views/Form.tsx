@@ -6,42 +6,42 @@ import {
 } from "./FormView";
 import {
   PAGE_ELEMENT_SLOT,
-  requirePageModel,
+  requirePageResource,
 } from "./page";
 
 /**
  * Declarative form view.
  *
- * Used standalone, `Form` renders `FormView` directly. Used as a `DataPage`
- * child, the element is parsed as a view declaration and `DataPage` stitches it
+ * Used standalone, `Form` renders `FormView` directly. Used as a `ResourceList`
+ * child, the element is parsed as a view declaration and `ResourceList` stitches it
  * into the collection-record page. Export and reuse element constants directly;
  * wrapper components hide the marker from the parser.
  */
 export interface FormProps
-  extends Omit<FormViewProps, "model" | "fields" | "groups" | "children"> {
+  extends Omit<FormViewProps, "resource" | "fields" | "groups" | "children"> {
   /**
-   * Model label rendered by this form, e.g. `"notes.Note"`.
+   * Resource rendered by this form, e.g. `"notes.Note"`.
    *
-   * Required when rendered standalone. When nested inside `DataPage`, this may
+   * Required when rendered standalone. When nested inside `ResourceList`, this may
    * be omitted and is inherited from the page; if both are declared, they must
    * match.
    */
-  model?: string;
+  resource?: string;
   /** Field and group element declarations for this form. */
   children?: React.ReactNode;
 }
 
 function FormComponentImpl({
-  model,
+  resource,
   children,
   ...props
 }: FormProps): React.ReactElement {
-  const resolvedModel = requirePageModel("Form", model);
+  const resolvedResource = requirePageResource("Form", resource);
 
   return (
     <FormView
       {...props}
-      model={resolvedModel}
+      resource={resolvedResource}
     >
       {children}
     </FormView>
@@ -50,7 +50,7 @@ function FormComponentImpl({
 
 /**
  * Render a reusable form declaration standalone, or hand the same element to
- * `DataPage` for page-level composition. Element constants are the reuse unit;
+ * `ResourceList` for page-level composition. Element constants are the reuse unit;
  * wrapper components hide the marker from the parser.
  */
 export const Form = Object.assign(FormComponentImpl, {

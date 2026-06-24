@@ -8,7 +8,6 @@ from typing import Any
 import strawberry
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models, transaction
-from strawberry.types import get_object_definition
 from strawberry_django.mutations import resolvers as mutation_resolvers
 from strawberry_django_aggregates.granularity import NumberGranularity, TimeGranularity
 from strawberry_django_hasura import (
@@ -23,6 +22,8 @@ from angee.base.models import instance_from_public_id
 from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
 from angee.graphql.data.metadata import (
     DataAggregateMeasureMetadata,
+    DataGroupBucketFilterMetadata,
+    DataGroupBucketFilterValueMapMetadata,
     DataGroupDimensionMetadata,
     DataGroupExtractionMetadata,
     DataResourceRoots,
@@ -51,9 +52,11 @@ class AngeeHasuraWriteBackend:
         model: type[models.Model],
         *,
         public_id_fields: Mapping[str, type[models.Model]] | None = None,
+        delete_guard: Callable[[models.Model], str | None] | None = None,
     ) -> None:
         self.model = model
         self.public_id_fields = dict(public_id_fields or {})
+        self.delete_guard = delete_guard
 
     def create(self, info: strawberry.Info, data: dict[str, Any]) -> Any:
         """Create through strawberry-django's stock mutation resolver."""
@@ -92,6 +95,11 @@ class AngeeHasuraWriteBackend:
         def capture(instance: models.Model) -> None:
             captured["instance"] = instance
             captured["pk"] = instance.pk
+            if self.delete_guard is None:
+                return
+            message = self.delete_guard(instance)
+            if message:
+                raise ValueError(message)
 
         preview = delete_by_public_id(
             self.model,
@@ -222,13 +230,11 @@ def hasura_resource(  # noqa: PLR0913 - mirrors the upstream declarative builder
     """Build a Hasura resource and attach Angee's model-resource metadata.
 
     ``strawberry-django-hasura`` owns the portable Hasura dialect mechanics.
-    This wrapper owns only the Angee seam around that resource: snake-pinning
-    the node fields while this repo still uses Strawberry's default converter,
-    and attaching the Phase 1 ``angee.resources`` metadata contribution.
+    This wrapper owns only the Angee seam around that resource: attaching the
+    Phase 1 ``angee.resources`` metadata contribution.
     """
 
     resource_name = name or model.__name__.lower()
-    pin_snake_wire_names(node)
     resource = build_hasura_resource(
         node,
         model=model,
@@ -318,7 +324,7 @@ def attach_hasura_resource_metadata(
             order_fields=sortable,
             aggregate_fields=aggregatable,
             group_by_fields=groupable,
-            group_dimensions=_hasura_group_dimensions(model, groupable),
+            group_dimensions=_hasura_group_dimensions(model, groupable, filterable),
             aggregate_measures=_hasura_aggregate_measures(model, aggregatable),
             default_measures=(DataAggregateMeasureMetadata(op="count"),),
         ),
@@ -425,47 +431,149 @@ def _mutation_capabilities(
 def _hasura_group_dimensions(
     model: type[models.Model],
     groupable: tuple[str, ...],
+    filterable: tuple[str, ...],
 ) -> tuple[DataGroupDimensionMetadata, ...]:
     """Return typed-key group metadata using the aggregate builder's public contract."""
 
-    return tuple(_hasura_group_dimension(model, path) for path in groupable)
+    return tuple(_hasura_group_dimension(model, path, filterable) for path in groupable)
 
 
 def _hasura_group_dimension(
     model: type[models.Model],
     path: str,
+    filterable: tuple[str, ...],
 ) -> DataGroupDimensionMetadata:
     field = _require_group_field(model, path)
     key = _group_key_path(field, path)
     is_relation = "__" not in path and _is_to_one_relation(field)
+    filter_metadata = _hasura_group_bucket_filter(
+        field,
+        path,
+        key,
+        filterable=filterable,
+        is_relation=is_relation,
+    )
     return DataGroupDimensionMetadata(
         field=path,
         input=_group_input_name(path),
         key=key,
         kind="relation" if is_relation else "column",
         scalar="ID" if is_relation else _scalar_for_field(field),
-        extractions=_hasura_group_extractions(field, key),
+        filter=filter_metadata,
+        extractions=_hasura_group_extractions(field, key, filter_metadata),
     )
 
 
 def _hasura_group_extractions(
     field: models.Field[Any, Any],
     key: str,
+    bucket_filter: DataGroupBucketFilterMetadata | None,
 ) -> tuple[DataGroupExtractionMetadata, ...]:
     if not isinstance(field, (models.DateField, models.DateTimeField)):
         return ()
-    return tuple(
-        DataGroupExtractionMetadata(
-            name=granularity.value,
-            input=granularity.name,
-            key=f"{key}_{granularity.value}",
-            range_key=(
-                f"{key}_{granularity.value}_range"
-                if isinstance(granularity, TimeGranularity)
-                else None
-            ),
+    extractions: list[DataGroupExtractionMetadata] = []
+    for granularity in (*TimeGranularity, *NumberGranularity):
+        extraction_key = f"{key}_{granularity.value}"
+        range_key = (
+            f"{key}_{granularity.value}_range"
+            if isinstance(granularity, TimeGranularity)
+            else None
         )
-        for granularity in (*TimeGranularity, *NumberGranularity)
+        extractions.append(
+            DataGroupExtractionMetadata(
+                name=granularity.value,
+                input=granularity.name,
+                key=extraction_key,
+                range_key=range_key,
+                filter=(
+                    _hasura_group_range_filter(
+                        bucket_filter,
+                        value_key=extraction_key,
+                        range_key=range_key,
+                    )
+                    if range_key is not None else None
+                ),
+            )
+        )
+    return tuple(extractions)
+
+
+def _hasura_group_bucket_filter(
+    field: models.Field[Any, Any],
+    path: str,
+    key: str,
+    *,
+    filterable: tuple[str, ...],
+    is_relation: bool,
+) -> DataGroupBucketFilterMetadata | None:
+    """Return the backend-owned drill-down filter for a group dimension."""
+
+    filter_field = _group_filter_field(path, filterable)
+    if filter_field is None:
+        return None
+    if is_relation:
+        return DataGroupBucketFilterMetadata(
+            kind="equality",
+            field=filter_field,
+            value_key=key,
+            lookup=PUBLIC_ID_FIELD_NAME,
+        )
+    if isinstance(field, models.JSONField):
+        return DataGroupBucketFilterMetadata(
+            kind="equality",
+            field=filter_field,
+            value_key=key,
+            lookup="exact",
+            value_transform="json",
+        )
+    return DataGroupBucketFilterMetadata(
+        kind="equality",
+        field=filter_field,
+        value_key=key,
+        value_map=_enum_value_map_for_field(field),
+    )
+
+
+def _hasura_group_range_filter(
+    bucket_filter: DataGroupBucketFilterMetadata | None,
+    *,
+    value_key: str,
+    range_key: str,
+) -> DataGroupBucketFilterMetadata | None:
+    if bucket_filter is None:
+        return None
+    return DataGroupBucketFilterMetadata(
+        kind="range",
+        field=bucket_filter.field,
+        value_key=value_key,
+        range_key=range_key,
+        null_lookup=bucket_filter.null_lookup,
+    )
+
+
+def _group_filter_field(path: str, filterable: tuple[str, ...]) -> str | None:
+    """Return the declared bool-exp field that can filter one group path."""
+
+    normalized = path.replace(".", "__")
+    for candidate in (path, normalized):
+        if candidate in filterable:
+            return candidate
+    return None
+
+
+def _enum_value_map_for_field(
+    field: models.Field[Any, Any],
+) -> tuple[DataGroupBucketFilterValueMapMetadata, ...]:
+    choices_enum = getattr(field, "choices_enum", None)
+    members = getattr(choices_enum, "__members__", None)
+    if not members:
+        return ()
+    return tuple(
+        DataGroupBucketFilterValueMapMetadata(
+            from_value=str(name),
+            to_value=str(member.value),
+        )
+        for name, member in members.items()
     )
 
 
@@ -569,16 +677,3 @@ def _scalar_for_field(field: models.Field[Any, Any]) -> str | None:
         return "JSON"
     return None
 
-
-def pin_snake_wire_names(strawberry_type: type) -> None:
-    """Pin snake_case fields and args on a Strawberry type for Hasura-default wire names."""
-
-    definition = get_object_definition(strawberry_type)
-    if definition is None:
-        return
-    for field in definition.fields:
-        if field.graphql_name is None and "_" in field.python_name:
-            field.graphql_name = field.python_name
-        for argument in field.arguments:
-            if argument.graphql_name is None and "_" in argument.python_name:
-                argument.graphql_name = argument.python_name

@@ -1,4 +1,4 @@
-// Presentational page shell exports; the column/field page-descriptor DSL is owned by ../views/page.
+// Presentational page layout exports; the column/field page-descriptor DSL is owned by ../views/page.
 export { Page, pageVariants, type PageProps } from "./Page";
 export {
   PageHeader,

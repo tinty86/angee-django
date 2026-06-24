@@ -14,32 +14,30 @@ import { makeContext } from "./make-context";
 
 /**
  * The merged app runtime an app composes once from its addon manifests. The
- * registry lookups (`useWidget` / `useMenus` / `useSlot` / `useT`) read from it;
+ * registry lookups (`useWidget` / `useSlot` / `useT`) read from it;
  * there is no separate provider per registry.
  */
 export interface AppRuntime {
   widgets: WidgetMap;
-  menus: readonly ComposedMenuItem[];
   i18n: I18nResources;
   icons: Readonly<Record<string, unknown>>;
   forms: FormOverrideMap;
   chatter: readonly ChatterContribution[];
   slots: readonly SlotContribution[];
   previews: readonly PreviewContribution[];
-  /** Collection route base path per model name, for "follow relation" navigation. */
-  routesByModel: Readonly<Record<string, string>>;
+  /** Collection route base path per resource id, for relation-follow navigation. */
+  routesByResource: Readonly<Record<string, string>>;
 }
 
 const EMPTY_RUNTIME: AppRuntime = {
   widgets: {},
-  menus: [],
   i18n: {},
   icons: {},
   forms: {},
   chatter: [],
   slots: [],
   previews: [],
-  routesByModel: {},
+  routesByResource: {},
 };
 
 const RuntimeContext = makeContext<AppRuntime>("AppRuntime");
@@ -67,25 +65,20 @@ export function useWidget(id: string): unknown {
   return useAppRuntime().widgets[id];
 }
 
-/** Look up an addon-registered create-form override for a model (or undefined). */
-export function useFormOverride(model: string): unknown {
+/** Look up an addon-registered create-form override for a resource (or undefined). */
+export function useFormOverride(resource: string): unknown {
   // `?.` guards a `Partial<AppRuntime>` provider that spread `forms: undefined`.
-  return useAppRuntime().forms?.[model];
+  return useAppRuntime().forms?.[resource];
 }
 
 /**
- * The collection route base path for a model (e.g. `"OAuthClient"` →
+ * The collection route base path for a resource (e.g. `"OAuthClient"` →
  * `"/integrate/providers"`), or `undefined` when no route lists it. Drives the
- * relation "follow" affordance — a model without a routed page simply offers none.
+ * relation-follow affordance; a resource without a routed list offers no link.
  */
-export function useModelRoute(model: string): string | undefined {
-  // `?.` guards a `Partial<AppRuntime>` provider that spread `routesByModel: undefined`.
-  return useAppRuntime().routesByModel?.[model];
-}
-
-/** The merged menu list. */
-export function useMenus(): readonly ComposedMenuItem[] {
-  return useAppRuntime().menus;
+export function useResourceRoute(resource: string): string | undefined {
+  // `?.` guards a `Partial<AppRuntime>` provider that spread `routesByResource: undefined`.
+  return useAppRuntime().routesByResource?.[resource];
 }
 
 /** The slot entries contributed to one slot, in merged order. */

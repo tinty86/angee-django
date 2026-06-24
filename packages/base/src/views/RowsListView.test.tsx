@@ -18,7 +18,7 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { parseFlatSearch, stringifyFlatSearch } from "../createApp";
-import { DataViewProvider } from "./data-view-context";
+import { ResourceViewProvider } from "./resource-view-context";
 import { RowsListView } from "./RowsListView";
 import type { ListColumn } from "./ListInternals";
 
@@ -137,7 +137,7 @@ describe("RowsListView filters", () => {
 
   test("matches relation public-id lookup filters against local row objects", async () => {
     renderInRouter(
-      <DataViewProvider initialState={{ filter: { provider: { sqid: "ipr_anthropic" } } }}>
+      <ResourceViewProvider initialState={{ filter: { provider: { sqid: "ipr_anthropic" } } }}>
         <RowsListView<Item>
           rows={[
             {
@@ -155,14 +155,14 @@ describe("RowsListView filters", () => {
           ]}
           columns={columns}
         />
-      </DataViewProvider>,
+      </ResourceViewProvider>,
     );
 
     expect(await screen.findByText("Claude")).toBeTruthy();
     expect(screen.queryByText("GPT")).toBeNull();
   });
 
-  test("standalone rows use route-owned data-view state", async () => {
+  test("standalone rows use route-owned resource-view state", async () => {
     const routeFilter = encodeURIComponent(
       JSON.stringify({ provider: { sqid: "ipr_anthropic" } }),
     );
@@ -193,7 +193,7 @@ describe("RowsListView filters", () => {
 
   test("local scope ignores an ambient data view filter", async () => {
     renderInRouter(
-      <DataViewProvider initialState={{ filter: { provider: { sqid: "ipr_anthropic" } } }}>
+      <ResourceViewProvider initialState={{ filter: { provider: { sqid: "ipr_anthropic" } } }}>
         <RowsListView<Item>
           scope="local"
           rows={[
@@ -212,7 +212,7 @@ describe("RowsListView filters", () => {
           ]}
           columns={columns}
         />
-      </DataViewProvider>,
+      </ResourceViewProvider>,
     );
 
     expect(await screen.findByText("Claude")).toBeTruthy();

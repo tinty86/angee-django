@@ -1,30 +1,50 @@
 import { useCallback, useMemo } from "react";
+import { useQueries } from "@tanstack/react-query";
 import {
   useCustom,
   useCustomMutation,
+  useDataProvider,
+  useInvalidate,
   type BaseRecord,
   type HttpError,
 } from "@refinedev/core";
-import type { DataResourceMetadata } from "@angee/sdk";
+import {
+  resourceOperationTarget,
+  refineInvalidationParams,
+  resourceInvalidationTargets,
+  useActiveGraphQLSchemaName,
+  useSchemaFieldMetadata,
+  type DataResourceMetadata,
+} from "@angee/resources";
 
 import {
   aggregateRequest,
+  actionRequest,
   deletePreviewRequest,
+  extractActionOutcome,
   extractAggregate,
+  runActionResult,
   extractDeletePreview,
-  extractFacets,
+  extractFacet,
   extractGroupBy,
-  facetsRequest,
   groupByRequest,
   type AggregateBucket,
   type AggregateRequestOptions,
+  type ByIdVariables,
   type DeletePreview,
   type DeletePreviewVariables,
   type FacetRequestSpec,
   type GroupByRequestOptions,
   type GroupByResult,
   type ResourceFacetResult,
-} from "./operations";
+} from "@angee/refine";
+import {
+  aggregateDocumentForResource,
+  actionDocumentForSchema,
+  deletePreviewDocumentForResource,
+  groupDocumentForResource,
+  useOperationDocuments,
+} from "@angee/refine";
 
 export interface UseAngeeAggregateResult {
   aggregate: AggregateBucket | null;
@@ -59,22 +79,20 @@ export interface UseAngeeDeletePreviewResult {
   reset: () => void;
 }
 
+export type ActionMutate = (id: string) => Promise<string | undefined>;
+
+export interface UseActionMutationOptions {
+  dataProviderName?: string;
+  /** Extra Angee model labels whose refine caches this action mutates. */
+  invalidateModels?: readonly string[];
+}
+
+export interface UseActionMutationState {
+  fetching: boolean;
+  error: Error | null;
+}
+
 const EMPTY_FACETS: readonly FacetRequestSpec[] = [];
-const INERT_FACET_RESOURCE: DataResourceMetadata = {
-  schemaName: "default",
-  modelLabel: "",
-  appLabel: "",
-  modelName: "",
-  publicIdField: "id",
-  roots: { groups: "__angeeFacetNoop" },
-  typeNames: {},
-  capabilities: [],
-  filterFields: [],
-  orderFields: [],
-  aggregateFields: [],
-  groupByFields: [],
-  relationAxes: [],
-};
 
 export function useAngeeAggregate(
   resource: DataResourceMetadata,
@@ -82,9 +100,16 @@ export function useAngeeAggregate(
 ): UseAngeeAggregateResult {
   const { enabled = true, ...query } = options;
   const queryKey = stableJson(query);
+  const operationDocuments = useOperationDocuments();
   const request = useMemo(
-    () => aggregateRequest(resource, query),
-    [resource, queryKey],
+    () => aggregateRequest(resourceOperationTarget(resource, "aggregate"), query, {
+      document: aggregateDocumentForResource(
+        operationDocuments,
+        resource.schemaName,
+        resource.modelLabel,
+      ),
+    }),
+    [operationDocuments, resource, queryKey],
   );
   const run = useCustom<BaseRecord, HttpError>({
     url: "",
@@ -110,9 +135,16 @@ export function useAngeeGroupBy(
 ): UseAngeeGroupByResult {
   const { enabled = true, ...query } = options;
   const queryKey = stableJson(query);
+  const operationDocuments = useOperationDocuments();
   const request = useMemo(
-    () => groupByRequest(resource, query),
-    [resource, queryKey],
+    () => groupByRequest(resourceOperationTarget(resource, "groups"), query, {
+      document: groupDocumentForResource(
+        operationDocuments,
+        resource.schemaName,
+        resource.modelLabel,
+      ),
+    }),
+    [operationDocuments, resource, queryKey],
   );
   const run = useCustom<BaseRecord, HttpError>({
     url: "",
@@ -141,27 +173,65 @@ export function useAngeeFacets(
   const canQuery = enabled && Boolean(resource?.roots.groups) && facets.length > 0;
   const activeFacets = canQuery ? facets : EMPTY_FACETS;
   const facetsKey = stableJson(activeFacets);
-  const requestResource = canQuery && resource ? resource : INERT_FACET_RESOURCE;
-  const request = useMemo(
-    () => facetsRequest(requestResource, { facets: activeFacets }),
-    [requestResource, facetsKey],
-  );
-  const run = useCustom<BaseRecord, HttpError>({
-    url: "",
-    method: "post",
-    dataProviderName: request.dataProviderName,
-    meta: request.meta,
-    queryOptions: {
+  const dataProvider = useDataProvider();
+  const operationDocuments = useOperationDocuments();
+  const facetRequests = useMemo(() => {
+    if (!canQuery || !resource) return [];
+    const document = groupDocumentForResource(
+      operationDocuments,
+      resource.schemaName,
+      resource.modelLabel,
+    );
+    return activeFacets.map((facet) => ({
+      facet,
+      request: groupByRequest(
+        resourceOperationTarget(resource, "groups"),
+        facet,
+        { document },
+      ),
+    }));
+  }, [activeFacets, canQuery, facetsKey, operationDocuments, resource]);
+  const queries = useQueries({
+    queries: facetRequests.map(({ facet, request }) => ({
+      queryKey: [
+        "angee",
+        "facets",
+        request.dataProviderName,
+        request.root,
+        facet.id,
+        stableJson(facet),
+      ],
+      queryFn: async () => {
+        const custom = dataProvider(request.dataProviderName).custom;
+        if (!custom) {
+          throw new Error(
+            `Data provider "${request.dataProviderName}" does not support ` +
+              "custom GraphQL requests.",
+          );
+        }
+        const response = await custom<BaseRecord>({
+          url: "",
+          method: "post",
+          meta: request.meta,
+        });
+        return response.data;
+      },
       enabled: canQuery,
-    },
+    })),
   });
-  const data = run.query.data?.data ?? run.result.data;
   return {
-    facets: extractFacets(data, activeFacets),
-    fetching: run.query.isFetching,
-    error: run.query.error,
+    facets: Object.fromEntries(
+      facetRequests.map(({ facet, request }, index) => [
+        facet.id,
+        extractFacet(queries[index]?.data, request.root, facet),
+      ]),
+    ),
+    fetching: queries.some((query) => query.isFetching),
+    error: (queries.find((query) => query.error)?.error ?? null) as HttpError | null,
     refetch: () => {
-      void run.query.refetch();
+      queries.forEach((query) => {
+        void query.refetch();
+      });
     },
   };
 }
@@ -171,9 +241,20 @@ export function useAngeeDeletePreview(
 ): UseAngeeDeletePreviewResult {
   const root = resource.roots.deletePreview ?? "";
   const run = useCustomMutation<BaseRecord, HttpError, DeletePreviewVariables>();
+  const operationDocuments = useOperationDocuments();
   const mutate = useCallback(
     async (variables: DeletePreviewVariables) => {
-      const request = deletePreviewRequest(resource, variables);
+      const request = deletePreviewRequest(
+        resourceOperationTarget(resource, "deletePreview"),
+        variables,
+        {
+          document: deletePreviewDocumentForResource(
+            operationDocuments,
+            resource.schemaName,
+            resource.modelLabel,
+          ),
+        },
+      );
       const response = await run.mutateAsync({
         url: "",
         method: "post",
@@ -183,7 +264,7 @@ export function useAngeeDeletePreview(
       });
       return extractDeletePreview(response.data, request.root);
     },
-    [resource, run.mutateAsync],
+    [operationDocuments, resource, run.mutateAsync],
   );
   return {
     preview: root ? extractDeletePreview(run.mutation.data?.data, root) : null,
@@ -193,6 +274,71 @@ export function useAngeeDeletePreview(
     reset: run.mutation.reset,
   };
 }
+
+/**
+ * Run a single-id backend action mutation through refine's custom mutation
+ * owner. The generated `ActionFieldName` union from `@angee/gql/<schema>/actions`
+ * still pins callers to real action fields, while refine owns execution state.
+ */
+export function useActionMutation<TField extends string = string>(
+  field: TField,
+  options: UseActionMutationOptions = {},
+): [ActionMutate, UseActionMutationState] {
+  const activeSchema = useActiveGraphQLSchemaName();
+  const dataProviderName = options.dataProviderName ?? activeSchema ?? "default";
+  const metadata = useSchemaFieldMetadata();
+  const operationDocuments = useOperationDocuments();
+  const invalidate = useInvalidate();
+  const invalidateModels = options.invalidateModels ?? EMPTY_MODEL_LABELS;
+  const invalidationTargets = useMemo(
+    () => resourceInvalidationTargets(metadata, invalidateModels),
+    [metadata, invalidateModels],
+  );
+  const run = useCustomMutation<BaseRecord, HttpError, ByIdVariables>();
+  const mutate = useCallback<ActionMutate>(
+    async (id) => {
+      const request = actionRequest(field, { id }, {
+        dataProviderName,
+        document: actionDocumentForSchema(
+          operationDocuments,
+          dataProviderName,
+          field,
+        ),
+      });
+      const response = await run.mutateAsync({
+        url: "",
+        method: "post",
+        values: { id },
+        dataProviderName: request.dataProviderName,
+        meta: request.meta,
+      });
+      const result = runActionResult(extractActionOutcome(response.data, request.root));
+      await Promise.all(
+        invalidationTargets.map((target) =>
+          invalidate(refineInvalidationParams(target)),
+        ),
+      );
+      return result;
+    },
+    [
+      dataProviderName,
+      field,
+      invalidate,
+      invalidationTargets,
+      operationDocuments,
+      run.mutateAsync,
+    ],
+  );
+  return [
+    mutate,
+    {
+      fetching: run.mutation.isPending,
+      error: run.mutation.error as Error | null,
+    },
+  ];
+}
+
+const EMPTY_MODEL_LABELS: readonly string[] = [];
 
 function stableJson(value: unknown): string {
   return JSON.stringify(sortJson(value));

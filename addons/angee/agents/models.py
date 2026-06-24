@@ -562,6 +562,38 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
 
         return self.name
 
+    @property
+    def can_provision(self) -> bool:
+        """Whether the provision action may start from the current lifecycle facts."""
+
+        return str(self.runtime_status) == RuntimeStatus.ERROR.value or str(self.lifecycle) in {
+            AgentLifecycle.DRAFT.value,
+            AgentLifecycle.DEPROVISIONED.value,
+        }
+
+    @property
+    def can_deprovision(self) -> bool:
+        """Whether the teardown action is meaningful for the current rendered state."""
+
+        return str(self.lifecycle) in {
+            AgentLifecycle.PROVISIONING.value,
+            AgentLifecycle.READY.value,
+            AgentLifecycle.DEPROVISIONING.value,
+        } or bool(self.workspace or self.service)
+
+    @property
+    def can_delete(self) -> bool:
+        """Whether deleting the definition can leave no orphaned operator instance."""
+
+        return not self.can_deprovision
+
+    def delete_blocker(self) -> str | None:
+        """Return the delete-blocking reason, or ``None`` when deletion is allowed."""
+
+        if self.can_delete:
+            return None
+        return "Deprovision this agent before deleting it."
+
     def mark_provisioning(self) -> None:
         """Enter the provision flow: lifecycle provisioning, run state reset to stopped."""
 

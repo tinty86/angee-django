@@ -13,9 +13,9 @@ import { TopMenu, type TopMenuProps } from "./TopMenu";
 import { UserMenu } from "./UserMenu";
 
 export interface TopBarProps {
-  /** Optional leading brand/lockup. Omit inside ConsoleShell — the rail's
+  /** Optional leading brand/lockup. Omit inside ConsoleLayout — the rail's
    * app-switcher already carries the brand mark, so the top bar starts with
-   * the menu (matching the console shell). */
+   * the menu (matching the console layout). */
   brand?: ReactNode;
   hideSearch?: boolean;
   hideSystray?: boolean;

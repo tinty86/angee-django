@@ -2,15 +2,17 @@
 
 import { describe, expect, test } from "vitest";
 
-import type { ModelMetadata } from "@angee/sdk";
+import type {
+  ModelMetadata,
+} from "@angee/resources";
 
 import {
   bucketFilterForGroup,
   bucketValueLabels,
-  dataViewGroupToAggregateDimension,
+  resourceViewGroupToAggregateDimension,
   groupLabelDimension,
 } from "./ListInternals";
-import { validDataViewGroupStack } from "./list-view-utils";
+import { validResourceViewGroupStack } from "./list-view-utils";
 
 // A model whose resource artifact owns group dimensions, including a relation
 // label axis for `party__display_name`.
@@ -41,6 +43,15 @@ const GROUP_METADATA = {
         key: "serverStatus",
         kind: "column",
         scalar: "String",
+        filter: {
+          kind: "equality",
+          field: "status",
+          valueKey: "serverStatus",
+          valueMap: [
+            { from: "ACTIVE", to: "active" },
+            { from: "IN_REVIEW", to: "in_review" },
+          ],
+        },
       },
       {
         field: "createdAt",
@@ -48,12 +59,23 @@ const GROUP_METADATA = {
         key: "createdAt",
         kind: "column",
         scalar: "DateTime",
+        filter: {
+          kind: "equality",
+          field: "createdAt",
+          valueKey: "createdAt",
+        },
         extractions: [
           {
             name: "month",
             input: "MONTH",
             key: "createdAtMonth",
             rangeKey: "createdAtMonthRange",
+            filter: {
+              kind: "range",
+              field: "createdAt",
+              valueKey: "createdAtMonth",
+              rangeKey: "createdAtMonthRange",
+            },
           },
         ],
       },
@@ -70,6 +92,12 @@ const GROUP_METADATA = {
         key: "vendorId",
         kind: "relation",
         scalar: "ID",
+        filter: {
+          kind: "equality",
+          field: "vendor",
+          valueKey: "vendorId",
+          lookup: "id",
+        },
       },
       {
         field: "party",
@@ -77,6 +105,12 @@ const GROUP_METADATA = {
         key: "partyId",
         kind: "relation",
         scalar: "ID",
+        filter: {
+          kind: "equality",
+          field: "party",
+          valueKey: "partyId",
+          lookup: "id",
+        },
       },
       {
         field: "party_DisplayName",
@@ -91,6 +125,13 @@ const GROUP_METADATA = {
         key: "metadata",
         kind: "column",
         scalar: "JSON",
+        filter: {
+          kind: "equality",
+          field: "metadata",
+          valueKey: "metadata",
+          lookup: "exact",
+          valueTransform: "json",
+        },
       },
     ],
   },
@@ -115,12 +156,23 @@ const HASURA_SNAKE_METADATA = {
         key: "updated_at",
         kind: "column",
         scalar: "DateTime",
+        filter: {
+          kind: "equality",
+          field: "updated_at",
+          valueKey: "updated_at",
+        },
         extractions: [
           {
             name: "month",
             input: "MONTH",
             key: "updated_at_month",
             rangeKey: "updated_at_month_range",
+            filter: {
+              kind: "range",
+              field: "updated_at",
+              valueKey: "updated_at_month",
+              rangeKey: "updated_at_month_range",
+            },
           },
         ],
       },
@@ -128,16 +180,16 @@ const HASURA_SNAKE_METADATA = {
   },
 } as unknown as ModelMetadata;
 
-describe("dataViewGroupToAggregateDimension", () => {
+describe("resourceViewGroupToAggregateDimension", () => {
   test("uses backend group dimension metadata verbatim", () => {
-    expect(dataViewGroupToAggregateDimension({ field: "status" }, GROUP_METADATA)).toEqual({
+    expect(resourceViewGroupToAggregateDimension({ field: "status" }, GROUP_METADATA)).toEqual({
       field: "SERVER_STATUS",
       key: "serverStatus",
     });
   });
 
   test("uses backend metadata for camelCase field dimensions", () => {
-    expect(dataViewGroupToAggregateDimension({ field: "createdAt" }, GROUP_METADATA)).toEqual({
+    expect(resourceViewGroupToAggregateDimension({ field: "createdAt" }, GROUP_METADATA)).toEqual({
       field: "CREATED_AT",
       key: "createdAt",
     });
@@ -148,7 +200,7 @@ describe("dataViewGroupToAggregateDimension", () => {
     // `oauth_client__is_enabled`; the group key reads the camel field while the
     // backend groupable-field enum is the double-underscore SNAKE_UPPER form.
     expect(
-      dataViewGroupToAggregateDimension(
+      resourceViewGroupToAggregateDimension(
         { field: "oauthClient_IsEnabled" },
         GROUP_METADATA,
       ),
@@ -160,7 +212,7 @@ describe("dataViewGroupToAggregateDimension", () => {
 
   test("can group on one row field while querying a different aggregate axis", () => {
     expect(
-      dataViewGroupToAggregateDimension({
+      resourceViewGroupToAggregateDimension({
         field: "vendor.displayName",
         aggregateField: "vendor",
         aggregateKey: "vendorId",
@@ -173,7 +225,7 @@ describe("dataViewGroupToAggregateDimension", () => {
 
   test("carries granularity through, uppercased", () => {
     expect(
-      dataViewGroupToAggregateDimension({
+      resourceViewGroupToAggregateDimension({
         field: "createdAt",
         granularity: "month",
       }, GROUP_METADATA),
@@ -188,10 +240,10 @@ describe("dataViewGroupToAggregateDimension", () => {
   test("accepts camel-case date groups for Hasura snake-case dimensions", () => {
     const group = { field: "updatedAt", granularity: "month" as const };
 
-    expect(validDataViewGroupStack([group], HASURA_SNAKE_METADATA)).toEqual([
+    expect(validResourceViewGroupStack([group], HASURA_SNAKE_METADATA)).toEqual([
       { field: "updated_at", granularity: "month" },
     ]);
-    expect(dataViewGroupToAggregateDimension(group, HASURA_SNAKE_METADATA)).toEqual({
+    expect(resourceViewGroupToAggregateDimension(group, HASURA_SNAKE_METADATA)).toEqual({
       field: "UPDATED_AT",
       key: "updated_at_month",
       granularity: "MONTH",
@@ -199,7 +251,16 @@ describe("dataViewGroupToAggregateDimension", () => {
     });
     expect(
       bucketFilterForGroup(
-        { key: { updated_at_month: "2026-02-01 00:00:00+00:00" }, count: 2 },
+        {
+          key: {
+            updated_at_month: "2026-02-01 00:00:00+00:00",
+            updated_at_month_range: {
+              from: "2026-02-01 00:00:00+00:00",
+              to: "2026-03-01 00:00:00+00:00",
+            },
+          },
+          count: 2,
+        },
         group,
         HASURA_SNAKE_METADATA,
       ),
@@ -213,7 +274,7 @@ describe("dataViewGroupToAggregateDimension", () => {
 
   test("fails fast when a grouped axis is not in resource metadata", () => {
     expect(() =>
-      dataViewGroupToAggregateDimension({ field: "missing" }, GROUP_METADATA)
+      resourceViewGroupToAggregateDimension({ field: "missing" }, GROUP_METADATA)
     ).toThrow('group dimension "missing"');
   });
 });
@@ -247,10 +308,19 @@ describe("relation group display label (Odoo (id, display_name))", () => {
 });
 
 describe("bucketFilterForGroup", () => {
-  test("turns date granularity buckets into range filters", () => {
+  test("uses backend-authored date range filters", () => {
     expect(
       bucketFilterForGroup(
-        { key: { createdAtMonth: "2026-02-01 00:00:00+00:00" }, count: 2 },
+        {
+          key: {
+            createdAtMonth: "2026-02-01 00:00:00+00:00",
+            createdAtMonthRange: {
+              from: "2026-02-01 00:00:00+00:00",
+              to: "2026-03-01 00:00:00+00:00",
+            },
+          },
+          count: 2,
+        },
         { field: "createdAt", granularity: "month" },
         GROUP_METADATA,
       ),
@@ -272,7 +342,7 @@ describe("bucketFilterForGroup", () => {
     ).toEqual({ createdAt: { isNull: true } });
   });
 
-  test("parses structured JSON bucket values for containment drill-down", () => {
+  test("parses structured JSON bucket values for exact bucket drill-down", () => {
     expect(
       bucketFilterForGroup(
         { key: { metadata: "{\"kind\":\"note\",\"flags\":[\"pinned\"]}" }, count: 1 },
@@ -280,7 +350,7 @@ describe("bucketFilterForGroup", () => {
         GROUP_METADATA,
       ),
     ).toEqual({
-      metadata: { jsonContains: { kind: "note", flags: ["pinned"] } },
+      metadata: { exact: { kind: "note", flags: ["pinned"] } },
     });
   });
 
@@ -292,5 +362,31 @@ describe("bucketFilterForGroup", () => {
         GROUP_METADATA,
       ),
     ).toEqual({ status: "in_review" });
+  });
+
+  test("fails fast when metadata omits the backend bucket filter", () => {
+    const metadata = {
+      ...GROUP_METADATA,
+      resource: {
+        ...GROUP_METADATA.resource,
+        groupDimensions: [
+          {
+            field: "unfiltered",
+            input: "UNFILTERED",
+            key: "unfiltered",
+            kind: "column",
+            scalar: "String",
+          },
+        ],
+      },
+    } as unknown as ModelMetadata;
+
+    expect(() =>
+      bucketFilterForGroup(
+        { key: { unfiltered: "x" }, count: 1 },
+        { field: "unfiltered" },
+        metadata,
+      )
+    ).toThrow("does not declare a bucket filter");
   });
 });

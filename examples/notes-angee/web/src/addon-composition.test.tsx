@@ -11,14 +11,14 @@ import messaging from "@angee/messaging";
 import operator from "@angee/operator";
 import parties from "@angee/parties";
 import platform from "@angee/platform";
-import resources from "@angee/resources";
+import resources from "@angee/resources-addon";
 import storage from "@angee/storage";
 import { describe, expect, test } from "vitest";
 
 const authAddon = defineBaseAddon({
   id: "auth",
   routes: [
-    { name: "auth.login", path: "/login", shell: "public", component: () => null },
+    { name: "auth.login", path: "/login", layout: "public", component: () => null },
   ],
 });
 

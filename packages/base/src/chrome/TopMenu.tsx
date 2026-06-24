@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useMenus } from "@angee/sdk";
 import { parseAsString, useQueryState } from "nuqs";
 
 import { useBaseT } from "../i18n";
@@ -15,11 +14,12 @@ import {
   type ChromeMenuNode,
   MenuTree,
 } from "./menu-tree";
+import { useChromeMenuTree } from "./refine-menu";
 
 /**
  * A presentational collection-view tab. The framework owns the tab strip and
  * its `?tab=` query state; the product owns what each tab *means* — a route or
- * data view reads `?tab=` and applies its own filter. No data-view coupling
+ * data view reads `?tab=` and applies its own filter. No resource-view coupling
  * lives here.
  */
 export interface TopMenuTab {
@@ -94,12 +94,12 @@ function TopMenuLinks({
   className?: string;
   items?: readonly ChromeMenuItem[];
 }): ReactElement | null {
-  const runtimeItems = useMenus() as readonly ChromeMenuItem[];
+  const runtimeTree = useChromeMenuTree();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const tree = MenuTree.from(items ?? runtimeItems);
-  // An explicit `items` list is a shell scoping its own nav — render it as given.
+  const tree = items ? MenuTree.from(items) : runtimeTree;
+  // An explicit `items` list is a layout scoping its own nav — render it as given.
   // The default top bar is the *active app's* sections: the rail switches apps,
   // the top bar navigates within the one you're in, so a sibling app never leaks.
   const menuItems = items ? tree.railMenuItems() : tree.appSectionItems(pathname);

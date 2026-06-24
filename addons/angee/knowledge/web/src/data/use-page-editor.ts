@@ -1,8 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  Row,
+} from "@angee/resources";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState } from "react";
+import {
+  useUpdate,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
 
 import { useDebouncedCallback } from "@angee/base";
-import { useResourceMutation } from "@angee/data";
-import { useAuthoredMutation } from "@angee/sdk";
+import {
+  refineFieldsFromPaths,
+  } from "@angee/refine";
+import {
+  useAuthoredMutation,
+} from "@angee/data";
+import {
+  refineResourceName,
+  useModelMetadata,
+} from "@angee/resources";
 
 import { KnowledgeUpdatePageBody } from "./documents";
 
@@ -21,6 +41,7 @@ export interface PageEditorState {
 }
 
 const AUTOSAVE_MS = 700;
+const PAGE_MODEL = "knowledge.Page";
 
 /**
  * Editing state for one page. The title persists through `updatePage` on commit;
@@ -47,8 +68,13 @@ export function usePageEditor(
     onSavedRef.current = onSaved;
   }, [onSaved]);
 
-  const [updatePage] = useResourceMutation("knowledge.Page", "update", {
-    fields: ["title"],
+  const metadata = useModelMetadata(PAGE_MODEL);
+  const resource = metadata?.resource ?? null;
+  const updatePage = useUpdate<RowRecord, HttpError, Record<string, unknown>>({
+    resource: resource ? refineResourceName(resource) : "",
+    dataProviderName: resource?.schemaName,
+    meta: { fields: refineFieldsFromPaths(["title"]) },
+    invalidates: ["list", "many", "detail"],
   });
   const [updateBody] = useAuthoredMutation(KnowledgeUpdatePageBody);
 
@@ -95,13 +121,13 @@ export function usePageEditor(
     if (!trimmed || trimmed === savedTitleRef.current) return;
     savedTitleRef.current = trimmed;
     setStatus("saving");
-    void updatePage({ data: { id: pageId, title: trimmed } })
+    void updatePage.mutateAsync({ id: pageId, values: { title: trimmed } })
       .then(() => {
         setSafeStatus("saved");
         onSavedRef.current();
       })
       .catch(() => setSafeStatus("error"));
-  }, [title, pageId, updatePage, setSafeStatus]);
+  }, [title, pageId, updatePage.mutateAsync, setSafeStatus]);
 
   // Flush a pending body save when the page switches (the editor unmounts).
   useEffect(() => {
@@ -114,3 +140,5 @@ export function usePageEditor(
 
   return { title, body, status, setTitle: setTitleState, commitTitle, setBody };
 }
+
+type RowRecord = BaseRecord & Row;

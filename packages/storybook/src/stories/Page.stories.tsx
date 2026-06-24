@@ -156,7 +156,7 @@ export const Frame: Story = {
 export const InContentRegion: Story = {
   name: "In Content Region",
   render: () => (
-    // Page is shell-agnostic: mounted inside the console content region, that
+    // Page is layout-agnostic: mounted inside the console content region, that
     // region owns the scroll and canvas background, so Page runs height="auto"
     // / overflow="visible" and never opens a second scroller.
     <div className="grid h-screen grid-rows-[auto_1fr] bg-inset">

@@ -94,6 +94,28 @@ class DataGroupAliasMetadata:
 
 
 @dataclass(frozen=True, slots=True)
+class DataGroupBucketFilterValueMapMetadata:
+    """One backend-owned group bucket value rewrite for drill-down filters."""
+
+    from_value: Any
+    to_value: Any
+
+
+@dataclass(frozen=True, slots=True)
+class DataGroupBucketFilterMetadata:
+    """Backend-owned predicate metadata for drilling into one group bucket."""
+
+    kind: str
+    field: str
+    value_key: str | None = None
+    range_key: str | None = None
+    lookup: str | None = None
+    null_lookup: str = "isNull"
+    value_transform: str | None = None
+    value_map: tuple[DataGroupBucketFilterValueMapMetadata, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class DataGroupExtractionMetadata:
     """One extraction supported by a group dimension, such as month or day."""
 
@@ -101,6 +123,7 @@ class DataGroupExtractionMetadata:
     input: str
     key: str
     range_key: str | None = None
+    filter: DataGroupBucketFilterMetadata | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +135,7 @@ class DataGroupDimensionMetadata:
     key: str
     kind: str = "column"
     scalar: str | None = None
+    filter: DataGroupBucketFilterMetadata | None = None
     extractions: tuple[DataGroupExtractionMetadata, ...] = ()
 
 
@@ -169,12 +193,21 @@ class DataResourceTypeNames:
 
 
 @dataclass(frozen=True, slots=True)
+class DataResourceEnumValueMetadata:
+    """One enum value exposed by a resource field."""
+
+    value: str
+    description: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DataResourceFieldMetadata:
     """Field capability metadata emitted for one model resource field."""
 
     name: str
     kind: str
     scalar: str | None = None
+    values: tuple[DataResourceEnumValueMetadata, ...] = ()
     widget: str | None = None
     readable: bool = True
     filterable: bool = False
@@ -436,6 +469,13 @@ def _serialize_data_resource(metadata: DataResourceMetadata, *, schema_name: str
                 "name": field.name,
                 "kind": field.kind,
                 "scalar": field.scalar,
+                "values": [
+                    {
+                        "value": value.value,
+                        "description": value.description,
+                    }
+                    for value in field.values
+                ],
                 "widget": field.widget,
                 "readable": field.readable,
                 "filterable": field.filterable,
@@ -461,12 +501,14 @@ def _serialize_data_resource(metadata: DataResourceMetadata, *, schema_name: str
                 "key": dimension.key,
                 "kind": dimension.kind,
                 "scalar": dimension.scalar,
+                "filter": _serialize_group_bucket_filter(dimension.filter),
                 "extractions": [
                     {
                         "name": extraction.name,
                         "input": extraction.input,
                         "key": extraction.key,
                         "rangeKey": extraction.range_key,
+                        "filter": _serialize_group_bucket_filter(extraction.filter),
                     }
                     for extraction in dimension.extractions
                 ],
@@ -516,6 +558,31 @@ def _serialize_data_resource(metadata: DataResourceMetadata, *, schema_name: str
                 "aggregateKey": alias.aggregate_key,
             }
             for alias in metadata.group_aliases
+        ],
+    }
+
+
+def _serialize_group_bucket_filter(
+    metadata: DataGroupBucketFilterMetadata | None,
+) -> dict[str, object] | None:
+    """Return JSON-safe grouped bucket filter metadata."""
+
+    if metadata is None:
+        return None
+    return {
+        "kind": metadata.kind,
+        "field": metadata.field,
+        "valueKey": metadata.value_key,
+        "rangeKey": metadata.range_key,
+        "lookup": metadata.lookup,
+        "nullLookup": metadata.null_lookup,
+        "valueTransform": metadata.value_transform,
+        "valueMap": [
+            {
+                "from": item.from_value,
+                "to": item.to_value,
+            }
+            for item in metadata.value_map
         ],
     }
 
@@ -700,6 +767,7 @@ def _merge_resource_fields(
             name=existing.name,
             kind=existing.kind if existing.kind != "scalar" or field.kind == "scalar" else field.kind,
             scalar=existing.scalar or field.scalar,
+            values=existing.values or field.values,
             widget=existing.widget or field.widget,
             readable=existing.readable or field.readable,
             filterable=existing.filterable or field.filterable,
@@ -796,11 +864,13 @@ def _resource_fields(
             value=surface_type,
             kind=kind,
         )
+        values = _surface_enum_values(surface_type) if kind == "enum" else ()
         fields.append(
             DataResourceFieldMetadata(
                 name=name,
                 kind=kind,
                 scalar=scalar,
+                values=values,
                 widget=None if scalar == "ID" else _field_widget(model_field, kind),
                 filterable=name in filterable,
                 sortable=name in sortable,
@@ -941,6 +1011,35 @@ def _strawberry_type_is_enum(value: object | None) -> bool:
     if isinstance(value, StrawberryOptional):
         return _strawberry_type_is_enum(value.of_type)
     return False
+
+
+def _surface_enum_values(value: object | None) -> tuple[DataResourceEnumValueMetadata, ...]:
+    """Return enum value metadata from the Strawberry enum surface."""
+
+    definition = _strawberry_enum_definition(value)
+    if definition is None:
+        return ()
+    return tuple(
+        DataResourceEnumValueMetadata(
+            value=str(enum_value.name),
+            description=(
+                str(enum_value.description)
+                if enum_value.description is not None and str(enum_value.description).strip()
+                else None
+            ),
+        )
+        for enum_value in definition.values
+    )
+
+
+def _strawberry_enum_definition(value: object | None) -> StrawberryEnumDefinition | None:
+    """Return the unwrapped Strawberry enum definition for ``value``."""
+
+    if isinstance(value, StrawberryEnumDefinition):
+        return value
+    if isinstance(value, StrawberryOptional):
+        return _strawberry_enum_definition(value.of_type)
+    return None
 
 
 def _strawberry_type_is_object(value: object | None) -> bool:

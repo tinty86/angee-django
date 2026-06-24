@@ -1,10 +1,13 @@
-import type { ReactNode } from "react";
 import type {
-  ModelFieldMetadata,
   ModelMetadata,
   ModelRelationFilterMetadata,
   SchemaFieldMetadata,
-} from "@angee/sdk";
+} from "@angee/resources";
+import type {
+  ReactNode } from "react";
+import type {
+  ModelFieldMetadata,
+} from "@angee/resources";
 
 import type { WidgetOption } from "../widgets";
 import type {
@@ -18,7 +21,7 @@ import { enumValueLabel, groupFieldLabel } from "./ListInternals";
  * display field, and whether the related model can be created inline. */
 export interface RelationFieldInfo {
   /** Related model label, e.g. `"Vendor"`. */
-  model: string;
+  resource: string;
   /** Field shown as the option label. */
   labelField: string;
   /** A create mutation exists for the related model. */
@@ -48,7 +51,7 @@ const SCALAR_WIDGET: Readonly<Record<string, string>> = {
 };
 
 /**
- * The default widget for a field from its SDL metadata: enums pick a select,
+ * The default widget for a field from its resource metadata: enums pick a select,
  * object relations a `many2one` picker, string-list fields a tag input, and
  * scalars map by GraphQL scalar (Boolean→switch, Int→integer, …). Returns
  * `undefined` for a plain string scalar (the FormView text fallback). Shared by
@@ -69,8 +72,8 @@ export function defaultWidgetFor(
 /**
  * Resolve a form field to its relation target, or `null` when it is not an
  * object relation whose related model is listable. Only nested object fields
- * (`kind: "relation"`) qualify — a bare `ID` scalar FK is opaque to the SDL, so
- * it stays an explicitly-configured field.
+ * (`kind: "relation"`) qualify — a bare `ID` scalar FK is opaque to resource
+ * metadata, so it stays an explicitly-configured field.
  */
 export function relationFieldInfo(
   fieldName: string,
@@ -83,7 +86,7 @@ export function relationFieldInfo(
   // Without a list root field the picker has no way to fetch options.
   if (!related?.rootFields?.list) return null;
   return {
-    model: stripTypeSuffix(field.relationTarget),
+    resource: stripTypeSuffix(field.relationTarget),
     labelField: related.recordRepresentation ?? "id",
     canCreate: Boolean(related.rootFields.create),
     ...(field.relationFilter ? { filter: field.relationFilter } : {}),
@@ -126,7 +129,7 @@ const ENUM_OPTION_WIDGETS = new Set([
   "ribbon",
 ]);
 
-/** Apply SDL-derived column labels and enum options without overriding props. */
+/** Apply metadata-derived column labels and enum options without overriding props. */
 export function columnsWithMetadataDefaults<TRow extends object>(
   columns: readonly ColumnDescriptor<TRow>[],
   metadata: ModelMetadata | null,
@@ -146,14 +149,14 @@ export function columnsWithMetadataDefaults<TRow extends object>(
   });
 }
 
-/** Apply SDL-derived field labels and enum options without overriding props. */
+/** Apply metadata-derived field labels and enum options without overriding props. */
 export function fieldsWithMetadataDefaults(
   fields: readonly FieldDescriptor[],
   metadata: ModelMetadata | null,
 ): readonly FieldDescriptor[] {
   return fields.map((field) => {
     const fieldMetadata = metadata?.fields[field.name];
-    // A declared field with no explicit widget inherits the SDL-derived default
+    // A declared field with no explicit widget inherits the metadata-derived default
     // for its kind/scalar: enum→select, relation→many2one (selecting `<field>.id`
     // for the picker), Boolean→switch, list→tagInput, etc. Without this every
     // bare `<Field>` falls to the text widget — booleans then submit "" and fail.
@@ -175,7 +178,7 @@ export function fieldsWithMetadataDefaults(
   });
 }
 
-/** Resolve a field label from explicit props, SDL metadata, then title-case. */
+/** Resolve a field label from explicit props, resource metadata, then title-case. */
 export function fieldLabel(
   name: string,
   metadata: ModelFieldMetadata | undefined,
@@ -184,7 +187,7 @@ export function fieldLabel(
   return explicit ?? metadata?.label ?? titleCase(name);
 }
 
-/** Resolve a group label from SDL metadata, then group-specific field text. */
+/** Resolve a group label from resource metadata, then group-specific field text. */
 export function groupLabel(
   name: string,
   metadata: ModelFieldMetadata | undefined,

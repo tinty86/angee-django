@@ -24,7 +24,7 @@ const resourcesRoutes: readonly BaseAddonRoute[] = [
   {
     name: "resources.ledger",
     path: "/platform/resources",
-    shell: "console",
+    layout: "console",
     component: ResourcesPage,
   },
 ];

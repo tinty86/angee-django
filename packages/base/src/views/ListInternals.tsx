@@ -1,31 +1,35 @@
-// Leaf row/column/cell primitives for the data-view list surfaces: record rows,
+// Leaf row/column/cell primitives for the resource-view list surfaces: record rows,
 // `cellContent`, column building, and the group key/label helpers. Imports only
 // ui/sdk/page leaves so parent view modules can depend on it without a cycle.
 import * as React from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate } from "@tanstack/react-router";
 import {
   flexRender,
   type Cell as TableCellModel,
   type Column as TableColumn,
   type ColumnDef,
   type Header as TableHeaderModel,
-  type Row as TableRowModel,
   type Table as TableModel,
-} from "@tanstack/react-table";
+  type Row as TableRowModel,
+  } from "@tanstack/react-table";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type {
   AggregateBucket,
   AggregateMeasure,
   AggregateMeasureOperator,
   GroupDimension as HasuraGroupDimension,
-  Row,
-} from "@angee/data";
+  GroupOrder,
+  } from "@angee/refine";
 import type {
+  DataResourceGroupBucketFilterMetadata,
   DataResourceGroupDimensionMetadata,
   DataResourceGroupExtractionMetadata,
   ModelEnumValueMetadata,
   ModelMetadata,
-} from "@angee/sdk";
+  Row,
+} from "@angee/resources";
 import { format } from "date-fns";
 import { Spinner } from "../ui/spinner";
 
@@ -35,6 +39,7 @@ import { useBaseT } from "../i18n";
 import { RelativeTime } from "../fragments/RelativeTime";
 import { cn } from "../lib/cn";
 import { dragSourceProps, type DndPayload, type DragSourceProps } from "../lib/dnd";
+import { statusLabel } from "../lib/labels";
 import { titleCase } from "../lib/titleCase";
 import { Badge } from "../ui/badge";
 import { Button, buttonVariants, type ButtonVariant } from "../ui/button";
@@ -54,12 +59,11 @@ import {
 } from "../ui/table";
 import { useResolvedWidget } from "../widgets";
 import { dateFromUnknown } from "../widgets/date-format";
-import type { DataViewContextValue } from "./data-view-context";
+import type { ResourceViewContextValue } from "./resource-view-context";
 import type {
-  DataViewFilter,
-  DataViewFilterValue,
-  DataViewGroup,
-} from "./data-view-model";
+  ResourceViewFilter,
+  ResourceViewGroup,
+} from "./resource-view-model";
 import type {
   ListEmptyAction,
   ListEmptyContent,
@@ -177,7 +181,7 @@ export interface FlatListBodyProps<TRow extends Row> {
   onPageSelectionChange: (checked: boolean) => void;
   visibleFields?: readonly VisibleFieldOption[];
   onVisibleFieldToggle?: (id: string, visible: boolean) => void;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   interactive: boolean;
   selectable?: boolean;
   rowHref?: (row: TRow) => string;
@@ -204,7 +208,7 @@ export function FlatListBody<TRow extends Row>({
   onPageSelectionChange,
   visibleFields = [],
   onVisibleFieldToggle,
-  dataView,
+  resourceView,
   interactive,
   selectable = true,
   rowHref,
@@ -260,7 +264,7 @@ export function FlatListBody<TRow extends Row>({
                 <ListHeaderCell
                   key={header.id}
                   header={header}
-                  dataView={dataView}
+                  resourceView={resourceView}
                   visibleFields={visibleFields}
                   onVisibleFieldToggle={onVisibleFieldToggle}
                   withVisibleFields={index === group.headers.length - 1}
@@ -299,7 +303,7 @@ export function FlatListBody<TRow extends Row>({
                   ? renderListItem({
                       item,
                       colSpan,
-                      dataView,
+                      resourceView,
                       interactive,
                       selectable,
                       rowHref,
@@ -382,13 +386,13 @@ function FlatMeasureFooter<TRow extends Row>({
 
 export function ListHeaderCell<TRow extends Row>({
   header,
-  dataView,
+  resourceView,
   visibleFields = [],
   onVisibleFieldToggle,
   withVisibleFields = false,
 }: {
   header: TableHeaderModel<TRow, unknown>;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   visibleFields?: readonly VisibleFieldOption[];
   onVisibleFieldToggle?: (id: string, visible: boolean) => void;
   withVisibleFields?: boolean;
@@ -401,7 +405,7 @@ export function ListHeaderCell<TRow extends Row>({
     <TableHead
       sticky
       className={ALIGN_CLASS[alignOf(header.column.columnDef)]}
-      aria-sort={ariaSortForColumn(header.column, dataView)}
+      aria-sort={ariaSortForColumn(header.column, resourceView)}
     >
       {showVisibleFields ? (
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -471,12 +475,12 @@ export function VisibleFieldsMenu({
 
 export function buildColumns<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
-  dataView: DataViewContextValue,
+  resourceView: ResourceViewContextValue,
 ): ColumnDef<TRow>[] {
   return columns.map((column) => ({
     id: column.field,
     header: () => (
-      <SortHeader column={column} dataView={dataView}>
+      <SortHeader column={column} resourceView={resourceView}>
         {column.header ?? column.field}
       </SortHeader>
     ),
@@ -521,16 +525,16 @@ export function ListCellContent<TRow extends Row>({
 
 function SortHeader<TRow extends Row>({
   column,
-  dataView,
+  resourceView,
   children,
 }: {
   column: ColumnDescriptor<TRow>;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   children: React.ReactNode;
 }): React.ReactElement {
   const t = useBaseT();
   if (column.sortable === false) return <>{children}</>;
-  const sort = dataView.state.sort;
+  const sort = resourceView.state.sort;
   const active = sort?.field === column.field;
   const iconName = !active
     ? "arrow-up-down"
@@ -548,7 +552,7 @@ function SortHeader<TRow extends Row>({
       type="button"
       className="inline-flex min-w-0 items-center gap-1 rounded text-left outline-none hover:text-fg focus-visible:focus-ring"
       aria-label={t(sortKey, { label })}
-      onClick={() => dataView.setSort(nextSort(sort, column.field))}
+      onClick={() => resourceView.setSort(nextSort(sort, column.field))}
     >
       <span className="truncate">{children}</span>
       <Glyph name={iconName} className="size-3 text-fg-subtle" />
@@ -558,7 +562,7 @@ function SortHeader<TRow extends Row>({
 
 export function RecordRow<TRow extends Row>({
   row,
-  dataView,
+  resourceView,
   interactive,
   selectable = true,
   rowHref,
@@ -567,7 +571,7 @@ export function RecordRow<TRow extends Row>({
   draggableRow,
 }: {
   row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   interactive: boolean;
   selectable?: boolean;
   rowHref?: (row: TRow) => string;
@@ -581,7 +585,7 @@ export function RecordRow<TRow extends Row>({
     return (
       <LinkedRecordRow
         row={row}
-        dataView={dataView}
+        resourceView={resourceView}
         selectable={selectable}
         href={href}
         onRecordOpen={onRecordOpen}
@@ -592,7 +596,7 @@ export function RecordRow<TRow extends Row>({
   return (
     <PlainRecordRow
       row={row}
-      dataView={dataView}
+      resourceView={resourceView}
       interactive={interactive}
       selectable={selectable}
       onRowClick={onRowClick}
@@ -604,14 +608,14 @@ export function RecordRow<TRow extends Row>({
 
 function LinkedRecordRow<TRow extends Row>({
   row,
-  dataView,
+  resourceView,
   selectable,
   href,
   onRecordOpen,
   dragProps,
 }: {
   row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   selectable: boolean;
   href: string;
   onRecordOpen?: (row: TRow) => void;
@@ -619,7 +623,7 @@ function LinkedRecordRow<TRow extends Row>({
 }): React.ReactElement {
   const t = useBaseT();
   const id = row.id;
-  const selected = dataView.state.selectedIds.has(id);
+  const selected = resourceView.state.selectedIds.has(id);
   const navigate = useNavigate();
   const openHref = React.useCallback(
     (event: React.MouseEvent<HTMLTableRowElement>) => {
@@ -659,7 +663,7 @@ function LinkedRecordRow<TRow extends Row>({
             checked={selected}
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={(checked) =>
-              dataView.toggleSelectedId(id, checked)
+              resourceView.toggleSelectedId(id, checked)
             }
           />
         </TableCell>
@@ -678,7 +682,7 @@ function LinkedRecordRow<TRow extends Row>({
 
 function PlainRecordRow<TRow extends Row>({
   row,
-  dataView,
+  resourceView,
   interactive,
   selectable,
   onRowClick,
@@ -686,7 +690,7 @@ function PlainRecordRow<TRow extends Row>({
   dragProps,
 }: {
   row: TableRowModel<TRow>;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   interactive: boolean;
   selectable: boolean;
   onRowClick?: (row: TRow) => void;
@@ -695,7 +699,7 @@ function PlainRecordRow<TRow extends Row>({
 }): React.ReactElement {
   const t = useBaseT();
   const id = row.id;
-  const selected = dataView.state.selectedIds.has(id);
+  const selected = resourceView.state.selectedIds.has(id);
   return (
     <TableRow
       {...dragProps}
@@ -714,7 +718,7 @@ function PlainRecordRow<TRow extends Row>({
             checked={selected}
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={(checked) =>
-              dataView.toggleSelectedId(id, checked)
+              resourceView.toggleSelectedId(id, checked)
             }
           />
         </TableCell>
@@ -749,7 +753,7 @@ function PlainRecordRow<TRow extends Row>({
 function renderListItem<TRow extends Row>({
   item,
   colSpan,
-  dataView,
+  resourceView,
   interactive,
   selectable,
   rowHref,
@@ -760,7 +764,7 @@ function renderListItem<TRow extends Row>({
 }: {
   item: ListRenderItem<TRow>;
   colSpan: number;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   interactive: boolean;
   selectable: boolean;
   rowHref?: (row: TRow) => string;
@@ -787,7 +791,7 @@ function renderListItem<TRow extends Row>({
     <RecordRow
       key={item.row.id}
       row={item.row}
-      dataView={dataView}
+      resourceView={resourceView}
       interactive={interactive}
       selectable={selectable}
       rowHref={rowHref}
@@ -891,8 +895,8 @@ function estimatedListHeight<TRow extends Row>(
   );
 }
 
-export function dataViewGroupToAggregateDimension(
-  group: DataViewGroup,
+export function resourceViewGroupToAggregateDimension(
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): GroupByDimension {
   const dimension = groupDimensionForGroup(group, metadata);
@@ -916,6 +920,16 @@ export function hasuraGroupDimension(
   };
 }
 
+export function hasuraGroupOrderForDimensions(
+  dimensions: readonly HasuraGroupDimension[],
+): readonly GroupOrder[] | undefined {
+  const dimension = dimensions.length > 1
+    ? dimensions[dimensions.length - 1]
+    : dimensions[0];
+  const field = dimension?.key ?? dimension?.input;
+  return field ? [{ field, direction: "ASC", nulls: "LAST" }] : undefined;
+}
+
 /**
  * The extra group-by dimension that carries a relation group's display label —
  * the same bucket grouped by `<relation>__<label>` so the related record's name
@@ -923,7 +937,7 @@ export function hasuraGroupDimension(
  * registers no label axis for the relation, in which case the group labels by id.
  */
 export function groupLabelDimension(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): GroupByDimension | null {
   const labelKey = groupLabelKey(group, metadata);
@@ -933,7 +947,7 @@ export function groupLabelDimension(
 }
 
 function groupLabelKey(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): string | undefined {
   const field = group.aggregateField;
@@ -942,7 +956,7 @@ function groupLabelKey(
 }
 
 function groupDimensionForGroup(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): DataResourceGroupDimensionMetadata {
   return groupDimensionForField(group.aggregateField ?? group.field, metadata);
@@ -978,7 +992,7 @@ export function resourceGroupDimensionForField(
 
 function groupExtractionForGroup(
   dimension: DataResourceGroupDimensionMetadata,
-  group: DataViewGroup,
+  group: ResourceViewGroup,
 ): DataResourceGroupExtractionMetadata | null {
   if (!group.granularity) return null;
   const requested = group.granularity.toUpperCase();
@@ -998,7 +1012,7 @@ function groupExtractionForGroup(
 
 export function bucketValueLabels(
   bucket: AggregateBucket,
-  groupStack: readonly DataViewGroup[],
+  groupStack: readonly ResourceViewGroup[],
   metadata: ModelMetadata | null = null,
 ): string[] {
   return groupStack.map((group) => {
@@ -1007,7 +1021,7 @@ export function bucketValueLabels(
       const label = bucket.key?.[groupDimensionForField(labelKey, metadata).key];
       if (label != null && label !== "") return String(label);
     }
-    const dimension = dataViewGroupToAggregateDimension(group, metadata);
+    const dimension = resourceViewGroupToAggregateDimension(group, metadata);
     const value = bucket.key?.[dimension.key ?? dimension.field];
     return groupKey(value, group, metadata);
   });
@@ -1015,101 +1029,93 @@ export function bucketValueLabels(
 
 export function bucketFilterForGroup(
   bucket: AggregateBucket,
-  group: DataViewGroup | undefined,
+  group: ResourceViewGroup | undefined,
   metadata: ModelMetadata | null,
-): DataViewFilter | undefined {
+): ResourceViewFilter | undefined {
   if (!group) return {};
   const dimensionMetadata = groupDimensionForGroup(group, metadata);
-  const dimension = dataViewGroupToAggregateDimension(group, metadata);
-  const value = bucket.key?.[dimension.key ?? dimension.field];
+  const extraction = groupExtractionForGroup(dimensionMetadata, group);
+  const filter = extraction?.filter ?? dimensionMetadata.filter;
+  if (!filter) {
+    throw new Error(
+      `Resource metadata for group dimension "${dimensionMetadata.field}" does ` +
+        "not declare a bucket filter.",
+    );
+  }
+  if (filter.kind === "range") {
+    return bucketRangeDrillDownFilter(bucket, filter, dimensionMetadata);
+  }
+
+  const value = bucket.key?.[filter.valueKey ?? extraction?.key ?? dimensionMetadata.key];
   if (value === undefined) return undefined;
-  const filter = filterTargetForGroup(group, metadata);
 
-  if (isNullBucketValue(value, dimensionMetadata)) {
-    return { [filter.field]: { isNull: true } };
+  if (isNullBucketValue(value, filter)) {
+    return bucketNullFilter(filter);
   }
 
-  if (group.granularity && isDateScalar(dimensionMetadata.scalar)) {
-    const extraction = groupExtractionForGroup(dimensionMetadata, group);
-    const rangeValue = extraction?.rangeKey ? bucket.key?.[extraction.rangeKey] : undefined;
-    const range = bucketRangeFilter(rangeValue, dimensionMetadata.scalar)
-      ?? bucketDateRange(value, extraction?.name ?? group.granularity, dimensionMetadata.scalar);
-    return range ? { [filter.field]: range } : undefined;
-  }
+  return bucketEqualityFilter(filter, bucketFilterValue(value, filter));
+}
 
-  return bucketEqualityFilter(
-    filter,
-    jsonBucketValue(value, dimensionMetadata),
-    dimensionMetadata,
-    group,
-    metadata,
+function bucketRangeDrillDownFilter(
+  bucket: AggregateBucket,
+  filter: DataResourceGroupBucketFilterMetadata,
+  dimension: DataResourceGroupDimensionMetadata,
+): ResourceViewFilter | undefined {
+  const rangeValue = filter.rangeKey ? bucket.key?.[filter.rangeKey] : undefined;
+  const scalar = dateRangeScalar(dimension);
+  const range = scalar ? bucketRangeFilter(rangeValue, scalar) : null;
+  if (range) return { [filter.field]: range };
+
+  const value = filter.valueKey ? bucket.key?.[filter.valueKey] : undefined;
+  if (isNullBucketValue(value, filter)) return bucketNullFilter(filter);
+  if (value === undefined) return undefined;
+  throw new Error(
+    `Group bucket for "${dimension.field}" did not include declared range key ` +
+      `"${filter.rangeKey ?? ""}".`,
   );
 }
 
-function filterTargetForGroup(
-  group: DataViewGroup,
-  metadata: ModelMetadata | null,
-): { field: string; lookup?: string } {
-  const aggregateField = group.aggregateField ?? group.field;
-  const relationFilter =
-    metadata?.fields[group.field]?.relationFilter ??
-    metadata?.fields[aggregateField]?.relationFilter;
-  if (relationFilter) {
-    return {
-      field: relationFilter.field,
-      ...(relationFilter.mode === "lookup"
-        ? { lookup: relationFilter.lookup ?? "exact" }
-        : {}),
-    };
-  }
-  const filterFields = metadata?.resource?.filterFields ?? [];
-  if (filterFields.includes(aggregateField)) return { field: aggregateField };
-  const snakeField = fieldToSnake(aggregateField);
-  return { field: filterFields.includes(snakeField) ? snakeField : aggregateField };
+function dateRangeScalar(
+  dimension: DataResourceGroupDimensionMetadata,
+): "Date" | "DateTime" | null {
+  return dimension.scalar === "Date" || dimension.scalar === "DateTime"
+    ? dimension.scalar
+    : null;
 }
 
 function bucketEqualityFilter(
-  filter: { field: string; lookup?: string },
+  filter: DataResourceGroupBucketFilterMetadata,
   value: unknown,
-  dimension: DataResourceGroupDimensionMetadata,
-  group: DataViewGroup,
-  metadata: ModelMetadata | null,
-): DataViewFilter {
-  const filterValue = enumBucketValue(value, group, metadata);
-  if (filter.lookup) return { [filter.field]: { [filter.lookup]: filterValue } };
-  if (dimension.scalar === "JSON") {
-    return { [filter.field]: { jsonContains: filterValue as DataViewFilterValue } };
-  }
-  return { [filter.field]: filterValue as DataViewFilter[string] };
+): ResourceViewFilter {
+  if (filter.lookup) return { [filter.field]: { [filter.lookup]: value } };
+  return { [filter.field]: value as ResourceViewFilter[string] };
 }
 
-function enumBucketValue(
+function bucketFilterValue(
   value: unknown,
-  group: DataViewGroup,
-  metadata: ModelMetadata | null,
+  filter: DataResourceGroupBucketFilterMetadata,
 ): unknown {
-  if (typeof value !== "string") return value;
-  const field = group.aggregateField ?? group.field;
-  if (metadata?.fields[field]?.kind !== "enum") return value;
-  return value.toLowerCase();
+  const mapped = filter.valueMap?.find((item) => Object.is(item.from, value));
+  if (mapped) return mapped.to;
+  if (filter.valueTransform === "json") return jsonBucketValue(value);
+  return value;
 }
 
 function isNullBucketValue(
   value: unknown,
-  dimension: DataResourceGroupDimensionMetadata,
+  filter: DataResourceGroupBucketFilterMetadata,
 ): boolean {
-  return value === null || (value === "" && isDateScalar(dimension.scalar));
+  return value === null || (filter.kind === "range" && value === "");
 }
 
-function isDateScalar(scalar: string | null | undefined): scalar is "Date" | "DateTime" {
-  return scalar === "Date" || scalar === "DateTime";
+function bucketNullFilter(
+  filter: DataResourceGroupBucketFilterMetadata,
+): ResourceViewFilter {
+  return { [filter.field]: { [filter.nullLookup ?? "isNull"]: true } };
 }
 
-function jsonBucketValue(
-  value: unknown,
-  dimension: DataResourceGroupDimensionMetadata,
-): unknown {
-  if (dimension.scalar !== "JSON" || typeof value !== "string") return value;
+function jsonBucketValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
   const trimmed = value.trim();
   if (!trimmed || !/^[\[{"]|^(true|false|null|-?\d)/.test(trimmed)) {
     return value;
@@ -1124,7 +1130,7 @@ function jsonBucketValue(
 function bucketRangeFilter(
   value: unknown,
   scalar: "Date" | "DateTime",
-): DataViewFilter[string] | null {
+): ResourceViewFilter[string] | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const range = value as Record<string, unknown>;
   const from = dateBucketBoundary(range.from, scalar);
@@ -1138,21 +1144,6 @@ function dateBucketBoundary(
 ): string | null {
   const date = dateBucketStart(value);
   return date ? formatDateBoundary(date, scalar) : null;
-}
-
-function bucketDateRange(
-  value: unknown,
-  granularity: string,
-  scalar: "Date" | "DateTime",
-): DataViewFilter[string] | null {
-  const start = dateBucketStart(value);
-  if (!start) return null;
-  const end = addGranularity(start, granularity);
-  if (!end) return null;
-  return {
-    gte: formatDateBoundary(start, scalar),
-    lt: formatDateBoundary(end, scalar),
-  };
 }
 
 function dateBucketStart(value: unknown): Date | null {
@@ -1188,38 +1179,6 @@ function normalizeDateBucketValue(value: string): string {
   return withTimeSeparator;
 }
 
-function addGranularity(date: Date, granularity: string): Date | null {
-  const next = new Date(date.getTime());
-  switch (granularity) {
-    case "year":
-      next.setUTCFullYear(next.getUTCFullYear() + 1);
-      return next;
-    case "quarter":
-      next.setUTCMonth(next.getUTCMonth() + 3);
-      return next;
-    case "month":
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      return next;
-    case "week":
-      next.setUTCDate(next.getUTCDate() + 7);
-      return next;
-    case "day":
-      next.setUTCDate(next.getUTCDate() + 1);
-      return next;
-    case "hour":
-      next.setUTCHours(next.getUTCHours() + 1);
-      return next;
-    case "minute":
-      next.setUTCMinutes(next.getUTCMinutes() + 1);
-      return next;
-    case "second":
-      next.setUTCSeconds(next.getUTCSeconds() + 1);
-      return next;
-    default:
-      return null;
-  }
-}
-
 function formatDateBoundary(date: Date, scalar: "Date" | "DateTime"): string {
   if (scalar === "Date") {
     return [
@@ -1233,7 +1192,7 @@ function formatDateBoundary(date: Date, scalar: "Date" | "DateTime"): string {
 
 export function groupKey(
   value: unknown,
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null = null,
 ): string {
   if (value == null) return "No value";
@@ -1318,11 +1277,11 @@ export function tableColumnLabel<TRow extends Row>(
 
 export function ariaSortForColumn<TRow extends Row>(
   column: TableColumn<TRow, unknown>,
-  dataView: DataViewContextValue,
+  resourceView: ResourceViewContextValue,
 ): React.AriaAttributes["aria-sort"] {
   const field = columnMeta(column.columnDef).field ?? column.id;
-  if (dataView.state.sort?.field !== field) return "none";
-  return dataView.state.sort.dir === "asc" ? "ascending" : "descending";
+  if (resourceView.state.sort?.field !== field) return "none";
+  return resourceView.state.sort.dir === "asc" ? "ascending" : "descending";
 }
 
 function rowActionLabelForTableColumn<TRow extends Row>(
@@ -1483,9 +1442,9 @@ function columnMeta<TRow extends Row>(
 }
 
 function nextSort(
-  current: DataViewContextValue["state"]["sort"],
+  current: ResourceViewContextValue["state"]["sort"],
   field: string,
-): DataViewContextValue["state"]["sort"] {
+): ResourceViewContextValue["state"]["sort"] {
   if (current?.field !== field) return { field, dir: "asc" };
   if (current.dir === "asc") return { field, dir: "desc" };
   return null;
@@ -1520,24 +1479,14 @@ export function groupFieldLabel(field: string): string {
 }
 
 /**
- * Humanize a bare enum member name for display (`IN_REVIEW` → `In Review`). The
- * rendered binding's one owner for enum-string casing; `enumValueLabel` uses it
- * as the fallback when the SDL authors no description.
- */
-export function statusLabel(value: string): string {
-  return titleCase(value.toLowerCase());
-}
-
-/**
- * The display label for an enum metadata value: its SDL description where the
- * schema authored one, otherwise the humanized value. The SDK carries only the
- * structural `value`/`description`; this rendered binding owns the casing.
+ * The display label for an enum metadata value: its authored description where
+ * the resource artifact provides one, otherwise the humanized value.
  */
 export function enumValueLabel(value: ModelEnumValueMetadata): string {
   return value.description ?? statusLabel(value.value);
 }
 
-/** The flush "Loading…" footer shown under a list shell while a page fetches. */
+/** The flush "Loading…" footer shown under a list layout while a page fetches. */
 export function ListLoadingFooter(): React.ReactElement {
   const t = useBaseT();
   return (

@@ -257,6 +257,18 @@ def test_soft_delete_trash_restore_and_purge(tmp_path: Path, drive: Any) -> None
     assert not (tmp_path / storage_path).exists()
 
 
+def test_storage_resource_metadata_exposes_delete_previews() -> None:
+    """Storage's custom delete verbs are advertised to refine/resource actions."""
+
+    schema = addon_schema(storage_schema.schemas, "public")
+    resources = {item.model_label: item for item in schema.angee_resources}
+
+    assert resources["storage.File"].roots.delete_preview_name == "delete_file"
+    assert resources["storage.Folder"].roots.delete_preview_name == "delete_folder"
+    assert resources["storage.File"].type_names.delete_payload == "DeletePreview"
+    assert resources["storage.Folder"].type_names.delete_payload == "DeletePreview"
+
+
 @pytest.mark.django_db(transaction=True)
 def test_storage_graphql_custom_mutations_accept_public_ids(drive: Any) -> None:
     """Custom storage mutations resolve raw sqids at the GraphQL boundary."""

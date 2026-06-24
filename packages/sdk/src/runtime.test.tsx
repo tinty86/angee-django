@@ -5,7 +5,6 @@ import { describe, expect, test } from "vitest";
 
 import {
   AppRuntimeProvider,
-  useMenus,
   useSlot,
   useT,
   useWidget,
@@ -27,13 +26,6 @@ describe("useWidget", () => {
   test("returns undefined for an unknown widget", () => {
     const { result } = renderHook(() => useWidget("missing"));
     expect(result.current).toBeUndefined();
-  });
-});
-
-describe("useMenus", () => {
-  test("returns the merged menu list, empty without a provider", () => {
-    const { result } = renderHook(() => useMenus());
-    expect(result.current).toEqual([]);
   });
 });
 

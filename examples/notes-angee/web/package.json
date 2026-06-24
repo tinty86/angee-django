@@ -8,7 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "codegen": "graphql-codegen --config codegen.public.ts && graphql-codegen --config codegen.console.ts && node ./bin/build-action-types.mjs"
+    "codegen": "graphql-codegen --config codegen.public.ts && graphql-codegen --config codegen.console.ts && node ./bin/build-operation-documents.mjs"
   },
   "dependencies": {
     "@angee-example/notes-web": "workspace:*",
@@ -21,7 +21,7 @@
     "@angee/operator": "workspace:*",
     "@angee/parties": "workspace:*",
     "@angee/platform": "workspace:*",
-    "@angee/resources": "workspace:*",
+    "@angee/resources-addon": "workspace:*",
     "@angee/sdk": "workspace:*",
     "@angee/storage": "workspace:*",
     "@graphql-typed-document-node/core": "^3.2.0",

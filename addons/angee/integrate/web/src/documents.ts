@@ -1,7 +1,8 @@
 // Bespoke custom operations for the integrate console. Model CRUD is model-driven
-// (DataPage reads the SDL); these are the non-CRUD operations a DataPage needs that
+// (ResourceList reads the SDL); these are the non-CRUD operations a ResourceList needs that
 // aren't single-id `{ ok, message }` actions. Single-id action mutations use
-// `useActionMutation(field)` at the call site — no document is authored here.
+// `useActionMutation(field)` from `@angee/data` at the call site — no document is
+// authored here.
 
 import { graphql, type DocumentType } from "@angee/gql/console";
 
@@ -11,17 +12,17 @@ export const ConnectIntegration = graphql(`
     $redirectUri: String!
     $next: String!
   ) {
-    connectIntegration(
-      integrationId: $integrationId
-      redirectUri: $redirectUri
+    connect_integration(
+      integration_id: $integrationId
+      redirect_uri: $redirectUri
       next: $next
     ) {
       attached
-      authorizeUrl
+      authorize_url
       error
       mode
       state
-      redirectUri
+      redirect_uri
       integration {
         id
         status
@@ -32,35 +33,25 @@ export const ConnectIntegration = graphql(`
 
 export const RotateWebhookSecret = graphql(`
   mutation RotateWebhookSecret($id: ID!) {
-    rotateWebhookSecret(id: $id) { ok secret }
+    rotate_webhook_secret(id: $id) { ok secret }
   }
 `);
 
-// --- VCS console: bridge picker, repo typeahead, and inventory actions ---
-// VcsBridge/Source CRUD and Repository delete stay model-driven (DataPage
-// reads the SDL). These are the bespoke reads the VCS views need: the bridge
-// picker for the add dialog, the repo search typeahead, and the bulk-discover
-// mutation whose variables do not match the single-id ActionResult helper.
-
-/** VCS bridges for the add-repository dialog's bridge picker. */
-export const IntegrateVcsBridges = graphql(`
-  query IntegrateVcsBridges($limit: Int, $offset: Int) {
-    vcs_bridges(limit: $limit, offset: $offset) {
-      id
-      display_name
-    }
-  }
-`);
+// --- VCS console: repo typeahead and inventory actions ---
+// VcsBridge/Source CRUD and Repository delete stay model-driven (ResourceList
+// reads the SDL). These are the bespoke operations the VCS views need: the repo
+// search typeahead and inventory mutations whose variables do not match the
+// single-id ActionResult helper.
 
 /** The add typeahead: host repositories matching a typed query, not yet inventoried. */
 export const IntegrateSearchRepositories = graphql(`
   query IntegrateSearchRepositories($vcsBridgeId: ID!, $query: String!) {
-    searchRepositories(vcsBridgeId: $vcsBridgeId, query: $query) {
+    search_repositories(vcs_bridge_id: $vcsBridgeId, query: $query) {
       name
       org
-      defaultBranch
+      default_branch
       visibility
-      webUrl
+      web_url
     }
   }
 `);
@@ -68,7 +59,7 @@ export const IntegrateSearchRepositories = graphql(`
 /** Inventory one picked repository; returns the created row. */
 export const IntegrateAddRepository = graphql(`
   mutation IntegrateAddRepository($vcsBridgeId: ID!, $name: String!) {
-    addRepository(vcsBridgeId: $vcsBridgeId, name: $name) {
+    add_repository(vcs_bridge_id: $vcsBridgeId, name: $name) {
       id
       org
       name
@@ -79,15 +70,11 @@ export const IntegrateAddRepository = graphql(`
 /** Bulk-inventory every repository an account exposes. */
 export const IntegrateDiscoverRepositories = graphql(`
   mutation IntegrateDiscoverRepositories($vcsBridgeId: ID!, $org: String!) {
-    discoverRepositories(vcsBridgeId: $vcsBridgeId, org: $org) { ok message }
+    discover_repositories(vcs_bridge_id: $vcsBridgeId, org: $org) { ok message }
   }
 `);
-
-/** Selection result for one `vcs_bridges` item (the picker option). */
-export type VcsBridgeOption =
-  DocumentType<typeof IntegrateVcsBridges>["vcs_bridges"][number];
 
 /** One host repository candidate the add typeahead lists (the SDL `RepoCandidate`). */
 export type RepoCandidate = DocumentType<
   typeof IntegrateSearchRepositories
->["searchRepositories"][number];
+>["search_repositories"][number];

@@ -1,28 +1,33 @@
 import * as React from "react";
 import {
   useAngeeFacets,
-  type FacetRequestSpec,
 } from "@angee/data";
+import type {
+  FacetRequestSpec,
+  } from "@angee/refine";
 import {
   useModelMetadata,
+} from "@angee/resources";
+import {
   useSchemaFieldMetadata,
   type ModelMetadata,
   type ModelRelationFilterMetadata,
   type ModelRelationFilterMode,
   type SchemaFieldMetadata,
-} from "@angee/sdk";
+} from "@angee/resources";
 
 import type {
-  DataToolbarFilterField,
-  DataToolbarFilterOption,
-  DataToolbarGroupOption,
+  ResourceToolbarFilterField,
+  ResourceToolbarFilterOption,
+  ResourceToolbarGroupOption,
 } from "../toolbars";
-import type { DataViewFilter, DataViewGroup } from "./data-view-model";
+import type { ResourceViewFilter, ResourceViewGroup } from "./resource-view-model";
 import { facetRequestSpec } from "./facet-query";
 import {
-  dataViewGroupToAggregateDimension,
+  resourceViewGroupToAggregateDimension,
   groupLabelDimension,
   hasuraGroupDimension,
+  hasuraGroupOrderForDimensions,
 } from "./ListInternals";
 import {
   fieldLabel,
@@ -32,9 +37,9 @@ import {
 import type { FacetDescriptor } from "./page";
 
 const RELATION_FACET_OPTION_LIMIT = 200;
-const EMPTY_FILTER_OPTIONS: readonly DataToolbarFilterOption[] = [];
-const EMPTY_FILTER_FIELDS: readonly DataToolbarFilterField[] = [];
-const EMPTY_GROUP_OPTIONS: readonly DataToolbarGroupOption[] = [];
+const EMPTY_FILTER_OPTIONS: readonly ResourceToolbarFilterOption[] = [];
+const EMPTY_FILTER_FIELDS: readonly ResourceToolbarFilterField[] = [];
+const EMPTY_GROUP_OPTIONS: readonly ResourceToolbarGroupOption[] = [];
 const EMPTY_FACET_SPECS: readonly FacetRequestSpec[] = [];
 const EMPTY_RELATION_FACET_OPTIONS: readonly RelationFacetOptions[] = [];
 const EMPTY_DECLARED_RELATION_FACETS: RelationFacets = {
@@ -46,34 +51,34 @@ const EMPTY_DECLARED_RELATION_FACETS: RelationFacets = {
 export type RelationFacetOptions = FacetDescriptor;
 
 export interface RelationFacets {
-  filters: readonly DataToolbarFilterOption[];
-  filterFields: readonly DataToolbarFilterField[];
-  groupOptions: readonly DataToolbarGroupOption[];
+  filters: readonly ResourceToolbarFilterOption[];
+  filterFields: readonly ResourceToolbarFilterField[];
+  groupOptions: readonly ResourceToolbarGroupOption[];
 }
 
 interface DeclaredRelationFacet {
   id: string;
   label: React.ReactNode;
   filter: ModelRelationFilterMetadata;
-  groupOption?: DataToolbarGroupOption;
+  groupOption?: ResourceToolbarGroupOption;
   spec?: FacetRequestSpec;
 }
 
 /** Build declared relation facets in one GraphQL facet query for a model list. */
 export function useRelationFacets(
-  model: string,
+  resource: string,
   options: readonly RelationFacetOptions[] | undefined =
     EMPTY_RELATION_FACET_OPTIONS,
-  activeFilter?: DataViewFilter,
+  activeFilter?: ResourceViewFilter,
 ): RelationFacets {
   const schemaMetadata = useSchemaFieldMetadata();
-  const modelMetadata = useModelMetadata(model);
+  const modelMetadata = useModelMetadata(resource);
   const facetOptions = options ?? EMPTY_RELATION_FACET_OPTIONS;
   const facets = React.useMemo(
     () => relationFacetDeclarations(facetOptions, modelMetadata, schemaMetadata),
     [facetOptions, modelMetadata, schemaMetadata],
   );
-  const resource = modelMetadata?.resource ?? null;
+  const dataResource = modelMetadata?.resource ?? null;
   const facetSpecs = React.useMemo(
     () =>
       facets.flatMap((facet) =>
@@ -82,11 +87,11 @@ export function useRelationFacets(
           : []),
     [activeFilter, facets],
   );
-  const facetQuery = useAngeeFacets(resource, {
+  const facetQuery = useAngeeFacets(dataResource, {
     facets: facetSpecs,
-    enabled: resource !== null && facetSpecs.length > 0,
+    enabled: dataResource !== null && facetSpecs.length > 0,
   });
-  const filters = React.useMemo<readonly DataToolbarFilterOption[]>(
+  const filters = React.useMemo<readonly ResourceToolbarFilterOption[]>(
     () =>
       facets.flatMap((facet) => {
         const result = facetQuery.facets[facet.id];
@@ -99,7 +104,7 @@ export function useRelationFacets(
       }),
     [facetQuery.facets, facets],
   );
-  const filterFields = React.useMemo<readonly DataToolbarFilterField[]>(
+  const filterFields = React.useMemo<readonly ResourceToolbarFilterField[]>(
     () =>
       facets.flatMap((facet) => {
         const result = facetQuery.facets[facet.id];
@@ -122,7 +127,7 @@ export function useRelationFacets(
       }),
     [facetQuery.facets, facets],
   );
-  const groupOptions = React.useMemo<readonly DataToolbarGroupOption[]>(
+  const groupOptions = React.useMemo<readonly ResourceToolbarGroupOption[]>(
     () =>
       facets.flatMap((facet) => facet.groupOption ? [facet.groupOption] : []),
     [facets],
@@ -222,7 +227,7 @@ function relationFilterConfig(
 function relationFacetFilter(
   filter: ModelRelationFilterMetadata,
   value: string,
-): DataViewFilter {
+): ResourceViewFilter {
   if (filter.mode === "id") return { [filter.field]: value };
   const lookup = filter.lookup ?? "exact";
   return {
@@ -233,7 +238,7 @@ function relationFacetFilter(
 }
 
 function relationFacetSpecs(
-  group: DataViewGroup | undefined,
+  group: ResourceViewGroup | undefined,
   metadata: ModelMetadata | null,
   options: {
     id: string | undefined;
@@ -241,15 +246,18 @@ function relationFacetSpecs(
   },
 ): readonly FacetRequestSpec[] {
   if (!group || !options.id) return EMPTY_FACET_SPECS;
-  const identity = dataViewGroupToAggregateDimension(group, metadata);
+  const identity = resourceViewGroupToAggregateDimension(group, metadata);
   const label = groupLabelDimension(group, metadata);
   const identityDimension = hasuraGroupDimension(identity);
   const labelDimension = label ? hasuraGroupDimension(label) : null;
+  const dimensions = labelDimension
+    ? [identityDimension, labelDimension]
+    : [identityDimension];
+  const orderBy = hasuraGroupOrderForDimensions(dimensions);
   return [{
     id: options.id,
-    dimensions: labelDimension
-      ? [identityDimension, labelDimension]
-      : [identityDimension],
+    dimensions,
+    ...(orderBy ? { orderBy } : {}),
     ...(identityDimension.key ? { valueKey: identityDimension.key } : {}),
     ...(labelDimension?.key ? { labelKey: labelDimension.key } : {}),
     pageSize: options.pageSize,
@@ -266,11 +274,11 @@ function relationGroupOption({
 }: {
   aggregateKey: string | undefined;
   field: string;
-  group: DataViewGroup | false | undefined;
+  group: ResourceViewGroup | false | undefined;
   label: React.ReactNode;
   labelField: string | undefined;
   relation: RelationFieldInfo | null;
-}): DataToolbarGroupOption | undefined {
+}): ResourceToolbarGroupOption | undefined {
   if (!relation || group === false) return undefined;
   const resolvedGroup = group;
   if (!resolvedGroup && !aggregateKey) return undefined;

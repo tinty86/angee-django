@@ -1,11 +1,33 @@
 import * as React from "react";
 import {
-  useResourceMutation,
+  resourceOperationTarget,
+} from "@angee/resources";
+import {
+  useCustomMutation,
+  useCan,
+  useInvalidate,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
+import {
+  deletePreviewDocumentForResource,
+  deletePreviewRequest,
+  extractDeletePreview,
+  useOperationDocuments,
   type DeletePreview,
   type DeletePreviewGroup,
   type DeletePreviewNode,
-} from "@angee/data";
-import { useModelRootFields } from "@angee/sdk";
+  type DeletePreviewVariables,
+  } from "@angee/refine";
+import {
+  refineResourceName,
+} from "@angee/resources";
+import {
+  useModelMetadata,
+} from "@angee/resources";
+import {
+  useModelRootFields,
+} from "@angee/resources";
 
 import { errorMessage, useToast } from "../feedback";
 
@@ -37,16 +59,72 @@ export interface UseBulkDeleteResult {
 }
 
 export function useBulkDelete(
-  model: string,
+  resource: string,
   selectedIds: ReadonlySet<string>,
   clearSelectedIds: () => void,
 ): UseBulkDeleteResult {
   const toast = useToast();
-  const rootFields = useModelRootFields(model);
-  const canDelete = rootFields === null || Boolean(rootFields.delete);
-  const [mutate] = useResourceMutation(model, "delete", {
-    enabled: canDelete,
+  const rootFields = useModelRootFields(resource);
+  const metadata = useModelMetadata(resource);
+  const dataResource = metadata?.resource ?? null;
+  const operationDocuments = useOperationDocuments();
+  const refineResource = dataResource ? refineResourceName(dataResource) : undefined;
+  const deleteAccess = useCan({
+    resource: refineResource,
+    action: "delete",
+    queryOptions: { enabled: Boolean(refineResource) },
   });
+  const canDelete =
+    (rootFields === null || Boolean(rootFields.delete))
+    && (deleteAccess.data?.can ?? true);
+  const deletePreview = useCustomMutation<BaseRecord, HttpError, DeletePreviewVariables>();
+  const invalidate = useInvalidate();
+  const mutate = React.useCallback(
+    async ({ id, confirm }: { id: string; confirm?: boolean }) => {
+      if (!canDelete) {
+        throw new Error(`Delete mutation for "${resource}" is disabled.`);
+      }
+      if (!dataResource) {
+        throw new Error(`Resource metadata for "${resource}" is not available.`);
+      }
+      const variables = { id, confirm };
+      const request = deletePreviewRequest(
+        resourceOperationTarget(dataResource, "deletePreview"),
+        variables,
+        {
+          document: deletePreviewDocumentForResource(
+            operationDocuments,
+            dataResource.schemaName,
+            dataResource.modelLabel,
+          ),
+        },
+      );
+      const response = await deletePreview.mutateAsync({
+        url: "",
+        method: "post",
+        values: variables,
+        dataProviderName: request.dataProviderName,
+        meta: request.meta,
+      });
+      if (confirm === true) {
+        await invalidate({
+          resource: refineResourceName(dataResource),
+          dataProviderName: request.dataProviderName,
+          id,
+          invalidates: ["list", "many", "detail"],
+        });
+      }
+      return extractDeletePreview(response.data, request.root);
+    },
+    [
+      canDelete,
+      dataResource,
+      deletePreview.mutateAsync,
+      invalidate,
+      operationDocuments,
+      resource,
+    ],
+  );
   const selectedIdList = React.useMemo(
     () => [...selectedIds],
     [selectedIds],

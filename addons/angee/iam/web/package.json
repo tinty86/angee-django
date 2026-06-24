@@ -13,8 +13,9 @@
   },
   "dependencies": {
     "@angee/base": "workspace:*",
-    "@angee/sdk": "workspace:*",
-    "urql": "^5.0.0"
+    "@angee/data": "workspace:*",
+    "@angee/refine": "workspace:*",
+    "@angee/sdk": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-router": "^1",

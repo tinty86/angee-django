@@ -40,7 +40,7 @@ describe("RevisionsTab", () => {
       revisionsResult({ fetching: true }),
     );
 
-    render(<RevisionsTab model="notes.Note" recordId="1" />);
+    render(<RevisionsTab resource="notes.Note" recordId="1" />);
 
     expect(screen.getByRole("status").textContent).toContain("Loading revisions");
   });
@@ -50,14 +50,14 @@ describe("RevisionsTab", () => {
       revisionsResult({ error: new Error("Revision query failed") }),
     );
 
-    render(<RevisionsTab model="notes.Note" recordId="1" />);
+    render(<RevisionsTab resource="notes.Note" recordId="1" />);
 
     expect(screen.getByText("Revisions unavailable")).toBeTruthy();
     expect(screen.getByText("Revision query failed")).toBeTruthy();
   });
 
   test("renders the empty state", () => {
-    render(<RevisionsTab model="notes.Note" recordId="1" />);
+    render(<RevisionsTab resource="notes.Note" recordId="1" />);
 
     expect(screen.getByText("No revisions yet")).toBeTruthy();
   });
@@ -76,7 +76,7 @@ describe("RevisionsTab", () => {
       }),
     );
 
-    render(<RevisionsTab model="notes.Note" recordId="1" />);
+    render(<RevisionsTab resource="notes.Note" recordId="1" />);
 
     expect(screen.getByText("Body changed")).toBeTruthy();
     expect(screen.getByText("Snapshot title")).toBeTruthy();

@@ -15,8 +15,8 @@ import {
 } from "@angee/base";
 import {
   useAuthoredMutation,
-  type DocumentData,
-} from "@angee/sdk";
+} from "@angee/data";
+import type { DocumentData } from "@angee/refine";
 
 import {
   IamGrants,
@@ -46,9 +46,9 @@ export function GrantsPage(): ReactElement {
     () => ({ pagination: { offset: 0, limit: IAM_LIST_LIMIT } }),
     [],
   );
-  const [revokeRole, revokeState] = useAuthoredMutation(IamRevokeRole, {
+  const [revoke_role, revokeState] = useAuthoredMutation(IamRevokeRole, {
     invalidateModels: [GRANT_MODEL],
-    shouldInvalidate: (result) => result?.revokeRole === true,
+    shouldInvalidate: (result) => result?.revoke_role === true,
   });
   const [pendingGrantId, setPendingGrantId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export function GrantsPage(): ReactElement {
   async function revoke(row: IAMGrantRow): Promise<void> {
     const confirmed = await confirm({
       title: t("iam.grants.revoke.title"),
-      body: t("iam.grants.revoke.body", { role: row.role, principal: row.principalLabel }),
+      body: t("iam.grants.revoke.body", { role: row.role, principal: row.principal_label }),
       cancel: t("iam.grants.revoke.cancel"),
       confirm: t("iam.revoke"),
       danger: true,
@@ -65,11 +65,11 @@ export function GrantsPage(): ReactElement {
     setPendingGrantId(row.id);
     setActionError(null);
     try {
-      const result = await revokeRole({
-        principalId: row.principalId,
+      const result = await revoke_role({
+        principal_id: row.principal_id,
         role: row.role,
       });
-      if (result?.revokeRole === false) {
+      if (result?.revoke_role === false) {
         throw new Error(t("iam.grants.revoke.error"));
       }
     } catch (caught) {
@@ -82,11 +82,11 @@ export function GrantsPage(): ReactElement {
   const grantColumns = useMemo<readonly ListColumn<IAMGrantRow>[]>(
     () => [
       {
-        field: "principalLabel",
+        field: "principal_label",
         header: t("iam.grants.column.principal"),
         render: (row) => (
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-13 text-fg">{row.principalLabel}</span>
+            <span className="truncate text-13 text-fg">{row.principal_label}</span>
             <Code truncate tone="muted" className="text-2xs">
               {row.principalRef}
             </Code>

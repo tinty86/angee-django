@@ -1,17 +1,26 @@
-import type { ReactNode } from "react";
+import type {
+  Row,
+  ResourceFilter,
+  ResourceOrder,
+} from "@angee/resources";
+import type {
+  ReactNode } from "react";
 import type {
   ResourceTypeName,
-  UseResourceListOptions,
-  Row,
-} from "@angee/data";
+} from "@angee/resources";
+import type {
+  ResourceViewDefaultGroups,
+  ResourceViewGroup,
+  ResourceViewKind,
+} from "./resource-view-model";
 import type { ButtonVariant } from "../ui/button";
 
 import type {
-  DataToolbarFilterField,
-  DataToolbarFilterOption,
-  DataToolbarGroupOption,
+  ResourceToolbarFilterField,
+  ResourceToolbarFilterOption,
+  ResourceToolbarGroupOption,
 } from "../toolbars";
-import type { ListViewState } from "./data-view-surface";
+import type { ResourceListSnapshot } from "./resource-view-surface";
 import type { ColumnDescriptor, FacetDescriptor } from "./page";
 
 export interface CardActionContext {
@@ -37,29 +46,33 @@ export interface ListEmptyState {
 
 export type ListEmptyContent = ReactNode | ListEmptyState;
 
-// The lean list contract. Grouping-only props (e.g. defaultGroup) live on
-// GroupListViewProps so the flat ListView never advertises grouping it can't do.
 export interface ListViewProps<TRow extends Row = Row> {
   /** Model label rendered by this list, e.g. `"notes.Note"`. */
-  model: string;
+  resource: string;
   /** Columns rendered by the list. */
   columns: readonly ColumnDescriptor<TRow>[];
   /** Extra resource fields selected in addition to the declared columns. */
   fields?: readonly string[];
   /** Base resource filter applied before user-owned view filters. */
-  filter?: UseResourceListOptions<ResourceTypeName>["filter"];
+  filter?: ResourceFilter<ResourceTypeName>;
   /** Favorite or quick filters shown in the list toolbar. */
-  filters?: readonly DataToolbarFilterOption[];
+  filters?: readonly ResourceToolbarFilterOption[];
   /** Explicit relation facets exposed as quick filters and group-by axes. */
   facets?: readonly FacetDescriptor[];
   /** Fields available to the toolbar's custom filter editor. */
-  filterFields?: readonly DataToolbarFilterField[];
+  filterFields?: readonly ResourceToolbarFilterField[];
   /** Fields available to the toolbar's group-by editor. */
-  groupOptions?: readonly DataToolbarGroupOption[];
+  groupOptions?: readonly ResourceToolbarGroupOption[];
   /** Default resource order when the URL-owned data view has no sort. */
-  order?: UseResourceListOptions<ResourceTypeName>["order"];
+  order?: ResourceOrder<ResourceTypeName>;
   /** Initial page size for the URL-owned data view. */
   pageSize?: number;
+  /** Initial collection view for the resource list. */
+  defaultView?: ResourceViewKind;
+  /** Group seeded by the resource list. */
+  defaultGroup?: ResourceViewGroup | null;
+  /** Per-view group defaults seeded by the resource list. */
+  defaultGroups?: ResourceViewDefaultGroups;
   /** Called when the list's create command is invoked. */
   onCreate?: () => void;
   /** Label for the list's create command. */
@@ -67,7 +80,7 @@ export interface ListViewProps<TRow extends Row = Row> {
   /** Called when a row is activated. */
   onRowClick?: (row: TRow) => void;
   /** Called whenever the loaded list state changes. */
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
   /** Optional href for a row, used when rows should render as links. */
   rowHref?: (row: TRow) => string;
   /** Controls rendered in the toolbar's leading slot, beside the filter — e.g. a

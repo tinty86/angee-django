@@ -18,12 +18,12 @@ export function resourceRows(
 ): ResourceRow[] {
   return ledger.map((row) => ({
     id: row.id,
-    sourceAddon: row.sourceAddon,
-    sourcePath: row.sourcePath,
+    sourceAddon: row.source_addon,
+    sourcePath: row.source_path,
     tier: row.tier,
-    target: row.targetModel,
-    targetId: row.targetId,
-    hash: row.contentHash.slice(0, 12),
-    loaded: formatDateTime(row.loadedAt),
+    target: row.target_model,
+    targetId: row.target_id,
+    hash: row.content_hash.slice(0, 12),
+    loaded: formatDateTime(row.loaded_at),
   }));
 }

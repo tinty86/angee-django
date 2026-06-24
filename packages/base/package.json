@@ -25,6 +25,8 @@
   "dependencies": {
     "@angee/data": "workspace:*",
     "@angee/logo-react": "^0.2.1",
+    "@angee/refine": "workspace:*",
+    "@angee/resources": "workspace:*",
     "@angee/sdk": "workspace:*",
     "@base-ui/react": "^1.5.0",
     "@codemirror/commands": "^6.0.0",
@@ -37,7 +39,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@floating-ui/react-dom": "^2.1.8",
     "@refinedev/core": "^5.0.12",
-    "@tanstack/react-form": "^1.32.0",
+    "@refinedev/react-hook-form": "^5.0.4",
+    "@refinedev/react-table": "^6.0.1",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.25",
     "@xyflow/react": "^12.10.2",
@@ -47,6 +50,7 @@
     "lucide-react": "^1.17.0",
     "nuqs": "^2.5.0",
     "react-day-picker": "^10.0.1",
+    "react-hook-form": "^7.80.0",
     "react-json-view-lite": "^2.5.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.11.1",
@@ -69,6 +73,7 @@
     }
   },
   "devDependencies": {
+    "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-router": "^1.170.8",
     "@tanstack/router-core": "^1.171.0",
     "@testing-library/react": "^16.1.0",

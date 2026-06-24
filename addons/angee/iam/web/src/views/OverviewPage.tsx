@@ -21,7 +21,7 @@ import {
   SurfacePanel,
   errorMessage,
 } from "@angee/base";
-import { useAuthoredMutation, useAuthoredQuery } from "@angee/sdk";
+import { useAuthoredMutation, useAuthoredQuery } from "@angee/data";
 
 import {
   IamGrantRole,
@@ -56,21 +56,21 @@ export function OverviewPage(): ReactElement {
   );
   const overview = useAuthoredQuery(IamOverview, overviewVars);
   const usersQuery = useAuthoredQuery(IamUsers, listVars);
-  const [grantRole, grantState] = useAuthoredMutation(IamGrantRole);
+  const [grant_role, grantState] = useAuthoredMutation(IamGrantRole);
 
-  const overviewFacts = overview.data?.iamOverview;
+  const overviewFacts = overview.data?.iam_overview;
   const roles = useMemo(() => roleRows(overview.data?.roles ?? []), [overview.data]);
   const users = useMemo(
     () => [...(usersQuery.data?.users ?? [])],
     [usersQuery.data],
   );
   const privileged = useMemo(
-    () => grantRows(overviewFacts?.privilegedGrants ?? []),
+    () => grantRows(overviewFacts?.privileged_grants ?? []),
     [overviewFacts],
   );
   const namespaces = overviewFacts?.namespaces ?? [];
   const unassigned = useMemo(
-    () => [...(overviewFacts?.unassignedUsers ?? [])],
+    () => [...(overviewFacts?.unassigned_users ?? [])],
     [overviewFacts],
   );
 
@@ -88,13 +88,13 @@ export function OverviewPage(): ReactElement {
   );
   const userTotalCount = usersQuery.data?.users_aggregate.aggregate?.count ?? 0;
   const usersTruncated = userTotalCount > IAM_LIST_LIMIT;
-  const privilegedTotal = overviewFacts?.privilegedGrantCount ?? privileged.length;
-  const unassignedTotal = overviewFacts?.unassignedUserCount ?? unassigned.length;
+  const privilegedTotal = overviewFacts?.privileged_grant_count ?? privileged.length;
+  const unassignedTotal = overviewFacts?.unassigned_user_count ?? unassigned.length;
 
-  const [principalId, setPrincipalId] = useState("");
+  const [principal_id, setPrincipalId] = useState("");
   const [role, setRole] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const principalLabelId = useId();
+  const principal_labelId = useId();
   const roleLabelId = useId();
 
   useEffect(() => {
@@ -103,21 +103,21 @@ export function OverviewPage(): ReactElement {
     }
   }, [roleOptions, role]);
   useEffect(() => {
-    if (principalId && !principalOptions.some((o) => o.value === principalId)) {
+    if (principal_id && !principalOptions.some((o) => o.value === principal_id)) {
       setPrincipalId("");
     }
-  }, [principalOptions, principalId]);
+  }, [principalOptions, principal_id]);
 
   async function handleGrant(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!principalId || !role) {
+    if (!principal_id || !role) {
       setError(t("iam.overview.grant.chooseBoth"));
       return;
     }
     setError(null);
     try {
-      const result = await grantRole({ principalId, role });
-      if (result?.grantRole === false) throw new Error(t("iam.overview.grant.error"));
+      const result = await grant_role({ principal_id, role });
+      if (result?.grant_role === false) throw new Error(t("iam.overview.grant.error"));
       setPrincipalId("");
       overview.refetch();
     } catch (caught) {
@@ -129,12 +129,12 @@ export function OverviewPage(): ReactElement {
 
   return (
     <DashboardView className="p-1">
-      <Metric label={t("iam.overview.metric.users")} value={count(overviewFacts?.userCount, loading)} icon="users" />
-      <Metric label={t("iam.overview.metric.roles")} value={count(overviewFacts?.roleCount, loading)} icon="auth" tone="brand" />
-      <Metric label={t("iam.overview.metric.grants")} value={count(overviewFacts?.grantCount, loading)} icon="check" tone="success" />
-      <Metric label={t("iam.overview.metric.relationships")} value={count(overviewFacts?.relationshipCount, loading)} icon="share" tone="info" />
-      <Metric label={t("iam.overview.metric.privileged")} value={count(overviewFacts?.privilegedGrantCount, loading)} icon="auth" tone="warning" detail={t("iam.overview.metric.privilegedDetail")} />
-      <Metric label={t("iam.overview.metric.unassigned")} value={count(overviewFacts?.unassignedUserCount, loading)} icon="users" tone="danger" detail={t("iam.overview.metric.unassignedDetail")} />
+      <Metric label={t("iam.overview.metric.users")} value={count(overviewFacts?.user_count, loading)} icon="users" />
+      <Metric label={t("iam.overview.metric.roles")} value={count(overviewFacts?.role_count, loading)} icon="auth" tone="brand" />
+      <Metric label={t("iam.overview.metric.grants")} value={count(overviewFacts?.grant_count, loading)} icon="check" tone="success" />
+      <Metric label={t("iam.overview.metric.relationships")} value={count(overviewFacts?.relationship_count, loading)} icon="share" tone="info" />
+      <Metric label={t("iam.overview.metric.privileged")} value={count(overviewFacts?.privileged_grant_count, loading)} icon="auth" tone="warning" detail={t("iam.overview.metric.privilegedDetail")} />
+      <Metric label={t("iam.overview.metric.unassigned")} value={count(overviewFacts?.unassigned_user_count, loading)} icon="users" tone="danger" detail={t("iam.overview.metric.unassignedDetail")} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-6">
@@ -147,14 +147,14 @@ export function OverviewPage(): ReactElement {
                 <FieldRoot>
                   {/* A Select trigger is a button, not a labelable control, so the
                       label renders as a span and associates via aria-labelledby. */}
-                  <FieldLabel id={principalLabelId} nativeLabel={false} render={<span />}>
+                  <FieldLabel id={principal_labelId} nativeLabel={false} render={<span />}>
                     {t("iam.overview.grant.principal")}
                   </FieldLabel>
                   <Select
-                    value={principalId}
+                    value={principal_id}
                     options={principalOptions}
                     placeholder={usersQuery.fetching ? t("iam.overview.grant.loadingUsers") : t("iam.overview.grant.selectUser")}
-                    aria-labelledby={principalLabelId}
+                    aria-labelledby={principal_labelId}
                     disabled={usersQuery.fetching || principalOptions.length === 0}
                     onValueChange={setPrincipalId}
                   />
@@ -180,7 +180,7 @@ export function OverviewPage(): ReactElement {
                   />
                 </FieldRoot>
                 <div className="flex items-end">
-                  <Button type="submit" variant="primary" pending={grantState.fetching} disabled={!principalId || !role}>
+                  <Button type="submit" variant="primary" pending={grantState.fetching} disabled={!principal_id || !role}>
                     {t("iam.overview.grant.submit")}
                   </Button>
                 </div>
@@ -219,13 +219,13 @@ export function OverviewPage(): ReactElement {
                   key={namespace.namespace}
                   title={titleLabel(namespace.namespace)}
                   meta={
-                    namespace.roleCount === 1
-                      ? t("iam.overview.namespaces.roleCount.one", { count: namespace.roleCount.toLocaleString() })
-                      : t("iam.overview.namespaces.roleCount.other", { count: namespace.roleCount.toLocaleString() })
+                    namespace.role_count === 1
+                      ? t("iam.overview.namespaces.role_count.one", { count: namespace.role_count.toLocaleString() })
+                      : t("iam.overview.namespaces.role_count.other", { count: namespace.role_count.toLocaleString() })
                   }
                   primaryTag={{
-                    label: t("iam.overview.namespaces.grantCount", { count: namespace.grantCount.toLocaleString() }),
-                    tone: namespace.grantCount > 0 ? "brand" : "neutral",
+                    label: t("iam.overview.namespaces.grant_count", { count: namespace.grant_count.toLocaleString() }),
+                    tone: namespace.grant_count > 0 ? "brand" : "neutral",
                   }}
                 />
               ))}
@@ -269,7 +269,7 @@ function PrivilegedGrantRow({
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
-        <div className="truncate text-13 font-medium text-fg">{grant.principalLabel}</div>
+        <div className="truncate text-13 font-medium text-fg">{grant.principal_label}</div>
         <div className="truncate text-2xs text-fg-muted">{titleLabel(grant.namespace)} · {grant.roleName}</div>
       </div>
       <Button
@@ -277,7 +277,7 @@ function PrivilegedGrantRow({
         size="sm"
         pending={state.fetching}
         onClick={() => {
-          void revoke({ principalId: grant.principalId, role: grant.role }).then(onRevoked);
+          void revoke({ principal_id: grant.principal_id, role: grant.role }).then(onRevoked);
         }}
       >
         {t("iam.revoke")}

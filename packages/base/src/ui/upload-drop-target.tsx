@@ -41,7 +41,7 @@ export const UploadDropTarget = React.forwardRef<
       ref={ref}
       className={cn("relative", className)}
       data-file-drag-over={isOver ? "" : undefined}
-      aria-disabled={disabled || undefined}
+      data-file-drop-disabled={disabled ? "" : undefined}
       {...props}
       {...dropProps}
     >

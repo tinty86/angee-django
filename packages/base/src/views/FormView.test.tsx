@@ -1,5 +1,10 @@
 // @vitest-environment happy-dom
 
+import type {
+  DataResourceMetadata,
+  ModelMetadata,
+  SchemaFieldMetadata,
+} from "@angee/resources";
 import {
   act,
   cleanup,
@@ -7,7 +12,7 @@ import {
   render,
   screen,
   waitFor,
-} from "@testing-library/react";
+  } from "@testing-library/react";
 import {
   Outlet,
   RouterContextProvider,
@@ -16,14 +21,17 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-} from "@tanstack/react-router";
+  } from "@tanstack/react-router";
 import {
   AppRuntimeProvider,
-  ModelMetadataProvider,
   type AppRuntime,
-  type SchemaFieldMetadata,
-} from "@angee/sdk";
-import type { Row } from "@angee/data";
+  } from "@angee/sdk";
+import {
+  ModelMetadataProvider,
+} from "@angee/resources";
+import type {
+  Row,
+} from "@angee/resources";
 import { useMemo, useState, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -54,31 +62,193 @@ vi.mock("@angee/sdk", async (importOriginal) => {
 
 vi.mock("@angee/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/data")>();
-  return {
-    ...actual,
-    useResourceMutation: (
-      _model: string,
-      action: string,
-      options?: { fields?: readonly string[]; enabled?: boolean },
-    ) => {
-      sdkMocks.mutationAction = action;
-      sdkMocks.mutationOptions = options;
-      return [
-        sdkMocks.mutate,
-        { fetching: false, error: null },
-      ];
-    },
-    useResourceRecord: (
-      _model: string,
-      _id: string | null,
-      options?: { fields?: readonly string[] },
-    ) => {
-      sdkMocks.recordSelection = options?.fields;
-      return {
-        record: sdkMocks.record,
-        fetching: false,
+  return actual;
+});
+
+vi.mock("@refinedev/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@refinedev/core")>();
+  const fieldsFromMeta = (meta: unknown): readonly string[] | undefined => {
+    const fields = (meta as { fields?: unknown } | undefined)?.fields;
+    if (!Array.isArray(fields)) return undefined;
+    const paths: string[] = [];
+    const visit = (items: readonly unknown[], prefix = ""): void => {
+      for (const item of items) {
+        if (typeof item === "string") {
+          paths.push(prefix ? `${prefix}.${item}` : item);
+          continue;
+        }
+        if (!item || typeof item !== "object") continue;
+        for (const [key, value] of Object.entries(item)) {
+          if (Array.isArray(value)) visit(value, prefix ? `${prefix}.${key}` : key);
+        }
+      }
+    };
+    visit(fields);
+    return paths;
+  };
+  const mutationResult = (
+    action: "create" | "update",
+    mutateAsync: (input: { id?: string | number; values?: Record<string, unknown> }) => Promise<{ data: Row | null }>,
+  ) => (options?: { meta?: unknown }) => {
+    sdkMocks.mutationAction = action;
+    sdkMocks.mutationOptions = {
+      fields: fieldsFromMeta(options?.meta),
+      enabled: true,
+    };
+    return {
+      mutateAsync,
+      mutation: { isPending: false, error: null },
+    };
+  };
+  const formResult = (options?: {
+    action?: "create" | "edit";
+    id?: string | number;
+    meta?: unknown;
+    queryOptions?: { enabled?: boolean };
+  }) => {
+    const action = options?.action === "edit" ? "update" : "create";
+    sdkMocks.recordSelection = fieldsFromMeta(options?.meta);
+    sdkMocks.mutationAction = action;
+    sdkMocks.mutationOptions = {
+      fields: fieldsFromMeta(options?.meta),
+      enabled: true,
+    };
+    const queryEnabled = options?.queryOptions?.enabled !== false;
+    return {
+      id: options?.id,
+      setId: vi.fn(),
+      query: {
+        data: { data: queryEnabled ? sdkMocks.record ?? undefined : undefined },
+        isFetching: false,
         error: null,
         refetch: vi.fn(),
+      },
+      mutation: { isPending: false, error: null, status: "idle" },
+      formLoading: false,
+      onFinish: async (values: Record<string, unknown>) => ({
+        data: await sdkMocks.mutate({
+          data: action === "update"
+            ? ({ ...values, id: options?.id } as Row)
+            : (values as Row),
+        }),
+      }),
+      redirect: vi.fn(),
+      overtime: {},
+      autoSaveProps: { status: "idle", data: undefined, error: null },
+      onFinishAutoSave: vi.fn(),
+    };
+  };
+  return {
+    ...actual,
+    useForm: formResult,
+    useOne: (options?: { meta?: unknown }) => {
+      sdkMocks.recordSelection = fieldsFromMeta(options?.meta);
+      return {
+        result: sdkMocks.record ?? undefined,
+        query: {
+          isFetching: false,
+          error: null,
+          refetch: vi.fn(),
+        },
+      };
+    },
+    useList: () => ({
+      result: { data: [], total: 0 },
+      query: {
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+      },
+    }),
+    useCreate: mutationResult("create", async ({ values = {} }) => ({
+      data: await sdkMocks.mutate({ data: values }),
+    })),
+    useUpdate: mutationResult("update", async ({ id, values = {} }) => ({
+      data: await sdkMocks.mutate({ data: { ...values, id } }),
+    })),
+  };
+});
+
+vi.mock("@refinedev/react-hook-form", async () => {
+  const hookForm = await import("react-hook-form");
+  const fieldsFromMeta = (meta: unknown): readonly string[] | undefined => {
+    const fields = (meta as { fields?: unknown } | undefined)?.fields;
+    if (!Array.isArray(fields)) return undefined;
+    const paths: string[] = [];
+    const visit = (items: readonly unknown[], prefix = ""): void => {
+      for (const item of items) {
+        if (typeof item === "string") {
+          paths.push(prefix ? `${prefix}.${item}` : item);
+          continue;
+        }
+        if (!item || typeof item !== "object") continue;
+        for (const [key, value] of Object.entries(item)) {
+          if (Array.isArray(value)) visit(value, prefix ? `${prefix}.${key}` : key);
+        }
+      }
+    };
+    visit(fields);
+    return paths;
+  };
+  return {
+    useForm: (options: {
+      defaultValues?: Record<string, unknown>;
+      refineCoreProps?: {
+        action?: "create" | "edit";
+        id?: string | number;
+        meta?: unknown;
+        queryOptions?: { enabled?: boolean };
+      };
+    } = {}) => {
+      const form = hookForm.useForm({ defaultValues: options.defaultValues });
+      const refineCore = (() => {
+        const action =
+          options.refineCoreProps?.action === "edit" ? "update" : "create";
+        sdkMocks.recordSelection = fieldsFromMeta(options.refineCoreProps?.meta);
+        sdkMocks.mutationAction = action;
+        sdkMocks.mutationOptions = {
+          fields: fieldsFromMeta(options.refineCoreProps?.meta),
+          enabled: true,
+        };
+        const queryEnabled =
+          options.refineCoreProps?.queryOptions?.enabled !== false;
+        return {
+          id: options.refineCoreProps?.id,
+          setId: vi.fn(),
+          query: {
+            data: {
+              data: queryEnabled ? sdkMocks.record ?? undefined : undefined,
+            },
+            isFetching: false,
+            error: null,
+            refetch: vi.fn(),
+          },
+          mutation: { isPending: false, error: null, status: "idle" },
+          formLoading: false,
+          onFinish: async (values: Record<string, unknown>) => ({
+            data: await sdkMocks.mutate({
+              data: action === "update"
+                ? ({ ...values, id: options.refineCoreProps?.id } as Row)
+                : (values as Row),
+            }),
+          }),
+          redirect: vi.fn(),
+          overtime: {},
+          autoSaveProps: { status: "idle", data: undefined, error: null },
+          onFinishAutoSave: vi.fn(),
+        };
+      })();
+      return {
+        ...form,
+        refineCore,
+        saveButtonProps: {
+          disabled: false,
+          onClick: (event: unknown) => {
+            void form.handleSubmit((values) => refineCore.onFinish(values))(
+              event as never,
+            );
+          },
+        },
       };
     },
   };
@@ -139,7 +309,7 @@ describe("FormView", () => {
   test("throws when fields prop and field children are both declared", () => {
     expect(() =>
       renderWithProviders(
-        <FormView model="notes.Note" id="note-1" fields={fields}>
+        <FormView resource="notes.Note" id="note-1" fields={fields}>
           <Field name="title" />
         </FormView>,
       ),
@@ -150,7 +320,7 @@ describe("FormView", () => {
     expect(() =>
       renderWithProviders(
         <FormView
-          model="notes.Note"
+          resource="notes.Note"
           id="note-1"
           groups={[{ label: "Details", fields: [], actions: [] }]}
         >
@@ -164,7 +334,7 @@ describe("FormView", () => {
 
   test("renders declared record actions in the action menu", async () => {
     renderWithProviders(
-      <FormView model="notes.Note" id="note-1">
+      <FormView resource="notes.Note" id="note-1">
         <Field name="title" label="Title" title />
         <Action id="archive" label="Archive" set={{ status: "ARCHIVED" }} />
       </FormView>,
@@ -183,7 +353,7 @@ describe("FormView", () => {
 
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         id="note-1"
         deleteAction={deleteAction}
         deleteVisibleWhen={(record) => record.status === "ARCHIVED"}
@@ -200,7 +370,7 @@ describe("FormView", () => {
     sdkMocks.record = { ...sdkMocks.record, status: "ARCHIVED" };
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         id="note-1"
         deleteAction={deleteAction}
         deleteVisibleWhen={(record) => record.status === "ARCHIVED"}
@@ -217,7 +387,7 @@ describe("FormView", () => {
   test("renders record-aware toolbarStart content", async () => {
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         id="note-1"
         toolbarStart={({ record }) =>
           record?.status === "ACTIVE" ? (
@@ -236,7 +406,7 @@ describe("FormView", () => {
   test("lets toolbarStart patch displayed record state immediately", async () => {
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         id="note-1"
         fields={fields}
         toolbarStart={({ patchRecord, record }) =>
@@ -262,7 +432,7 @@ describe("FormView", () => {
 
   test("runs a declarative set action through the update mutation", async () => {
     renderWithProviders(
-      <FormView model="notes.Note" id="note-1">
+      <FormView resource="notes.Note" id="note-1">
         <Field name="title" label="Title" title />
         <Action id="archive" label="Archive" set={{ status: "ARCHIVED" }} />
       </FormView>,
@@ -281,7 +451,7 @@ describe("FormView", () => {
   test("invokes a custom run action with the open-record context", async () => {
     const run = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(
-      <FormView model="notes.Note" id="note-1">
+      <FormView resource="notes.Note" id="note-1">
         <Field name="title" label="Title" title />
         <Action id="sync" label="Sync" run={run} />
       </FormView>,
@@ -310,7 +480,7 @@ describe("FormView", () => {
           >
             refetch {version}
           </button>
-          <FormView model="notes.Note" id="note-1" fields={fields} />
+          <FormView resource="notes.Note" id="note-1" fields={fields} />
         </>
       );
     }
@@ -350,7 +520,7 @@ describe("FormView", () => {
           >
             load {String(loaded)}
           </button>
-          <FormView model="notes.Note" id="note-1" fields={fields} />
+          <FormView resource="notes.Note" id="note-1" fields={fields} />
         </>
       );
     }
@@ -359,7 +529,6 @@ describe("FormView", () => {
 
     expect(screen.queryByRole("textbox", { name: "Title" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: false });
 
     fireEvent.click(screen.getByRole("button", { name: /load/ }));
 
@@ -367,12 +536,11 @@ describe("FormView", () => {
     await waitFor(() =>
       expect((title as HTMLInputElement).value).toBe("Loaded"),
     );
-    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: true });
   });
 
   test("renders standalone Form from Field and Group children", async () => {
     renderWithProviders(
-      <Form model="notes.Note" id="note-1">
+      <Form resource="notes.Note" id="note-1">
         <Field name="title" label="Title" title />
         <Group label="Details">
           <Field name="wordCount" label="Word Count" readOnly />
@@ -390,7 +558,7 @@ describe("FormView", () => {
 
   test("renders labelled groups as tab panels when layout is tabs", async () => {
     renderWithProviders(
-      <Form model="notes.Note" id="note-1" layout="tabs">
+      <Form resource="notes.Note" id="note-1" layout="tabs">
         <Field name="title" label="Title" title />
         <Group label="Details">
           <Field name="summary" label="Summary" />
@@ -419,7 +587,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         fields={[
           { name: "title", label: "Title", title: true },
           { name: "slug", widget: "slug" },
@@ -440,7 +608,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         fields={[
           { name: "title", label: "Title", title: true },
           { name: "slug", widget: "slug" },
@@ -493,7 +661,7 @@ describe("FormView", () => {
             create
           </button>
           <FormView
-            model="notes.Note"
+            resource="notes.Note"
             id={id}
             fields={[
               { name: "title", label: "Title", title: true },
@@ -535,7 +703,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         fields={[
           { name: "title", label: "Title", title: true },
           { name: "sourceName", label: "Source Name" },
@@ -580,7 +748,7 @@ describe("FormView", () => {
     sdkMocks.record = { id: "repo-1", name: "widgets", org: "acme" };
     renderWithProviders(
       <FormView
-        model="integrate.Repository"
+        resource="integrate.Repository"
         id="repo-1"
         fields={[
           { name: "org", label: "Org", readOnly: true },
@@ -592,7 +760,7 @@ describe("FormView", () => {
     expect(await screen.findByText("widgets")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(sdkMocks.mutationAction).toBe("update");
-    expect(sdkMocks.mutationOptions).toMatchObject({ enabled: false });
+    expect(sdkMocks.mutate).not.toHaveBeenCalled();
   });
 
   test("includes an enum field when the user changes it", async () => {
@@ -626,7 +794,7 @@ describe("FormView", () => {
   test("omits blank numeric fields from create payloads", async () => {
     renderWithProviders(
       <FormView
-        model="agents.InferenceModel"
+        resource="agents.InferenceModel"
         fields={[
           { name: "name", label: "Name", title: true },
           { name: "contextWindow", label: "Context Window", widget: "integer" },
@@ -647,7 +815,7 @@ describe("FormView", () => {
   test("merges default values into create payloads", async () => {
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         fields={fields}
         defaultValues={{ status: "ACTIVE" }}
       />,
@@ -710,7 +878,7 @@ describe("FormView", () => {
 
     renderWithProviders(
       <FormView
-        model="integrate.Integration"
+        resource="integrate.Integration"
         fields={integrationFields}
         defaultValues={{
           vendor: "vendor-1",
@@ -754,7 +922,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     renderWithProviders(
       <FormView
-        model="OAuthClient"
+        resource="OAuthClient"
         fields={implFields}
         defaultValues={{ isEnabled: true }}
       />,
@@ -784,7 +952,7 @@ describe("FormView", () => {
     };
     sdkMocks.mutate.mockReset();
     renderWithProviders(
-      <FormView model="OAuthClient" id="client-1" fields={implFields} />,
+      <FormView resource="OAuthClient" id="client-1" fields={implFields} />,
     );
     await waitFor(() =>
       expect(
@@ -817,7 +985,7 @@ describe("FormView", () => {
     };
     renderWithProviders(
       <FormView
-        model="OAuthClient"
+        resource="OAuthClient"
         id="client-1"
         fields={[
           { name: "displayName", label: "Display Name", title: true },
@@ -854,7 +1022,7 @@ describe("FormView", () => {
   test("submits fields declared through the groups prop", async () => {
     renderWithProviders(
       <FormView
-        model="notes.Note"
+        resource="notes.Note"
         groups={[
           {
             label: "Details",
@@ -879,7 +1047,7 @@ describe("FormView", () => {
   test("merges FORM_VIEW_SECTIONS_SLOT fields into the submit payload", async () => {
     sdkMocks.record = null;
     renderWithProviders(
-      <FormView model="notes.Note">
+      <FormView resource="notes.Note">
         <Field name="title" label="Title" title />
       </FormView>,
       undefined,
@@ -935,7 +1103,7 @@ describe("FormView", () => {
 
     renderWithProviders(
       <FormView
-        model="OAuthClient"
+        resource="OAuthClient"
         id="client-1"
         fields={relationFields}
       />,
@@ -951,7 +1119,7 @@ describe("FormView", () => {
     sdkMocks.mutate.mockReset();
     renderWithProviders(
       <FormView
-        model="OAuthClient"
+        resource="OAuthClient"
         fields={relationFields}
         defaultValues={{ vendor: "vendor-2" }}
       />,
@@ -975,7 +1143,7 @@ describe("FormView", () => {
             {saveVersion}
           </span>
           <FormView
-            model="notes.Note"
+            resource="notes.Note"
             id="note-1"
             fields={viewFields}
             onSaved={() => setSaveVersion((current) => current + 1)}
@@ -1018,7 +1186,7 @@ describe("FormView", () => {
       return (
         <ModalsHost>
           <ToastProvider>
-            <ModelMetadataProvider>
+            <ModelMetadataProvider metadata={withDefaultResourceMetadata(undefined)}>
               <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
                 <Outlet />
               </AppRuntimeProvider>
@@ -1034,7 +1202,7 @@ describe("FormView", () => {
       path: "/",
       component: () => (
         <FormView
-          model="notes.Note"
+          resource="notes.Note"
           id="note-1"
           fields={fields}
           onSaved={() => {
@@ -1093,7 +1261,7 @@ describe("FormView", () => {
 
     renderWithProviders(
       <FormView
-        model="iam.User"
+        resource="iam.User"
         id="user-1"
         fields={[
           { name: "username", label: "Username", title: true },
@@ -1128,7 +1296,7 @@ describe("FormView", () => {
     };
 
     renderWithProviders(
-      <FormView model="notes.Note" fields={[{ name: "code", label: "Code" }]} />,
+      <FormView resource="notes.Note" fields={[{ name: "code", label: "Code" }]} />,
       metadata,
     );
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -1155,7 +1323,7 @@ describe("FormView", () => {
       ],
     });
 
-    renderWithProviders(<FormView model="notes.Note" fields={fields} />);
+    renderWithProviders(<FormView resource="notes.Note" fields={fields} />);
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
@@ -1169,7 +1337,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     sdkMocks.mutate.mockReset();
     renderWithProviders(
-      <FormView model="notes.Note">
+      <FormView resource="notes.Note">
         <Field name="kind" label="Kind" />
         <Field
           name="secret"
@@ -1198,7 +1366,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     sdkMocks.mutate.mockReset();
     renderWithProviders(
-      <FormView model="notes.Note">
+      <FormView resource="notes.Note">
         <Field name="kind" label="Kind" />
         <Field
           name="secret"
@@ -1228,7 +1396,7 @@ describe("FormView", () => {
     sdkMocks.record = null;
     sdkMocks.mutate.mockReset();
     renderWithProviders(
-      <FormView model="Widget">
+      <FormView resource="Widget">
         <Field name="declaredName" label="Declared Name" />
       </FormView>,
       undefined,
@@ -1242,7 +1410,7 @@ describe("FormView", () => {
     // Edit (id set): the override is ignored; the declared lifecycle form renders.
     sdkMocks.record = { id: "w-1", declaredName: "kept" };
     renderWithProviders(
-      <FormView model="Widget" id="w-1">
+      <FormView resource="Widget" id="w-1">
         <Field name="declaredName" label="Declared Name" />
       </FormView>,
       undefined,
@@ -1269,7 +1437,7 @@ describe("FormView", () => {
       ],
     });
 
-    renderWithProviders(<FormView model="notes.Note" fields={fields} />);
+    renderWithProviders(<FormView resource="notes.Note" fields={fields} />);
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(sdkMocks.mutate).toHaveBeenCalledTimes(1));
@@ -1282,7 +1450,7 @@ describe("FormView", () => {
 });
 
 function renderForm(id: string | null): void {
-  renderWithProviders(<FormView model="notes.Note" id={id} fields={fields} />);
+  renderWithProviders(<FormView resource="notes.Note" id={id} fields={fields} />);
 }
 
 function renderWithProviders(
@@ -1306,7 +1474,7 @@ function renderWithProviders(
     <RouterContextProvider router={router}>
       <ModalsHost>
         <ToastProvider>
-          <ModelMetadataProvider metadata={metadata}>
+          <ModelMetadataProvider metadata={withDefaultResourceMetadata(metadata)}>
             <AppRuntimeProvider
               runtime={{
                 widgets: defaultWidgets,
@@ -1321,6 +1489,90 @@ function renderWithProviders(
       </ModalsHost>
     </RouterContextProvider>,
   );
+}
+
+function withDefaultResourceMetadata(
+  metadata: SchemaFieldMetadata | undefined,
+): SchemaFieldMetadata {
+  const seed = metadata ?? { types: {} };
+  const types: Record<string, ModelMetadata> = {
+    NoteType: defaultModel("NoteType", "notes.Note"),
+    RepositoryType: defaultModel("RepositoryType", "integrate.Repository"),
+    InferenceModelType: defaultModel("InferenceModelType", "agents.InferenceModel"),
+    IntegrationType: defaultModel("IntegrationType", "integrate.Integration"),
+    OAuthClientType: defaultModel("OAuthClientType", "OAuthClient"),
+    UserType: defaultModel("UserType", "iam.User"),
+    WidgetType: defaultModel("WidgetType", "Widget"),
+    ...seed.types,
+  };
+  for (const [typeName, model] of Object.entries(types)) {
+    const modelLabel = modelLabelForType(typeName);
+    types[typeName] = {
+      ...defaultModel(typeName, modelLabel),
+      ...model,
+      resource: model.resource ?? defaultResource(typeName, modelLabel),
+    };
+  }
+  return { ...seed, types };
+}
+
+function defaultModel(typeName: string, modelLabel: string): ModelMetadata {
+  const modelName = modelNameForLabel(modelLabel);
+  return {
+    typeName,
+    fields: {},
+    rootFields: {
+      list: `${modelName.toLowerCase()}s`,
+      detail: `${modelName.toLowerCase()}_by_pk`,
+      create: `create${modelName}`,
+      update: `update${modelName}`,
+    },
+    resource: defaultResource(typeName, modelLabel),
+  };
+}
+
+function defaultResource(typeName: string, modelLabel: string): DataResourceMetadata {
+  const modelName = modelNameForLabel(modelLabel);
+  const list = `${modelName.toLowerCase()}s`;
+  return {
+    schemaName: "console",
+    modelLabel,
+    appLabel: modelLabel.includes(".") ? modelLabel.split(".")[0] ?? "" : "",
+    modelName,
+    publicIdField: "id",
+    roots: {
+      list,
+      detail: `${list}_by_pk`,
+      create: `insert_${list}_one`,
+      update: `update_${list}_by_pk`,
+      delete: `delete_${list}_by_pk`,
+    },
+    typeNames: { node: typeName },
+    capabilities: ["list", "detail", "create", "update", "delete"],
+    fields: [],
+    filterFields: [],
+    orderFields: [],
+    aggregateFields: [],
+    groupByFields: [],
+    relationAxes: [],
+  };
+}
+
+function modelLabelForType(typeName: string): string {
+  const known: Record<string, string> = {
+    NoteType: "notes.Note",
+    RepositoryType: "integrate.Repository",
+    InferenceModelType: "agents.InferenceModel",
+    IntegrationType: "integrate.Integration",
+    OAuthClientType: "OAuthClient",
+    UserType: "iam.User",
+    WidgetType: "Widget",
+  };
+  return known[typeName] ?? typeName.replace(/Type$/, "");
+}
+
+function modelNameForLabel(modelLabel: string): string {
+  return modelLabel.split(".").at(-1) ?? modelLabel;
 }
 
 function cloneFields(source: readonly FormField[]): FormField[] {

@@ -43,14 +43,17 @@ describe("UploadDropTarget", () => {
     const file = new File(["hello"], "hello.txt");
     render(
       <UploadDropTarget disabled onFiles={onFiles} overlay="Drop files">
-        <span>Body</span>
+        <button type="button">Body</button>
       </UploadDropTarget>,
     );
 
-    const target = screen.getByText("Body").parentElement!;
+    const target = screen.getByRole("button", { name: "Body" }).parentElement!;
     fireEvent.dragEnter(target, { dataTransfer: fileTransfer([file]) });
     fireEvent.drop(target, { dataTransfer: fileTransfer([file]) });
 
+    expect(target.getAttribute("aria-disabled")).toBeNull();
+    expect(target.hasAttribute("data-file-drop-disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Body" }).hasAttribute("disabled")).toBe(false);
     expect(onFiles).not.toHaveBeenCalled();
     expect(screen.queryByText("Drop files")).toBeNull();
   });

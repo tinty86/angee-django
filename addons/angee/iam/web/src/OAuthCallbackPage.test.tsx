@@ -10,8 +10,8 @@ import { OAuthCallbackPage } from "./OAuthCallbackPage";
 
 const mocks = vi.hoisted(() => ({ mutate: vi.fn() }));
 
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
+vi.mock("@angee/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/data")>();
   return {
     ...actual,
     useAuthoredMutation: () => [mocks.mutate, { fetching: false, error: null }],
@@ -40,7 +40,7 @@ describe("OAuthCallbackPage", () => {
   test("redirects to next when the login payload reports ok", async () => {
     window.history.replaceState(null, "", "/sso/callback?code=login-ok&state=s1");
     mocks.mutate.mockResolvedValue({
-      loginComplete: { ok: true, next: "/dashboard", error: null },
+      login_complete: { ok: true, next: "/dashboard", error: null },
     });
 
     render(
@@ -58,7 +58,7 @@ describe("OAuthCallbackPage", () => {
   test("renders the error frame when the login payload is not ok", async () => {
     window.history.replaceState(null, "", "/sso/callback?code=login-bad&state=s2");
     mocks.mutate.mockResolvedValue({
-      loginComplete: { ok: false, next: "", error: "Account disabled" },
+      login_complete: { ok: false, next: "", error: "Account disabled" },
     });
 
     render(

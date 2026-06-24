@@ -1,26 +1,25 @@
 import * as React from "react";
 import {
-  DataPage,
+  ResourceList,
   EmptyState,
   Form,
-  GroupListView,
+  ListView,
   List,
   Column,
   Field,
   Group,
-  NEW_RECORD_ID,
+  REFINE_CREATE_ID,
   RevisionsTab,
   Statusline,
   StatusSegment,
   StatuslineSpacer,
   type ChatterTab,
-  type DataViewDefaultGroups,
+  type ResourceViewDefaultGroups,
   type RecordSmartButtonDescriptor,
   useChatterContent,
 } from "@angee/base";
 import { AgentChatterPane } from "@angee/agents";
-import { useResourceRecord, useResourceRevisions } from "@angee/data";
-import { useModelMetadata } from "@angee/sdk";
+import { useResourceRevisions } from "@angee/data";
 import { useParams } from "@tanstack/react-router";
 
 const MODEL = "notes.Note";
@@ -30,7 +29,7 @@ const NOTE_RESOURCE_TYPE = "notes/note";
 const NOTE_DEFAULT_GROUPS = {
   list: { field: "updated_at", granularity: "month" },
   board: { field: "status" },
-} satisfies DataViewDefaultGroups;
+} satisfies ResourceViewDefaultGroups;
 
 // Created/updated timestamps + word count feed the record subtitle (id · created
 // · updated · words); they are queried but kept out of the field grid.
@@ -42,8 +41,7 @@ const RECORD_SUBTITLE_FIELDS: readonly string[] = [
 
 const noteList = (
   <List
-    model={MODEL}
-    list={GroupListView}
+    resource={MODEL}
     defaultGroups={NOTE_DEFAULT_GROUPS}
     order={{ updated_at: "DESC" }}
     emptyState={{
@@ -66,7 +64,7 @@ const noteList = (
 );
 
 const noteForm = (
-  <Form model={MODEL} returning={RECORD_SUBTITLE_FIELDS}>
+  <Form resource={MODEL} returning={RECORD_SUBTITLE_FIELDS}>
     <Field name="title" widget="text" title />
     <Field name="status" widget="statusbar" />
     <Group label="Details" columns={2}>
@@ -78,22 +76,6 @@ const noteForm = (
   </Form>
 );
 
-/** The record crumb for `/notes/$id` — resolves the note title from the cache. */
-export function NoteCrumb({ id }: { id: string }): React.ReactElement {
-  const isNew = id === NEW_RECORD_ID;
-  const metadata = useModelMetadata(MODEL);
-  const representationField = metadata?.recordRepresentation ?? "title";
-  const { fetching, record } = useResourceRecord(MODEL, isNew ? null : id, {
-    enabled: !isNew && id !== "",
-    fields: [representationField],
-  });
-  const value = record?.[representationField];
-  const title = typeof value === "string" ? value.trim() : "";
-  if (isNew) return <>New</>;
-  if (fetching) return <>…</>;
-  return <>{title || "Note"}</>;
-}
-
 /** The notes console page: a count-by-status panel above the data table. */
 export function NotePage(): React.ReactElement {
   // The nested record route (`notes.record`) carries no component; this parent
@@ -101,7 +83,7 @@ export function NotePage(): React.ReactElement {
   const params = useParams({ strict: false });
   const routeId =
     "id" in params && typeof params.id === "string" ? params.id : undefined;
-  const creating = routeId === NEW_RECORD_ID;
+  const creating = routeId === REFINE_CREATE_ID;
   const recordId = creating ? null : routeId;
   const activeRecordId =
     !creating && typeof recordId === "string" ? recordId : null;
@@ -116,7 +98,7 @@ export function NotePage(): React.ReactElement {
         icon: "agent",
         children: (
           <AgentChatterPane
-            model={NOTE_RESOURCE_TYPE}
+            resource={NOTE_RESOURCE_TYPE}
             recordId={activeRecordId ?? undefined}
           />
         ),
@@ -139,7 +121,7 @@ export function NotePage(): React.ReactElement {
         label: "Activity",
         icon: "activity",
         count: revisions.count,
-        children: <RevisionsTab model={MODEL} recordId={activeRecordId} />,
+        children: <RevisionsTab resource={MODEL} recordId={activeRecordId} />,
       },
     ] satisfies readonly ChatterTab[],
     [activeRecordId, revisions.count],
@@ -162,15 +144,15 @@ export function NotePage(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       {/* Open as a month-grouped list; board view switches to status lanes. */}
-      <DataPage
-        model={MODEL}
+      <ResourceList
+        resource={MODEL}
         recordSmartButtons={recordSmartButtons}
         placement="inline"
         routed
       >
         {noteList}
         {noteForm}
-      </DataPage>
+      </ResourceList>
       <Statusline>
         <StatusSegment icon="check" tone="success">
           Synced

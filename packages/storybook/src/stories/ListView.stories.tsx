@@ -82,7 +82,7 @@ function ListFixture() {
     <RuntimeFixture schemas={storySchemas}>
       <div className="max-w-5xl">
         <ListView
-          model="notes.Note"
+          resource="notes.Note"
           columns={columns}
           createLabel="New note"
           onCreate={() => undefined}

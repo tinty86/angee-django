@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
 import { renderHook } from "@testing-library/react";
-import type { ResourceFacetOption } from "@angee/data";
-import type { ModelMetadata } from "@angee/sdk";
+import type { ResourceFacetOption } from "@angee/refine";
+import type {
+  ModelMetadata,
+} from "@angee/resources";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { scalarFacetDeclarations, useScalarFacets } from "./scalar-facet";
@@ -68,6 +70,7 @@ describe("useScalarFacets", () => {
         {
           id: "status",
           dimensions: [{ input: "STATUS", key: "status" }],
+          orderBy: [{ field: "status", direction: "ASC", nulls: "LAST" }],
           valueKey: "status",
           pageSize: 200,
           where: { title: { _ilike: "release" } },
@@ -75,6 +78,7 @@ describe("useScalarFacets", () => {
         {
           id: "source",
           dimensions: [{ input: "SOURCE", key: "source" }],
+          orderBy: [{ field: "source", direction: "ASC", nulls: "LAST" }],
           valueKey: "source",
           pageSize: 200,
           where: {
@@ -140,6 +144,7 @@ describe("useScalarFacets", () => {
         spec: {
           id: "implClass",
           dimensions: [{ input: "IMPL_CLASS", key: "implClass" }],
+          orderBy: [{ field: "implClass", direction: "ASC", nulls: "LAST" }],
           valueKey: "implClass",
           pageSize: 200,
         },

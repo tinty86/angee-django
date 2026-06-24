@@ -4,10 +4,10 @@ import {
   AuthoredRowsList,
   Badge,
   Code,
-  type DataToolbarGroupOption,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
-import type { DocumentData } from "@angee/sdk";
+import type { DocumentData } from "@angee/refine";
 
 import {
   IamRelationships,
@@ -24,18 +24,18 @@ type IamRelationshipsResult = DocumentData<typeof IamRelationships>;
 
 export function RelationshipsPage(): ReactElement {
   const t = useIamT();
-  const relationshipGroupOptions = useMemo<readonly DataToolbarGroupOption[]>(
+  const relationshipGroupOptions = useMemo<readonly ResourceToolbarGroupOption[]>(
     () => [
       {
-        id: "resourceType",
+        id: "resource_type",
         label: t("iam.relationships.group.resourceType"),
-        group: { field: "resourceType" },
+        group: { field: "resource_type" },
         type: "value",
       },
       {
-        id: "subjectType",
+        id: "subject_type",
         label: t("iam.relationships.group.subjectType"),
-        group: { field: "subjectType" },
+        group: { field: "subject_type" },
         type: "value",
       },
       {
@@ -59,21 +59,21 @@ export function RelationshipsPage(): ReactElement {
         header: t("iam.relationships.column.subjectRef"),
         render: (row) => <Code truncate>{row.subjectRef}</Code>,
       },
-      { field: "resourceType", header: t("iam.relationships.column.resourceType") },
-      { field: "resourceId", header: t("iam.relationships.column.resourceId") },
+      { field: "resource_type", header: t("iam.relationships.column.resourceType") },
+      { field: "resource_id", header: t("iam.relationships.column.resourceId") },
       {
         field: "relation",
         header: t("iam.relationships.column.relation"),
         render: (row) => <Badge tone="info">{row.relation}</Badge>,
       },
-      { field: "subjectType", header: t("iam.relationships.column.subjectType") },
-      { field: "subjectId", header: t("iam.relationships.column.subjectId") },
+      { field: "subject_type", header: t("iam.relationships.column.subjectType") },
+      { field: "subject_id", header: t("iam.relationships.column.subjectId") },
       {
-        field: "caveatName",
+        field: "caveat_name",
         header: t("iam.relationships.column.caveat"),
         render: (row) =>
-          row.caveatName ? (
-            <Badge tone="warning">{row.caveatName}</Badge>
+          row.caveat_name ? (
+            <Badge tone="warning">{row.caveat_name}</Badge>
           ) : (
             <span className="text-fg-muted">-</span>
           ),
@@ -98,7 +98,7 @@ export function RelationshipsPage(): ReactElement {
       selectRows={selectRows}
       columns={relationshipColumns}
       groupOptions={relationshipGroupOptions}
-      defaultGroup={{ field: "resourceType" }}
+      defaultGroup={{ field: "resource_type" }}
       pageSize={50}
     />
   );

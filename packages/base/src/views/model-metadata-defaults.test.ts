@@ -1,12 +1,14 @@
 import { describe, expect, test } from "vitest";
-import type { Row } from "@angee/data";
-import type { ModelMetadata } from "@angee/sdk";
+import type {
+  ModelMetadata,
+  Row,
+} from "@angee/resources";
 
 import {
   buildFilterFields,
   buildFilterOptions,
   buildGroupOptions,
-  resolveDataViewGroup,
+  resolveResourceViewGroup,
 } from "./list-view-utils";
 import {
   columnsWithMetadataDefaults,
@@ -61,7 +63,7 @@ const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Active" },
 ];
 
-describe("SDL metadata defaults", () => {
+describe("resource metadata defaults", () => {
   const columns: readonly ColumnDescriptor<Row>[] = [
     { field: "title" },
     { field: "status", widget: "statusBadge" },
@@ -357,7 +359,7 @@ describe("SDL metadata defaults", () => {
       },
     ]);
     expect(
-      resolveDataViewGroup({ field: "party.displayName" }, handleMetadata),
+      resolveResourceViewGroup({ field: "party.displayName" }, handleMetadata),
     ).toEqual({
       field: "party.displayName",
       aggregateField: "party",
@@ -440,7 +442,7 @@ describe("SDL metadata defaults", () => {
         type: "value",
       },
     ]);
-    expect(resolveDataViewGroup({ field: "implCategory" }, integrationMetadata)).toEqual({
+    expect(resolveResourceViewGroup({ field: "implCategory" }, integrationMetadata)).toEqual({
       field: "implCategory",
       aggregateField: "implClass",
       aggregateKey: "implClass",

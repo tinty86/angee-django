@@ -1,35 +1,26 @@
 import { Link } from "@tanstack/react-router";
+import {
+  useBreadcrumb as useRefineBreadcrumb,
+  type BreadcrumbsType,
+} from "@refinedev/core";
 import type { ReactElement } from "react";
 
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
-import {
-  useRouteBreadcrumbItems,
-  type BreadcrumbItem,
-} from "../route-static-data";
 
-export type { BreadcrumbItem } from "../route-static-data";
+export interface BreadcrumbItem {
+  label: string;
+  to?: string;
+}
 
 export interface BreadcrumbProps {
   className?: string;
-  /** Controlled trail; bypasses match-derived items. */
-  items?: readonly BreadcrumbItem[];
 }
 
 export function Breadcrumb({
   className,
-  items,
 }: BreadcrumbProps): ReactElement {
-  if (items) return <BreadcrumbTrail className={className} items={items} />;
-  return <MatchedBreadcrumbTrail className={className} />;
-}
-
-function MatchedBreadcrumbTrail({
-  className,
-}: {
-  className?: string;
-}): ReactElement {
-  const items = useRouteBreadcrumbItems();
+  const items = breadcrumbItemsFromRefine(useRefineBreadcrumb().breadcrumbs);
   return <BreadcrumbTrail className={className} items={items} />;
 }
 
@@ -82,8 +73,14 @@ function BreadcrumbTrail({
 }
 
 function itemKey(label: BreadcrumbItem["label"]): string {
-  if (typeof label === "string" || typeof label === "number") {
-    return String(label);
-  }
-  return "";
+  return label;
+}
+
+function breadcrumbItemsFromRefine(
+  breadcrumbs: readonly BreadcrumbsType[],
+): readonly BreadcrumbItem[] {
+  return breadcrumbs.map((item) => ({
+    label: item.label,
+    ...(item.href ? { to: item.href } : {}),
+  }));
 }

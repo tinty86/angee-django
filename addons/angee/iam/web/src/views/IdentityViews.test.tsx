@@ -30,7 +30,7 @@ import { GrantsPage } from "./GrantsPage";
 import { documentName } from "./test-documents";
 
 // The model-driven pages (Users / OIDC Providers) are exercised end-to-end (they
-// carry no bespoke logic to unit-test, like the notes/storage DataPages).
+// carry no bespoke logic to unit-test, like the notes/storage resource lists).
 // GrantsPage is a custom REBAC view, so it is tested.
 const sdkMocks = vi.hoisted(() => ({
   grants: {
@@ -41,15 +41,15 @@ const sdkMocks = vi.hoisted(() => ({
   },
   grantQueryOptions: null as unknown,
   revokeOptions: null as unknown,
-  revokeRole: vi.fn(),
+  revoke_role: vi.fn(),
   revokeState: {
     fetching: false,
     error: null as Error | null,
   },
 }));
 
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
+vi.mock("@angee/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/data")>();
   return {
     ...actual,
     useAuthoredQuery: (document: unknown, _variables: unknown, options: unknown) => {
@@ -80,7 +80,7 @@ vi.mock("@angee/sdk", async (importOriginal) => {
     },
     useAuthoredMutation: (_document: unknown, options: unknown) => {
       sdkMocks.revokeOptions = options;
-      return [sdkMocks.revokeRole, sdkMocks.revokeState];
+      return [sdkMocks.revoke_role, sdkMocks.revokeState];
     },
   };
 });
@@ -101,14 +101,14 @@ describe("IAM identity views", () => {
     sdkMocks.grants.refetch.mockReset();
     sdkMocks.grantQueryOptions = null;
     sdkMocks.revokeOptions = null;
-    sdkMocks.revokeRole.mockReset();
+    sdkMocks.revoke_role.mockReset();
     sdkMocks.revokeState.fetching = false;
     sdkMocks.revokeState.error = null;
   });
 
   test("revokes a grant through the confirm dialog and declares invalidation", async () => {
     sdkMocks.grants.data = grantsData();
-    sdkMocks.revokeRole.mockResolvedValue({ revokeRole: true });
+    sdkMocks.revoke_role.mockResolvedValue({ revoke_role: true });
 
     renderInRouter(<GrantsPage />);
 
@@ -118,8 +118,8 @@ describe("IAM identity views", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" }).at(-1)!);
 
     await waitFor(() =>
-      expect(sdkMocks.revokeRole).toHaveBeenCalledWith({
-        principalId: "user-1",
+      expect(sdkMocks.revoke_role).toHaveBeenCalledWith({
+        principal_id: "user-1",
         role: "iam/admin",
       }),
     );
@@ -132,15 +132,15 @@ describe("IAM identity views", () => {
       shouldInvalidate: expect.any(Function),
     });
     const revokeOptions = sdkMocks.revokeOptions as {
-      shouldInvalidate: (result: { revokeRole: boolean }) => boolean;
+      shouldInvalidate: (result: { revoke_role: boolean }) => boolean;
     };
-    expect(revokeOptions.shouldInvalidate({ revokeRole: true })).toBe(true);
-    expect(revokeOptions.shouldInvalidate({ revokeRole: false })).toBe(false);
+    expect(revokeOptions.shouldInvalidate({ revoke_role: true })).toBe(true);
+    expect(revokeOptions.shouldInvalidate({ revoke_role: false })).toBe(false);
   });
 
   test("surfaces revoke errors", async () => {
     sdkMocks.grants.data = grantsData();
-    sdkMocks.revokeRole.mockRejectedValue(new Error("Permission denied"));
+    sdkMocks.revoke_role.mockRejectedValue(new Error("Permission denied"));
 
     renderInRouter(<GrantsPage />);
 
@@ -158,11 +158,11 @@ describe("IAM identity views", () => {
 function grantsData(): unknown {
   return {
     grants: {
-      totalCount: 1,
+      total_count: 1,
       results: [
         {
-          principalId: "user-1",
-          principalType: "user",
+          principal_id: "user-1",
+          principal_type: "user",
           role: "iam/admin",
         },
       ],

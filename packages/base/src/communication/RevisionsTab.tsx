@@ -1,5 +1,6 @@
 import * as React from "react";
-import { revisionSnapshot, useResourceRevisions } from "@angee/data";
+import { useResourceRevisions } from "@angee/data";
+import { revisionSnapshot } from "@angee/refine";
 
 import { useBaseT } from "../i18n";
 import { EmptyState } from "../fragments/EmptyState";
@@ -8,21 +9,21 @@ import { LoadingPanel } from "../fragments/LoadingPanel";
 import { TimelineEntry } from "../fragments/TimelineEntry";
 
 export interface RevisionsTabProps {
-  model: string;
+  resource: string;
   recordId: string | null | undefined;
   enabled?: boolean;
 }
 
 export function RevisionsTab({
   enabled = true,
-  model,
+  resource,
   recordId,
 }: RevisionsTabProps): React.ReactElement {
   const t = useBaseT();
   const activeRecordId = typeof recordId === "string" && recordId !== ""
     ? recordId
     : null;
-  const revisions = useResourceRevisions(model, activeRecordId, {
+  const revisions = useResourceRevisions(resource, activeRecordId, {
     enabled: enabled && activeRecordId !== null,
   });
 

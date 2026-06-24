@@ -18,9 +18,11 @@ from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import public_id_for
 from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, public_pk_decoder
+from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata, delete_by_public_id
 from angee.graphql.ids import PublicID, instance_for_id
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
+from angee.graphql.writes import write_queryset
 from angee.iam.identity import user_display_label, user_public_id
 from angee.storage import exceptions
 from angee.storage.models import UploadState
@@ -405,6 +407,42 @@ class StorageMutation:
             raise ValueError("file not found")
         row.restore()
         return cast(FileType, row)
+
+    @strawberry.mutation(name="delete_file")
+    def delete_file(self, id: PublicID, confirm: bool = False) -> DeletePreview:
+        """Preview or confirm moving one file to Trash."""
+
+        return delete_by_public_id(
+            File,
+            str(id),
+            confirm=confirm,
+            queryset=write_queryset(File),
+        )
+
+    @strawberry.mutation(name="delete_folder")
+    def delete_folder(self, id: PublicID, confirm: bool = False) -> DeletePreview:
+        """Preview or confirm deleting one folder."""
+
+        return delete_by_public_id(
+            Folder,
+            str(id),
+            confirm=confirm,
+            queryset=write_queryset(Folder),
+        )
+
+
+StorageMutation = attach_delete_preview_metadata(
+    StorageMutation,
+    model=File,
+    node=FileType,
+    field="delete_file",
+)
+StorageMutation = attach_delete_preview_metadata(
+    StorageMutation,
+    model=Folder,
+    node=FolderType,
+    field="delete_folder",
+)
 
 
 @strawberry.type

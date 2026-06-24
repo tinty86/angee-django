@@ -1,12 +1,12 @@
 import * as React from "react";
 import {
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
   RelatedRowsList,
   type ListColumn,
@@ -52,12 +52,12 @@ const affiliationColumns: readonly ListColumn<RelatedRow>[] = [
  */
 function PartyRelatedTab({
   recordId,
-  model,
+  resource,
   fields,
   columns,
   emptyMessage,
 }: RecordPanelContext & {
-  model: string;
+  resource: string;
   fields: readonly string[];
   columns: readonly ListColumn<RelatedRow>[];
   emptyMessage: string;
@@ -65,7 +65,7 @@ function PartyRelatedTab({
   return (
     <RelatedRowsList<RelatedRow>
       recordId={recordId}
-      model={model}
+      resource={resource}
       fields={fields}
       filterFor={(id) => ({ party: { _eq: id } })}
       columns={columns}
@@ -81,7 +81,7 @@ const personRecordTabs: readonly RecordTabDescriptor[] = [
     render: (context) => (
       <PartyRelatedTab
         {...context}
-        model="parties.Handle"
+        resource="parties.Handle"
         fields={["id", "platform", "value", "label", "is_preferred"]}
         columns={handleColumns}
         emptyMessage="No handles for this contact yet."
@@ -94,7 +94,7 @@ const personRecordTabs: readonly RecordTabDescriptor[] = [
     render: (context) => (
       <PartyRelatedTab
         {...context}
-        model="parties.Address"
+        resource="parties.Address"
         fields={["id", "label", "street", "city", "region", "postal_code", "country"]}
         columns={addressColumns}
         emptyMessage="No addresses for this contact yet."
@@ -107,7 +107,7 @@ const personRecordTabs: readonly RecordTabDescriptor[] = [
     render: (context) => (
       <PartyRelatedTab
         {...context}
-        model="parties.Affiliation"
+        resource="parties.Affiliation"
         fields={["id", "organization_name", "title", "role", "department"]}
         columns={affiliationColumns}
         emptyMessage="No affiliations for this contact yet."
@@ -117,7 +117,7 @@ const personRecordTabs: readonly RecordTabDescriptor[] = [
 ];
 
 const peopleForm = (
-  <Form model={MODEL}>
+  <Form resource={MODEL}>
     <Field name="display_name" title />
     <Group label="Name" columns={2}>
       <Field name="given_name" label="Given name" />
@@ -145,8 +145,8 @@ const peopleForm = (
  */
 export function PeoplePage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed recordTabs={personRecordTabs}>
-      <List model={MODEL} list={GroupListView}>
+    <ResourceList resource={MODEL} placement="inline" routed recordTabs={personRecordTabs}>
+      <List resource={MODEL}>
         <Facet field="folder" label="Folder" labelField="name" />
         <Column field="display_name" />
         <Column field="folder.name" header="Folder" />
@@ -155,6 +155,6 @@ export function PeoplePage(): React.ReactElement {
         <Column field="created_at" />
       </List>
       {peopleForm}
-    </DataPage>
+    </ResourceList>
   );
 }

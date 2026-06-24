@@ -3,7 +3,7 @@ import {
   Action,
   Button,
   Column,
-  DataPage,
+  ResourceList,
   Dialog,
   Field,
   FieldLabel,
@@ -11,13 +11,13 @@ import {
   Form,
   Glyph,
   Group,
-  GroupListView,
+  ListView,
   Input,
   List,
   errorMessage,
   useRecordActionMutation,
 } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation } from "@angee/data";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectCardDavDirectory } from "./documents.console";
@@ -25,7 +25,7 @@ import { ConnectCardDavDirectory } from "./documents.console";
 const MODEL = "parties.Directory";
 
 const directoryList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="display_name" header="Name" />
     <Column field="status" widget="statusBadge" />
     <Column field="backend_class" />
@@ -38,17 +38,17 @@ const directoryList = (
 /**
  * Connected contacts directories. The "Connect CardDAV" control opens a connect
  * dialog (one mutation creates the credential + directory); rows are model-driven
- * via DataPage, each detail carrying a declarative "Sync now" record action.
+ * via ResourceList, each detail carrying a declarative "Sync now" record action.
  * Directories are created through the connect flow and have no delete root, so the
  * form is read-only (`hideCreate`) and no delete affordance renders — a directory
  * is removed by deleting the integration, and its synced contacts by the source.
  */
 export function DirectoriesPage(): React.ReactElement {
-  const [sync] = useRecordActionMutation<ActionFieldName>("syncIntegration");
+  const [sync] = useRecordActionMutation<ActionFieldName>("sync_integration");
   return (
-    <DataPage model={MODEL} placement="inline" routed hideCreate toolbarActions={<ConnectCardDav />}>
+    <ResourceList resource={MODEL} placement="inline" routed hideCreate toolbarActions={<ConnectCardDav />}>
       {directoryList}
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="display_name" title readOnly />
         <Field name="status" readOnly />
         <Field name="backend_class" readOnly />
@@ -60,7 +60,7 @@ export function DirectoriesPage(): React.ReactElement {
         </Group>
         <Action id="sync" label="Sync now" icon="refresh" run={sync} />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }
 

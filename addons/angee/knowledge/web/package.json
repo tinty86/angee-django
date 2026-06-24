@@ -14,7 +14,10 @@
   "dependencies": {
     "@angee/base": "workspace:*",
     "@angee/data": "workspace:*",
+    "@angee/refine": "workspace:*",
+    "@angee/resources": "workspace:*",
     "@angee/sdk": "workspace:*",
+    "@refinedev/core": "^5.0.12",
     "lucide-react": "^1.17.0"
   },
   "peerDependencies": {

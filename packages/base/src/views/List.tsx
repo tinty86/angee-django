@@ -1,71 +1,69 @@
 import * as React from "react";
-import type { Row } from "@angee/data";
+import type {
+  Row,
+} from "@angee/resources";
 
 import {
   ListView,
   type ListViewProps,
 } from "./ListView";
 import type {
-  DataViewDefaultGroups,
-  DataViewGroup,
-  DataViewKind,
-} from "./data-view-model";
+  ResourceViewDefaultGroups,
+  ResourceViewGroup,
+  ResourceViewKind,
+} from "./resource-view-model";
 import {
   PAGE_ELEMENT_SLOT,
   mergePageFacets,
   parsePageColumns,
   parsePageFacets,
   requirePageColumns,
-  requirePageModel,
+  requirePageResource,
 } from "./page";
 
 export type ListComponent<TRow extends Row = Row> = React.ComponentType<
-  ListViewProps<TRow> & {
-    defaultView?: DataViewKind;
-    defaultGroup?: DataViewGroup | null;
-    defaultGroups?: DataViewDefaultGroups;
-  }
+  ListViewProps<TRow>
 >;
 
 /**
  * Declarative list view.
  *
  * Used standalone, `List` renders the collection surface directly through
- * `ListView` or the supplied list renderer. Used as a `DataPage` child, the
- * element is parsed as a view declaration and `DataPage` stitches it into the
+ * `ListView` or the supplied list renderer. Used as a `ResourceList` child, the
+ * element is parsed as a view declaration and `ResourceList` stitches it into the
  * collection-record page. Export and reuse element constants directly; wrapper
  * components hide the marker from the parser.
  */
 export interface ListProps<TRow extends Row = Row>
-  extends Omit<ListViewProps<TRow>, "model" | "columns"> {
+  extends Omit<ListViewProps<TRow>, "resource" | "columns"> {
   /**
-   * Model label rendered by this list, e.g. `"notes.Note"`.
+   * Resource rendered by this list, e.g. `"notes.Note"`.
    *
-   * Required when rendered standalone. When nested inside `DataPage`, this may
+   * Required when rendered standalone. When nested inside `ResourceList`, this may
    * be omitted and is inherited from the page; if both are declared, they must
    * match.
    */
-  model?: string;
+  resource?: string;
   /** Column and facet element declarations for this list. */
   children?: React.ReactNode;
-  /** Initial collection view for grouping-capable list renderers. */
-  defaultView?: DataViewKind;
-  /** Group seeded by grouping-capable list renderers. */
-  defaultGroup?: DataViewGroup | null;
-  /** Per-view group defaults seeded by grouping-capable list renderers. */
-  defaultGroups?: DataViewDefaultGroups;
-  /** Collection renderer. Defaults to `ListView`; pass `GroupListView` for grouping. */
+  /** Initial collection view for the resource list. */
+  defaultView?: ResourceViewKind;
+  /** Group seeded by the resource list. */
+  defaultGroup?: ResourceViewGroup | null;
+  /** Per-view group defaults seeded by the resource list. */
+  defaultGroups?: ResourceViewDefaultGroups;
+  /** Collection renderer. Defaults to the grouped-capable `ListView`. */
   list?: ListComponent<TRow>;
 }
 
 function ListComponentImpl<TRow extends Row = Row>({
-  model,
+  resource,
   children,
   facets: explicitFacets,
   list: Collection = ListView as ListComponent<TRow>,
   ...props
 }: ListProps<TRow>): React.ReactElement {
-  const resolvedModel = requirePageModel("List", model);
+  const resolvedResource = requirePageResource("List", resource);
   const columns = requirePageColumns(
     "List",
     parsePageColumns<TRow>(children),
@@ -75,7 +73,7 @@ function ListComponentImpl<TRow extends Row = Row>({
   return (
     <Collection
       {...props}
-      model={resolvedModel}
+      resource={resolvedResource}
       columns={columns}
       facets={facets}
     />
@@ -84,7 +82,7 @@ function ListComponentImpl<TRow extends Row = Row>({
 
 /**
  * Render a reusable list declaration standalone, or hand the same element to
- * `DataPage` for page-level composition. Element constants are the reuse unit;
+ * `ResourceList` for page-level composition. Element constants are the reuse unit;
  * wrapper components hide the marker from the parser.
  */
 export const List = Object.assign(ListComponentImpl, {

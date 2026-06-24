@@ -6,7 +6,7 @@ import { graphql, type DocumentType } from "@angee/gql/console";
 
 export const BaseImplChoices = graphql(`
   query BaseImplChoices($model: String!, $field: String!) {
-    implChoices(model: $model, field: $field) {
+    impl_choices(model: $model, field: $field) {
       key
       category
       defaults
@@ -15,4 +15,4 @@ export const BaseImplChoices = graphql(`
 `);
 
 export type ImplChoice =
-  DocumentType<typeof BaseImplChoices>["implChoices"][number];
+  DocumentType<typeof BaseImplChoices>["impl_choices"][number];

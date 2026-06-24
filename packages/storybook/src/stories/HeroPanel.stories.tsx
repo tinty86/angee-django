@@ -29,7 +29,7 @@ export const Feature: Story = {
           <Button variant="secondary">View docs</Button>
         </>
       }
-      body="Use framework primitives for the host shell, then let addons own the product contracts."
+      body="Use framework primitives for the host layout, then let addons own the product contracts."
       brand={<BrandLockup label="Angee" mark={<Glyph name="angee" />} size="sm" />}
       className="max-w-5xl"
       commandStrip={

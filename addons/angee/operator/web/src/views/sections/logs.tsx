@@ -7,7 +7,10 @@ import {
   CardTitle,
   LogStream,
 } from "@angee/base";
-import { isFatalGraphQLWsCloseCode, type DocumentData } from "@angee/sdk";
+import {
+  isFatalGraphQLWsCloseCode,
+} from "@angee/refine";
+import type { DocumentData } from "@angee/refine";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "urql";
 

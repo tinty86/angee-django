@@ -95,7 +95,7 @@ export function Chatter({
 }
 
 /**
- * The chatter's left-edge resize grip. The chatter lives in the shell grid's
+ * The chatter's left-edge resize grip. The chatter lives in the layout grid's
  * `auto` column, sized by the aside's `width`, so resizing is just driving that
  * width: a pointer drag (the aside is anchored right, so dragging left widens it)
  * or arrow keys (Shift for a coarser step). The context clamps to the min/max.

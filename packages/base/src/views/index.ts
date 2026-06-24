@@ -1,4 +1,4 @@
-// Data-bound views over the @angee/sdk resource hooks: reusable declarative
+// Rendered resource views over refine/@angee/data owners: reusable declarative
 // list/form views, their collection⇄record page composition, and aggregate
 // panels. Hosts configure them with descriptors or with the page element DSL.
 
@@ -14,13 +14,9 @@ export {
   type ListEmptyContent,
   type ListEmptyState,
   type ListColumn,
-  type ListViewState,
+  type ResourceListSnapshot,
   type ColumnAlign,
 } from "./ListView";
-export {
-  GroupListView,
-  type GroupListViewProps,
-} from "./GroupListView";
 export {
   RowsListView,
   type RowsListViewProps,
@@ -103,15 +99,19 @@ export {
   type RecordTabDescriptor,
 } from "./FormView";
 export {
-  DataPage,
-  DrawerDataPage,
-  NEW_RECORD_ID,
-  type DataPageProps,
-  type DrawerDataPageProps,
-  type RecordPlacement,
+  ResourceList,
+  ResourceCreate,
+  ResourceEdit,
+  ResourceShow,
+  DrawerResourceList,
+  REFINE_CREATE_ID,
+  type ResourceListProps,
+  type ResourceFormActionProps,
+  type DrawerResourceListProps,
+  type ResourceRecordPlacement,
   type RecordSmartButtonDescriptor,
-} from "./DataPage";
-export { recordPath } from "./DataPageRouted";
+} from "./ResourceList";
+export { recordPath } from "./resource-routing";
 export {
   AggregatePanel,
   type AggregatePanelProps,
@@ -142,10 +142,16 @@ export {
   type RelationFacets,
   type RelationFacetOptions,
 } from "./relation-facet";
-export { enumValueLabel, statusLabel } from "./ListInternals";
-export * from "./data-view-model";
-export * from "./data-view-context";
-export type { StringIdRow } from "./data-view-surface";
+export {
+  useRelationOptions,
+  relationOptionsFromRows,
+  type RelationOptionsConfig,
+  type RelationOptionsList,
+  type RelationOptionsResult,
+} from "./relation-options";
+export * from "./resource-view-model";
+export * from "./resource-view-context";
+export type { StringIdRow } from "./resource-view-surface";
 export {
   Action,
   Column,

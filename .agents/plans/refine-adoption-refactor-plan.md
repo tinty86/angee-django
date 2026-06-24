@@ -7,6 +7,11 @@ GraphQL dialect**, driven by the stock **`@refinedev/hasura`** provider. This is
 **execution** plan; decisions/rationale live in
 [`refine-adoption-sdk-decomposition.md`](./refine-adoption-sdk-decomposition.md).
 
+> **2026-06-24 target update:** frontend execution has moved to
+> [`refine-greenfield-rebuild-plan.md`](./refine-greenfield-rebuild-plan.md).
+> This file remains the Hasura dialect/rationale history. When frontend wording
+> conflicts with the greenfield plan, the greenfield plan wins.
+
 ## Decision: Hasura dialect (settled 2026-06-23, by A/B spike)
 
 An A/B spike (`@refinedev/hasura` vs `@refinedev/nestjs-query`, both stock) settled
@@ -89,7 +94,12 @@ Companions (read for evidence; not duplicated here):
    camelCased aggregate field *breaks at runtime*; the integration pins them via a
    `_pin_snake_wire_names` helper). The schema-wide converter is the **end state** (installed once
    a schema is fully Hasura, then the per-field pins drop); the clean enabler is a **per-bucket
-   name-converter seam on `AngeeSchema`** (recommended framework follow-up). Filter-semantics
+   name-converter seam on `AngeeSchema`**. **2026-06-24: the end-state trigger has fired** — every
+   schema is now Hasura (Lane E), so the per-field pins are permanent debt until the seam lands.
+   Build the seam (now Lane L, promoted out of the Parking Lot) and delete `pin_snake_wire_names`
+   plus its addon call sites; note Angee's `hasura.py` copy is a weaker duplicate of the adapter's
+   own `_pin_snake_wire_names` (no cyclic-graph guard), so reuse/install the adapter owner, do not
+   keep two. Filter-semantics
    note: the lib maps `_ilike → Django __icontains` (substring), not SQL `LIKE` wildcards — fine
    for refine, but a real-Hasura `_ilike` portability gap to revisit.
 
@@ -424,14 +434,14 @@ pnpm --filter @angee/e2e run test      # per migrated surface
 - [x] Custom Hasura operation slice (2026-06-23): `@angee/data` now owns
       refine-native `meta.gqlQuery` request builders and hooks for the custom
       resource operations refine/Hasura does not model as generic CRUD:
-      `aggregateRequest`/`useAngeeAggregate` over `<resource>_aggregate`,
+      `aggregateRequest`/`useAngeeAggregate` over `<resource>_aggregate` and
       `groupByRequest`/`useAngeeGroupBy` over NDC-shaped
-      `<resource>_groups(dimensions, where, limit, offset)`, and
-      `facetsRequest`/`useAngeeFacets` as aliased grouped requests. The builders
-      emit refine-compatible GraphQL 15 `DocumentNode`s because
-      `@refinedev/core`/`@refinedev/hasura` own the `meta.gqlQuery` document
-      identity, while codegen/legacy SDK paths remain on GraphQL 16 until their
-      deletion lanes.
+      `<resource>_groups(dimensions, where, limit, offset)` now receive generated
+      documents; `useAngeeFacets` runs TanStack `useQueries` over generated group
+      documents instead of a runtime aliased grouped request. The runtime
+      `operations.ts` module no longer parses or assembles GraphQL strings for
+      action, aggregate, delete-preview, revision, list, group, or facet
+      execution.
 - [x] Delete-preview metadata/hook slice (2026-06-23): `angee.graphql.deletion`
       now owns an `attach_delete_preview_metadata(...)` helper for authored
       cascade-preview mutations. `angee.resources.roots.delete` stays the
@@ -623,10 +633,16 @@ frontend transport = stock `@refinedev/hasura`/`graphql-request`; form resolver 
 
 ## Next action
 
-Continue Phase 3/4 frontend wiring: run a real backend/browser proof for one
-model-backed list now that the shared list hook is refine-backed, then begin
-rebinding `@angee/base` list/form primitives to `@refinedev/react-table` /
-`@refinedev/react-hook-form`. Notes, IAM,
-Storage, Knowledge, Integrate, Agents, Parties, and Messaging are closed on the
-Hasura resource contract for current model-backed surfaces; broader SDK deletion
-remains.
+**2026-06-24 review correction (keystone).** Three independent reviews found the
+remaining work is adding new owners without deleting old ones — a dual
+refine+urql data/cache/invalidation engine running at once, a sideways-lifted
+GraphQL document builder in `@angee/data`, and adapter/aggregates names
+re-derived in `hasura.py`/`metadata.py` instead of read off the built types.
+Before continuing addon migration, **collapse the dual live/data engine onto
+refine + react-query and delete urql + the relay-registry** (the keystone that
+unblocks the rest of the SDK deletion and stops `@angee/data` depending on
+`@angee/sdk`). Then project `ModelMetadata` from the backend artifact, land the
+name-converter seam, and fold the backend owner corrections. Full plan: Lane L +
+"Review Corrections (2026-06-24)" in
+[`refine-adoption-hasura-todo.md`](./refine-adoption-hasura-todo.md); evidence:
+[`refine-adoption-library-leaning-findings.md`](../notes/refine-adoption-library-leaning-findings.md).

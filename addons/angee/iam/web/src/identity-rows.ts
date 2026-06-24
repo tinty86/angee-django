@@ -13,10 +13,10 @@ export interface IAMRoleRow extends Record<string, unknown> {
 
 export interface IAMGrantRow extends Record<string, unknown> {
   id: string;
-  principalId: string;
-  principalType: string;
+  principal_id: string;
+  principal_type: string;
   principalRef: string;
-  principalLabel: string;
+  principal_label: string;
   role: string;
   namespace: string;
   roleName: string;
@@ -24,13 +24,13 @@ export interface IAMGrantRow extends Record<string, unknown> {
 
 export interface IAMRelationshipRow extends Record<string, unknown> {
   id: string;
-  resourceType: string;
-  resourceId: string;
+  resource_type: string;
+  resource_id: string;
   relation: string;
-  subjectType: string;
-  subjectId: string;
-  subjectRelation: string;
-  caveatName: string;
+  subject_type: string;
+  subject_id: string;
+  subject_relation: string;
+  caveat_name: string;
   resourceRef: string;
   subjectRef: string;
 }
@@ -64,10 +64,10 @@ export function grantRows(grants: readonly IAMGrant[]): IAMGrantRow[] {
       const principal = principalRef(grant);
       return {
         id: `${principal}:${grant.role}`,
-        principalId: grant.principalId,
-        principalType: grant.principalType,
+        principal_id: grant.principal_id,
+        principal_type: grant.principal_type,
         principalRef: principal,
-        principalLabel: grant.principalLabel || principal,
+        principal_label: grant.principal_label || principal,
         role: grant.role,
         namespace: roleNamespace(grant.role),
         roleName: roleName(grant.role),
@@ -80,24 +80,24 @@ export function relationshipRows(
 ): IAMRelationshipRow[] {
   return [...relationships]
     .sort((left, right) =>
-      left.resourceType.localeCompare(right.resourceType)
-      || left.resourceId.localeCompare(right.resourceId)
+      left.resource_type.localeCompare(right.resource_type)
+      || left.resource_id.localeCompare(right.resource_id)
       || left.relation.localeCompare(right.relation)
-      || left.subjectType.localeCompare(right.subjectType)
-      || left.subjectId.localeCompare(right.subjectId),
+      || left.subject_type.localeCompare(right.subject_type)
+      || left.subject_id.localeCompare(right.subject_id),
     )
     .map((relationship) => {
       const resourceRef = relationshipResourceRef(relationship);
       const subjectRef = relationshipSubjectRef(relationship);
       return {
-        id: `${resourceRef}->${subjectRef}:${relationship.caveatName}`,
-        resourceType: relationship.resourceType,
-        resourceId: relationship.resourceId,
+        id: `${resourceRef}->${subjectRef}:${relationship.caveat_name}`,
+        resource_type: relationship.resource_type,
+        resource_id: relationship.resource_id,
         relation: relationship.relation,
-        subjectType: relationship.subjectType,
-        subjectId: relationship.subjectId,
-        subjectRelation: relationship.subjectRelation,
-        caveatName: relationship.caveatName,
+        subject_type: relationship.subject_type,
+        subject_id: relationship.subject_id,
+        subject_relation: relationship.subject_relation,
+        caveat_name: relationship.caveat_name,
         resourceRef,
         subjectRef,
       };
@@ -115,16 +115,16 @@ function roleName(role: string): string {
 }
 
 function principalRef(grant: IAMGrant): string {
-  return `${grant.principalType}:${grant.principalId}`;
+  return `${grant.principal_type}:${grant.principal_id}`;
 }
 
 function relationshipResourceRef(relationship: IAMRelationship): string {
-  return `${relationship.resourceType}:${relationship.resourceId}#${relationship.relation}`;
+  return `${relationship.resource_type}:${relationship.resource_id}#${relationship.relation}`;
 }
 
 function relationshipSubjectRef(relationship: IAMRelationship): string {
-  const ref = `${relationship.subjectType}:${relationship.subjectId}`;
-  return relationship.subjectRelation
-    ? `${ref}#${relationship.subjectRelation}`
+  const ref = `${relationship.subject_type}:${relationship.subject_id}`;
+  return relationship.subject_relation
+    ? `${ref}#${relationship.subject_relation}`
     : ref;
 }

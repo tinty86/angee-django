@@ -1,10 +1,10 @@
 import * as React from "react";
-import { Column, DataPage, Field, Form, GroupListView, List } from "@angee/base";
+import { Column, ResourceList, Field, Form, ListView, List } from "@angee/base";
 
 const MODEL = "integrate.Vendor";
 
 const vendorList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="slug" />
     <Column field="display_name" />
     <Column field="website_url" />
@@ -12,7 +12,7 @@ const vendorList = (
 );
 
 const vendorForm = (
-  <Form model={MODEL}>
+  <Form resource={MODEL}>
     <Field name="display_name" title />
     <Field name="slug" widget="slug" />
     <Field name="icon" />
@@ -24,9 +24,9 @@ const vendorForm = (
 /** The third-party vendor catalogue. */
 export function VendorsPage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL} placement="inline" routed>
       {vendorList}
       {vendorForm}
-    </DataPage>
+    </ResourceList>
   );
 }

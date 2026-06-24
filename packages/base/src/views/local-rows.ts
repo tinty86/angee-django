@@ -1,16 +1,18 @@
 import {
   DEFAULT_PAGE_SIZE,
   clampPageSize,
-  type Row,
-} from "@angee/data";
+} from "@angee/refine";
 import type {
-  DataViewFilter,
-  DataViewSort,
-} from "./data-view-model";
+  Row,
+} from "@angee/resources";
+import type {
+  ResourceViewFilter,
+  ResourceViewSort,
+} from "./resource-view-model";
 
 export interface LocalRowsQuery {
-  filter?: DataViewFilter;
-  sort?: DataViewSort | null;
+  filter?: ResourceViewFilter;
+  sort?: ResourceViewSort | null;
   page?: number;
   pageSize?: number;
   textFields?: readonly string[];
@@ -30,12 +32,12 @@ export interface LocalRowsDataSource<TRow extends Row = Row> {
   readonly rows: readonly TRow[];
   query: (query?: LocalRowsQuery) => LocalRowsResult<TRow>;
   filterRows: (
-    filter: DataViewFilter | undefined,
+    filter: ResourceViewFilter | undefined,
     options?: { textFields?: readonly string[] },
   ) => readonly TRow[];
   sortRows: (
     rows: readonly TRow[],
-    sort: DataViewSort | null | undefined,
+    sort: ResourceViewSort | null | undefined,
   ) => readonly TRow[];
 }
 
@@ -75,15 +77,15 @@ export function createLocalRowsDataSource<TRow extends Row>(
   };
 }
 
-export function rowTextFilterValue(filter: DataViewFilter): string {
+export function rowTextFilterValue(filter: ResourceViewFilter): string {
   const value = filter[ROWS_TEXT_FILTER_KEY];
   return typeof value === "string" ? value : "";
 }
 
 export function nextRowTextFilter(
-  filter: DataViewFilter,
+  filter: ResourceViewFilter,
   value: string,
-): DataViewFilter {
+): ResourceViewFilter {
   const next = { ...filter };
   const trimmed = value.trim();
   if (trimmed) next[ROWS_TEXT_FILTER_KEY] = trimmed;
@@ -93,7 +95,7 @@ export function nextRowTextFilter(
 
 export function localRowsFilter<TRow extends Row>(
   rows: readonly TRow[],
-  filter: DataViewFilter | undefined,
+  filter: ResourceViewFilter | undefined,
   { textFields = [] }: { textFields?: readonly string[] } = {},
 ): readonly TRow[] {
   if (!filter || Object.keys(filter).length === 0) return rows;
@@ -110,7 +112,7 @@ export function localRowsFilter<TRow extends Row>(
 
 export function localRowsSort<TRow extends Row>(
   rows: readonly TRow[],
-  sort: DataViewSort | null | undefined,
+  sort: ResourceViewSort | null | undefined,
 ): readonly TRow[] {
   if (!sort) return rows;
   const direction = sort.dir === "asc" ? 1 : -1;
@@ -236,7 +238,7 @@ function compareLocalValues(left: unknown, right: unknown): number {
   });
 }
 
-function isFilterObject(value: unknown): value is DataViewFilter {
+function isFilterObject(value: unknown): value is ResourceViewFilter {
   return Boolean(value)
     && typeof value === "object"
     && !Array.isArray(value)

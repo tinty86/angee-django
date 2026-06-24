@@ -11,14 +11,14 @@ describe("defineAddon", () => {
 
 describe("composeAddons", () => {
   test("concatenates routes in addon order", () => {
-    const a = defineAddon({ id: "a", routes: [{ name: "a.home", path: "/a", shell: "console" }] });
-    const b = defineAddon({ id: "b", routes: [{ name: "b.home", path: "/b", shell: "console" }] });
+    const a = defineAddon({ id: "a", routes: [{ name: "a.home", path: "/a", layout: "console" }] });
+    const b = defineAddon({ id: "b", routes: [{ name: "b.home", path: "/b", layout: "console" }] });
     expect(composeAddons([a, b]).routes.map((r) => r.path)).toEqual(["/a", "/b"]);
   });
 
   test("rejects two routes that declare the same name", () => {
-    const a = defineAddon({ id: "a", routes: [{ name: "dup", path: "/a", shell: "console" }] });
-    const b = defineAddon({ id: "b", routes: [{ name: "dup", path: "/b", shell: "console" }] });
+    const a = defineAddon({ id: "a", routes: [{ name: "dup", path: "/a", layout: "console" }] });
+    const b = defineAddon({ id: "b", routes: [{ name: "dup", path: "/b", layout: "console" }] });
     expect(() => composeAddons([a, b])).toThrow(/dup/);
   });
 

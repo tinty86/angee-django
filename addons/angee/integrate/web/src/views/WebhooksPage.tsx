@@ -2,17 +2,17 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
   recordActionId,
   useRecordActionMutation,
   type ActionContext,
 } from "@angee/base";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation } from "@angee/data";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
@@ -21,7 +21,7 @@ import { RotateWebhookSecret } from "../documents";
 const MODEL = "integrate.WebhookSubscription";
 
 const webhookList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="target_url" />
     <Column field="enabled" />
     <Column field="last_delivery_status" />
@@ -31,14 +31,14 @@ const webhookList = (
 /** Outbound webhook subscriptions and their delivery operations. */
 export function WebhooksPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [sendTest] = useRecordActionMutation<ActionFieldName>("testWebhookDelivery");
+  const [sendTest] = useRecordActionMutation<ActionFieldName>("test_webhook_delivery");
   const [rotateSecret] = useAuthoredMutation(RotateWebhookSecret);
   const rotate = React.useCallback(
     async (ctx: ActionContext) => {
       const id = recordActionId(ctx);
       if (!id) return;
       const result = await rotateSecret({ id });
-      const outcome = result?.rotateWebhookSecret;
+      const outcome = result?.rotate_webhook_secret;
       if (outcome && !outcome.ok)
         throw new Error(t("integrate.webhooks.rotateFailed"));
       const secret = outcome?.secret;
@@ -62,9 +62,9 @@ export function WebhooksPage(): React.ReactElement {
   );
 
   return (
-    <DataPage model={MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL} placement="inline" routed>
       {webhookList}
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="target_url" title />
         <Field name="enabled" />
         <Group label={t("integrate.webhooks.filters")} columns={2}>
@@ -76,20 +76,7 @@ export function WebhooksPage(): React.ReactElement {
         <Field name="secret" widget="text" kind="string" createOnly />
         <Action id="send-test" label={t("integrate.webhooks.sendTest")} run={sendTest} />
         <Action id="rotate-secret" label={t("integrate.webhooks.rotateSecret")} run={rotate} />
-        <Action
-          id="disable"
-          label={t("integrate.action.disable")}
-          danger
-          set={{ enabled: false }}
-          visibleWhen={(record) => record.enabled === true}
-        />
-        <Action
-          id="enable"
-          label={t("integrate.webhooks.enable")}
-          set={{ enabled: true }}
-          visibleWhen={(record) => record.enabled === false}
-        />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

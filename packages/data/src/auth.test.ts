@@ -49,13 +49,13 @@ const contract = buildSchema(`
   }
 
   type Query {
-    currentUser: CurrentUserType
+    current_user: CurrentUserType
   }
 
   type Mutation {
     login(username: String!, password: String!): LoginPayload!
     logout: Boolean!
-    updatePreferences(preferences: JSON!): CurrentUserType!
+    update_preferences(preferences: JSON!): CurrentUserType!
   }
 `);
 
@@ -73,10 +73,10 @@ const currentUser = {
 
 describe("Angee refine auth provider", () => {
   for (const [name, document] of [
-    ["currentUser", CURRENT_USER_DOCUMENT],
+    ["current_user", CURRENT_USER_DOCUMENT],
     ["login", LOGIN_DOCUMENT],
     ["logout", LOGOUT_DOCUMENT],
-    ["updatePreferences", UPDATE_PREFERENCES_DOCUMENT],
+    ["update_preferences", UPDATE_PREFERENCES_DOCUMENT],
   ] as const) {
     test(`${name} document validates against the public schema`, () => {
       expect(validate(contract, parse(document)).map((error) => error.message)).toEqual([]);
@@ -86,7 +86,7 @@ describe("Angee refine auth provider", () => {
   test("maps currentUser into Refine identity and permissions", async () => {
     const provider = createAngeeAuthProviderFromRequest(async (document) => {
       expect(document).toBe(CURRENT_USER_DOCUMENT);
-      return { currentUser } as never;
+      return { current_user: currentUser } as never;
     });
 
     await expect(provider.check()).resolves.toEqual({ authenticated: true });
@@ -104,7 +104,7 @@ describe("Angee refine auth provider", () => {
 
   test("returns an unauthenticated check response when currentUser is empty", async () => {
     const provider = createAngeeAuthProviderFromRequest(async () => ({
-      currentUser: null,
+      current_user: null,
     }) as never);
 
     await expect(provider.check()).resolves.toEqual({

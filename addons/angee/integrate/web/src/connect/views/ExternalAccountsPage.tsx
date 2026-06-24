@@ -1,12 +1,11 @@
 import * as React from "react";
 import {
-  Action,
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
 } from "@angee/base";
 
@@ -15,7 +14,7 @@ import { useIntegrateT } from "../../i18n";
 const MODEL = "ExternalAccount";
 
 const accountList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="provider_label" />
     <Column field="external_id" />
     <Column field="email" />
@@ -32,7 +31,7 @@ export function ExternalAccountsPage(): React.ReactElement {
   // scalar profile/status. Creation happens through the connect flow, so the
   // Create button is hidden here.
   const accountForm = (
-    <Form model={MODEL}>
+    <Form resource={MODEL}>
       <Field name="display_name" title />
       <Field name="status" widget="statusbar" />
       <Group label={t("integrate.externalAccounts.group.identity")} columns={2}>
@@ -41,26 +40,12 @@ export function ExternalAccountsPage(): React.ReactElement {
         <Field name="email" />
         <Field name="avatar_url" />
       </Group>
-      <Action
-        id="revoke"
-        label={t("integrate.revoke")}
-        danger
-        set={{ status: "revoked" }}
-        confirm={{
-          title: t("integrate.externalAccounts.revoke.title"),
-          body: t("integrate.externalAccounts.revoke.body"),
-          danger: true,
-        }}
-        visibleWhen={(record) =>
-          String(record.status ?? "").toUpperCase() !== "REVOKED"
-        }
-      />
     </Form>
   );
   return (
-    <DataPage model={MODEL} placement="inline" routed hideCreate>
+    <ResourceList resource={MODEL} placement="inline" routed hideCreate>
       {accountList}
       {accountForm}
-    </DataPage>
+    </ResourceList>
   );
 }

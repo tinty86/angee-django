@@ -2,12 +2,12 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
 } from "@angee/base";
 
@@ -20,16 +20,15 @@ const DEFAULT_GROUPS = { list: { field: "status" } } as const;
 /**
  * The inbox: cross-thread "smart aggregation" over messages. Channel is an
  * explicit high-cardinality facet because it is useful here but not rendered as
- * a column. The list groups by status/channel through `DataPage` +
- * `GroupListView`, not a hand-rolled inbox. Messages arrive via channel sync,
+ * a column. The list groups by status/channel through `ResourceList` +
+ * `ListView`, not a hand-rolled inbox. Messages arrive via channel sync,
  * so the list creates nothing; status is the one human-editable field.
  */
 export function MessagesPage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed hideCreate>
+    <ResourceList resource={MODEL} placement="inline" routed hideCreate>
       <List
-        model={MODEL}
-        list={GroupListView}
+        resource={MODEL}
         defaultGroups={DEFAULT_GROUPS}
       >
         <Facet field="channel" label="Channel" labelField="display_name" />
@@ -39,7 +38,7 @@ export function MessagesPage(): React.ReactElement {
         <Column field="status" widget="statusBadge" />
         <Column field="sent_at" />
       </List>
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="subject" readOnly />
         {/* status reads the UPPERCASE enum member name but its String patch input
             takes the lowercase value, so moderation rides declarative verbs (which
@@ -73,6 +72,6 @@ export function MessagesPage(): React.ReactElement {
           visibleWhen={(record) => record.status === "HIDDEN" || record.status === "REMOVED"}
         />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

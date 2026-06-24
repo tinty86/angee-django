@@ -1,12 +1,12 @@
 import {
   bearerAuth,
-  createUrqlClient,
   graphQLWebSocketUrl,
   isFatalGraphQLWsClose,
-} from "@angee/sdk";
+} from "@angee/refine";
 import { createClient as createWSClient } from "graphql-ws";
 import {
   cacheExchange,
+  createClient,
   fetchExchange,
   subscriptionExchange,
   type Client,
@@ -17,14 +17,13 @@ import {
 import type { OperatorConnectionInfo } from "./types";
 
 export function createOperatorClient(connection: OperatorConnectionInfo): Client {
-  // The SDK client factory owns transport and HTTP auth: bearerAuth carries the
-  // minted token on every fetch. The operator contributes a document cache and a
-  // graphql-ws subscription transport (bearer in connectionParams) reserved for
-  // future daemon streaming — today every operator op is a query/mutation over
-  // fetch. Canonical urql order: cache, subscription (forwards downstream), fetch.
-  return createUrqlClient({
+  // The operator owns this daemon urql quarantine until it is rebuilt on the
+  // refine provider. Data owns shared auth/url helpers; operator owns the cache
+  // and subscription transport for its daemon GraphQL surface.
+  return createClient({
     url: connection.endpoint,
-    auth: bearerAuth(connection.token),
+    fetch: bearerAuth(connection.token)(globalThis.fetch),
+    preferGetMethod: false,
     exchanges: [
       cacheExchange,
       subscriptionExchange({

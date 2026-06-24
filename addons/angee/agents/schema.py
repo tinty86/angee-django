@@ -30,7 +30,7 @@ from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
 from angee.graphql.actions import ActionResult, action_target, resolve_action_target
-from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, pin_snake_wire_names, public_pk_decoder
+from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, public_pk_decoder
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
@@ -96,9 +96,6 @@ class IntegrationInferenceProviderExtension:
             return cast(InferenceProviderType, cast(Any, self).inferenceprovider)
         except ObjectDoesNotExist:
             return None
-
-
-pin_snake_wire_names(IntegrationInferenceProviderExtension)
 
 
 @strawberry_django.type(InferenceModel)
@@ -185,6 +182,9 @@ class AgentType(AngeeNode):
     lifecycle: auto
     runtime_status: auto
     last_error: auto
+    can_provision: bool
+    can_deprovision: bool
+    can_delete: bool
     created_at: auto
     updated_at: auto
 
@@ -331,6 +331,7 @@ _AGENT_RESOURCE = hasura_resource(
             "service_template": Template,
             "workspace_template": Template,
         },
+        delete_guard=lambda agent: agent.delete_blocker(),
     ),
     id_decode=public_pk_decoder(Agent),
 )
@@ -683,7 +684,7 @@ class AgentActionMutation:
             model_handle=str(agent.model.name) if agent.model is not None else "",
         )
 
-    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    @strawberry.mutation
     def resolve_session_for_view(self, view: JSON) -> AgentSession | None:
         """Resolve the agent that serves the user's current view, for the side chatter.
 

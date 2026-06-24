@@ -44,8 +44,8 @@ class IAMGraphQLTests(TransactionTestCase):
         self.client = Client()
 
     def test_login_current_user_and_logout_use_session_cookie(self) -> None:
-        anonymous = self.graphql("query { currentUser { username } }")
-        self.assertEqual(anonymous["data"], {"currentUser": None})
+        anonymous = self.graphql("query { current_user { username } }")
+        self.assertEqual(anonymous["data"], {"current_user": None})
 
         logged_in = self.graphql(
             """
@@ -68,17 +68,17 @@ class IAMGraphQLTests(TransactionTestCase):
             },
         )
 
-        current = self.graphql("query { currentUser { username is_staff } }")
+        current = self.graphql("query { current_user { username is_staff } }")
         self.assertEqual(
             current["data"],
-            {"currentUser": {"username": "alice", "is_staff": True}},
+            {"current_user": {"username": "alice", "is_staff": True}},
         )
 
         logged_out = self.graphql("mutation { logout }")
         self.assertEqual(logged_out["data"], {"logout": True})
 
-        anonymous_again = self.graphql("query { currentUser { username } }")
-        self.assertEqual(anonymous_again["data"], {"currentUser": None})
+        anonymous_again = self.graphql("query { current_user { username } }")
+        self.assertEqual(anonymous_again["data"], {"current_user": None})
 
     def test_notes_page_and_update_by_public_id(self) -> None:
         self.graphql(

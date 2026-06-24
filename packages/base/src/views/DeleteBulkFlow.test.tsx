@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import type {
+  Row,
+} from "@angee/resources";
 import {
   act,
   cleanup,
@@ -8,7 +11,7 @@ import {
   screen,
   waitFor,
   within,
-} from "@testing-library/react";
+  } from "@testing-library/react";
 import {
   Outlet,
   RouterProvider,
@@ -16,24 +19,36 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-} from "@tanstack/react-router";
+  } from "@tanstack/react-router";
+import {
+  QueryClient,
+  QueryClientProvider,
+  } from "@tanstack/react-query";
 import {
   createContext,
   useContext,
   useMemo,
   type ReactElement,
   type ReactNode,
-} from "react";
-import { afterEach, describe, expect, test, vi } from "vitest";
+  } from "react";
+import { afterEach,
+  describe,
+  expect,
+  test,
+  vi } from "vitest";
 import {
+  ModelMetadataProvider,
+} from "@angee/resources";
+import {
+  OperationDocumentsProvider,
   type DeletePreview,
-  type UseResourceListResult,
-  type Row,
-} from "@angee/data";
+} from "@angee/refine";
 import {
   AppRuntimeProvider,
-  ModelMetadataProvider,
 } from "@angee/sdk";
+import {
+  type SchemaFieldMetadata,
+} from "@angee/resources";
 
 import { baseIcons } from "../chrome/icon-registry";
 import { parseFlatSearch, stringifyFlatSearch } from "../createApp";
@@ -56,40 +71,84 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   };
 });
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@refinedev/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@refinedev/core")>();
   return {
     ...actual,
-    useResourceMutation: () => [
-      sdkMocks.mutate,
-      { fetching: false, error: null },
-    ],
-    useResourceList: (): UseResourceListResult => ({
-      rows: sdkMocks.rows,
-      total: sdkMocks.rows.length,
-      pageCount: 1,
-      page: 1,
-      pageSize: 50,
-      pageInfo: undefined,
-      hasNext: false,
-      hasPrev: false,
-      fetching: false,
-      error: null,
-      refetch: vi.fn(),
-      setPage: vi.fn(),
-      firstPage: vi.fn(),
-      nextPage: vi.fn(),
-      prevPage: vi.fn(),
-      lastPage: vi.fn(),
+    useCustomMutation: () => ({
+      mutateAsync: async ({ values }: { values?: { id?: string; confirm?: boolean } }) => ({
+        data: { deleteSalePreview: await sdkMocks.mutate(values ?? {}) },
+      }),
+      mutation: { isPending: false, error: null, reset: vi.fn() },
     }),
-    useAngeeFacets: () => ({
-      fetching: false,
-      error: null,
-      filters: [],
-      filterFields: [],
-      groupOptions: [],
-      refetch: vi.fn(),
+    useCustom: () => ({
+      result: { data: undefined },
+      query: { isFetching: false, error: null, refetch: vi.fn() },
     }),
+    useCan: () => ({
+      data: { can: true },
+      isLoading: false,
+      error: null,
+    }),
+    useInvalidate: () => vi.fn(async () => undefined),
+  };
+});
+
+vi.mock("@refinedev/react-table", async () => {
+  const TanStackTable = await import("@tanstack/react-table");
+  return {
+    useTable: (options: {
+      columns?: unknown[];
+      state?: { pagination?: { pageIndex?: number; pageSize?: number } };
+      getRowId?: (row: Row, index: number) => string;
+      refineCoreProps?: {
+        pagination?: { currentPage?: number; pageSize?: number };
+        queryOptions?: { enabled?: boolean };
+      };
+      onColumnVisibilityChange?: (updater: unknown) => void;
+    }) => {
+      const props = options.refineCoreProps ?? {};
+      const pageSize =
+        props.pagination?.pageSize ?? options.state?.pagination?.pageSize ?? 50;
+      const requestedPage =
+        props.pagination?.currentPage
+        ?? ((options.state?.pagination?.pageIndex ?? 0) + 1);
+      const active = props.queryOptions?.enabled !== false;
+      const pageCount = Math.max(1, Math.ceil(sdkMocks.rows.length / pageSize));
+      const page = Math.min(pageCount, Math.max(1, requestedPage));
+      const rows = active
+        ? sdkMocks.rows.slice((page - 1) * pageSize, page * pageSize)
+        : [];
+      const pagination = {
+        pageIndex: options.state?.pagination?.pageIndex ?? page - 1,
+        pageSize,
+      };
+      const reactTable = TanStackTable.createTable({
+        data: rows,
+        columns: (options.columns ?? []) as never[],
+        getCoreRowModel: TanStackTable.getCoreRowModel(),
+        getRowId: options.getRowId as never,
+        state: {
+          ...(options.state ?? {}),
+          columnPinning: { left: [], right: [] },
+          pagination,
+          rowSelection: {},
+        },
+        onStateChange: () => undefined,
+        renderFallbackValue: null,
+      });
+      return {
+        reactTable,
+        refineCore: {
+          result: { data: rows, total: active ? sdkMocks.rows.length : undefined },
+          tableQuery: {
+            isFetching: false,
+            error: null,
+            refetch: vi.fn(),
+          },
+        },
+      };
+    },
   };
 });
 
@@ -111,7 +170,7 @@ describe("bulk delete flow", () => {
 
     render(
       <TestUrlState>
-        <ListView model="sales.Sale" columns={columns} />
+        <ListView resource="sales.Sale" columns={columns} />
       </TestUrlState>,
     );
 
@@ -123,11 +182,11 @@ describe("bulk delete flow", () => {
     expect(deleteButton.querySelector("svg")).toBeTruthy();
   });
 
-  test("SelectionBar omits Delete when the model exposes no delete root", async () => {
+  test("SelectionBar omits Delete when the resource exposes no delete root", async () => {
     render(
       <TestUrlState>
         <NoDeleteMetadata>
-          <ListView model="sales.Sale" columns={columns} />
+          <ListView resource="sales.Sale" columns={columns} />
         </NoDeleteMetadata>
       </TestUrlState>,
     );
@@ -144,7 +203,7 @@ describe("bulk delete flow", () => {
 
     render(
       <TestUrlState>
-        <ListView model="sales.Sale" columns={columns} />
+        <ListView resource="sales.Sale" columns={columns} />
       </TestUrlState>,
     );
 
@@ -169,7 +228,7 @@ describe("bulk delete flow", () => {
 
     render(
       <TestUrlState>
-        <ListView model="sales.Sale" columns={columns} />
+        <ListView resource="sales.Sale" columns={columns} />
       </TestUrlState>,
     );
 
@@ -187,9 +246,9 @@ describe("bulk delete flow", () => {
 
   test("tree renders nested nodes collapsibly", () => {
     render(
-      <TestShell>
+      <TestLayout>
         <DeletePreviewTree nodes={[previewFor("sale-1", "First sale").root]} />
-      </TestShell>,
+      </TestLayout>,
     );
 
     expect(screen.getByText("Line 1")).toBeTruthy();
@@ -270,9 +329,9 @@ function TestUrlState({ children }: { children: ReactNode }): ReactElement {
 
 function TestRootRoute(): ReactElement {
   return (
-    <TestShell>
+    <TestLayout>
       <Outlet />
-    </TestShell>
+    </TestLayout>
   );
 }
 
@@ -281,10 +340,26 @@ function TestScreen(): ReactElement | null {
   return context ? <>{context.children}</> : null;
 }
 
-function TestShell({ children }: { children: ReactNode }): ReactElement {
+function TestLayout({ children }: { children: ReactNode }): ReactElement {
+  const queryClient = useMemo(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      }),
+    [],
+  );
   return (
     <AppRuntimeProvider runtime={{ icons: baseIcons }}>
-      <ToastProvider>{children}</ToastProvider>
+      <QueryClientProvider client={queryClient}>
+        <OperationDocumentsProvider documents={SALE_OPERATION_DOCUMENTS}>
+          <ModelMetadataProvider metadata={SALE_METADATA}>
+            <ToastProvider>{children}</ToastProvider>
+          </ModelMetadataProvider>
+        </OperationDocumentsProvider>
+      </QueryClientProvider>
     </AppRuntimeProvider>
   );
 }
@@ -296,10 +371,37 @@ function NoDeleteMetadata({ children }: { children: ReactNode }): ReactElement {
         types: {
           SaleType: {
             typeName: "SaleType",
-            fields: {},
+            fields: {
+              title: { name: "title", kind: "scalar", scalar: "String" },
+            },
             rootFields: {
               detail: "sale",
               list: "sales",
+              aggregate: "saleAggregate",
+            },
+            resource: {
+              schemaName: "console",
+              modelLabel: "sales.Sale",
+              appLabel: "sales",
+              modelName: "Sale",
+              publicIdField: "id",
+              roots: {
+                list: "sales",
+                detail: "sale",
+                aggregate: "saleAggregate",
+              },
+              typeNames: {
+                node: "SaleType",
+                filter: "SaleFilter",
+                order: "SaleOrder",
+                aggregate: "SaleAggregate",
+              },
+              capabilities: ["list", "aggregate"],
+              filterFields: [],
+              orderFields: ["title"],
+              aggregateFields: ["id"],
+              groupByFields: [],
+              relationAxes: [],
             },
           },
         },
@@ -309,3 +411,55 @@ function NoDeleteMetadata({ children }: { children: ReactNode }): ReactElement {
     </ModelMetadataProvider>
   );
 }
+
+const SALE_METADATA: SchemaFieldMetadata = {
+  types: {
+    SaleType: {
+      typeName: "SaleType",
+      fields: {
+        title: { name: "title", kind: "scalar", scalar: "String" },
+      },
+      rootFields: {
+        detail: "sale",
+        list: "sales",
+        aggregate: "saleAggregate",
+        delete: "deleteSale",
+      },
+      resource: {
+        schemaName: "console",
+        modelLabel: "sales.Sale",
+        appLabel: "sales",
+        modelName: "Sale",
+        publicIdField: "id",
+        roots: {
+          list: "sales",
+          detail: "sale",
+          aggregate: "saleAggregate",
+          delete: "deleteSale",
+          deletePreview: "deleteSalePreview",
+        },
+        typeNames: {
+          node: "SaleType",
+          filter: "SaleFilter",
+          order: "SaleOrder",
+          aggregate: "SaleAggregate",
+          deletePayload: "SaleDeletePreview",
+        },
+        capabilities: ["list", "aggregate", "delete"],
+        filterFields: [],
+        orderFields: ["title"],
+        aggregateFields: ["id"],
+        groupByFields: [],
+        relationAxes: [],
+      },
+    },
+  },
+};
+
+const SALE_OPERATION_DOCUMENTS = {
+  console: {
+    deletePreviews: {
+      "sales.Sale": { kind: "Document", definitions: [] },
+    },
+  },
+};

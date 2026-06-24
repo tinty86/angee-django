@@ -1,10 +1,10 @@
 import * as React from "react";
-import { Column, DataPage, Field, Form, Group, GroupListView, List } from "@angee/base";
+import { Column, ResourceList, Field, Form, Group, ListView, List } from "@angee/base";
 
 const MODEL = "parties.Organization";
 
 const organizationsList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="display_name" />
     <Column field="domain" />
     <Column field="created_at" />
@@ -12,7 +12,7 @@ const organizationsList = (
 );
 
 const organizationsForm = (
-  <Form model={MODEL}>
+  <Form resource={MODEL}>
     <Field name="display_name" title />
     <Group label="Details" columns={2}>
       <Field name="legal_name" label="Legal name" />
@@ -25,9 +25,9 @@ const organizationsForm = (
 /** Organizations (the organisation-kind contacts): full create/edit/list/detail. */
 export function OrganizationsPage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL} placement="inline" routed>
       {organizationsList}
       {organizationsForm}
-    </DataPage>
+    </ResourceList>
   );
 }

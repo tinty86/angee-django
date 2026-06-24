@@ -2,18 +2,19 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
-  GroupListView,
+  ListView,
   List,
   useEnumOptions,
   useImplPrefill,
   useRecordAction,
   useRecordActionMutation,
 } from "@angee/base";
-import { runActionResult, useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation } from "@angee/data";
+import { runActionResult } from "@angee/refine";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
@@ -26,7 +27,7 @@ const MODEL = "integrate.VcsBridge";
  */
 export function VcsBridgesPage(): React.ReactElement {
   const t = useIntegrateT();
-  const [sync] = useRecordActionMutation<ActionFieldName>("syncVcsBridge");
+  const [sync] = useRecordActionMutation<ActionFieldName>("sync_vcs_bridge");
   const [discover] = useAuthoredMutation(IntegrateDiscoverRepositories);
   const backendClassOptions = useEnumOptions(MODEL, "backend_class");
   const backendClassPrefill = useImplPrefill(MODEL, "backend_class");
@@ -34,15 +35,15 @@ export function VcsBridgesPage(): React.ReactElement {
   const discoverRepositories = React.useCallback(
     async (id: string) => {
       const result = await discover({ vcsBridgeId: id, org: "" });
-      return runActionResult(result?.discoverRepositories);
+      return runActionResult(result?.discover_repositories);
     },
     [discover],
   );
   const discoverAll = useRecordAction(discoverRepositories);
 
   return (
-    <DataPage model={MODEL} placement="inline" routed>
-      <List model={MODEL} list={GroupListView}>
+    <ResourceList resource={MODEL} placement="inline" routed>
+      <List resource={MODEL}>
         <Facet field="vendor" label="Vendor" labelField="display_name" />
         <Column field="display_name" />
         <Column field="backend_class" header={t("integrate.vcs.backendClass")} />
@@ -53,7 +54,7 @@ export function VcsBridgesPage(): React.ReactElement {
         />
         <Column field="last_sync_completed_at" />
       </List>
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="owner" />
         <Field name="vendor" />
         <Field
@@ -71,6 +72,6 @@ export function VcsBridgesPage(): React.ReactElement {
         <Action id="sync" label={t("integrate.action.syncNow")} icon="refresh" run={sync} />
         <Action id="discover" label={t("integrate.vcs.discover")} run={discoverAll} />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

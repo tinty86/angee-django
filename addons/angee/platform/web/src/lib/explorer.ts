@@ -6,8 +6,8 @@ import {
   useAuthoredRows,
   type AuthoredQueryResult,
   type AuthoredRowsResult,
-  type DocumentData,
-} from "@angee/sdk";
+} from "@angee/data";
+import type { DocumentData } from "@angee/refine";
 
 import {
   PlatformExplorer,
@@ -85,7 +85,7 @@ export interface PlatformModelGraphResult
 function explorerOrEmpty(
   data: PlatformExplorerResult | undefined,
 ): PlatformExplorerData {
-  return data?.platformExplorer ?? EMPTY_EXPLORER;
+  return data?.platform_explorer ?? EMPTY_EXPLORER;
 }
 
 function sortedUnique(values: readonly string[]): string[] {
@@ -125,14 +125,14 @@ export function selectPlatformAddonDetail(
   const ids = new Set(addons.map((candidate) => candidate.id));
   return {
     addon,
-    dependsOn: sortedUnique((addon?.dependsOn ?? []).filter((dep) => ids.has(dep))),
+    dependsOn: sortedUnique((addon?.depends_on ?? []).filter((dep) => ids.has(dep))),
     dependedBy: id
       ? addons
-          .filter((candidate) => candidate.dependsOn.includes(id))
+          .filter((candidate) => candidate.depends_on.includes(id))
           .map((candidate) => candidate.id)
           .sort()
       : [],
-    modelLabels: sortedUnique(addon?.modelLabels ?? []),
+    modelLabels: sortedUnique(addon?.model_labels ?? []),
   };
 }
 
@@ -145,7 +145,7 @@ export function selectPlatformModelDetail(
     model: id ? models.find((candidate) => candidate.label === id) : undefined,
     dependedBy: id
       ? models
-          .filter((candidate) => candidate.dependsOn.includes(id))
+          .filter((candidate) => candidate.depends_on.includes(id))
           .map((candidate) => candidate.label)
           .sort()
       : [],
@@ -167,7 +167,7 @@ export function usePlatformExplorer(): PlatformExplorerQuery {
   const query = useAuthoredQuery(PlatformExplorer);
   return {
     ...query,
-    explorer: query.data?.platformExplorer ?? null,
+    explorer: query.data?.platform_explorer ?? null,
   };
 }
 

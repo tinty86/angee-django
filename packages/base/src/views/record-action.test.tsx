@@ -1,12 +1,34 @@
 // @vitest-environment happy-dom
 
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ActionContext } from "./page";
-import { recordActionId, useRecordAction } from "./record-action";
+import {
+  recordActionId,
+  useRecordAction,
+  useRecordActionMutation,
+} from "./record-action";
+
+const dataMocks = vi.hoisted(() => ({
+  mutate: vi.fn(async () => "Synced"),
+  useActionMutation: vi.fn(),
+}));
+
+vi.mock("@angee/data", () => ({
+  useActionMutation: dataMocks.useActionMutation,
+}));
 
 describe("record action helpers", () => {
+  beforeEach(() => {
+    dataMocks.mutate.mockClear();
+    dataMocks.useActionMutation.mockReset();
+    dataMocks.useActionMutation.mockReturnValue([
+      dataMocks.mutate,
+      { fetching: false, error: null },
+    ]);
+  });
+
   test("reads a saved record id from the action context", () => {
     expect(recordActionId(actionContext("row-1"))).toBe("row-1");
     expect(recordActionId(actionContext(""))).toBeUndefined();
@@ -77,6 +99,26 @@ describe("record action helpers", () => {
     await expect(result.current(actionContext(undefined))).rejects.toThrow(
       "Save first",
     );
+  });
+
+  test("passes invalidation targets to the data action owner", async () => {
+    const refresh = vi.fn();
+    const { result } = renderHook(() =>
+      useRecordActionMutation("refresh_source", {
+        invalidateModels: ["agents.Skill"],
+      }),
+    );
+
+    await act(async () => {
+      await result.current[0](actionContext("src_1", { refresh }));
+    });
+
+    expect(dataMocks.useActionMutation).toHaveBeenCalledWith(
+      "refresh_source",
+      { invalidateModels: ["agents.Skill"] },
+    );
+    expect(dataMocks.mutate).toHaveBeenCalledWith("src_1");
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });
 

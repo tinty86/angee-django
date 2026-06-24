@@ -23,8 +23,15 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => routerMocks.params,
 }));
 
+vi.mock("@angee/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/data")>();
+  return {
+    ...actual,
+    useAuthoredQuery: sdkMocks.useAuthoredQuery,
+  };
+});
+
 vi.mock("@angee/sdk", () => ({
-  useAuthoredQuery: sdkMocks.useAuthoredQuery,
   useNamespaceT: (
     _namespace: string,
     messages: Record<string, string>,

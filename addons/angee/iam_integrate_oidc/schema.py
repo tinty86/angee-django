@@ -20,7 +20,6 @@ from strawberry import auto
 from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
-from angee.graphql.data import pin_snake_wire_names
 from angee.iam.permissions import request_from_info as _request
 from angee.iam.permissions import session_user as _session_user
 from angee.iam.schema import UserType
@@ -290,9 +289,6 @@ class OAuthClientOidcExtension:
         """Return the login domain allow-list."""
 
         return cast(list[str], cast(Any, self).allowed_email_domain_values)
-
-
-pin_snake_wire_names(OAuthClientOidcExtension)
 
 
 _PUBLIC_TYPES: list[type] = [

@@ -4,7 +4,7 @@ import { parseAsString, useQueryState } from "nuqs";
 import {
   Code,
   RowsListView,
-  type DataToolbarGroupOption,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
 
@@ -64,7 +64,7 @@ function columns(t: (key: string) => string): readonly ListColumn<ModelRow>[] {
   ];
 }
 
-function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+function groupOptions(t: (key: string) => string): readonly ResourceToolbarGroupOption[] {
   return [
     { id: "addon", label: t("platform.col.addon"), group: { field: "addon" }, type: "value" },
     { id: "dependsOn", label: t("platform.col.dependsOn"), group: { field: "dependsOn" }, type: "value" },

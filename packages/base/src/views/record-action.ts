@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useActionMutation } from "@angee/sdk";
+import { useActionMutation } from "@angee/data";
 
 import type { ActionContext, ActionResult } from "./page";
 
@@ -11,6 +11,8 @@ export type RecordActionRunner = (
 export interface UseRecordActionOptions {
   /** Message returned when the action itself returns no message. */
   defaultMessage?: string;
+  /** Extra Angee model labels whose refine caches this action mutates. */
+  invalidateModels?: readonly string[];
   /** Error thrown when the form action is invoked before a saved record exists. */
   missingRecordMessage?: string;
   /** Refresh the form record after a successful run. Defaults to true. */
@@ -57,7 +59,7 @@ export function useRecordAction(
 }
 
 /**
- * Compose SDK single-id `ActionResult` mutations into a record form action.
+ * Compose @angee/data single-id `ActionResult` mutations into a record form action.
  *
  * The returned `run` callback can be passed directly to `<Action run={...} />`.
  */
@@ -65,7 +67,9 @@ export function useRecordActionMutation<TField extends string = string>(
   field: TField,
   options?: UseRecordActionOptions,
 ): [RecordAction, { fetching: boolean; error: Error | null }] {
-  const [mutate, state] = useActionMutation<TField>(field);
+  const [mutate, state] = useActionMutation<TField>(field, {
+    invalidateModels: options?.invalidateModels,
+  });
   const run = React.useCallback<RecordActionRunner>((id) => mutate(id), [mutate]);
   return [useRecordAction(run, options), state];
 }

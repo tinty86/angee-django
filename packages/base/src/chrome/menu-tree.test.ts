@@ -118,6 +118,32 @@ describe("navigableItems", () => {
   });
 });
 
+describe("railMenuItems", () => {
+  test("filters to authored app roots when refine projection marks them", () => {
+    const ids = MenuTree.from([
+      { id: "agents", label: "Agents", to: "/agents", appRoot: true },
+      { id: "agents.menu", label: "Agents", to: "/agents" },
+      { id: "agents.list", label: "Agents", to: "/agents" },
+      { id: "notes", label: "Notes", to: "/notes", appRoot: true },
+    ])
+      .railMenuItems()
+      .map((item) => item.id);
+
+    expect(ids).toEqual(["agents", "notes"]);
+  });
+
+  test("keeps legacy direct menu fixtures when no app root markers exist", () => {
+    const ids = MenuTree.from([
+      { id: "agents", label: "Agents", to: "/agents" },
+      { id: "notes", label: "Notes", to: "/notes" },
+    ])
+      .railMenuItems()
+      .map((item) => item.id);
+
+    expect(ids).toEqual(["agents", "notes"]);
+  });
+});
+
 describe("isActive / pathMatchesTarget", () => {
   test("pathMatchesTarget matches an exact or nested path, never missing/#", () => {
     expect(pathMatchesTarget("/notes", "/notes")).toBe(true);

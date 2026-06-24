@@ -15,7 +15,7 @@ import type { ListEmptyState } from "./list-view-types";
  * The hierarchical View: flat `rows` carrying a self-referential `parent`
  * pointer are folded into a `Tree` (folders/files, nested records). The host
  * gives the field names; `renderRow` overrides a node's label for richer rows.
- * A peer View in a `DataPage` — the Explorer navigator pairs it with a list.
+ * A peer View in a `ResourceList` — the Explorer navigator pairs it with a list.
  */
 export interface TreeViewProps<
   TRow extends Record<string, unknown> = Record<string, unknown>,

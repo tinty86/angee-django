@@ -1,7 +1,8 @@
 # Frontend Guidelines
 
 Frontend code is TypeScript, React, and the rendered Angee experience. It owns
-presentation, routes, menus, widgets, shells, view state, and interaction.
+presentation, routes, menus, widgets, layouts, resource-view state, and
+interaction.
 
 Follow the shared development process and coding principles in
 [`docs/guidelines.md`](../guidelines.md) for every task; the rules below are the
@@ -21,7 +22,7 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   operation is a `graphql()` document imported from `@angee/gql/<schema>`; its
   result/variables types come from the generated `TypedDocumentNode` (use
   `DocumentType<typeof Doc>` for named result types and
-  `DocumentVariables<typeof Doc>` from `@angee/sdk` for named variable types) —
+  `DocumentVariables<typeof Doc>` from `@angee/data` for named variable types) —
   never a hand-written `…Data`/`…Variables` interface, and never call-site
   `<TData,TVars>` generics on the `useAuthored*` hooks. The operation's **file
   name picks its schema**: `documents.ts`/`documents.console.ts` → console,
@@ -32,20 +33,23 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   opaque (parse, do not assert).
 - **Single-id action mutations are derived, not authored.** For a
   `<field>(id: ID!): ActionResult` mutation, call
-  `useActionMutation<ActionFieldName>("field")` in headless code, or
+  `useActionMutation<ActionFieldName>("field")` from `@angee/data` in headless
+  code, or
   `useRecordActionMutation<ActionFieldName>("field")` for a rendered
   `@angee/base` `<Action run={...}>` bound to the open record. `ActionFieldName`
   comes from `@angee/gql/<schema>/actions`; no document, result type, or
-  variables are authored. SDK owns deriving/running the mutation; base owns
-  adapting it to `ActionContext` (record id, refresh, missing-record handling,
-  success hooks). Don't hand-author these as `graphql()` documents or page-local
+  variables are authored. `@angee/data` owns deriving the Hasura custom mutation
+  and running it through refine `useCustomMutation`; base owns adapting it to
+  `ActionContext` (record id, refresh, missing-record handling, success hooks).
+  Don't hand-author these as `graphql()` documents or page-local
   `ctx.record.id → mutate → refresh` callbacks.
 - React does not own business logic, permissions, models, or persistence.
 - **React state has one owner.** Keep canonical facts in the smallest owner:
-  route/search facts in TanStack Router/nuqs, server facts in GraphQL/urql, data
-  view facts in `DataViewProvider`, form facts in `FormView`/TanStack Form, and
-  ephemeral interaction state in the component that handles it. Lift state when
-  siblings coordinate; do not keep parallel local copies.
+  route/search facts in TanStack Router/nuqs, server facts in refine data hooks
+  and react-query, resource-view facts in `ResourceViewProvider`, form facts in
+  `@refinedev/react-hook-form`/`FormView`, and ephemeral interaction state in the
+  component that handles it. Lift state when siblings coordinate; do not keep
+  parallel local copies.
 - **Derive during render.** Do not store `filteredRows`, selected records,
   labels, options, variables, column lists, or capability booleans in state when
   they can be computed from props, route search, GraphQL results, model metadata,
@@ -56,14 +60,17 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   browser APIs, storage, subscriptions, timers, navigation after async data, or
   imperative libraries like CodeMirror. Event logic belongs in handlers, and
   render-derived data belongs in render.
-- Use `defineAddon` (headless, `@angee/sdk`) or `defineBaseAddon` (rendered,
-  `@angee/base`, routes carry React components) to declare an addon, and
-  `createApp` for the project's host composition. One greppable seam per addon —
-  never annotate a bare `const x: BaseAddon = {…}`.
+- Use `defineAddon` for headless addon composition, `defineBaseAddon` for
+  rendered addon composition, and `createApp` for the project's host
+  composition. One greppable seam per addon — never annotate a bare
+  `const x: BaseAddon = {…}`. The current package names are `@angee/sdk` for
+  composition contracts and `@angee/base` for rendered primitives; the greenfield
+  target owners are `@angee/app` and `@angee/ui`.
 - Compose addon capabilities at build time through the manifest + `composeAddons`
-  (widgets, i18n, icons, forms, slots, previews); never register or mutate a
-  module-global at runtime. `usePreviews`/`useWidget`/`useMenus`/`useSlot` read the
-  composed `AppRuntime`.
+  (widgets, i18n, icons, forms, slots, previews, and menu declarations); never
+  register or mutate a module-global at runtime. `usePreviews`/`useWidget`/
+  `useSlot` read the composed `AppRuntime`; menu declarations project into refine
+  resources and chrome renders refine `useMenu`.
 - One component tree. Extend or register; do not fork.
 - Slots are additive extension points. Use them before copying a component.
 - Tokens beat color props and one-off variants. Theme by overriding tokens.
@@ -97,23 +104,25 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   own lucide components through the manifest `icons:` field (the registry seam), not
   by rendering them. Glyph ids are lowercase/kebab-case; the lookup normalizes
   requested names to lowercase, so camelCase registry keys do not resolve.
-- Use shared page, view, form, table, widget, and shell primitives before adding
-  new local state. Never hand-roll a data view (grid/list/group/board), form, or
-  detail in an addon — compose the shared views (`ListView`/`RowsListView`/
-  `DataPage`/`RecordView`) and record fragments (`RecordHeader`/`MetaGrid`/
-  `MetricStrip`); for a linked cell, compose `TextLink`/`Chip`/`MetricTile`, never
-  a bespoke link class. If a shared view lacks what your case needs, extend it in
-  `@angee/base` (the owner) so every addon gets it. The principle and what a
-  hand-rolled copy silently drops live in `AGENTS.md` → "Compose, never
-  re-implement, at the addon level".
-- **Routes and pages stay thin.** A route declares URL, shell, menu/chrome, model,
-  and component. A model-backed page composes `DataPage` with `List` and `Form`
-  declarations; a daemon/remote/in-memory collection composes `RowsListView` or a
-  named shared owner; a grouped or board-capable model composes `GroupListView`
-  and the matching backend aggregate/filter contract. Page components may add
-  small action controls or hooks, but they do not own table mechanics, duplicate
-  route params, cache state, bespoke loading/error surfaces, or local copies of
-  shared view state.
+- Use shared page, resource, form, table, widget, and layout primitives before
+  adding new local state. Never hand-roll a resource list (grid/list/group/board),
+  form, or detail in an addon — compose the shared resource actions
+  (`ResourceList`/`ResourceCreate`/`ResourceEdit`/`ResourceShow`), `List`/`Form`
+  declarations, and record fragments (`RecordHeader`/`MetaGrid`/`MetricStrip`);
+  for a linked cell, compose `TextLink`/`Chip`/`MetricTile`, never a bespoke link
+  class. If a shared view lacks what your case needs, extend it in `@angee/base`
+  (the owner) so every addon gets it. The principle and what a hand-rolled copy
+  silently drops live in `AGENTS.md` → "Compose, never re-implement, at the addon
+  level".
+- **Routes and pages stay thin.** A route declares URL, layout, menu/chrome,
+  refine resource, action, and component. A resource-backed page composes the
+  standard resource action components with `List` and `Form` declarations; a
+  daemon/remote/in-memory collection composes `RowsListView` or a named shared
+  owner; a grouped or board-capable resource composes `ListView` with grouping
+  and the matching backend aggregate/filter contract. Page components may add small
+  action controls or hooks, but they do not own table mechanics, duplicate route
+  params, cache state, bespoke loading/error surfaces, or local copies of shared
+  resource-view state.
 - A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
   across recipes). A default `size` is a visual contract — do not flip it without a
   requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`
@@ -142,17 +151,17 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   are untouched — and reuses the same `<Group>` declarations, so no field metadata is
   duplicated. Group your fields for the stacked layout and tabbing is one prop away.
 - A relation field is a link, not a dead end. A routed collection page tags its
-  model on the route — `{ name, path, component, model: "OAuthClient" }` (one route
-  per model, build-time fail-fast) — and the relation widget resolves it through
-  `useModelRoute(model)` to show a "follow" arrow to the selected record's detail
-  page (breadcrumbs come from that route). A model with no routed page simply shows
-  no arrow.
-- Register a model's create form once via `defineAddon`'s
+  refine resource on the route — `{ name, path, component, resource:
+  "OAuthClient" }` (one route per resource, build-time fail-fast) — and the
+  relation widget resolves it through `useResourceRoute(resource)` to show a
+  "follow" arrow to the selected record's detail page (breadcrumbs come from
+  refine). A resource with no routed page simply shows no arrow.
+- Register a resource's create form once via `defineAddon`'s
   `forms: { Model: <…Field/Group children…> }`; the standard renderer uses it
-  wherever that model is created, including the relation-picker inline create. Use
+  wherever that resource is created, including the relation-picker inline create. Use
   it when the create input diverges from the read projection (write-only secrets,
   scalar-id pickers, a kind discriminator). With a registered form,
-  `RelationPicker`'s `create` needs only `{ model }` (the override supersedes any
+  `RelationPicker`'s `create` needs only `{ resource }` (the override supersedes any
   passed `fields` on create); pass inline `fields` only for a data-dependent form
   whose options are fetched at runtime and so cannot be a static registration.
   `RelationPicker` also offers inline **edit** (a pencil beside the picker opens the
@@ -170,16 +179,16 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   Record-level chrome (star/share/follow) is host-contributed into
   `FORM_VIEW_RECORD_CHROME_SLOT` via the manifest `slots:`; render contributions
   with the shared `SlotOutlet`.
-- Never poll for data freshness. Live updates ride GraphQL subscriptions and the
-  normalized cache, not a `setInterval` refetch loop. Opt a model into live
-  cross-actor refresh by declaring `changes(Model, field="<model>Changed")` in its
-  `schema.py` — the relay invalidator then auto-subscribes and refetches every
-  registered read (`useResourceRecord`/list/picker) on each push; a model without
-  it still invalidates on local writes. Stream foreign-system state (e.g. the
-  operator daemon's `onWorkspaceStatusChange`/`onServiceLogs`) over its own
-  subscriptions. A timed `setInterval` is only ever for non-data UI motion (a
-  carousel) or rotating a short-lived credential before it expires — never to
-  re-read a resolver hoping it changed. If a foreign system publishes no change
+- Never poll for data freshness. Live updates ride GraphQL subscriptions through
+  refine's live provider and react-query invalidation, not a `setInterval`
+  refetch loop. Opt a model into live cross-actor refresh by declaring
+  `changes(Model, field="<model>Changed")` in its `schema.py`; local writes
+  invalidate through refine mutations, and subscription pushes invalidate the
+  affected refine resources. Stream foreign-system state (e.g. the operator
+  daemon's `onWorkspaceStatusChange`/`onServiceLogs`) over its own subscriptions.
+  A timed `setInterval` is only ever for non-data UI motion (a carousel) or
+  rotating a short-lived credential before it expires — never to re-read a
+  resolver hoping it changed. If a foreign system publishes no change
   subscription, add one there rather than polling it from the client.
 - Client-side gates are UX only. The server is the authorization boundary.
 - No Python view DSL, no frontend metadata hidden in backend decorators.
@@ -205,18 +214,18 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   `RelationPicker` own their query state and filter a fixed `options` list
   client-side, so they cannot drive a remote search. For one (e.g. a host repo
   search), build a thin control on the dialog/`Input` primitives whose debounced
-  query feeds `useAuthoredQuery`, and refresh the affected list with
-  `useModelInvalidation(model)` after the write.
-- **A FormView create dialog under the console shell** needs
+  query feeds `@angee/data`'s refine-backed `useAuthoredQuery`, and refresh the
+  affected list with `useModelInvalidation(model)` after the write.
+- **A FormView create dialog under the console layout** needs
   `<ControlBandProvider host={undefined}>` to keep its Save band inline instead of
-  portaling into the shell's band.
-- **Shells bind their own schema** (`ShellConfig.schema`): console-only fields
+  portaling into the layout's band.
+- **Layouts bind their own schema** (`RefineLayoutConfig.schema`): console-only fields
   need the console client — set `defaultSchema: "console"` and pin the
-  public/login shell to `public`.
-- **Order urql exchanges `[cache, subscription, fetch]`** — a client missing
-  `fetchExchange` forces plain queries over graphql-ws and they hang; never set a
-  poll interval shorter than the slowest resolver, or a `network-only` reexecute
-  aborts the in-flight request.
+  public/login layout to `public`.
+- **Keep urql out of app data paths.** The only remaining urql owner is the
+  operator daemon quarantine. Django-backed app resources use refine data hooks,
+  react-query invalidation, and the Hasura provider; do not reintroduce a
+  second app cache/live engine.
 - **Generate the operator console's types from the Go daemon's introspected SDL**
   (`operator_schema` → codegen), never by hand; daemon actions return
   `MutationResult{status}`, not `{ok}`.
@@ -232,10 +241,10 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **A new web package needs `pnpm install` + a Vite restart** (Vite snapshots
   workspace packages at start) plus registration in the host `main.tsx` addons and
   `package.json`.
-- **`DataPage` still needs a form declaration, even for read-only records.** Give
-  discovered/read-only models a `<Form>` child or `formFields` with read-only fields;
+- **`ResourceList` still needs a form declaration, even for read-only records.** Give
+  discovered/read-only resources a `<Form>` child or `formFields` with read-only fields;
   an all-read-only form never assembles an update mutation. Delete affordances are
-  schema-capability gated: if the model has no `delete` root, `DataPage`/`ListView`
+  schema-capability gated: if the resource has no `delete` root, `ResourceList`/`ListView`
   omit record and bulk delete instead of requiring a delete-only `crud(...)`.
 - **An addon contributes one rail (app) root** (`group:"platform"`); its children
   are the top-bar menus, and a child that itself has children renders as a dropdown.
@@ -247,8 +256,8 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   axis may traverse a forward FK/OneToOne (e.g. `group_by_fields=["oauth_client__is_enabled"]`
   in `schema.py`; to-many stays refused). The backend emits the group-key field in
   camel form (`oauthClient_IsEnabled`) and the groupable enum in `__` SNAKE_UPPER
-  (`OAUTH_CLIENT__IS_ENABLED`). A `DataToolbarGroupOption`'s `group.field` is the
-  *camel key* (`"oauthClient_IsEnabled"`) — `dataViewGroupToAggregateDimension`
+  (`OAUTH_CLIENT__IS_ENABLED`). A `ResourceToolbarGroupOption`'s `group.field` is the
+  *camel key* (`"oauthClient_IsEnabled"`) — `resourceViewGroupToAggregateDimension`
   reads it verbatim as the bucket key and `fieldToSnake`-uppercases it to the enum
   (a `_<Capital>` restores the Django `__`). Use the camel key, not the snake path.
 - **Live cross-actor refresh requires a `changes()` subscription.** A list/picker
@@ -257,7 +266,7 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   `changes(Model, field="<model>Changed")` in its `schema.py` refreshes on local
   writes only (no live push, no error). Add the subscription to opt a model into
   live updates; omit it and you simply get local-write invalidation.
-- **`createDefaults` needs a submittable field, never `readOnly`.** `DataPage`'s
+- **`createDefaults` needs a submittable field, never `readOnly`.** `ResourceList`'s
   `createDefaults` seeds the create form, but `FormView.mutationData` drops every
   `readOnly` field from the payload — so a `readOnly` field pinned by `createDefaults`
   is silently *not* sent, failing a required create input. Use `createOnly` (editable

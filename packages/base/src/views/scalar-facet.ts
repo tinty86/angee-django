@@ -1,46 +1,51 @@
 import * as React from "react";
 import {
   useAngeeFacets,
-  type FacetRequestSpec,
-  type ResourceFacetOption,
 } from "@angee/data";
+import type {
+  FacetRequestSpec,
+  ResourceFacetOption,
+  } from "@angee/refine";
 import {
   type ModelFieldMetadata,
-  type ModelMetadata,
-} from "@angee/sdk";
+} from "@angee/resources";
+import type {
+  ModelMetadata,
+} from "@angee/resources";
 
 import type {
-  DataToolbarFilterField,
-  DataToolbarFilterOption,
+  ResourceToolbarFilterField,
+  ResourceToolbarFilterOption,
 } from "../toolbars";
-import type { DataViewFilter, DataViewGroup } from "./data-view-model";
+import type { ResourceViewFilter, ResourceViewGroup } from "./resource-view-model";
 import { facetRequestSpec } from "./facet-query";
 import {
-  dataViewGroupToAggregateDimension,
+  resourceViewGroupToAggregateDimension,
   groupKey,
   hasuraGroupDimension,
+  hasuraGroupOrderForDimensions,
 } from "./ListInternals";
 import { groupLabel } from "./model-metadata-defaults";
 import type { ColumnDescriptor } from "./page";
 
 const SCALAR_FACET_OPTION_LIMIT = 200;
-const EMPTY_FILTER_OPTIONS: readonly DataToolbarFilterOption[] = [];
-const EMPTY_FILTER_FIELDS: readonly DataToolbarFilterField[] = [];
+const EMPTY_FILTER_OPTIONS: readonly ResourceToolbarFilterOption[] = [];
+const EMPTY_FILTER_FIELDS: readonly ResourceToolbarFilterField[] = [];
 const EMPTY_SCALAR_FACETS: ScalarFacets = {
   filters: EMPTY_FILTER_OPTIONS,
   filterFields: EMPTY_FILTER_FIELDS,
 };
 
 export interface ScalarFacets {
-  filters: readonly DataToolbarFilterOption[];
-  filterFields: readonly DataToolbarFilterField[];
+  filters: readonly ResourceToolbarFilterOption[];
+  filterFields: readonly ResourceToolbarFilterField[];
 }
 
 export interface ScalarFacetDeclaration {
   id: string;
   field: string;
   label: React.ReactNode;
-  group: DataViewGroup;
+  group: ResourceViewGroup;
   spec: FacetRequestSpec;
   neutralizeFilterFields: readonly string[];
 }
@@ -50,7 +55,7 @@ export function useScalarFacets<TRow extends object>(
   _model: string,
   columns: readonly ColumnDescriptor<TRow>[],
   metadata: ModelMetadata | null,
-  activeFilter?: DataViewFilter,
+  activeFilter?: ResourceViewFilter,
 ): ScalarFacets {
   const facets = React.useMemo(
     () => scalarFacetDeclarations(columns, metadata),
@@ -71,7 +76,7 @@ export function useScalarFacets<TRow extends object>(
     facets: facetSpecs,
     enabled: resource !== null && facetSpecs.length > 0,
   });
-  const filters = React.useMemo<readonly DataToolbarFilterOption[]>(
+  const filters = React.useMemo<readonly ResourceToolbarFilterOption[]>(
     () =>
       facets.flatMap((facet) => {
         const result = facetQuery.facets[facet.id];
@@ -81,7 +86,7 @@ export function useScalarFacets<TRow extends object>(
       }),
     [facetQuery.facets, facets, metadata],
   );
-  const filterFields = React.useMemo<readonly DataToolbarFilterField[]>(
+  const filterFields = React.useMemo<readonly ResourceToolbarFilterField[]>(
     () =>
       facets.flatMap((facet) => {
         const result = facetQuery.facets[facet.id];
@@ -113,7 +118,7 @@ function scalarFilterOption(
   facet: ScalarFacetDeclaration,
   option: ResourceFacetOption,
   metadata: ModelMetadata | null,
-): DataToolbarFilterOption {
+): ResourceToolbarFilterOption {
   const label = scalarFacetOptionLabel(facet, option, metadata);
   return {
     id: `${facet.field}:${option.value}`,
@@ -173,11 +178,12 @@ function addScalarFacet(
   seen: Set<string>,
   metadata: ModelMetadata,
   fieldName: string,
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   options: { labelField?: string } = {},
 ): void {
-  const identity = dataViewGroupToAggregateDimension(group, metadata);
+  const identity = resourceViewGroupToAggregateDimension(group, metadata);
   const dimension = hasuraGroupDimension(identity);
+  const orderBy = hasuraGroupOrderForDimensions([dimension]);
   const labelField = options.labelField ?? fieldName;
   const label = groupLabel(labelField, metadata.fields[labelField]);
   seen.add(fieldName);
@@ -189,6 +195,7 @@ function addScalarFacet(
     spec: {
       id: fieldName,
       dimensions: [dimension],
+      ...(orderBy ? { orderBy } : {}),
       ...(dimension.key ? { valueKey: dimension.key } : {}),
       pageSize: SCALAR_FACET_OPTION_LIMIT,
     },

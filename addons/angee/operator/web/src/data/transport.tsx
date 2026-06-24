@@ -1,10 +1,11 @@
 import { Alert, EmptyState, LoadingPanel, errorMessage } from "@angee/base";
 import {
-  useDocumentSubscription,
-  useSchemaClients,
-  type DocumentData,
-  type DocumentVariables,
-} from "@angee/sdk";
+  useAuthoredQuery,
+} from "@angee/data";
+import type {
+  DocumentData,
+  DocumentVariables,
+} from "@angee/refine";
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import {
   Provider as UrqlProvider,
@@ -28,6 +29,7 @@ import {
 
 import { useOperatorT } from "../i18n";
 import { OperatorConnectionQuery } from "./documents.console";
+import { useDocumentSubscription } from "./document-subscription";
 import {
   SNAPSHOT_QUERY,
   STACK_SNAPSHOT_SUBSCRIPTION,
@@ -101,54 +103,36 @@ export function OperatorTransportProvider({
   children,
 }: OperatorTransportProviderProps): ReactNode {
   const t = useOperatorT();
-  const clients = useSchemaClients();
-  const consoleClient = clients[CONSOLE_SCHEMA];
-  const [state, setState] = useState<ConnectionState>({ kind: "loading" });
-
-  // Fetch the daemon endpoint + a freshly minted scoped token. `network-only` so
-  // an expired token is never served from the console client's cache.
-  const loadConnection = useCallback(
-    async (signal: { active: boolean }) => {
-      if (!consoleClient) {
-        setState({
-          kind: "error",
-          message: t("operator.transport.noConsoleClient"),
-        });
-        return;
-      }
-      try {
-        const result = await consoleClient
-          .query(OperatorConnectionQuery, {}, { requestPolicy: "network-only" })
-          .toPromise();
-        if (!signal.active) return;
-        if (result.error) {
-          setState({ kind: "error", message: result.error.message });
-          return;
-        }
-        const connection = parseOperatorConnection(result.data?.operatorConnection);
-        setState(
-          connection ? { kind: "ready", connection } : { kind: "not-configured" },
-        );
-      } catch (error: unknown) {
-        if (!signal.active) return;
-        setState({ kind: "error", message: errorMessage(error, t("operator.transport.unknownError")) });
-      }
-    },
-    [consoleClient, t],
-  );
+  const connectionQuery = useAuthoredQuery(OperatorConnectionQuery, undefined, {
+    dataProviderName: CONSOLE_SCHEMA,
+  });
 
   useEffect(() => {
-    const signal = { active: true };
-    setState({ kind: "loading" });
-    void loadConnection(signal);
     const intervalId = globalThis.setInterval(() => {
-      void loadConnection(signal);
+      connectionQuery.refetch();
     }, CONNECTION_REFRESH_MS);
     return () => {
-      signal.active = false;
       globalThis.clearInterval(intervalId);
     };
-  }, [loadConnection]);
+  }, [connectionQuery.refetch]);
+
+  const state = useMemo<ConnectionState>(() => {
+    if (!connectionQuery.data && connectionQuery.fetching) {
+      return { kind: "loading" };
+    }
+    if (connectionQuery.error) {
+      return { kind: "error", message: connectionQuery.error.message };
+    }
+    try {
+      const connection = parseOperatorConnection(connectionQuery.data?.operator_connection);
+      return connection ? { kind: "ready", connection } : { kind: "not-configured" };
+    } catch (error) {
+      return {
+        kind: "error",
+        message: errorMessage(error, t("operator.transport.unknownError")),
+      };
+    }
+  }, [connectionQuery.data, connectionQuery.error, connectionQuery.fetching, t]);
 
   const endpoint = state.kind === "ready" ? state.connection.endpoint : null;
   const token = state.kind === "ready" ? state.connection.token : null;

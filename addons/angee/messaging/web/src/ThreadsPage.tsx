@@ -2,12 +2,12 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
   RelatedRowsList,
   type ListColumn,
@@ -47,7 +47,7 @@ function ThreadMessagesTab({ recordId }: RecordPanelContext): React.ReactElement
   return (
     <RelatedRowsList<MessageRow>
       recordId={recordId}
-      model={MESSAGE_MODEL}
+      resource={MESSAGE_MODEL}
       fields={THREAD_MESSAGE_FIELDS}
       filterFor={(id) => ({ thread: { _eq: id } })}
       order={{ sent_at: "ASC" }}
@@ -69,15 +69,15 @@ const threadRecordTabs: readonly RecordTabDescriptor[] = [
  */
 export function ThreadsPage(): React.ReactElement {
   return (
-    <DataPage model={MODEL} placement="inline" routed hideCreate recordTabs={threadRecordTabs}>
-      <List model={MODEL} list={GroupListView}>
+    <ResourceList resource={MODEL} placement="inline" routed hideCreate recordTabs={threadRecordTabs}>
+      <List resource={MODEL}>
         <Facet field="channel" label="Channel" labelField="display_name" />
         <Column field="subject" />
         <Column field="modality" />
         <Column field="message_count" header="Messages" />
         <Column field="last_message_at" />
       </List>
-      <Form model={MODEL}>
+      <Form resource={MODEL}>
         <Field name="subject" />
         <Group label="About" columns={2}>
           <Field name="platform" readOnly />
@@ -113,6 +113,6 @@ export function ThreadsPage(): React.ReactElement {
           visibleWhen={(record) => record.visibility !== "RESTRICTED"}
         />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

@@ -2,11 +2,11 @@ import * as React from "react";
 import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
   recordActionId,
   useEnumOptions,
@@ -15,7 +15,7 @@ import {
   type ActionContext,
 } from "@angee/base";
 import type { ActionFieldName } from "@angee/gql/console/actions";
-import { useAuthoredMutation } from "@angee/sdk";
+import { useAuthoredMutation } from "@angee/data";
 
 import { useIntegrateT } from "../../i18n";
 import {
@@ -28,7 +28,7 @@ import { connectCallbackRedirectUri } from "../redirects";
 const MODEL = "OAuthClient";
 
 const providerList = (
-  <List model={MODEL} list={GroupListView}>
+  <List resource={MODEL}>
     <Column field="slug" />
     <Column field="display_name" />
     <Column field="environment" />
@@ -52,7 +52,7 @@ function fieldString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/** OAuth connect providers (full CRUD plus enable/disable and account connect). */
+/** OAuth connect providers (full CRUD plus discovery and account connect). */
 export function ProvidersPage(): React.ReactElement {
   const t = useIntegrateT();
   const [connectAccountStart] = useAuthoredMutation(IntegrateConnectAccountStart);
@@ -60,7 +60,7 @@ export function ProvidersPage(): React.ReactElement {
     IntegrateConnectAccountComplete,
   );
   const [discover] = useRecordActionMutation<ActionFieldName>(
-    "discoverOauthEndpoints",
+    "discover_oauth_endpoints",
     { defaultMessage: t("integrate.providers.discover.done") },
   );
 
@@ -76,13 +76,13 @@ export function ProvidersPage(): React.ReactElement {
         redirectUri: connectCallbackRedirectUri(),
         next: "/integrate/accounts",
       });
-      const payload = result?.connectAccountStart;
-      if (!payload?.authorizeUrl) {
+      const payload = result?.connect_account_start;
+      if (!payload?.authorize_url) {
         throw new Error(payload?.error ?? t("integrate.providers.connect.startError"));
       }
       if (payload.mode !== "manual") {
         // Redirect-back flow: the browser leaves and the callback page completes.
-        window.location.assign(payload.authorizeUrl);
+        window.location.assign(payload.authorize_url);
         return t("integrate.providers.connect.redirecting");
       }
       // Manual flow: the provider only displays the code (no redirect back), so keep
@@ -93,7 +93,7 @@ export function ProvidersPage(): React.ReactElement {
         body: (
           <span>
             <a
-              href={payload.authorizeUrl}
+              href={payload.authorize_url}
               target="_blank"
               rel="noreferrer"
               className="underline"
@@ -113,15 +113,15 @@ export function ProvidersPage(): React.ReactElement {
       });
       if (!entered) return;
       const { code, state } = parseManualCode(entered.pasted, payload.state ?? "", t);
-      if (!payload.redirectUri) {
+      if (!payload.redirect_uri) {
         throw new Error(t("integrate.providers.connect.stateIncomplete"));
       }
       const completed = await connectAccountComplete({
         code,
         state,
-        redirectUri: payload.redirectUri,
+        redirectUri: payload.redirect_uri,
       });
-      const done = completed?.connectAccountComplete;
+      const done = completed?.connect_account_complete;
       if (done?.error) {
         throw new Error(done.error);
       }
@@ -138,9 +138,9 @@ export function ProvidersPage(): React.ReactElement {
   const providerTypePrefill = useImplPrefill(MODEL, "provider_type");
 
   return (
-    <DataPage model={MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL} placement="inline" routed>
       {providerList}
-      <Form model={MODEL} layout="tabs">
+      <Form resource={MODEL} layout="tabs">
         <Field name="display_name" title />
         <Group label={t("integrate.providers.group.client")} columns={2}>
           <Field
@@ -200,20 +200,7 @@ export function ProvidersPage(): React.ReactElement {
           run={connect}
           visibleWhen={canConnectAccount}
         />
-        <Action
-          id="disable"
-          label={t("integrate.providers.action.disable")}
-          danger
-          set={{ is_enabled: false }}
-          visibleWhen={(record) => record.is_enabled === true}
-        />
-        <Action
-          id="enable"
-          label={t("integrate.providers.action.enable")}
-          set={{ is_enabled: true }}
-          visibleWhen={(record) => record.is_enabled === false}
-        />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

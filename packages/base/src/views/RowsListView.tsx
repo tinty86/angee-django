@@ -5,33 +5,33 @@ import { Glyph } from "../chrome/Glyph";
 import type { DndPayload } from "../lib/dnd";
 import { GalleryView } from "./GalleryView";
 import {
-  type DataToolbarFilterField,
-  type DataToolbarFilterOption,
-  type DataToolbarGroupOption,
+  type ResourceToolbarFilterField,
+  type ResourceToolbarFilterOption,
+  type ResourceToolbarGroupOption,
 } from "../toolbars";
 import type { PagerState } from "../ui/pager";
 import {
-  DataViewProvider,
-  useDataView,
-  useDataViewMaybe,
-  type DataViewContextValue,
-} from "./data-view-context";
+  ResourceViewProvider,
+  useResourceView,
+  useResourceViewMaybe,
+  type ResourceViewContextValue,
+} from "./resource-view-context";
 import {
-  dataViewGroupsEqual,
-  type DataViewGroup,
-} from "./data-view-model";
+  resourceViewGroupsEqual,
+  type ResourceViewGroup,
+} from "./resource-view-model";
 import {
   nextRowTextFilter,
   rowTextFilterValue,
-  useRowsDataViewSurface,
-  type ListViewState,
+  useRowsResourceViewSurface,
+  type ResourceListSnapshot,
   type StringIdRow,
-} from "./data-view-surface";
+} from "./resource-view-surface";
 import {
   FlatListBody,
   type ListColumn,
 } from "./ListInternals";
-import { DataViewListShell } from "./DataViewListShell";
+import { ResourceListFrame } from "./ResourceListFrame";
 import type { ListEmptyState } from "./list-view-types";
 import {
   activeFilterIdsFor,
@@ -49,15 +49,15 @@ import {
 export interface RowsListViewProps<TRow extends StringIdRow = StringIdRow> {
   rows: readonly TRow[];
   columns: readonly ListColumn<TRow>[];
-  filters?: readonly DataToolbarFilterOption[];
-  filterFields?: readonly DataToolbarFilterField[];
-  groupOptions?: readonly DataToolbarGroupOption[];
-  defaultGroup?: DataViewGroup | null;
+  filters?: readonly ResourceToolbarFilterOption[];
+  filterFields?: readonly ResourceToolbarFilterField[];
+  groupOptions?: readonly ResourceToolbarGroupOption[];
+  defaultGroup?: ResourceViewGroup | null;
   pageSize?: number;
   fetching?: boolean;
   error?: Error | null;
   onRowClick?: (row: TRow) => void;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
   rowHref?: (row: TRow) => string;
   emptyMessage?: React.ReactNode;
   emptyState?: ListEmptyState;
@@ -78,7 +78,7 @@ export interface RowsListViewProps<TRow extends StringIdRow = StringIdRow> {
   ) => React.ReactNode;
   /** Make each row/card draggable by returning its dnd payload, or `null`. */
   draggableRow?: (row: TRow) => DndPayload | null;
-  /** Use local data-view state even when rendered inside another data view. */
+  /** Use local resource-view state even when rendered inside another data view. */
   scope?: "inherit" | "local";
 }
 
@@ -95,7 +95,7 @@ type RowLayout = "list" | "grid";
 export function RowsListView<TRow extends StringIdRow = StringIdRow>(
   props: RowsListViewProps<TRow>,
 ): React.ReactElement {
-  const dataView = useDataViewMaybe();
+  const resourceView = useResourceViewMaybe();
   const scope = props.scope ?? "inherit";
   const initialState = React.useMemo(
     () => ({
@@ -103,21 +103,21 @@ export function RowsListView<TRow extends StringIdRow = StringIdRow>(
     }),
     [props.pageSize],
   );
-  if (scope !== "local" && dataView) {
-    return <RowsListViewBody {...props} dataView={dataView} />;
+  if (scope !== "local" && resourceView) {
+    return <RowsListViewBody {...props} resourceView={resourceView} />;
   }
   const providerScope = scope === "local" ? "local" : "route";
   return (
-    <DataViewProvider initialState={initialState} scope={providerScope}>
+    <ResourceViewProvider initialState={initialState} scope={providerScope}>
       <RowsListViewBound {...props} />
-    </DataViewProvider>
+    </ResourceViewProvider>
   );
 }
 
 function RowsListViewBound<TRow extends StringIdRow = StringIdRow>(
   props: RowsListViewProps<TRow>,
 ): React.ReactElement {
-  return <RowsListViewBody {...props} dataView={useDataView()} />;
+  return <RowsListViewBody {...props} resourceView={useResourceView()} />;
 }
 
 function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
@@ -141,13 +141,13 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
   gallery,
   bulkActions,
   draggableRow,
-  dataView,
+  resourceView,
 }: RowsListViewProps<TRow> & {
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
 }): React.ReactElement {
   const emptyContent = emptyState ?? emptyMessage;
   const [layout, setLayout] = React.useState<RowLayout>("list");
-  const handledDefaultGroupRef = React.useRef<DataViewGroup | null>(null);
+  const handledDefaultGroupRef = React.useRef<ResourceViewGroup | null>(null);
   React.useEffect(() => {
     if (!defaultGroup) {
       handledDefaultGroupRef.current = null;
@@ -155,19 +155,19 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
     }
     if (
       handledDefaultGroupRef.current
-      && dataViewGroupsEqual(handledDefaultGroupRef.current, defaultGroup)
+      && resourceViewGroupsEqual(handledDefaultGroupRef.current, defaultGroup)
     ) {
       return;
     }
     handledDefaultGroupRef.current = defaultGroup;
-    if (dataView.state.group === null) dataView.setGroup(defaultGroup);
-  }, [dataView.setGroup, dataView.state.group, defaultGroup]);
+    if (resourceView.state.group === null) resourceView.setGroup(defaultGroup);
+  }, [resourceView.setGroup, resourceView.state.group, defaultGroup]);
 
-  const surface = useRowsDataViewSurface({
+  const surface = useRowsResourceViewSurface({
     rows,
     columns,
     pageSize,
-    dataView,
+    resourceView,
     fetching,
     error,
     onListStateChange,
@@ -193,7 +193,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
     [columns, defaultGroup, groupOptions],
   );
   const groupingEnabled =
-    toolbarGroupOptions.length > 0 || dataView.state.groupStack.length > 0;
+    toolbarGroupOptions.length > 0 || resourceView.state.groupStack.length > 0;
   const inferredFilterFields = React.useMemo(
     () => buildFilterFields(columns, surface.sourceRows, null),
     [columns, surface.sourceRows],
@@ -211,19 +211,19 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
     [explicitFilters, inferredFilterOptions],
   );
   const activeFilterIds = activeFilterIdsFor(
-    dataView.state.filter,
+    resourceView.state.filter,
     filterOptions,
   );
   const customFilterChips = customFilterChipsFor(
-    dataView.state.filter,
+    resourceView.state.filter,
     filterOptions,
     filterFields,
   );
-  const filterText = rowTextFilterValue(dataView.state.filter);
+  const filterText = rowTextFilterValue(resourceView.state.filter);
   const interactive = Boolean(onRowClick || rowHref);
 
   return (
-    <DataViewListShell
+    <ResourceListFrame
       className={className}
       toolbar={{
         actions: toolbarActions,
@@ -231,41 +231,41 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
           <RowLayoutSwitcher layout={layout} onLayoutChange={setLayout} />
         ) : undefined,
         pager: toolbarPager,
-        group: groupingEnabled ? dataView.state.group : undefined,
-        groupStack: groupingEnabled ? dataView.state.groupStack : undefined,
+        group: groupingEnabled ? resourceView.state.group : undefined,
+        groupStack: groupingEnabled ? resourceView.state.groupStack : undefined,
         groupOptions: groupingEnabled ? toolbarGroupOptions : undefined,
         filterOptions,
         filterFields,
         customFilterChips,
-        favorites: dataView.savedFavorites,
+        favorites: resourceView.savedFavorites,
         activeFilterIds,
         filterText,
-        onClearGroup: groupingEnabled ? () => dataView.setGroupStack([]) : undefined,
-        onGroupStackChange: groupingEnabled ? dataView.setGroupStack : undefined,
-        onPageChange: dataView.setPage,
-        onPageSizeChange: dataView.setPageSize,
+        onClearGroup: groupingEnabled ? () => resourceView.setGroupStack([]) : undefined,
+        onGroupStackChange: groupingEnabled ? resourceView.setGroupStack : undefined,
+        onPageChange: resourceView.setPage,
+        onPageSizeChange: resourceView.setPageSize,
         onCustomFilterAdd: (customFilter) =>
-          dataView.setFilter(
-            addCustomFilterToFilter(dataView.state.filter, customFilter),
+          resourceView.setFilter(
+            addCustomFilterToFilter(resourceView.state.filter, customFilter),
           ),
         onCustomFilterRemove: (id) =>
-          dataView.setFilter(removeCustomFilter(dataView.state.filter, id)),
-        onFavoriteSave: dataView.saveFavorite,
-        onFavoriteSelect: dataView.applyFavorite,
+          resourceView.setFilter(removeCustomFilter(resourceView.state.filter, id)),
+        onFavoriteSave: resourceView.saveFavorite,
+        onFavoriteSelect: resourceView.applyFavorite,
         onFilterToggle: (id) =>
-          dataView.setFilter(
-            nextFacetFilter(dataView.state.filter, filterOptions, id),
+          resourceView.setFilter(
+            nextFacetFilter(resourceView.state.filter, filterOptions, id),
           ),
         onFilterTextChange: (value) =>
-          dataView.setFilter(nextRowTextFilter(dataView.state.filter, value)),
+          resourceView.setFilter(nextRowTextFilter(resourceView.state.filter, value)),
       }}
       selection={
         selectable
           ? {
               count: surface.selectedIds.size,
-              onClear: dataView.clearSelectedIds,
+              onClear: resourceView.clearSelectedIds,
               actions: surface.selectedIds.size > 0
-                ? bulkActions?.(surface.selectedIds, dataView.clearSelectedIds)
+                ? bulkActions?.(surface.selectedIds, resourceView.clearSelectedIds)
                 : undefined,
             }
           : undefined
@@ -284,7 +284,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
           onCardClick={onRowClick}
           draggableRow={draggableRow}
           selectedIds={selectable ? surface.selectedIds : undefined}
-          onToggleSelected={selectable ? dataView.toggleSelectedId : undefined}
+          onToggleSelected={selectable ? resourceView.toggleSelectedId : undefined}
           fetching={fetching}
           emptyMessage={emptyMessage}
           emptyState={emptyState}
@@ -305,7 +305,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
           onPageSelectionChange={surface.setPageSelection}
           visibleFields={surface.visibleFields}
           onVisibleFieldToggle={surface.toggleVisibleField}
-          dataView={dataView}
+          resourceView={resourceView}
           interactive={interactive}
           selectable={selectable}
           rowHref={rowHref}
@@ -315,7 +315,7 @@ function RowsListViewBody<TRow extends StringIdRow = StringIdRow>({
           fetching={fetching}
         />
       )}
-    </DataViewListShell>
+    </ResourceListFrame>
   );
 }
 

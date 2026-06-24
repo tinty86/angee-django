@@ -4,27 +4,39 @@
 // must NOT import ListView (ListView depends on this module, not vice versa).
 import * as React from "react";
 import {
+  rowPublicId,
+  type Row,
+} from "@angee/resources";
+import {
+  useList,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
+import {
   getCoreRowModel,
   useReactTable,
   type Column as TableColumn,
   type ColumnDef,
   type Table as TableModel,
   type VisibilityState,
-} from "@tanstack/react-table";
+  } from "@tanstack/react-table";
 import {
-  hasuraWhereFromAngeeFilter,
+  crudFiltersFromFilterRecord,
+  hasuraWhereFromCrudFilters,
+  refineFieldsFromPaths,
+  refineSortersFromAngeeOrder,
+  type AggregateBucket,
+  } from "@angee/refine";
+import {
   useAngeeAggregate,
   useAngeeGroupBy,
-  useResourceList,
-  type AggregateBucket,
-  type ResourceTypeName,
-  type UseResourceListOptions,
-  rowPublicId,
-  type Row,
 } from "@angee/data";
+import type {
+  ModelMetadata,
+} from "@angee/resources";
 import {
-  type ModelMetadata,
-} from "@angee/sdk";
+  refineResourceName,
+} from "@angee/resources";
 import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
@@ -41,16 +53,16 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import type { DataViewContextValue } from "./data-view-context";
+import type { ResourceViewContextValue } from "./resource-view-context";
 import {
-  useResourceListState,
-  type ListViewState,
-} from "./data-view-surface";
+  useResourceRowsSnapshot,
+  type ResourceListSnapshot,
+} from "./resource-view-surface";
 import {
   Filter,
   stableSerialize,
-  type DataViewGroup,
-} from "./data-view-model";
+  type ResourceViewGroup,
+} from "./resource-view-model";
 import {
   groupPagerStatesEqual,
   useExpandedKeys,
@@ -72,6 +84,7 @@ import {
   groupMeasuresFromColumns,
   hasuraMeasuresFromGroupMeasures,
   hasuraGroupDimension,
+  hasuraGroupOrderForDimensions,
   groupFieldLabel,
   measureValue,
   type GroupByDimension,
@@ -83,15 +96,16 @@ import type { ListEmptyContent } from "./list-view-types";
 
 const GROUPED_LIST_ITEM_PAGE_SIZE = 20;
 
-type ListFilter = UseResourceListOptions<ResourceTypeName>["filter"];
-type ListOrder = UseResourceListOptions<ResourceTypeName>["order"];
+type ListFilter = Record<string, unknown>;
+type ListOrder = Record<string, unknown>;
+type RowRecord = BaseRecord & Row;
 
 function formatPagerNumber(value: number): string {
   return value.toLocaleString();
 }
 
 export interface GroupedListBodyProps<TRow extends Row> {
-  model: string;
+  resource: string;
   columns: readonly ColumnDescriptor<TRow>[];
   table: TableModel<TRow>;
   tableColumns: readonly ColumnDef<TRow>[];
@@ -99,24 +113,24 @@ export interface GroupedListBodyProps<TRow extends Row> {
   visibleColumnCount: number;
   visibleFields?: readonly VisibleFieldOption[];
   onVisibleFieldToggle?: (id: string, visible: boolean) => void;
-  dataView: DataViewContextValue;
-  groupStack: readonly DataViewGroup[];
+  resourceView: ResourceViewContextValue;
+  groupStack: readonly ResourceViewGroup[];
   groupDimensions: readonly GroupByDimension[];
   requestedFields: readonly string[];
-  mergedFilter: ListFilter;
+  mergedFilter: ListFilter | undefined;
   sortOrder: ListOrder | undefined;
-  order: UseResourceListOptions<ResourceTypeName>["order"];
+  order: ListOrder | undefined;
   interactive: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   emptyMessage: ListEmptyContent;
   modelMetadata?: ModelMetadata | null;
   onPagerStateChange: (state: GroupPagerState) => void;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
 }
 
 export function GroupedListBody<TRow extends Row>({
-  model,
+  resource,
   columns,
   table,
   tableColumns,
@@ -124,7 +138,7 @@ export function GroupedListBody<TRow extends Row>({
   visibleColumnCount,
   visibleFields = [],
   onVisibleFieldToggle,
-  dataView,
+  resourceView,
   groupStack,
   groupDimensions,
   requestedFields,
@@ -148,13 +162,13 @@ export function GroupedListBody<TRow extends Row>({
     () => hasuraMeasuresFromGroupMeasures(measures, modelMetadata),
     [measures, modelMetadata],
   );
-  const resource = requireDataResource(model, modelMetadata);
+  const dataResource = requireDataResource(resource, modelMetadata ?? null);
   const where = React.useMemo(
-    () => hasuraWhereFromAngeeFilter(mergedFilter),
+    () => hasuraWhereFromCrudFilters(crudFiltersFromFilterRecord(mergedFilter)),
     [mergedFilter],
   );
   const visibleColumns = table.getVisibleLeafColumns();
-  const grandTotal = useAngeeAggregate(resource, {
+  const grandTotal = useAngeeAggregate(dataResource, {
     where,
     measures: queryMeasures,
     enabled: groupDimensions.length > 0 && measures.length > 0,
@@ -184,7 +198,7 @@ export function GroupedListBody<TRow extends Row>({
                   <ListHeaderCell
                     key={header.id}
                     header={header}
-                    dataView={dataView}
+                    resourceView={resourceView}
                     visibleFields={visibleFields}
                     onVisibleFieldToggle={onVisibleFieldToggle}
                     withVisibleFields={index === group.headers.length - 1}
@@ -194,20 +208,20 @@ export function GroupedListBody<TRow extends Row>({
             ))}
           </TableHeader>
           <GroupLevel
-            model={model}
+            resource={resource}
             measures={queryMeasures}
             axes={groupDimensions}
             groups={groupStack}
-            filter={mergedFilter}
+            filter={mergedFilter ?? {}}
             depth={0}
-            page={dataView.state.page}
-            pageSize={dataView.state.pageSize}
+            page={resourceView.state.page}
+            pageSize={resourceView.state.pageSize}
             enabled
             tableColumns={tableColumns}
             visibleColumns={visibleColumns}
             columnVisibility={columnVisibility}
             colSpan={colSpan}
-            dataView={dataView}
+            resourceView={resourceView}
             requestedFields={requestedFields}
             sortOrder={sortOrder}
             order={order}
@@ -236,26 +250,26 @@ export function GroupedListBody<TRow extends Row>({
 }
 
 interface GroupRenderProps<TRow extends Row> {
-  model: string;
+  resource: string;
   tableColumns: readonly ColumnDef<TRow>[];
   visibleColumns: readonly TableColumn<TRow, unknown>[];
   columnVisibility: VisibilityState;
   colSpan: number;
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   requestedFields: readonly string[];
   sortOrder: ListOrder | undefined;
-  order: UseResourceListOptions<ResourceTypeName>["order"];
+  order: ListOrder | undefined;
   interactive: boolean;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   modelMetadata?: ModelMetadata | null;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
 }
 
 interface GroupLevelProps<TRow extends Row> extends GroupRenderProps<TRow> {
   measures: readonly GroupMeasure[];
   axes: readonly GroupByDimension[];
-  groups: readonly DataViewGroup[];
+  groups: readonly ResourceViewGroup[];
   filter: ListFilter;
   depth: number;
   page: number;
@@ -267,7 +281,7 @@ interface GroupLevelProps<TRow extends Row> extends GroupRenderProps<TRow> {
 }
 
 function GroupLevel<TRow extends Row>({
-  model,
+  resource,
   measures,
   axes,
   groups,
@@ -283,7 +297,7 @@ function GroupLevel<TRow extends Row>({
   visibleColumns,
   columnVisibility,
   colSpan,
-  dataView,
+  resourceView,
   requestedFields,
   sortOrder,
   order,
@@ -315,17 +329,22 @@ function GroupLevel<TRow extends Row>({
   const [localPage, setLocalPage] = React.useState(1);
   const levelPage = depth === 0 ? page : localPage;
   const levelEnabled = enabled && dimensions.length > 0;
-  const resource = requireDataResource(model, modelMetadata);
+  const dataResource = requireDataResource(resource, modelMetadata ?? null);
   const where = React.useMemo(
-    () => hasuraWhereFromAngeeFilter(filter),
+    () => hasuraWhereFromCrudFilters(crudFiltersFromFilterRecord(filter)),
     [filter],
   );
   const hasuraDimensions = React.useMemo(
     () => dimensions.map(hasuraGroupDimension),
     [dimensions],
   );
-  const groupAggregation = useAngeeGroupBy(resource, {
+  const orderBy = React.useMemo(
+    () => hasuraGroupOrderForDimensions(hasuraDimensions),
+    [hasuraDimensions],
+  );
+  const groupAggregation = useAngeeGroupBy(dataResource, {
     dimensions: hasuraDimensions,
+    orderBy,
     where,
     measures,
     page: levelPage,
@@ -427,7 +446,7 @@ function GroupLevel<TRow extends Row>({
           <GroupSection
             key={key}
             bodyId={index === 0 ? regionId : undefined}
-            model={model}
+            resource={resource}
             measures={measures}
             bucket={bucket}
             bucketKey={key}
@@ -441,7 +460,7 @@ function GroupLevel<TRow extends Row>({
             visibleColumns={visibleColumns}
             columnVisibility={columnVisibility}
             colSpan={colSpan}
-            dataView={dataView}
+            resourceView={resourceView}
             requestedFields={requestedFields}
             sortOrder={sortOrder}
             order={order}
@@ -599,11 +618,11 @@ interface GroupSectionProps<TRow extends Row> extends GroupRenderProps<TRow> {
   measures: readonly GroupMeasure[];
   bucket: AggregateBucket;
   bucketKey: string;
-  group: DataViewGroup | undefined;
+  group: ResourceViewGroup | undefined;
   parentFilter: ListFilter;
   depth: number;
   remainingAxes: readonly GroupByDimension[];
-  remainingGroups: readonly DataViewGroup[];
+  remainingGroups: readonly ResourceViewGroup[];
   pageSize: number;
   emptyMessage: ListEmptyContent;
   expanded: boolean;
@@ -611,11 +630,11 @@ interface GroupSectionProps<TRow extends Row> extends GroupRenderProps<TRow> {
   bodyId?: string;
   onToggle: (key: string) => void;
   onPageChange: (key: string, page: number) => void;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
 }
 
 function GroupSection<TRow extends Row>({
-  model,
+  resource,
   measures,
   bucket,
   bucketKey,
@@ -630,7 +649,7 @@ function GroupSection<TRow extends Row>({
   visibleColumns,
   columnVisibility,
   colSpan,
-  dataView,
+  resourceView,
   requestedFields,
   sortOrder,
   order,
@@ -735,7 +754,7 @@ function GroupSection<TRow extends Row>({
       </TableBody>
       {branch ? (
         <BranchGroupSection
-          model={model}
+          resource={resource}
           measures={measures}
           axes={remainingAxes}
           groups={remainingGroups}
@@ -747,7 +766,7 @@ function GroupSection<TRow extends Row>({
           tableColumns={tableColumns}
           columnVisibility={columnVisibility}
           colSpan={colSpan}
-          dataView={dataView}
+          resourceView={resourceView}
           requestedFields={requestedFields}
           sortOrder={sortOrder}
           order={order}
@@ -761,7 +780,8 @@ function GroupSection<TRow extends Row>({
         />
       ) : (
         <LeafGroupSection
-          model={model}
+          resource={resource}
+          modelMetadata={modelMetadata}
           bucket={bucket}
           bucketKey={bucketKey}
           label={label}
@@ -772,7 +792,7 @@ function GroupSection<TRow extends Row>({
           tableColumns={tableColumns}
           columnVisibility={columnVisibility}
           colSpan={colSpan}
-          dataView={dataView}
+          resourceView={resourceView}
           requestedFields={requestedFields}
           sortOrder={sortOrder}
           order={order}
@@ -791,18 +811,18 @@ function GroupSection<TRow extends Row>({
 interface BranchGroupSectionProps<TRow extends Row> extends GroupRenderProps<TRow> {
   measures: readonly GroupMeasure[];
   axes: readonly GroupByDimension[];
-  groups: readonly DataViewGroup[];
+  groups: readonly ResourceViewGroup[];
   filter: ListFilter;
   depth: number;
   pageSize: number;
   expanded: boolean;
   regionId: string;
   emptyMessage: ListEmptyContent;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
 }
 
 function BranchGroupSection<TRow extends Row>({
-  model,
+  resource,
   measures,
   axes,
   groups,
@@ -816,7 +836,7 @@ function BranchGroupSection<TRow extends Row>({
   visibleColumns,
   columnVisibility,
   colSpan,
-  dataView,
+  resourceView,
   requestedFields,
   sortOrder,
   order,
@@ -828,7 +848,7 @@ function BranchGroupSection<TRow extends Row>({
 }: BranchGroupSectionProps<TRow>): React.ReactElement | null {
   return (
     <GroupLevel
-      model={model}
+      resource={resource}
       measures={measures}
       axes={axes}
       groups={groups}
@@ -842,7 +862,7 @@ function BranchGroupSection<TRow extends Row>({
       visibleColumns={visibleColumns}
       columnVisibility={columnVisibility}
       colSpan={colSpan}
-      dataView={dataView}
+      resourceView={resourceView}
       requestedFields={requestedFields}
       sortOrder={sortOrder}
       order={order}
@@ -906,11 +926,12 @@ interface LeafGroupSectionProps<TRow extends Row> extends GroupRenderProps<TRow>
   page: number;
   regionId: string;
   onPageChange: (key: string, page: number) => void;
-  onListStateChange?: (state: ListViewState<TRow>) => void;
+  onListStateChange?: (state: ResourceListSnapshot<TRow>) => void;
 }
 
 function LeafGroupSection<TRow extends Row>({
-  model,
+  resource,
+  modelMetadata,
   bucket,
   bucketKey,
   label,
@@ -921,7 +942,7 @@ function LeafGroupSection<TRow extends Row>({
   tableColumns,
   columnVisibility,
   colSpan,
-  dataView,
+  resourceView,
   requestedFields,
   sortOrder,
   order,
@@ -937,24 +958,86 @@ function LeafGroupSection<TRow extends Row>({
     Math.ceil(bucket.count / GROUPED_LIST_ITEM_PAGE_SIZE),
   );
   const currentPage = Math.min(page, pageCount);
-  const list = useResourceList(model, {
-    fields: requestedFields,
-    filter,
-    order: sortOrder ?? order,
-    page: currentPage,
-    pageSize: GROUPED_LIST_ITEM_PAGE_SIZE,
-    enabled: expanded,
+  const dataResource = requireDataResource(resource, modelMetadata ?? null);
+  const activeOrder = sortOrder ?? order;
+  const listMeta = React.useMemo(
+    () => ({ fields: refineFieldsFromPaths(requestedFields) }),
+    [requestedFields],
+  );
+  const refineFilters = React.useMemo(
+    () => crudFiltersFromFilterRecord(filter),
+    [filter],
+  );
+  const refineSorters = React.useMemo(
+    () => refineSortersFromAngeeOrder(activeOrder),
+    [activeOrder],
+  );
+  const run = useList<RowRecord, HttpError>({
+    resource: refineResourceName(dataResource),
+    dataProviderName: dataResource.schemaName,
+    pagination: {
+      mode: "server",
+      currentPage,
+      pageSize: GROUPED_LIST_ITEM_PAGE_SIZE,
+    },
+    filters: refineFilters,
+    sorters: refineSorters,
+    meta: listMeta,
+    queryOptions: {
+      enabled: expanded,
+    },
   });
   const navigationScope = React.useMemo(
     () => ({
       filter,
-      order: sortOrder ?? order,
+      order: activeOrder,
       page: currentPage,
       pageSize: GROUPED_LIST_ITEM_PAGE_SIZE,
     }),
-    [currentPage, filter, order, sortOrder],
+    [activeOrder, currentPage, filter],
   );
-  const listState = useResourceListState<TRow>(list, navigationScope);
+  const list = React.useMemo(() => {
+    const total = run.result.total;
+    const localPageCount = total === undefined
+      ? undefined
+      : Math.max(1, Math.ceil(total / GROUPED_LIST_ITEM_PAGE_SIZE));
+    return {
+      rows: (run.result.data ?? []) as readonly Row[],
+      total,
+      pageCount: localPageCount,
+      page: currentPage,
+      pageSize: GROUPED_LIST_ITEM_PAGE_SIZE,
+      pageInfo: undefined,
+      hasNext: localPageCount !== undefined && currentPage < localPageCount,
+      hasPrev: currentPage > 1,
+      setPage: (next: number) => onPageChange(bucketKey, next),
+      firstPage: () => onPageChange(bucketKey, 1),
+      nextPage: () =>
+        onPageChange(
+          bucketKey,
+          localPageCount
+            ? Math.min(currentPage + 1, localPageCount)
+            : currentPage + 1,
+        ),
+      prevPage: () => onPageChange(bucketKey, Math.max(1, currentPage - 1)),
+      lastPage: () => {
+        if (localPageCount) onPageChange(bucketKey, localPageCount);
+      },
+      fetching: run.query.isFetching,
+      error: errorFromUnknown(run.query.error),
+      refetch: () => {
+        void run.query.refetch();
+      },
+    };
+  }, [
+    bucketKey,
+    currentPage,
+    onPageChange,
+    run.query,
+    run.result.data,
+    run.result.total,
+  ]);
+  const listState = useResourceRowsSnapshot<TRow>(list, navigationScope);
   const handleRecordOpen = React.useCallback(
     (row: TRow) => {
       onListStateChange?.(listState);
@@ -1003,7 +1086,7 @@ function LeafGroupSection<TRow extends Row>({
           <RecordRow
             key={row.id}
             row={row}
-            dataView={dataView}
+            resourceView={resourceView}
             interactive={interactive}
             rowHref={rowHref}
             onRowClick={onRowClick}
@@ -1041,14 +1124,14 @@ function stableBucketKey(bucket: AggregateBucket): string {
 }
 
 function requireDataResource(
-  model: string,
+  resourceId: string,
   metadata: ModelMetadata | null,
 ): NonNullable<ModelMetadata["resource"]> {
-  const resource = metadata?.resource;
-  if (!resource) {
-    throw new Error(`Model "${model}" has no data resource metadata.`);
+  const dataResource = metadata?.resource;
+  if (!dataResource) {
+    throw new Error(`Resource "${resourceId}" has no data resource metadata.`);
   }
-  return resource;
+  return dataResource;
 }
 
 function errorFromUnknown(error: unknown): Error | null {
@@ -1062,7 +1145,7 @@ function errorFromUnknown(error: unknown): Error | null {
 
 function bucketLabel(
   bucket: AggregateBucket,
-  group: DataViewGroup | undefined,
+  group: ResourceViewGroup | undefined,
   metadata: ModelMetadata | null,
 ): string {
   if (!group) return "All records";

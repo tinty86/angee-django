@@ -7,13 +7,13 @@ describe("resource ledger row projector", () => {
     const [row] = resourceRows([
       {
         id: "1",
-        sourceAddon: "angee.storage",
-        sourcePath: "drives.yaml",
+        source_addon: "angee.storage",
+        source_path: "drives.yaml",
         tier: "install",
-        contentHash: "0123456789abcdef0123",
-        targetModel: "storage.drive",
-        targetId: "drv_1",
-        loadedAt: "2026-06-17T09:30:00",
+        content_hash: "0123456789abcdef0123",
+        target_model: "storage.drive",
+        target_id: "drv_1",
+        loaded_at: "2026-06-17T09:30:00",
       },
     ]);
     expect(row?.id).toBe("1");

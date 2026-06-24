@@ -9,7 +9,7 @@ import { SplitPane, SplitPaneHandle, SplitPanes } from "../page";
  * optional `aside` (e.g. a `PreviewPane`). Panes render only when supplied, so
  * `<Explorer>{list}</Explorer>` is a bare content pane and adding `navigator`/
  * `aside` grows it into the storage/knowledge file explorer. Sizes persist per
- * `autoSave` id. This is the `DataPage navigator ⇒ Explorer` shape from the
+ * `autoSave` id. This is the `ResourceList navigator ⇒ Explorer` shape from the
  * page docs, composed from the resizable split primitives.
  */
 export interface ExplorerProps {

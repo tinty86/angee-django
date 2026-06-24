@@ -1,20 +1,35 @@
 import * as React from "react";
-import { useForm, useStore } from "@tanstack/react-form";
+import {
+  refineResourceName,
+  rowPublicId,
+  type Row,
+} from "@angee/resources";
+import {
+  type BaseKey,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
+import { useForm as useRefineForm } from "@refinedev/react-hook-form";
+import { Controller,
+  useWatch } from "react-hook-form";
 import { useBlocker } from "@tanstack/react-router";
 import {
+  refineFieldsFromPaths,
+  } from "@angee/refine";
+import {
   publicIdLabel,
-  rowPublicId,
-  useResourceMutation,
-  useResourceRecord,
-  type Row,
-} from "@angee/data";
+} from "@angee/resources";
+import {
+  useSchemaFieldMetadata,
+  type ModelMetadata,
+} from "@angee/resources";
 import {
   useFormOverride,
-  useModelMetadata,
-  useSchemaFieldMetadata,
   useSlot,
-  type ModelMetadata,
-} from "@angee/sdk";
+  } from "@angee/sdk";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 
 import { Button } from "../ui/button";
 import { ErrorBanner } from "../fragments/ErrorBanner";
@@ -29,7 +44,7 @@ import { SectionEyebrow } from "../ui/section-eyebrow";
 import { Input } from "../ui/input";
 import { Spinner } from "../ui/spinner";
 import { Tabs } from "../ui/tabs";
-import { ControlBand } from "../shell/ControlBand";
+import { ControlBand } from "../layouts/ControlBand";
 import { cn } from "../lib/cn";
 import { SlotOutlet } from "../lib/slot-outlet";
 import { validationErrorsFromError } from "./validation-errors";
@@ -112,7 +127,7 @@ const OVERVIEW_TAB_ID = "overview";
 
 export interface FormViewProps {
   /** Model label rendered by this form, e.g. `"notes.Note"`. */
-  model: string;
+  resource: string;
   /** Record id to edit; `null` or `undefined` renders a create form. */
   id?: string | null;
   /** Fields rendered by the record form. */
@@ -192,11 +207,12 @@ export const FORM_VIEW_RECORD_CHROME_SLOT = "form-view.record-chrome";
 export const FORM_VIEW_SECTIONS_SLOT = "form-view.sections";
 
 /** The model-scoped section-slot name an addon contributes form groups/actions to. */
-export function formViewSectionsSlot(model: string): string {
-  return `${FORM_VIEW_SECTIONS_SLOT}:${model}`;
+export function formViewSectionsSlot(resource: string): string {
+  return `${FORM_VIEW_SECTIONS_SLOT}:${resource}`;
 }
 
 type Values = Record<string, unknown>;
+type RowRecord = BaseRecord & Row;
 
 const TITLE_TEXT_CLASS =
   "block w-full min-w-0 truncate text-28 font-semibold leading-9 text-fg";
@@ -228,7 +244,7 @@ const FULL_FIELD_CLASS = "col-span-full";
 const FORM_COLUMN_CLASS = "mx-auto w-full max-w-[1100px] px-6 sm:px-8";
 
 export function FormView({
-  model,
+  resource,
   id,
   fields,
   groups,
@@ -262,16 +278,16 @@ export function FormView({
   const childFields = parsePageFields(children);
   const childGroups = parsePageGroups(children);
   const childActions = parsePageActions(children);
-  const modelMetadata = useModelMetadata(model);
+  const modelMetadata = useModelMetadata(resource);
   const schemaMetadata = useSchemaFieldMetadata();
-  const formOverride = useFormOverride(model);
+  const formOverride = useFormOverride(resource);
   // Host/addon-contributed record chrome (star/share/…); base ships none.
   const recordChrome = useSlot(FORM_VIEW_RECORD_CHROME_SLOT);
   // Addon-contributed form sections for this model (e.g. the OIDC login tab the
   // iam addon adds to the OAuth client form). Parsed like declared children so
   // their fields join the form's values/selection/submit; each contribution gates
   // its own fields with `showWhen` keyed on the impl value.
-  const sectionEntries = useSlot(formViewSectionsSlot(model));
+  const sectionEntries = useSlot(formViewSectionsSlot(resource));
   const slotGroups = React.useMemo(
     () =>
       sectionEntries.flatMap((entry) =>
@@ -288,7 +304,7 @@ export function FormView({
   );
   const isCreate = id == null;
   // An addon may register a declarative create form for a model (composed into the
-  // runtime). On create it replaces the declared/metadata fields, so DataPage "New"
+  // runtime). On create it replaces the declared/metadata fields, so ResourceList "New"
   // and the relation-picker inline create render the same form for that model. A
   // malformed registration (not an element) reads as no override, not a blank form.
   const overrideNode =
@@ -359,8 +375,8 @@ export function FormView({
     for (const field of formFields) {
       // Project only fields the result type exposes. A write-only input
       // (password, apiKey, secret) is declared on the form but absent from the
-      // SDL read type; selecting it makes the whole detail/return query invalid
-      // and the record loads as null. The SDL metadata owns which fields are
+      // read type; selecting it makes the whole detail/return query invalid
+      // and the record loads as null. Resource metadata owns which fields are
       // readable — skip a declared field once metadata is loaded and lacks it.
       if (modelMetadata && !modelMetadata.fields[field.name]) continue;
       addFieldSelection(paths, field);
@@ -369,34 +385,17 @@ export function FormView({
     return [...paths];
   }, [formFields, modelMetadata, returning]);
 
-  const { record, fetching: loading, refetch } = useResourceRecord(
-    model,
-    id ?? null,
-    {
-      fields: selection,
-      enabled: !isCreate,
-    },
+  const dataResource = modelMetadata?.resource ?? null;
+  const refineFields = React.useMemo(
+    () => refineFieldsFromPaths(selection),
+    [selection],
   );
-  // An existing-record form starts before its query resolves. Keep fields locked
-  // until the record exists so a fast edit cannot be overwritten by the seed reset.
-  const recordUnavailable = !isCreate && record == null;
-  const formReadOnly = React.useMemo(
-    () =>
-      recordUnavailable ||
-      (formFields.length > 0 && formFields.every((field) => field.readOnly)),
-    [formFields, recordUnavailable],
-  );
-  const [mutate, mutation] = useResourceMutation(
-    model,
-    isCreate ? "create" : "update",
-    { fields: selection, enabled: !formReadOnly },
-  );
+  const refineResource = dataResource ? refineResourceName(dataResource) : "";
   const emptyValues = React.useMemo(
     () => emptyDraft(formFields, defaultValues),
     [defaultValues, formFields],
   );
   const [patchedRecord, setPatchedRecord] = React.useState<Row | null>(null);
-  const displayRecord = patchedRecord ?? record;
   // `useForm` re-seeds an untouched form whenever `defaultValues` deep-changes.
   // Source it from this stable baseline ref (reassigned only on record seed,
   // post-save reset, and create reset) so a post-save re-render carrying new
@@ -431,11 +430,71 @@ export function FormView({
       : modelMetadata?.rootFields?.updateFields;
     return fields ? new Set(fields) : null;
   }, [isCreate, modelMetadata]);
-  const form = useForm({
+  const form = useRefineForm<RowRecord, HttpError, Values>({
     defaultValues: baselineValuesRef.current,
-    onSubmit: async ({ value }) => {
+    disableServerSideValidation: true,
+    refineCoreProps: {
+      action: isCreate ? "create" : "edit",
+      resource: refineResource || "__angee_disabled__",
+      id: isCreate ? undefined : (id as BaseKey | undefined),
+      dataProviderName: dataResource?.schemaName,
+      meta: { fields: refineFields },
+      redirect: false,
+      invalidates: isCreate ? ["list", "many"] : ["list", "many", "detail"],
+      queryOptions: {
+        enabled:
+          !isCreate &&
+          id !== null &&
+          id !== undefined &&
+          id !== "" &&
+          dataResource !== null &&
+          Boolean(dataResource.roots.detail),
+      },
+    },
+  });
+  const record = (form.refineCore.query?.data?.data as Row | undefined) ?? null;
+  const displayRecord = patchedRecord ?? record;
+  const loading = form.refineCore.query?.isFetching ?? false;
+  const refetch = React.useCallback(() => {
+    void form.refineCore.query?.refetch();
+  }, [form.refineCore.query]);
+  // An existing-record form starts before its query resolves. Keep fields locked
+  // until the record exists so a fast edit cannot be overwritten by the seed reset.
+  const recordUnavailable = !isCreate && record == null;
+  const formReadOnly = React.useMemo(
+    () =>
+      recordUnavailable ||
+      (formFields.length > 0 && formFields.every((field) => field.readOnly)),
+    [formFields, recordUnavailable],
+  );
+  const formIsDirty = form.formState.isDirty;
+  const formIsDirtyRef = React.useRef(formIsDirty);
+  React.useEffect(() => {
+    formIsDirtyRef.current = formIsDirty;
+  }, [formIsDirty]);
+  useUnsavedChangesNavigationGuard({
+    isDirty: formIsDirty,
+    isDirtyNow: () => formIsDirtyRef.current,
+    readOnly: formReadOnly,
+  });
+
+  const resetForm = React.useCallback(
+    (values: Values) => {
+      form.reset(values);
+      formIsDirtyRef.current = false;
+    },
+    [form],
+  );
+  const submitValues = React.useCallback(
+    async (value: Values) => {
       setSaveError(null);
       setServerFieldErrors({});
+      if (formReadOnly) {
+        throw new Error(`Resource mutation for "${resource}" is disabled.`);
+      }
+      if (!dataResource) {
+        throw new Error(`Resource metadata for "${resource}" is not available.`);
+      }
       if (isCreate) {
         const missing = requiredFieldNames.filter(
           (name) =>
@@ -454,17 +513,17 @@ export function FormView({
       }
       const data = mutationData(value, formFields, {
         baseline: baselineValuesRef.current,
-        id,
         isCreate,
         writableFields: writableFieldNames,
       });
       try {
-        const saved = await mutate({ data });
+        const response = await form.refineCore.onFinish(data);
+        const saved = (response?.data ?? null) as Row | null;
         if (saved) {
           const savedValues = recordToValues(saved, formFields);
           baselineValuesRef.current = savedValues;
           setPatchedRecord(saved);
-          form.reset(savedValues);
+          resetForm(savedValues);
           // A reused, still-mounted create form starts each new record with a clean
           // slug-derive state (no `id` change fires the create-reset effect here).
           if (isCreate) manualSlugFieldsRef.current = new Set();
@@ -484,13 +543,21 @@ export function FormView({
         );
       }
     },
-  });
-  const formIsDirty = useStore(form.store, (state) => state.isDirty);
-  useUnsavedChangesNavigationGuard({
-    isDirty: formIsDirty,
-    isDirtyNow: () => form.store.state.isDirty,
-    readOnly: formReadOnly,
-  });
+    [
+      dataResource,
+      fieldByName,
+      form.refineCore,
+      formFields,
+      formReadOnly,
+      isCreate,
+      onSaved,
+      resetForm,
+      resource,
+      requiredFieldNames,
+      writableFieldNames,
+    ],
+  );
+  const submitForm = form.handleSubmit(submitValues);
 
   // Apply a record action's field patch through the form's own update mutation
   // and re-seed from the result — the same path as a save, so the form shows the
@@ -500,18 +567,22 @@ export function FormView({
       if (id == null) {
         throw new Error("No open record to update.");
       }
-      const saved = await mutate({ data: { id, ...patch } });
+      if (formReadOnly) {
+        throw new Error(`Resource mutation for "${resource}" is disabled.`);
+      }
+      const response = await form.refineCore.onFinish(patch);
+      const saved = (response?.data ?? null) as Row | null;
       if (saved) {
         const savedValues = recordToValues(saved, formFields);
         baselineValuesRef.current = savedValues;
         setPatchedRecord(saved);
-        form.reset(savedValues);
+        resetForm(savedValues);
         setSaveError(null);
         setServerFieldErrors({});
       }
       return saved;
     },
-    [form, formFields, id, mutate],
+    [form.refineCore, formFields, formReadOnly, id, resetForm, resource],
   );
 
   const patchRecord = React.useCallback(
@@ -522,11 +593,11 @@ export function FormView({
       const nextValues = recordToValues(next, formFields);
       setPatchedRecord(next);
       baselineValuesRef.current = nextValues;
-      form.reset(nextValues);
+      resetForm(nextValues);
       setSaveError(null);
       setServerFieldErrors({});
     },
-    [form, formFields, patchedRecord, record],
+    [formFields, patchedRecord, record, resetForm],
   );
 
   React.useEffect(() => {
@@ -546,7 +617,7 @@ export function FormView({
     setSaveError(null);
     setServerFieldErrors({});
     setActiveRecordTab(OVERVIEW_TAB_ID);
-  }, [model, id]);
+  }, [resource, id]);
 
   React.useEffect(() => {
     if (isCreate) {
@@ -555,7 +626,7 @@ export function FormView({
         seededRecordRef.current = null;
         baselineValuesRef.current = emptyValues;
         manualSlugFieldsRef.current = new Set();
-        form.reset(emptyValues);
+        resetForm(emptyValues);
         setSaveError(null);
       }
       return;
@@ -574,10 +645,10 @@ export function FormView({
       seededRecordRef.current = record;
       const recordValues = recordToValues(record, formFields);
       baselineValuesRef.current = recordValues;
-      form.reset(recordValues);
+      resetForm(recordValues);
       setSaveError(null);
     }
-  }, [emptyValues, formFields, isCreate, record, form]);
+  }, [emptyValues, formFields, isCreate, record, resetForm]);
 
   const titleField = titleFieldFor(formFields, modelMetadata);
   const statusField = formFields.find(
@@ -617,25 +688,30 @@ export function FormView({
     () => recordSubtitleParts(displayRecord, id),
     [displayRecord, id],
   );
+  const watchedValues = useWatch({ control: form.control }) as Values | undefined;
+  const currentValues = watchedValues ?? form.getValues();
 
   const renderField = (field: FieldDescriptor): React.ReactNode => (
-    <form.Field key={field.name} name={field.name}>
-      {(api) => (
+    <Controller
+      key={field.name}
+      control={form.control}
+      name={field.name}
+      render={({ field: controller, fieldState }) => (
         <BoundFieldRow
           field={field}
           relation={relationByField.get(field.name)}
-          value={api.state.value}
+          value={controller.value}
           readOnly={fieldReadOnly(field)}
-          errors={api.state.meta.errors}
+          errors={fieldState.error ? [fieldState.error] : []}
           serverMessages={serverFieldErrors[field.name]}
           onChange={(next) => {
             clearServerFieldError(field.name);
-            api.handleChange(next);
+            controller.onChange(next);
             afterFieldChange(field, next);
           }}
         />
       )}
-    </form.Field>
+    />
   );
 
   // Apply a field's `prefill` seeds (the impl-defaults mechanism): picking an impl
@@ -648,7 +724,7 @@ export function FormView({
     const seeds = field.prefill?.(value);
     if (!seeds) return;
     for (const [name, seed] of Object.entries(seeds)) {
-      form.setFieldValue(name, seed);
+      form.setValue(name, seed, { shouldDirty: true, shouldTouch: true });
     }
   }
 
@@ -665,7 +741,10 @@ export function FormView({
       if (fieldWidgetId(slugField) !== "slug") continue;
       if (manualSlugFieldsRef.current.has(slugField.name)) continue;
       if ((slugField.slugFrom ?? defaultSlugSource) !== field.name) continue;
-      form.setFieldValue(slugField.name, slugify(value));
+      form.setValue(slugField.name, slugify(value), {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
     }
   }
 
@@ -735,15 +814,9 @@ export function FormView({
   const overviewBody = (
     <>
       <div className="grid gap-6">
-        {hasConditionalFields ? (
-          <form.Subscribe selector={(state) => state.values}>
-            {(values) =>
-              renderSectionModels(visibleSections(sections, values as Values))
-            }
-          </form.Subscribe>
-        ) : (
-          renderSectionModels(sections)
-        )}
+        {hasConditionalFields
+          ? renderSectionModels(visibleSections(sections, currentValues))
+          : renderSectionModels(sections)}
       </div>
 
       {bodyField ? (
@@ -751,22 +824,24 @@ export function FormView({
           {bodyField.label ? (
             <SectionEyebrow as="span">{bodyField.label}</SectionEyebrow>
           ) : null}
-          <form.Field name={bodyField.name}>
-            {(api) => (
+          <Controller
+            control={form.control}
+            name={bodyField.name}
+            render={({ field: controller, fieldState }) => (
               <BodyFieldControl
                 field={bodyField}
-                value={api.state.value}
+                value={controller.value}
                 readOnly={fieldReadOnly(bodyField)}
-                errors={api.state.meta.errors}
+                errors={fieldState.error ? [fieldState.error] : []}
                 serverMessages={serverFieldErrors[bodyField.name]}
                 onChange={(next) => {
                   clearServerFieldError(bodyField.name);
-                  api.handleChange(next);
+                  controller.onChange(next);
                   afterFieldChange(bodyField, next);
                 }}
               />
             )}
-          </form.Field>
+          />
         </section>
       ) : null}
     </>
@@ -785,75 +860,55 @@ export function FormView({
     <form
       className={cn("min-h-full bg-sheet", className)}
       onSubmit={(event) => {
-        event.preventDefault();
-        void form.handleSubmit();
+        void submitForm(event);
       }}
     >
-      <form.Subscribe
-        selector={(state) => ({
-          canSubmit: state.canSubmit,
-          isDirty: state.isDirty,
-          isSubmitting: state.isSubmitting,
-        })}
-      >
-        {(state) => {
-          const showActions = isCreate || state.isDirty;
-          const isSaving = mutation.fetching || state.isSubmitting;
-          // The toolbar is the single home for record commands: host-provided
-          // left commands (delete) and Save/Discard, the record's domain actions,
-          // then record chrome (star/share) and host-provided right chrome
-          // (pager/view-switcher). Under a shell the band portals out of the
-          // <form>, so Save submits via handleSubmit(), not native type="submit".
-          return (
-            <ControlBand className={state.isDirty ? "bg-brand-soft" : undefined}>
-              <div className="flex min-w-0 items-center gap-2">
-                {toolbarStartNode}
-                {showActions ? (
-                  <div className="flex items-center gap-2">
-                    {state.isDirty ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={isSaving}
-                        onClick={() => form.reset()}
-                      >
-                        Discard
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      loading={isSaving}
-                      disabled={!state.canSubmit}
-                      onClick={() => {
-                        void form.handleSubmit();
-                      }}
-                    >
-                      {submitLabel ?? (isCreate ? "Create" : "Save")}
-                    </Button>
-                  </div>
-                ) : null}
-                {declaredActions.length > 0 || visibleDeleteAction !== undefined ? (
-                  <RecordActionBar
-                    record={displayRecord ?? null}
-                    actions={declaredActions}
-                    applyPatch={applyPatch}
-                    reload={reload}
-                    deleteAction={visibleDeleteAction}
-                  />
-                ) : null}
-              </div>
-              <div className="min-w-2 flex-1" />
-              <div className="flex min-w-0 items-center gap-2">
-                {!isCreate ? <SlotOutlet entries={recordChrome} /> : null}
-                {toolbar}
-              </div>
-            </ControlBand>
-          );
-        }}
-      </form.Subscribe>
+      <ControlBand className={formIsDirty ? "bg-brand-soft" : undefined}>
+        <div className="flex min-w-0 items-center gap-2">
+          {toolbarStartNode}
+          {isCreate || formIsDirty ? (
+            <div className="flex items-center gap-2">
+              {formIsDirty ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={form.refineCore.mutation.isPending || form.formState.isSubmitting}
+                  onClick={() => resetForm(baselineValuesRef.current)}
+                >
+                  Discard
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                loading={form.refineCore.mutation.isPending || form.formState.isSubmitting}
+                disabled={formReadOnly}
+                onClick={() => {
+                  void submitForm();
+                }}
+              >
+                {submitLabel ?? (isCreate ? "Create" : "Save")}
+              </Button>
+            </div>
+          ) : null}
+          {declaredActions.length > 0 || visibleDeleteAction !== undefined ? (
+            <RecordActionBar
+              record={displayRecord ?? null}
+              actions={declaredActions}
+              applyPatch={applyPatch}
+              reload={reload}
+              deleteAction={visibleDeleteAction}
+            />
+          ) : null}
+        </div>
+        <div className="min-w-2 flex-1" />
+        <div className="flex min-w-0 items-center gap-2">
+          {!isCreate ? <SlotOutlet entries={recordChrome} /> : null}
+          {toolbar}
+        </div>
+      </ControlBand>
       <div
         className={cn(
           FORM_COLUMN_CLASS,
@@ -867,27 +922,29 @@ export function FormView({
           <div className="flex items-start gap-4 max-[900px]:flex-col max-[900px]:items-stretch">
             <div className="min-w-0 flex-1 self-start">
               {titleField ? (
-                <form.Field name={titleField.name}>
-                  {(api) => (
+                <Controller
+                  control={form.control}
+                  name={titleField.name}
+                  render={({ field: controller }) => (
                     fieldReadOnly(titleField) ? (
                       <h1 className={TITLE_TEXT_CLASS}>
-                        {titleText(api.state.value)}
+                        {titleText(controller.value)}
                       </h1>
                     ) : (
                       <Input
-                        value={String(api.state.value ?? "")}
+                        value={String(controller.value ?? "")}
                         placeholder={titleField.placeholder ?? "Untitled"}
                         aria-label={fieldAriaLabel(titleField)}
                         className={cn(TITLE_TEXT_CLASS, TITLE_INPUT_CLASS)}
                         onChange={(event) => {
                           clearServerFieldError(titleField.name);
-                          api.handleChange(event.currentTarget.value);
+                          controller.onChange(event.currentTarget.value);
                           afterFieldChange(titleField, event.currentTarget.value);
                         }}
                       />
                     )
                   )}
-                </form.Field>
+                />
               ) : (
                 <h1 className="truncate text-28 font-semibold leading-9 text-fg">
                   Record
@@ -904,19 +961,21 @@ export function FormView({
             </div>
             {statusField ? (
               <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3 max-[900px]:w-full">
-                <form.Field name={statusField.name}>
-                  {(api) => (
+                <Controller
+                  control={form.control}
+                  name={statusField.name}
+                  render={({ field: controller }) => (
                     <FieldWidget
                       field={statusField}
-                      value={api.state.value}
+                      value={controller.value}
                       readOnly={fieldReadOnly(statusField)}
                       onChange={(next) => {
-                        api.handleChange(next);
+                        controller.onChange(next);
                         afterFieldChange(statusField, next);
                       }}
                     />
                   )}
-                </form.Field>
+                />
               </div>
             ) : null}
           </div>

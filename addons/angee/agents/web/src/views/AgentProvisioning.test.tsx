@@ -1,8 +1,23 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  cleanup,
+  render,
+  screen } from "@testing-library/react";
+import type { ReactElement,
+  ReactNode } from "react";
+import { afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi } from "vitest";
+import {
+  ModelMetadataProvider,
+} from "@angee/resources";
+import type {
+  SchemaFieldMetadata,
+} from "@angee/resources";
 
 import { enAgentsMessages } from "../i18n";
 import { AgentProvisioning } from "./AgentProvisioning";
@@ -37,14 +52,17 @@ vi.mock("@angee/sdk", async (importOriginal) => {
   };
 });
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@refinedev/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@refinedev/core")>();
   return {
     ...actual,
-    useResourceRecord: () => ({
-      fetching: false,
-      record: mocks.record,
-      refetch: mocks.refetch,
+    useOne: () => ({
+      result: mocks.record,
+      query: {
+        isFetching: false,
+        error: null,
+        refetch: mocks.refetch,
+      },
     }),
   };
 });
@@ -112,7 +130,7 @@ describe("AgentProvisioning", () => {
   test("shows the saved provisioning error even without recorded runtime names", () => {
     const intro = enAgentsMessages["agents.provisioning.intro"] ?? "";
 
-    render(<AgentProvisioning agentId="agent-1" pane="service" />);
+    renderProvisioning(<AgentProvisioning agentId="agent-1" pane="service" />);
 
     expect(screen.queryByRole("heading", { name: "Service" })).toBeNull();
     expect(screen.getByText(String(mocks.record.last_error))).toBeTruthy();
@@ -126,7 +144,7 @@ describe("AgentProvisioning", () => {
     mocks.record.service = "agent-demo-agent";
     const logsTitle = enAgentsMessages["agents.provisioning.serviceLogs"] ?? "Service logs";
 
-    render(<AgentProvisioning agentId="agent-1" pane="service" />);
+    renderProvisioning(<AgentProvisioning agentId="agent-1" pane="service" />);
 
     expect(screen.getByTestId("service-row").textContent).toBe("agent-demo-agent");
     expect(screen.queryByText("Service actions")).toBeNull();
@@ -154,7 +172,7 @@ describe("AgentProvisioning", () => {
     };
     const logsTitle = enAgentsMessages["agents.provisioning.workspaceLogs"] ?? "Workspace logs";
 
-    render(<AgentProvisioning agentId="agent-1" pane="workspace" />);
+    renderProvisioning(<AgentProvisioning agentId="agent-1" pane="workspace" />);
 
     expect(screen.getByTestId("workspace-row").textContent).toBe("agent-demo-workspace");
     expect(screen.queryByText(logsTitle)).toBeNull();
@@ -163,3 +181,43 @@ describe("AgentProvisioning", () => {
     expect(screen.getByText("+2 / -1")).toBeTruthy();
   });
 });
+
+const AGENT_METADATA: SchemaFieldMetadata = {
+  types: {
+    AgentType: {
+      typeName: "AgentType",
+      fields: {},
+      rootFields: {
+        detail: "agent",
+        list: "agents",
+      },
+      resource: {
+        schemaName: "console",
+        modelLabel: "agents.Agent",
+        appLabel: "agents",
+        modelName: "Agent",
+        publicIdField: "id",
+        roots: { detail: "agent", list: "agents" },
+        typeNames: {
+          node: "AgentType",
+          filter: "AgentFilter",
+          order: "AgentOrder",
+        },
+        capabilities: ["detail", "list"],
+        filterFields: [],
+        orderFields: [],
+        aggregateFields: [],
+        groupByFields: [],
+        relationAxes: [],
+      },
+    },
+  },
+};
+
+function renderProvisioning(children: ReactElement): ReturnType<typeof render> {
+  return render(
+    <ModelMetadataProvider metadata={AGENT_METADATA}>
+      {children}
+    </ModelMetadataProvider>,
+  );
+}

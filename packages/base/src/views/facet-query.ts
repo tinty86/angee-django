@@ -1,16 +1,17 @@
 import {
-  hasuraWhereFromAngeeFilter,
+  crudFiltersFromFilterRecord,
+  hasuraWhereFromCrudFilters,
   type FacetRequestSpec,
-} from "@angee/data";
+} from "@angee/refine";
 
 import {
   Filter,
-  type DataViewFilter,
-} from "./data-view-model";
+  type ResourceViewFilter,
+} from "./resource-view-model";
 
 export function facetRequestSpec(
   spec: FacetRequestSpec,
-  activeFilter: DataViewFilter | undefined,
+  activeFilter: ResourceViewFilter | undefined,
   neutralizeFilterFields: readonly string[],
 ): FacetRequestSpec {
   const where = facetWhere(activeFilter, neutralizeFilterFields);
@@ -18,11 +19,13 @@ export function facetRequestSpec(
 }
 
 function facetWhere(
-  activeFilter: DataViewFilter | undefined,
+  activeFilter: ResourceViewFilter | undefined,
   neutralizeFilterFields: readonly string[],
 ): Record<string, unknown> | undefined {
   if (activeFilter === undefined) return undefined;
-  return hasuraWhereFromAngeeFilter(
-    Filter.from(activeFilter).withoutFields(neutralizeFilterFields),
+  return hasuraWhereFromCrudFilters(
+    crudFiltersFromFilterRecord(
+      Filter.from(activeFilter).withoutFields(neutralizeFilterFields),
+    ),
   );
 }

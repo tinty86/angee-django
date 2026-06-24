@@ -5,19 +5,19 @@ import { addonRows, fieldRows, modelRows } from "./rows";
 
 const iamModel: PlatformModelData = {
   label: "iam.user",
-  appLabel: "iam",
-  modelName: "User",
-  verboseName: "user",
-  dbTable: "iam_user",
-  addonId: "angee.iam",
-  addonLabel: "iam",
-  resourceType: "auth/user",
-  fieldCount: 2,
-  relationCount: 1,
-  dependsOn: ["iam.user"],
+  app_label: "iam",
+  model_name: "User",
+  verbose_name: "user",
+  db_table: "iam_user",
+  addon_id: "angee.iam",
+  addon_label: "iam",
+  resource_type: "auth/user",
+  field_count: 2,
+  relation_count: 1,
+  depends_on: ["iam.user"],
   fields: [
-    { name: "id", attname: "id", kind: "BigAutoField", isRelation: false, relationTarget: null, addon: "iam" },
-    { name: "created_by", attname: "created_by_id", kind: "ForeignKey", isRelation: true, relationTarget: "iam.user", addon: "iam" },
+    { name: "id", attname: "id", kind: "BigAutoField", is_relation: false, relation_target: null, addon: "iam" },
+    { name: "created_by", attname: "created_by_id", kind: "ForeignKey", is_relation: true, relation_target: "iam.user", addon: "iam" },
   ],
 };
 
@@ -28,11 +28,11 @@ describe("platform row projectors", () => {
       label: id.split(".").pop() ?? id,
       namespace: "angee",
       kind: "required",
-      modelCount: 0,
-      fieldCount: 0,
-      resourceCount: 0,
-      dependsOn: deps,
-      modelLabels: [],
+      model_count: 0,
+      field_count: 0,
+      resource_count: 0,
+      depends_on: deps,
+      model_labels: [],
     });
     const rows = addonRows([
       addon("angee.iam", ["angee.resources", "angee.graphql", "django.contrib.auth"]),
@@ -48,7 +48,7 @@ describe("platform row projectors", () => {
   });
 
   test("modelRows blanks a missing resource type", () => {
-    const [row] = modelRows([{ ...iamModel, resourceType: null }]);
+    const [row] = modelRows([{ ...iamModel, resource_type: null }]);
     expect(row?.id).toBe("iam.user");
     expect(row?.resourceType).toBe("");
   });

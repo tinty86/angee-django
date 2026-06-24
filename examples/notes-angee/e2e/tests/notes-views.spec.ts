@@ -5,7 +5,7 @@ import { NotesPage } from "../pages/notes-page";
 const UPDATED_DAY_URL = "/notes?group=updated_at:day";
 
 /**
- * The data-view features added this cycle: column sortability gated to orderable
+ * The resource-view features added this cycle: column sortability gated to orderable
  * fields, date-bucket drill-down, column-aligned aggregate totals, and the
  * toolbar rendered as a flush control band.
  * Group-specific assertions opt into Updated·Day through the URL.
@@ -94,7 +94,7 @@ test.describe("notes views — sort, date drill-down, aggregates, control band",
   test("the list toolbar renders as a flush control band under the breadcrumb", async ({ page }) => {
     const notes = new NotesPage(page);
     await notes.gotoReady();
-    // the New-note action lives in the shell control band (the view toolbar),
+    // the New-note action lives in the layout control band (the view toolbar),
     // not inside a card in the content area.
     await expect(
       notes.controlBand.getByRole("button", { name: /New note/i }),

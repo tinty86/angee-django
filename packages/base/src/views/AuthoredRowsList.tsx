@@ -3,15 +3,17 @@ import {
   useAuthoredRows,
   type AuthoredQueryOptions,
   type AuthoredRowsOptions,
-  type DocumentData,
-  type TypedDocumentNode,
-} from "@angee/sdk";
+} from "@angee/data";
+import type {
+  DocumentData,
+  TypedDocumentNode,
+} from "@angee/refine";
 
 import {
   RowsListView,
   type RowsListViewProps,
 } from "./RowsListView";
-import type { StringIdRow } from "./data-view-surface";
+import type { StringIdRow } from "./resource-view-surface";
 
 export interface AuthoredRowsListProps<
   TDocument extends TypedDocumentNode<unknown, any>,

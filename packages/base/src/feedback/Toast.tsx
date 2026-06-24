@@ -37,6 +37,7 @@ export interface ToastApi {
   success: (options: ToastShortcutOptions) => string;
   warning: (options: ToastShortcutOptions) => string;
   danger: (options: ToastShortcutOptions) => string;
+  close: (id?: string) => void;
 }
 
 export interface ToastProviderProps {
@@ -74,7 +75,7 @@ export function ToastProvider({
 
 /** Must be rendered under ToastProvider so Base UI can provide the toast manager. */
 export function useToast(): ToastApi {
-  const { add } = BaseToast.useToastManager<ToastData>();
+  const { add, close } = BaseToast.useToastManager<ToastData>();
 
   const addToast = useCallback(
     (options: ToastOptions): string => {
@@ -108,8 +109,9 @@ export function useToast(): ToastApi {
         addToast({ ...options, tone: "warning" }),
       danger: (options: ToastShortcutOptions) =>
         addToast({ ...options, tone: "danger" }),
+      close,
     });
-  }, [addToast]);
+  }, [addToast, close]);
 }
 
 function ToastViewport(): ReactElement {

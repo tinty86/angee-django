@@ -83,7 +83,7 @@ export const PopoverViewport = BasePopover.Viewport;
 // Thin re-export. Base UI's controlled `open`/`onOpenChange` owns the open/close
 // transition; we no longer intercept the press here. The old rc.0-era capture-phase
 // defer (swallow the trusted press, re-dispatch via `setTimeout`) is gone — heavy
-// view-state work is de-prioritized at its owner (a React transition in the data-view
+// view-state work is de-prioritized at its owner (a React transition in the resource-view
 // store), not by re-timing the trigger.
 export const PopoverTrigger = BasePopover.Trigger;
 

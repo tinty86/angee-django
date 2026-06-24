@@ -1,5 +1,5 @@
 // @angee/base — the single rendered binding for @angee/sdk. Styled primitives,
-// data-bound views, app shell, and the auth surface, composed onto base-ui +
+// data-bound views, app layout, and the auth surface, composed onto base-ui +
 // tailwind-variants. The SDK stays headless; rendering lives here.
 
 // Styling foundation + the drag-and-drop seam.
@@ -13,6 +13,7 @@ export {
   readDndPayload,
   dragHasAcceptedType,
   dragHasFiles,
+  statusLabel,
   useDraggable,
   dragSourceProps,
   useDropTarget,
@@ -45,7 +46,7 @@ export {
   type PageInfo,
   type PageResult,
   type Row,
-} from "@angee/data";
+} from "@angee/resources";
 
 // i18n — the base namespace translator.
 export { useBaseT, enBaseMessages } from "./i18n";
@@ -59,17 +60,8 @@ export {
   type BaseAddon,
   type BaseAddonRoute,
   type CreateAppInput,
-  type ShellConfig,
+  type RefineLayoutConfig,
 } from "./createApp";
-export {
-  breadcrumbItemsFromMatches,
-  routeChromeFromMatches,
-  useRouteBreadcrumbItems,
-  useRouteChrome,
-  type BreadcrumbItem,
-  type RouteBreadcrumbFactory,
-  type RouteChromeStaticData,
-} from "./route-static-data";
 
 // Data-bound views.
 export * from "./views";
@@ -89,10 +81,9 @@ export * from "./page";
 export * from "./layouts";
 export * from "./fragments";
 
-// App shell (chrome) and auth surface.
+// App layout (chrome) and auth surface.
 export * from "./chrome";
 export * from "./communication";
-export * from "./shell";
 export * from "./auth";
 export * from "./preview";
 

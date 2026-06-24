@@ -5,7 +5,6 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useMenus } from "@angee/sdk";
 
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
@@ -32,6 +31,7 @@ import {
   MenuTree,
   pathMatchesTarget,
 } from "./menu-tree";
+import { useChromeMenuItems } from "./refine-menu";
 
 export interface AppChooserItem {
   id: string;
@@ -76,7 +76,7 @@ export function AppChooser({
   const resolvedSearchPlaceholder = searchPlaceholder ?? t("chrome.searchApps");
   const resolvedTitle = title ?? t("chrome.switchApp");
   const resolvedTriggerLabel = triggerLabel ?? t("chrome.switchApp");
-  const runtimeItems = useMenus() as readonly ChromeMenuItem[];
+  const runtimeItems = useChromeMenuItems();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });

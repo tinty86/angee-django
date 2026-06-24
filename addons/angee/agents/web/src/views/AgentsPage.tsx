@@ -1,33 +1,47 @@
 import * as React from "react";
+import type {
+  Row,
+} from "@angee/resources";
+import {
+  useOne,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
 import {
   Action,
   Button,
   Card,
   CardContent,
   Column,
-  DataPage,
+  ResourceList,
   Field,
   Form,
   Glyph,
   Group,
-  GroupListView,
+  ListView,
   List,
   errorMessage,
   useRecordActionMutation,
   useToast,
   type RecordToolbarContext,
   type RecordTabDescriptor,
-  type Row,
-} from "@angee/base";
+  } from "@angee/base";
+import {
+  useModelMetadata,
+} from "@angee/resources";
+import {
+  refineFieldsFromPaths,
+} from "@angee/refine";
 import {
   useActionMutation,
-  useModelInvalidation,
-} from "@angee/sdk";
-import { useResourceRecord } from "@angee/data";
+} from "@angee/data";
+import {
+  refineResourceName,
+} from "@angee/resources";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useAgentsT } from "../i18n";
-import { agentLifecycle, agentRuntime, stringField } from "./agent-record";
+import { agentRuntime, booleanField, stringField } from "./agent-record";
 import { AgentChat } from "./AgentChat";
 import { AgentProvisioning } from "./AgentProvisioning";
 import { type AgentChatView } from "../documents";
@@ -40,27 +54,15 @@ const MODEL = "agents.Agent";
 const CHAT_FIELDS = ["id", "runtime_status", "service"] as const;
 
 function canProvisionAgent(record: Row | null): boolean {
-  // Provision a fresh or torn-down agent, or retry one whose last operation errored.
-  return (
-    agentRuntime(record) === "ERROR" ||
-    ["DRAFT", "DEPROVISIONED"].includes(agentLifecycle(record))
-  );
+  return booleanField(record, "can_provision");
 }
 
 function canDeprovisionAgent(record: Row | null): boolean {
-  return (
-    ["PROVISIONING", "READY", "DEPROVISIONING"].includes(agentLifecycle(record)) ||
-    stringField(record, "workspace") !== "" ||
-    stringField(record, "service") !== ""
-  );
+  return booleanField(record, "can_deprovision");
 }
 
 function canDeleteAgent(record: Row): boolean {
-  return (
-    !["PROVISIONING", "READY", "DEPROVISIONING"].includes(agentLifecycle(record)) &&
-    stringField(record, "workspace") === "" &&
-    stringField(record, "service") === ""
-  );
+  return booleanField(record, "can_delete");
 }
 
 /**
@@ -71,7 +73,22 @@ function canDeleteAgent(record: Row): boolean {
  */
 function AgentChatPanel({ agentId }: { agentId: string }): React.ReactElement {
   const t = useAgentsT();
-  const { record } = useResourceRecord(MODEL, agentId, { fields: [...CHAT_FIELDS] });
+  const metadata = useModelMetadata(MODEL);
+  const resource = metadata?.resource ?? null;
+  const fields = React.useMemo(
+    () => refineFieldsFromPaths([...CHAT_FIELDS]),
+    [],
+  );
+  const run = useOne<RowRecord, HttpError>({
+    resource: resource ? refineResourceName(resource) : "__angee_disabled__",
+    id: agentId,
+    dataProviderName: resource?.schemaName,
+    meta: { fields },
+    queryOptions: {
+      enabled: Boolean(agentId) && resource !== null,
+    },
+  });
+  const record = (run.result as Row | undefined) ?? null;
   const running =
     agentRuntime(record) === "RUNNING" && stringField(record, "service") !== "";
   if (!running) {
@@ -87,43 +104,40 @@ function AgentChatPanel({ agentId }: { agentId: string }): React.ReactElement {
   return <AgentChat agentId={agentId} view={view} />;
 }
 
+type RowRecord = BaseRecord & Row;
+
 function AgentProvisionToolbarAction({
-  patchRecord,
   record,
   recordId,
   reload,
 }: RecordToolbarContext): React.ReactElement | null {
   const t = useAgentsT();
   const toast = useToast();
-  const invalidateAgent = useModelInvalidation(MODEL);
   const [optimisticProvisioning, setOptimisticProvisioning] = React.useState(false);
-  const [provisionAgent, provisionState] = useActionMutation<ActionFieldName>("provisionAgent");
-  const lifecycle = agentLifecycle(record);
+  const [provisionAgent, provisionState] = useActionMutation<ActionFieldName>(
+    "provision_agent",
+    { invalidateModels: [MODEL] },
+  );
+  const canProvision = canProvisionAgent(record);
 
   React.useEffect(() => {
-    if (lifecycle !== "PROVISIONING") setOptimisticProvisioning(false);
-  }, [lifecycle]);
+    if (canProvision) setOptimisticProvisioning(false);
+  }, [canProvision]);
 
   if (!recordId) return null;
-  // Keep the button mounted in its loading state while the mutation is in flight: the
-  // optimistic status patch has already flipped the record out of a provisionable state,
-  // so gating only on canProvisionAgent/optimistic would unmount it before the spinner shows.
-  if (!provisionState.fetching && (optimisticProvisioning || !canProvisionAgent(record))) {
+  // Keep the button mounted in its loading state while the mutation is in flight.
+  if (!provisionState.fetching && (optimisticProvisioning || !canProvision)) {
     return null;
   }
 
   const handleProvision = async (): Promise<void> => {
-    const previousLifecycle = stringField(record, "lifecycle");
     setOptimisticProvisioning(true);
-    patchRecord({ lifecycle: "PROVISIONING" });
     try {
       const message = await provisionAgent(recordId);
-      invalidateAgent();
       reload();
       if (message) toast.success({ title: message });
     } catch (caught) {
       setOptimisticProvisioning(false);
-      if (previousLifecycle) patchRecord({ lifecycle: previousLifecycle });
       toast.danger({
         title: t("agents.provisioning.provisionFailed"),
         description: errorMessage(caught, t("agents.provisioning.actionFailed")),
@@ -146,7 +160,7 @@ function AgentProvisionToolbarAction({
 }
 
 // Translated copy resolved at a component's render top level (where hooks belong)
-// and threaded into the plain `agentDataPage` builder below.
+// and threaded into the plain `agentResourceListPage` builder below.
 interface AgentLabels {
   modelTemplates: string;
   provisioningInputs: string;
@@ -171,16 +185,15 @@ function useAgentLabels(): AgentLabels {
 // ``is_template`` to match. A real agent renders into the operator; a template is a
 // reusable blueprint, so only the Agents detail carries the Provision/Chat record
 // tabs beside the Overview form.
-function AgentDataPage({
+function AgentResourceListPage({
   isTemplate,
 }: {
   isTemplate: boolean;
 }): React.ReactElement {
   const labels = useAgentLabels();
   const t = useAgentsT();
-  const invalidateAgent = useModelInvalidation(MODEL);
-  const [deprovision] = useRecordActionMutation<ActionFieldName>("deprovisionAgent", {
-    afterSuccess: invalidateAgent,
+  const [deprovision] = useRecordActionMutation<ActionFieldName>("deprovision_agent", {
+    invalidateModels: [MODEL],
     missingRecordMessage: t("agents.provisioning.saveFirst"),
   });
   const recordTabs: readonly RecordTabDescriptor[] | undefined = isTemplate
@@ -203,23 +216,35 @@ function AgentDataPage({
         },
       ];
   return (
-    <DataPage
-      model={MODEL}
+    <ResourceList
+      resource={MODEL}
       placement="inline"
       routed
       filter={{ is_template: { exact: isTemplate } }}
       createDefaults={{ is_template: isTemplate }}
       recordTabs={recordTabs}
-      returning={isTemplate ? undefined : ["lifecycle", "runtime_status", "workspace", "service"]}
+      returning={
+        isTemplate
+          ? undefined
+          : [
+              "lifecycle",
+              "runtime_status",
+              "workspace",
+              "service",
+              "can_provision",
+              "can_deprovision",
+              "can_delete",
+            ]
+      }
     >
-      <List model={MODEL} list={GroupListView} pageSize={50}>
+      <List resource={MODEL} pageSize={50}>
         <Column field="name" />
         <Column field="lifecycle" widget="statusBadge" />
         <Column field="runtime_status" widget="colorDot" />
         <Column field="updated_at" />
       </List>
       <Form
-        model={MODEL}
+        resource={MODEL}
         deleteVisibleWhen={isTemplate ? undefined : canDeleteAgent}
         toolbarStart={
           isTemplate
@@ -267,14 +292,14 @@ function AgentDataPage({
           <Field name="is_template" />
         </Group>
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }
 
 export function AgentsPage(): React.ReactElement {
-  return <AgentDataPage isTemplate={false} />;
+  return <AgentResourceListPage isTemplate={false} />;
 }
 
 export function TemplatesPage(): React.ReactElement {
-  return <AgentDataPage isTemplate />;
+  return <AgentResourceListPage isTemplate />;
 }

@@ -122,12 +122,12 @@ export function parsePageTabs(children: ReactNode): TabDescriptor[] {
   });
 }
 
-export function requirePageModel(
+export function requirePageResource(
   component: string,
-  model: string | undefined,
+  resource: string | undefined,
 ): string {
-  if (model) return model;
-  throw new Error(`${component} requires a model when rendered standalone.`);
+  if (resource) return resource;
+  throw new Error(`${component} requires a resource when rendered standalone.`);
 }
 
 export function requirePageColumns<

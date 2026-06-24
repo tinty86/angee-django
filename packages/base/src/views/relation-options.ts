@@ -1,10 +1,23 @@
 import * as React from "react";
 import {
-  useResourceList,
   rowPublicId,
-  type UseResourceListResult,
   type Row,
-} from "@angee/data";
+} from "@angee/resources";
+import {
+  useList,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
+import {
+  DEFAULT_PAGE_SIZE,
+  refineFieldsFromPaths,
+  } from "@angee/refine";
+import {
+  refineResourceName,
+} from "@angee/resources";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 
 import type { RelationOption } from "../widgets/RelationField";
 import type { RelationFieldInfo } from "./model-metadata-defaults";
@@ -18,8 +31,13 @@ export interface RelationOptionsConfig {
   sort?: boolean;
 }
 
+export interface RelationOptionsList {
+  fetching: boolean;
+  refetch: () => void;
+}
+
 export interface RelationOptionsResult {
-  list: UseResourceListResult;
+  list: RelationOptionsList;
   options: readonly RelationOption[];
 }
 
@@ -34,14 +52,41 @@ export function useRelationOptions(
     sort = false,
   } = config;
   const labelField = optionLabelField ?? relation?.labelField ?? "id";
-  const list = useResourceList(relation?.model ?? "", {
-    fields: [labelField],
-    pageSize,
-    enabled: enabled && relation !== null,
+  const metadata = useModelMetadata(relation?.resource ?? "");
+  const resource = metadata?.resource ?? null;
+  const fields = React.useMemo(
+    () => refineFieldsFromPaths([labelField]),
+    [labelField],
+  );
+  const run = useList<RowRecord, HttpError>({
+    resource: resource ? refineResourceName(resource) : "__angee_disabled__",
+    dataProviderName: resource?.schemaName,
+    pagination: {
+      mode: "server",
+      currentPage: 1,
+      pageSize: pageSize ?? DEFAULT_PAGE_SIZE,
+    },
+    meta: { fields },
+    queryOptions: {
+      enabled: enabled && relation !== null && resource !== null,
+    },
   });
+  const rows = React.useMemo(
+    () => (run.result.data ?? []) as readonly Row[],
+    [run.result.data],
+  );
+  const list = React.useMemo<RelationOptionsList>(
+    () => ({
+      fetching: run.query.isFetching,
+      refetch: () => {
+        void run.query.refetch();
+      },
+    }),
+    [run.query],
+  );
   const options = React.useMemo(
-    () => relationOptionsFromRows(list.rows, labelField, { sort }),
-    [labelField, list.rows, sort],
+    () => relationOptionsFromRows(rows, labelField, { sort }),
+    [labelField, rows, sort],
   );
   return React.useMemo(() => ({ list, options }), [list, options]);
 }
@@ -60,6 +105,8 @@ export function relationOptionsFromRows(
     ? [...options].sort((left, right) => left.label.localeCompare(right.label))
     : options;
 }
+
+type RowRecord = BaseRecord & Row;
 
 function relationOptionLabel(
   row: Row,

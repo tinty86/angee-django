@@ -6,19 +6,19 @@ import { graphql, type DocumentType } from "@angee/gql/console";
 
 export const ResourceLedger = graphql(`
   query ResourceLedger {
-    resourceLedger {
+    resource_ledger {
       id
-      sourceAddon
-      sourcePath
+      source_addon
+      source_path
       tier
-      contentHash
-      targetModel
-      targetId
-      loadedAt
+      content_hash
+      target_model
+      target_id
+      loaded_at
     }
   }
 `);
 
 /** One ledger row, derived from the `ResourceLedger` query result. */
 export type ResourceLedgerRowData =
-  DocumentType<typeof ResourceLedger>["resourceLedger"][number];
+  DocumentType<typeof ResourceLedger>["resource_ledger"][number];

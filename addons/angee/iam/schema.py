@@ -49,7 +49,7 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import SqidPublicIdentity, instance_from_public_id
-from angee.graphql.data import hasura_resource, pin_snake_wire_names
+from angee.graphql.data import hasura_resource
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
@@ -152,14 +152,11 @@ class CurrentUserType(AngeeNode):
         """Return direct REBAC role grants for the current session user.
 
         There is no synchronous dataloader idiom in this repo. Keep role refs on
-        the singleton ``currentUser`` path instead of exposing an N+1 admin-list
+        the singleton ``current_user`` path instead of exposing an N+1 admin-list
         field that can reveal another user's roles.
         """
 
         return sorted(str(role) for role in rebac_roles_of(cast(Any, self)))
-
-
-pin_snake_wire_names(CurrentUserType)
 
 
 @strawberry_django.type(Group)

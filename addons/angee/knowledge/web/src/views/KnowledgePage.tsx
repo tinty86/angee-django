@@ -13,8 +13,7 @@ import {
   useScopedTreeExplorer,
   type WikilinkResolver,
 } from "@angee/base";
-import { useResourceRecord } from "@angee/data";
-import { useAuthoredQuery } from "@angee/sdk";
+import { useAuthoredQuery } from "@angee/data";
 
 import {
   KnowledgePage as KnowledgePageQuery,
@@ -37,8 +36,6 @@ import { NewPageControl, type NewPageKind } from "./NewPageControl";
 import { PageEditor } from "./PageEditor";
 import { useKnowledgeT } from "../i18n";
 
-/** The Django model label backing the page crumb. */
-const PAGE_MODEL = "knowledge.Page";
 // One safety-capped read each of vaults/pages; the browser scopes the set
 // client-side so the navigator and reader share one fetch.
 const KNOWLEDGE_LIST_LIMIT = 500;
@@ -183,7 +180,7 @@ export function KnowledgePage(): ReactElement {
           explorer.setRootId(value);
           closePage();
         }}
-        create={{ model: "Vault" }}
+        create={{ resource: "Vault" }}
         onCreated={(id) => {
           void vaultsQuery.refetch();
           explorer.setRootId(id);
@@ -245,16 +242,4 @@ export function KnowledgePage(): ReactElement {
       </Explorer>
     </WikilinkProvider>
   );
-}
-
-/** The record crumb for `/knowledge/$id` — the page's title. */
-export function PageCrumb({ id }: { id: string }): ReactElement {
-  const t = useKnowledgeT();
-  const { fetching, record } = useResourceRecord(PAGE_MODEL, id || null, {
-    enabled: id !== "",
-    fields: ["title"],
-  });
-  const title = typeof record?.title === "string" ? record.title.trim() : "";
-  if (fetching) return <>…</>;
-  return <>{title || t("knowledge.page.crumbFallback")}</>;
 }

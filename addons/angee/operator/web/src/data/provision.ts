@@ -10,7 +10,7 @@ import {
   WORKSPACE_STATUS_SUBSCRIPTION,
 } from "./documents.daemon";
 import { useMemo } from "react";
-import type { DocumentData } from "@angee/sdk";
+import type { DocumentData } from "@angee/refine";
 
 import {
   useOperatorAction,

@@ -3,11 +3,11 @@ import { type ReactElement } from "react";
 import {
   AuthoredRowsList,
   Code,
-  type DataToolbarFilterField,
-  type DataToolbarGroupOption,
+  type ResourceToolbarFilterField,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
-import type { DocumentData } from "@angee/sdk";
+import type { DocumentData } from "@angee/refine";
 
 import { ResourceLedger } from "../documents";
 import { useResourcesT } from "../i18n";
@@ -16,7 +16,7 @@ import { resourceRows, type ResourceRow } from "../lib/rows";
 type ResourceLedgerResult = DocumentData<typeof ResourceLedger>;
 
 function selectRows(data: ResourceLedgerResult | undefined): readonly ResourceRow[] {
-  return resourceRows(data?.resourceLedger ?? []);
+  return resourceRows(data?.resource_ledger ?? []);
 }
 
 function columns(t: (key: string) => string): readonly ListColumn<ResourceRow>[] {
@@ -54,7 +54,7 @@ function columns(t: (key: string) => string): readonly ListColumn<ResourceRow>[]
   ];
 }
 
-function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+function groupOptions(t: (key: string) => string): readonly ResourceToolbarGroupOption[] {
   return [
     {
       id: "sourceAddon",
@@ -77,7 +77,7 @@ function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOpti
   ];
 }
 
-function filterFields(t: (key: string) => string): readonly DataToolbarFilterField[] {
+function filterFields(t: (key: string) => string): readonly ResourceToolbarFilterField[] {
   return [
     {
       id: "sourceAddon",

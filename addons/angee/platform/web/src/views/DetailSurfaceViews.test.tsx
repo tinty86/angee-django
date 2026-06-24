@@ -138,7 +138,7 @@ describe("platform detail surfaces", () => {
     platformMocks.usePlatformModel.mockReturnValue({
       dependedBy: ["notes.Attachment"],
       fetching: false,
-      model: {
+      resource: {
         addonId: "example.notes",
         addonLabel: "Notes",
         appLabel: "notes",

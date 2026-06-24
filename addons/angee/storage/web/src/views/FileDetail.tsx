@@ -1,13 +1,12 @@
 import { type ReactElement } from "react";
 
 import { Button, Field, FormView, Glyph, Group, buttonVariants } from "@angee/base";
-import { useResourceRecord } from "@angee/data";
 
 import { useStorageT } from "../i18n";
 import type { StorageFile } from "../data/documents";
 import { useFileActions } from "../data/use-file-actions";
 
-/** The Django model label backing the file record form and its crumb. */
+/** The Django model label backing the file record form. */
 const FILE_MODEL = "storage.File";
 // created/updated feed the FormView record subtitle (id · created · updated);
 // they ride along in the record query but stay out of the field grid.
@@ -38,7 +37,7 @@ export function FileDetail({
 
   return (
     <FormView
-      model={FILE_MODEL}
+      resource={FILE_MODEL}
       id={file.id}
       returning={[...SUBTITLE_FIELDS]}
       submitLabel={t("storage.file.rename")}
@@ -91,17 +90,4 @@ export function FileDetail({
       </Group>
     </FormView>
   );
-}
-
-/** The record crumb for `/storage/$id` — the file's title (or stored filename). */
-export function FileCrumb({ id }: { id: string }): ReactElement {
-  const t = useStorageT();
-  const { fetching, record } = useResourceRecord(FILE_MODEL, id || null, {
-    enabled: id !== "",
-    fields: ["title", "filename"],
-  });
-  const title = typeof record?.title === "string" ? record.title.trim() : "";
-  const filename = typeof record?.filename === "string" ? record.filename : "";
-  if (fetching) return <>…</>;
-  return <>{title || filename || t("storage.file.crumbFallback")}</>;
 }

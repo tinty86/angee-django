@@ -1,17 +1,19 @@
-// Kanban board rendering for the data-view surface. It consumes precomputed rows
+// Kanban board rendering for the resource-view surface. It consumes precomputed rows
 // from its parent and remains fetch-free.
 import * as React from "react";
-import type { Row as TableRowModel } from "@tanstack/react-table";
+import type {
+  Row as TableRowModel } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
-import type { Row } from "@angee/data";
+import type { Row,
+} from "@angee/resources";
 
 import { useBaseT } from "../i18n";
 import { type Tone } from "../lib/tones";
 import { CountBadge } from "../ui/badge";
 import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { StatusDot } from "../ui/status-icon";
-import type { DataViewContextValue } from "./data-view-context";
-import type { DataViewGroup } from "./data-view-model";
+import type { ResourceViewContextValue } from "./resource-view-context";
+import type { ResourceViewGroup } from "./resource-view-model";
 import {
   LIST_VIEW_SCROLL_BUDGET,
   ListCellContent,
@@ -34,7 +36,7 @@ const BOARD_CARD_SHELL_CLASS =
 export interface BoardViewProps<TRow extends Row = Row> {
   columns: readonly ColumnDescriptor<TRow>[];
   groups: readonly RowGroup<TRow>[];
-  dataView: DataViewContextValue;
+  resourceView: ResourceViewContextValue;
   selectedIds: ReadonlySet<string>;
   interactive: boolean;
   fetching?: boolean;
@@ -51,7 +53,7 @@ export function BoardView<TRow extends Row = Row>(
   const {
     columns,
     groups,
-    dataView,
+    resourceView,
     fetching = false,
     emptyMessage,
     rowHref,
@@ -64,7 +66,7 @@ export function BoardView<TRow extends Row = Row>(
       columns={columns}
       fetching={fetching}
       groups={groups}
-      groupStack={dataView.state.groupStack}
+      groupStack={resourceView.state.groupStack}
       emptyMessage={emptyMessage}
       rowHref={rowHref}
       onRowClick={onRowClick}
@@ -92,7 +94,7 @@ function BoardRows<TRow extends Row>({
   columns: readonly ColumnDescriptor<TRow>[];
   fetching: boolean;
   groups: readonly RowGroup<TRow>[];
-  groupStack: readonly DataViewGroup[];
+  groupStack: readonly ResourceViewGroup[];
   emptyMessage: ListEmptyContent;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
@@ -207,7 +209,7 @@ function BoardLane<TRow extends Row>({
 }: {
   columns: readonly ColumnDescriptor<TRow>[];
   group: RowGroup<TRow>;
-  groupStack: readonly DataViewGroup[];
+  groupStack: readonly ResourceViewGroup[];
   groupFields: ReadonlySet<string>;
   rowHref?: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
@@ -274,7 +276,7 @@ function BoardRowCard<TRow extends Row>({
   const [titleColumn, ...detailColumns] = cardColumns;
   return (
     <article className="grid gap-2 rounded-lg border border-border-subtle bg-sheet p-3 shadow-xs transition hover:-translate-y-0.5 hover:border-border hover:shadow-md">
-      <BoardCardShell
+      <BoardCardFrame
         href={href}
         onClick={onRowClick ? () => onRowClick(row.original) : undefined}
       >
@@ -296,7 +298,7 @@ function BoardRowCard<TRow extends Row>({
             </span>
           </div>
         ))}
-      </BoardCardShell>
+      </BoardCardFrame>
       {actions ? (
         <footer className="flex items-center justify-end gap-2 border-t border-border-subtle pt-2">
           {actions}
@@ -306,7 +308,7 @@ function BoardRowCard<TRow extends Row>({
   );
 }
 
-function BoardCardShell({
+function BoardCardFrame({
   href,
   onClick,
   children,
@@ -337,7 +339,7 @@ function BoardCardShell({
 
 function laneDotTone<TRow extends Row>(
   group: RowGroup<TRow>,
-  groupStack: readonly DataViewGroup[],
+  groupStack: readonly ResourceViewGroup[],
   columns: readonly ColumnDescriptor<TRow>[],
 ): Tone | undefined {
   const groupField = groupStack[group.depth]?.field;

@@ -3,7 +3,7 @@ import { parseAsString, useQueryState } from "nuqs";
 
 import {
   RowsListView,
-  type DataToolbarGroupOption,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
 
@@ -48,7 +48,7 @@ function columns(t: (key: string) => string): readonly ListColumn<FieldRow>[] {
   ];
 }
 
-function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+function groupOptions(t: (key: string) => string): readonly ResourceToolbarGroupOption[] {
   return [
     { id: "addon", label: t("platform.col.addon"), group: { field: "addon" }, type: "value" },
     { id: "model", label: t("platform.col.model"), group: { field: "model" }, type: "value" },

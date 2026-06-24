@@ -30,7 +30,7 @@ export interface DatePopoverProps {
 }
 
 /**
- * The shared date-picker shell: a bordered trigger showing the value, plus a
+ * The shared date-picker layout: a bordered trigger showing the value, plus a
  * popover holding the single-select `Calendar` and a `footer` slot. The owner of
  * the trigger/popover/calendar chrome the `date` and `datetime` widgets both
  * used; each widget keeps its own value formatting (`onSelectDate`) and footer

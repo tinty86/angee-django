@@ -16,6 +16,7 @@ export interface BaseMenuItem extends MenuItem {
   children?: readonly BaseMenuItem[];
   parent?: string;
   parentId?: string;
+  appRoot?: boolean;
   description?: string;
   group?: ChromeMenuGroup;
   sidebar?: boolean;
@@ -28,6 +29,7 @@ export interface ChromeMenuItem extends ComposedMenuItem {
   children?: readonly ChromeMenuItem[];
   parent?: string;
   parentId?: string;
+  appRoot?: boolean;
   description?: string;
   group?: ChromeMenuGroup;
   sidebar?: boolean;
@@ -59,6 +61,7 @@ export class ChromeMenuNode implements ChromeMenuItem {
   parent?: string;
   parentId?: string;
   parentNode?: ChromeMenuNode;
+  appRoot?: boolean;
   description?: string;
   group?: ChromeMenuGroup;
   sidebar?: boolean;
@@ -148,10 +151,12 @@ export class MenuTree {
   }
 
   railMenuItems(): readonly ChromeMenuNode[] {
-    return this.roots.filter((item) => {
+    const targetedRoots = this.roots.filter((item) => {
       if (CHROME_MENU_PARENT_IDS.has(item.id)) return false;
       return Boolean(item.target);
     });
+    const appRoots = targetedRoots.filter((item) => item.appRoot);
+    return appRoots.length ? appRoots : targetedRoots;
   }
 
   /**

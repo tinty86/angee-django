@@ -37,12 +37,12 @@ export function addonRows(addons: readonly PlatformAddonData[]): AddonRow[] {
   const ids = new Set(addons.map((addon) => addon.id));
   const dependedBy = new Map<string, string[]>();
   for (const addon of addons) {
-    for (const dep of addon.dependsOn) {
+    for (const dep of addon.depends_on) {
       if (ids.has(dep)) pushInto(dependedBy, dep, addon.id);
     }
   }
   return addons.map((addon) => {
-    const dependsOnList = sortedUnique(addon.dependsOn.filter((dep) => ids.has(dep)));
+    const dependsOnList = sortedUnique(addon.depends_on.filter((dep) => ids.has(dep)));
     const dependedByList = sortedUnique(dependedBy.get(addon.id) ?? []);
     return {
       id: addon.id,
@@ -50,9 +50,9 @@ export function addonRows(addons: readonly PlatformAddonData[]): AddonRow[] {
       fullName: addon.id,
       namespace: addon.namespace,
       kind: addon.kind,
-      models: addon.modelCount,
-      fields: addon.fieldCount,
-      resources: addon.resourceCount,
+      models: addon.model_count,
+      fields: addon.field_count,
+      resources: addon.resource_count,
       dependsOn: dependsOnList.join(", "),
       dependsOnList,
       dependedBy: dependedByList.join(", "),
@@ -79,20 +79,20 @@ export interface ModelRow extends Record<string, unknown> {
 export function modelRows(models: readonly PlatformModelData[]): ModelRow[] {
   const dependedBy = new Map<string, string[]>();
   for (const model of models) {
-    for (const dep of model.dependsOn) pushInto(dependedBy, dep, model.label);
+    for (const dep of model.depends_on) pushInto(dependedBy, dep, model.label);
   }
   return models.map((model) => {
-    const dependsOnList = sortedUnique(model.dependsOn);
+    const dependsOnList = sortedUnique(model.depends_on);
     const dependedByList = sortedUnique(dependedBy.get(model.label) ?? []);
     return {
       id: model.label,
-      model: model.modelName,
-      addon: model.addonLabel,
-      addonId: model.addonId,
-      table: model.dbTable,
-      fields: model.fieldCount,
-      relations: model.relationCount,
-      resourceType: model.resourceType ?? "",
+      model: model.model_name,
+      addon: model.addon_label,
+      addonId: model.addon_id,
+      table: model.db_table,
+      fields: model.field_count,
+      relations: model.relation_count,
+      resourceType: model.resource_type ?? "",
       dependsOn: dependsOnList.join(", "),
       dependsOnList,
       dependedBy: dependedByList.join(", "),
@@ -120,9 +120,9 @@ export function fieldRows(models: readonly PlatformModelData[]): FieldRow[] {
         field: field.name,
         model: model.label,
         addon: field.addon,
-        addonId: model.addonId,
+        addonId: model.addon_id,
         kind: field.kind,
-        relationTarget: field.relationTarget ?? "",
+        relationTarget: field.relation_target ?? "",
       });
     }
   }
@@ -136,9 +136,9 @@ export function modelGraphNodes(
   return models.map((model) => ({
     id: model.label,
     kind: "model",
-    title: model.modelName,
+    title: model.model_name,
     code: model.label,
-    detail: model.addonLabel,
+    detail: model.addon_label,
     highlighted: highlightId ? model.label === highlightId : undefined,
   }));
 }
@@ -151,6 +151,6 @@ export function modelGraphEdges(
     source: edge.source,
     target: edge.target,
     kind: edge.kind,
-    label: edge.fieldName,
+    label: edge.field_name,
   }));
 }

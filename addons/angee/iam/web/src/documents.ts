@@ -5,7 +5,7 @@
 // (available connections, login start/complete) lives in `./documents.public`.
 
 import { graphql, type DocumentType } from "@angee/gql/console";
-import type { DocumentVariables } from "@angee/sdk";
+import type { DocumentVariables } from "@angee/refine";
 
 export const IamRoles = graphql(`
   query IamRoles {
@@ -26,25 +26,25 @@ export const IamOverview = graphql(`
       label
       description
     }
-    iamOverview(peekLimit: $peekLimit) {
-      userCount
-      roleCount
-      grantCount
-      relationshipCount
-      privilegedGrantCount
-      unassignedUserCount
+    iam_overview(peek_limit: $peekLimit) {
+      user_count
+      role_count
+      grant_count
+      relationship_count
+      privileged_grant_count
+      unassigned_user_count
       namespaces {
         namespace
-        roleCount
-        grantCount
+        role_count
+        grant_count
       }
-      privilegedGrants {
-        principalId
-        principalType
-        principalLabel
+      privileged_grants {
+        principal_id
+        principal_type
+        principal_label
         role
       }
-      unassignedUsers {
+      unassigned_users {
         id
         username
         email
@@ -75,11 +75,11 @@ export const IamUsers = graphql(`
 export const IamGrants = graphql(`
   query IamGrants($pagination: OffsetPaginationInput) {
     grants(pagination: $pagination) {
-      totalCount
+      total_count
       results {
-        principalId
-        principalType
-        principalLabel
+        principal_id
+        principal_type
+        principal_label
         role
       }
     }
@@ -88,26 +88,26 @@ export const IamGrants = graphql(`
 
 export const IamRelationships = graphql(`
   query IamRelationships(
-    $resourceType: String
-    $subjectType: String
+    $resource_type: String
+    $subject_type: String
     $relation: String
     $pagination: OffsetPaginationInput
   ) {
     relationships(
-      resourceType: $resourceType
-      subjectType: $subjectType
+      resource_type: $resource_type
+      subject_type: $subject_type
       relation: $relation
       pagination: $pagination
     ) {
-      totalCount
+      total_count
       results {
-        resourceType
-        resourceId
+        resource_type
+        resource_id
         relation
-        subjectType
-        subjectId
-        subjectRelation
-        caveatName
+        subject_type
+        subject_id
+        subject_relation
+        caveat_name
       }
     }
   }
@@ -115,11 +115,11 @@ export const IamRelationships = graphql(`
 
 export const IamRebacSchema = graphql(`
   query IamRebacSchema {
-    rebacSchema {
-      resourceType
+    rebac_schema {
+      resource_type
       relations {
         name
-        allowedSubjectTypes
+        allowed_subject_types
       }
       permissions {
         name
@@ -132,14 +132,14 @@ export const IamRebacSchema = graphql(`
 `);
 
 export const IamRevokeRole = graphql(`
-  mutation IamRevokeRole($principalId: String!, $role: String!) {
-    revokeRole(principalId: $principalId, role: $role)
+  mutation IamRevokeRole($principal_id: String!, $role: String!) {
+    revoke_role(principal_id: $principal_id, role: $role)
   }
 `);
 
 export const IamGrantRole = graphql(`
-  mutation IamGrantRole($principalId: String!, $role: String!) {
-    grantRole(principalId: $principalId, role: $role)
+  mutation IamGrantRole($principal_id: String!, $role: String!) {
+    grant_role(principal_id: $principal_id, role: $role)
   }
 `);
 
@@ -161,14 +161,14 @@ export type IAMRelationship =
 
 export type IAMRelationshipsVariables = DocumentVariables<typeof IamRelationships>;
 
-/** One `rebacSchema` resource entry, derived from the `IamRebacSchema` selection. */
+/** One `rebac_schema` resource entry, derived from the `IamRebacSchema` selection. */
 export type IAMResourceSchema =
-  DocumentType<typeof IamRebacSchema>["rebacSchema"][number];
+  DocumentType<typeof IamRebacSchema>["rebac_schema"][number];
 
-/** A relation within a `rebacSchema` resource. */
+/** A relation within a `rebac_schema` resource. */
 export type IAMRelationSchema = IAMResourceSchema["relations"][number];
 
-/** A permission within a `rebacSchema` resource. */
+/** A permission within a `rebac_schema` resource. */
 export type IAMPermissionSchema = IAMResourceSchema["permissions"][number];
 
 export type IAMRevokeRoleVariables = DocumentVariables<typeof IamRevokeRole>;

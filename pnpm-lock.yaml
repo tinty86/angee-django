@@ -35,12 +35,21 @@ importers:
       '@angee/operator':
         specifier: workspace:*
         version: link:../../operator/web
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../../../../packages/resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
       '@assistant-ui/react':
         specifier: ^0.12.0
         version: 0.12.28(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@zed-industries/agent-client-protocol':
         specifier: ^0.4.5
         version: 0.4.5
@@ -87,12 +96,15 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
-      urql:
-        specifier: ^5.0.0
-        version: 5.0.2(@urql/core@6.0.1(graphql@16.14.0))(react@19.2.6)
     devDependencies:
       '@tanstack/react-router':
         specifier: ^1.170.8
@@ -127,6 +139,15 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../../../../packages/resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
@@ -170,9 +191,18 @@ importers:
       '@angee/data':
         specifier: workspace:*
         version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../../../../packages/resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.6)
@@ -241,6 +271,12 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
@@ -302,6 +338,9 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
@@ -333,6 +372,12 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
@@ -373,6 +418,12 @@ importers:
       '@angee/base':
         specifier: workspace:*
         version: link:../../../../packages/base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
@@ -413,9 +464,18 @@ importers:
       '@angee/data':
         specifier: workspace:*
         version: link:../../../../packages/data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../../../../packages/refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../../../../packages/resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../../../../packages/sdk
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@vidstack/react':
         specifier: ^1.12.13
         version: 1.15.6(@types/react@19.2.15)(react@19.2.6)
@@ -545,7 +605,7 @@ importers:
       '@angee/platform':
         specifier: workspace:*
         version: link:../../../addons/angee/platform/web
-      '@angee/resources':
+      '@angee/resources-addon':
         specifier: workspace:*
         version: link:../../../addons/angee/resources/web
       '@angee/sdk':
@@ -607,6 +667,40 @@ importers:
         specifier: ^4.1.7
         version: 4.1.7(@types/node@25.9.1)(happy-dom@20.9.0)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
+  packages/app:
+    dependencies:
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../resources
+      '@angee/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.15
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.15)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(happy-dom@20.9.0)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
   packages/base:
     dependencies:
       '@angee/data':
@@ -615,6 +709,12 @@ importers:
       '@angee/logo-react':
         specifier: ^0.2.1
         version: 0.2.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -651,9 +751,12 @@ importers:
       '@refinedev/core':
         specifier: ^5.0.12
         version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@tanstack/react-form':
-        specifier: ^1.32.0
-        version: 1.33.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@refinedev/react-hook-form':
+        specifier: ^5.0.4
+        version: 5.0.4(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react-hook-form@7.80.0(react@19.2.6))(react@19.2.6)
+      '@refinedev/react-table':
+        specifier: ^6.0.1
+        version: 6.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@tanstack/react-table@8.21.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -681,6 +784,9 @@ importers:
       react-day-picker:
         specifier: ^10.0.1
         version: 10.0.1(@types/react@19.2.15)(react@19.2.6)
+      react-hook-form:
+        specifier: ^7.80.0
+        version: 7.80.0(react@19.2.6)
       react-json-view-lite:
         specifier: ^2.5.0
         version: 2.5.0(react@19.2.6)
@@ -709,6 +815,9 @@ importers:
         specifier: ^1.4.0
         version: 1.4.1(typescript@6.0.3)
     devDependencies:
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.6)
       '@tanstack/react-router':
         specifier: ^1.170.8
         version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -745,43 +854,25 @@ importers:
 
   packages/data:
     dependencies:
-      '@angee/sdk':
+      '@angee/refine':
         specifier: workspace:*
-        version: link:../sdk
-      '@hookform/resolvers':
-        specifier: ^5.4.0
-        version: 5.4.0(react-hook-form@7.80.0(react@19.2.6))
+        version: link:../refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@refinedev/core':
         specifier: ^5.0.12
         version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@refinedev/hasura':
-        specifier: ^7.0.1
-        version: 7.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(gql-query-builder@3.8.0)(graphql-request@5.2.0(graphql@15.10.2))(graphql-ws@5.16.2(graphql@15.10.2))
-      '@refinedev/react-hook-form':
-        specifier: ^5.0.4
-        version: 5.0.4(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react-hook-form@7.80.0(react@19.2.6))(react@19.2.6)
-      '@refinedev/react-table':
-        specifier: ^6.0.1
-        version: 6.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@tanstack/react-table@8.21.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.6)
       graphql:
         specifier: ^15.10.2
         version: 15.10.2
-      graphql-request:
-        specifier: ^5.2.0
-        version: 5.2.0(graphql@15.10.2)
-      graphql-ws:
-        specifier: ^5.16.2
-        version: 5.16.2(graphql@15.10.2)
-      react-hook-form:
-        specifier: ^7.80.0
-        version: 7.80.0(react@19.2.6)
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+      i18next:
+        specifier: ^26.0.0
+        version: 26.3.0(typescript@6.0.3)
     devDependencies:
-      '@tanstack/react-router':
-        specifier: ^1.170.8
-        version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.15
@@ -816,17 +907,61 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/refine:
+    dependencies:
+      '@graphql-typed-document-node/core':
+        specifier: ^3.2.0
+        version: 3.2.0(graphql@16.14.0)
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@refinedev/hasura':
+        specifier: ^7.0.1
+        version: 7.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(gql-query-builder@3.8.0)(graphql-request@5.2.0(graphql@16.14.0))(graphql-ws@6.0.8(graphql@16.14.0)(ws@8.21.0))
+    devDependencies:
+      '@tanstack/react-router':
+        specifier: ^1.170.8
+        version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.15
+      graphql:
+        specifier: ^16.14.0
+        version: 16.14.0
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(happy-dom@20.9.0)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/resources:
+    dependencies:
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.15
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(happy-dom@20.9.0)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
   packages/sdk:
     dependencies:
-      '@urql/core':
-        specifier: ^6.0.1
-        version: 6.0.1(graphql@16.14.0)
-      '@urql/exchange-graphcache':
-        specifier: ^9.0.0
-        version: 9.0.0(@urql/core@6.0.1(graphql@16.14.0))(graphql@16.14.0)
-      graphql-ws:
-        specifier: ^5.16.2
-        version: 5.16.2(graphql@16.14.0)
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../data
     devDependencies:
       '@testing-library/react':
         specifier: ^16.1.0
@@ -840,33 +975,36 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.2.15)
-      graphql:
-        specifier: ^16.14.0
-        version: 16.14.0
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
-      i18next:
-        specifier: ^26.0.0
-        version: 26.3.0(typescript@6.0.3)
       react:
         specifier: ^19.0.0
         version: 19.2.6
       react-dom:
         specifier: ^19.0.0
         version: 19.2.6(react@19.2.6)
-      urql:
-        specifier: ^5.0.0
-        version: 5.0.2(@urql/core@6.0.1(graphql@16.14.0))(react@19.2.6)
 
   packages/storybook:
     dependencies:
       '@angee/base':
         specifier: workspace:*
         version: link:../base
+      '@angee/data':
+        specifier: workspace:*
+        version: link:../data
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@angee/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@refinedev/core':
+        specifier: ^5.0.12
+        version: 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       nuqs:
         specifier: ^2.5.0
         version: 2.8.9(@tanstack/react-router@1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
@@ -910,6 +1048,34 @@ importers:
       vite:
         specifier: ^8.0.14
         version: 8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0)
+
+  packages/ui:
+    dependencies:
+      '@angee/refine':
+        specifier: workspace:*
+        version: link:../refine
+      '@angee/resources':
+        specifier: workspace:*
+        version: link:../resources
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.15
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.15)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(happy-dom@20.9.0)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
 packages:
 
@@ -1605,11 +1771,6 @@ packages:
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
     peerDependencies:
       graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
-
-  '@hookform/resolvers@5.4.0':
-    resolution: {integrity: sha512-EIsqr/t/qbinPIhGjMdtvutIN1Kk4uwbROE9/UQ93CAVGR7GkA7Y92+fX80OzXi/OB67jVFYwKGO1WzkxmkFZw==}
-    peerDependencies:
-      react-hook-form: ^7.55.0
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -3217,9 +3378,6 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@standard-schema/utils@0.3.0':
-    resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
-
   '@storybook/addon-themes@10.4.1':
     resolution: {integrity: sha512-nxNskZwpgptCUWyci+jiM5IrKY6xSaTpv3xzgkL6NCU+5PyCxyp0Z6jE8NDvew9jolzOC9pBhGJAW26A/jbFqg==}
     peerDependencies:
@@ -3391,33 +3549,12 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/devtools-event-client@0.4.3':
-    resolution: {integrity: sha512-OZI6QyULw0FI0wjgmeYzCIfbgPsOEzwJtCpa69XrfLMtNXLGnz3d/dIabk7frg0TmHo+Ah49w5I4KC7Tufwsvw==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-  '@tanstack/form-core@1.33.0':
-    resolution: {integrity: sha512-AV4Pw9Dk4orFsuPBcDssfWMJFs+yMYBae7zZ4oTqrCf4ftNGQKxvrQRZeqKHG6A4TkiLeSvf2kzIjcVkrW7E6w==}
-
   '@tanstack/history@1.162.0':
     resolution: {integrity: sha512-79pf/RkhteYZTRgcR4F9kbk84P2N8rugQJswxfIqovlbRiT3yI7eBE+5QorIrZaOKktsgzRlXh1l/du/xpl4iA==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/pacer-lite@0.1.1':
-    resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
-    engines: {node: '>=18'}
-
   '@tanstack/query-core@5.101.0':
     resolution: {integrity: sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==}
-
-  '@tanstack/react-form@1.33.0':
-    resolution: {integrity: sha512-unaee+VS4MvKo+s1dmgGUXI4902VeAhuaUbKsQbhFe3MceOpB3JpAUGCDpyzjQPXVFkFY0COKfLrUNX2XZYW4g==}
-    peerDependencies:
-      '@tanstack/react-start': '*'
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@tanstack/react-start':
-        optional: true
 
   '@tanstack/react-query@5.101.0':
     resolution: {integrity: sha512-rLlJXSpkqfizLWgkR5+eLeIk0MvTx/meEIR7LRjxic+qxiQP8zVjq7BqQkiCMNLQBlLfuOLqqr6KO5GtrDlmSg==}
@@ -3430,12 +3567,6 @@ packages:
     peerDependencies:
       react: '>=18.0.0 || >=19.0.0'
       react-dom: '>=18.0.0 || >=19.0.0'
-
-  '@tanstack/react-store@0.11.0':
-    resolution: {integrity: sha512-tX4YXh3PDkmpvGQWkWqKpzs/MSqbtuwY9dWdWhtV9Q50PmO+jOkUKIWIX4G85dwt7lxdHLXsiaEKPdKmC8F41w==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@tanstack/react-store@0.9.3':
     resolution: {integrity: sha512-y2iHd/N9OkoQbFJLUX1T9vbc2O9tjH0pQRgTcx1/Nz4IlwLvkgpuglXUx+mXt0g5ZDFrEeDnONPqkbfxXJKwRg==}
@@ -3459,9 +3590,6 @@ packages:
   '@tanstack/router-core@1.171.8':
     resolution: {integrity: sha512-PbrTBbofFcacrH3RLgHYILRqTFnAGq+gXrXoA/vo7qUSkJpSO4GWfLtrtCahD4VayzRm19IPwcjPPLEugag6pw==}
     engines: {node: '>=20.19'}
-
-  '@tanstack/store@0.11.0':
-    resolution: {integrity: sha512-WlzzCt3xi0G6pCAJu1U+2jiECwabETDpQDi3hfkFZvJii9AuZqEKbOiVarX1/bWhTNjU486yQtJCCasi/0q+Cw==}
 
   '@tanstack/store@0.9.3':
     resolution: {integrity: sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw==}
@@ -3683,11 +3811,6 @@ packages:
 
   '@urql/core@6.0.1':
     resolution: {integrity: sha512-FZDiQk6jxbj5hixf2rEPv0jI+IZz0EqqGW8mJBEug68/zHTtT+f34guZDmyjJZyiWbj0vL165LoMr/TkeDHaug==}
-
-  '@urql/exchange-graphcache@9.0.0':
-    resolution: {integrity: sha512-5ACktvMFdnD5JC6DaSUrlj345c1JIUi7PwgvmnkwVOWsCRt/Vo9946UaG+sg69ku8seESMBK4xkeI41M39Dd5A==}
-    peerDependencies:
-      '@urql/core': ^6.0.0
 
   '@vidstack/react@1.15.6':
     resolution: {integrity: sha512-hO7cLld5yfxCdDnDCYqh5aS7JxmHfsmX43PmKBJWzDTwK40P3hh5qAdDQzl3qDtEJLYjuo3Sv+kr6tt/VRtJzQ==}
@@ -7101,18 +7224,9 @@ snapshots:
       graphql: 16.14.0
       tslib: 2.8.1
 
-  '@graphql-typed-document-node/core@3.2.0(graphql@15.10.2)':
-    dependencies:
-      graphql: 15.10.2
-
   '@graphql-typed-document-node/core@3.2.0(graphql@16.14.0)':
     dependencies:
       graphql: 16.14.0
-
-  '@hookform/resolvers@5.4.0(react-hook-form@7.80.0(react@19.2.6))':
-    dependencies:
-      '@standard-schema/utils': 0.3.0
-      react-hook-form: 7.80.0(react@19.2.6)
 
   '@iconify/types@2.0.0': {}
 
@@ -8459,15 +8573,15 @@ snapshots:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
 
-  '@refinedev/hasura@7.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(gql-query-builder@3.8.0)(graphql-request@5.2.0(graphql@15.10.2))(graphql-ws@5.16.2(graphql@15.10.2))':
+  '@refinedev/hasura@7.0.1(@refinedev/core@5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(gql-query-builder@3.8.0)(graphql-request@5.2.0(graphql@16.14.0))(graphql-ws@6.0.8(graphql@16.14.0)(ws@8.21.0))':
     dependencies:
       '@refinedev/core': 5.0.12(@tanstack/react-query@5.101.0(react@19.2.6))(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       camelcase: 6.3.0
       gql-query-builder: 3.8.0
       graphql: 15.10.2
-      graphql-request: 5.2.0(graphql@15.10.2)
+      graphql-request: 5.2.0(graphql@16.14.0)
       graphql-tag: 2.12.6(graphql@15.10.2)
-      graphql-ws: 5.16.2(graphql@15.10.2)
+      graphql-ws: 6.0.8(graphql@16.14.0)(ws@8.21.0)
       lodash: 4.18.1
       lodash-es: 4.18.1
 
@@ -8586,8 +8700,6 @@ snapshots:
   '@standard-schema/spec@1.0.0': {}
 
   '@standard-schema/spec@1.1.0': {}
-
-  '@standard-schema/utils@0.3.0': {}
 
   '@storybook/addon-themes@10.4.1(storybook@10.4.1(@testing-library/dom@10.4.1)(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))':
     dependencies:
@@ -8737,27 +8849,9 @@ snapshots:
       tailwindcss: 4.3.0
       vite: 8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0)
 
-  '@tanstack/devtools-event-client@0.4.3': {}
-
-  '@tanstack/form-core@1.33.0':
-    dependencies:
-      '@tanstack/devtools-event-client': 0.4.3
-      '@tanstack/pacer-lite': 0.1.1
-      '@tanstack/store': 0.11.0
-
   '@tanstack/history@1.162.0': {}
 
-  '@tanstack/pacer-lite@0.1.1': {}
-
   '@tanstack/query-core@5.101.0': {}
-
-  '@tanstack/react-form@1.33.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@tanstack/form-core': 1.33.0
-      '@tanstack/react-store': 0.11.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      react: 19.2.6
-    transitivePeerDependencies:
-      - react-dom
 
   '@tanstack/react-query@5.101.0(react@19.2.6)':
     dependencies:
@@ -8772,13 +8866,6 @@ snapshots:
       isbot: 5.1.40
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
-
-  '@tanstack/react-store@0.11.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
-    dependencies:
-      '@tanstack/store': 0.11.0
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
-      use-sync-external-store: 1.6.0(react@19.2.6)
 
   '@tanstack/react-store@0.9.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
@@ -8805,8 +8892,6 @@ snapshots:
       cookie-es: 3.1.1
       seroval: 1.5.4
       seroval-plugins: 1.5.4(seroval@1.5.4)
-
-  '@tanstack/store@0.11.0': {}
 
   '@tanstack/store@0.9.3': {}
 
@@ -9063,14 +9148,6 @@ snapshots:
   '@urql/core@6.0.1(graphql@16.14.0)':
     dependencies:
       '@0no-co/graphql.web': 1.2.0(graphql@16.14.0)
-      wonka: 6.3.6
-    transitivePeerDependencies:
-      - graphql
-
-  '@urql/exchange-graphcache@9.0.0(@urql/core@6.0.1(graphql@16.14.0))(graphql@16.14.0)':
-    dependencies:
-      '@0no-co/graphql.web': 1.2.0(graphql@16.14.0)
-      '@urql/core': 6.0.1(graphql@16.14.0)
       wonka: 6.3.6
     transitivePeerDependencies:
       - graphql
@@ -9911,13 +9988,13 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  graphql-request@5.2.0(graphql@15.10.2):
+  graphql-request@5.2.0(graphql@16.14.0):
     dependencies:
-      '@graphql-typed-document-node/core': 3.2.0(graphql@15.10.2)
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.0)
       cross-fetch: 3.2.0
       extract-files: 9.0.0
       form-data: 3.0.5
-      graphql: 15.10.2
+      graphql: 16.14.0
     transitivePeerDependencies:
       - encoding
 
@@ -9930,10 +10007,6 @@ snapshots:
     dependencies:
       graphql: 16.14.0
       tslib: 2.8.1
-
-  graphql-ws@5.16.2(graphql@15.10.2):
-    dependencies:
-      graphql: 15.10.2
 
   graphql-ws@5.16.2(graphql@16.14.0):
     dependencies:

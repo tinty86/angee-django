@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@angee/base": "workspace:*",
+    "@angee/data": "workspace:*",
+    "@angee/refine": "workspace:*",
+    "@angee/resources": "workspace:*",
     "@angee/sdk": "workspace:*",
+    "@refinedev/core": "^5.0.12",
     "nuqs": "^2.5.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import type { Row } from "@angee/data";
+import type { Row } from "@angee/resources";
 
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
@@ -12,7 +12,7 @@ import type { ListEmptyState } from "./list-view-types";
 
 /**
  * The card-grid View — a frameless sibling of `ListView` that renders each row
- * as a thumbnail card (image + title + subtitle). Composed inside a `DataPage`
+ * as a thumbnail card (image + title + subtitle). Composed inside a `ResourceList`
  * which owns the toolbar, or standalone over a row array. `renderCard`
  * overrides the card body; selection mirrors the list's `selected` set.
  */

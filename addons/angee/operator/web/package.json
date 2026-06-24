@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@angee/base": "workspace:*",
+    "@angee/data": "workspace:*",
+    "@angee/refine": "workspace:*",
     "@angee/sdk": "workspace:*",
     "graphql-ws": "^5.16.2",
     "lucide-react": "^1.17.0",

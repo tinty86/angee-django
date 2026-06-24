@@ -1,4 +1,12 @@
 import * as React from "react";
+import type {
+  Row,
+} from "@angee/resources";
+import {
+  useOne,
+  type BaseRecord,
+  type HttpError,
+  } from "@refinedev/core";
 import {
   OperatorTransportProvider,
   ServiceLogs,
@@ -7,9 +15,16 @@ import {
   WorkspaceRow,
   useWorkspaceStatus,
   type WorkspaceStatusResult,
-} from "@angee/operator/runtime";
-import { useResourceRecord } from "@angee/data";
-import type { Row } from "@angee/data";
+  } from "@angee/operator/runtime";
+import {
+  refineFieldsFromPaths,
+  } from "@angee/refine";
+import {
+  refineResourceName,
+} from "@angee/resources";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 
 import { useAgentsT } from "../i18n";
 import { agentLifecycle, agentRuntime, stringField } from "./agent-record";
@@ -51,11 +66,24 @@ export function AgentProvisioning({
   pane: AgentProvisioningPane;
 }): React.ReactElement {
   const t = useAgentsT();
-  const { record, fetching } = useResourceRecord(AGENT_MODEL, agentId, {
-    fields: [...PROVISION_FIELDS],
+  const metadata = useModelMetadata(AGENT_MODEL);
+  const resource = metadata?.resource ?? null;
+  const fields = React.useMemo(
+    () => refineFieldsFromPaths([...PROVISION_FIELDS]),
+    [],
+  );
+  const run = useOne<RowRecord, HttpError>({
+    resource: resource ? refineResourceName(resource) : "__angee_disabled__",
+    id: agentId,
+    dataProviderName: resource?.schemaName,
+    meta: { fields },
+    queryOptions: {
+      enabled: Boolean(agentId) && resource !== null,
+    },
   });
 
-  const agent = record as AgentProvisionRecord | null;
+  const agent = (run.result as AgentProvisionRecord | undefined) ?? null;
+  const fetching = run.query.isFetching;
   const workspace = stringField(agent, "workspace");
   const service = stringField(agent, "service");
   const lifecycle = agentLifecycle(agent);
@@ -111,6 +139,8 @@ export function AgentProvisioning({
     </div>
   );
 }
+
+type RowRecord = BaseRecord & Row;
 
 function AgentOperatorRuntime({
   expectsService,

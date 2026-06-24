@@ -59,6 +59,7 @@ class NotesSchemaMetadataTests(SimpleTestCase):
             },
             {
                 "status": ("STATUS", "status", "column", None),
+                "tags": ("TAGS", "tags", "column", "JSON"),
                 "updated_at": ("UPDATED_AT", "updated_at", "column", "DateTime"),
             },
         )
@@ -66,6 +67,41 @@ class NotesSchemaMetadataTests(SimpleTestCase):
             dimension["field"]: dimension
             for dimension in note["groupDimensions"]
         }["updated_at"]
+        group_dimensions = {
+            dimension["field"]: dimension
+            for dimension in note["groupDimensions"]
+        }
+        self.assertEqual(
+            group_dimensions["status"]["filter"],
+            {
+                "kind": "equality",
+                "field": "status",
+                "valueKey": "status",
+                "rangeKey": None,
+                "lookup": None,
+                "nullLookup": "isNull",
+                "valueTransform": None,
+                "valueMap": [
+                    {"from": "DRAFT", "to": "draft"},
+                    {"from": "IN_REVIEW", "to": "in_review"},
+                    {"from": "ACTIVE", "to": "active"},
+                    {"from": "ARCHIVED", "to": "archived"},
+                ],
+            },
+        )
+        self.assertEqual(
+            group_dimensions["tags"]["filter"],
+            {
+                "kind": "equality",
+                "field": "tags",
+                "valueKey": "tags",
+                "rangeKey": None,
+                "lookup": "exact",
+                "nullLookup": "isNull",
+                "valueTransform": "json",
+                "valueMap": [],
+            },
+        )
         self.assertEqual(
             {
                 extraction["name"]: extraction
@@ -78,12 +114,32 @@ class NotesSchemaMetadataTests(SimpleTestCase):
                     "input": "YEAR",
                     "key": "updated_at_year",
                     "rangeKey": "updated_at_year_range",
+                    "filter": {
+                        "kind": "range",
+                        "field": "updated_at",
+                        "valueKey": "updated_at_year",
+                        "rangeKey": "updated_at_year_range",
+                        "lookup": None,
+                        "nullLookup": "isNull",
+                        "valueTransform": None,
+                        "valueMap": [],
+                    },
                 },
                 "month": {
                     "name": "month",
                     "input": "MONTH",
                     "key": "updated_at_month",
                     "rangeKey": "updated_at_month_range",
+                    "filter": {
+                        "kind": "range",
+                        "field": "updated_at",
+                        "valueKey": "updated_at_month",
+                        "rangeKey": "updated_at_month_range",
+                        "lookup": None,
+                        "nullLookup": "isNull",
+                        "valueTransform": None,
+                        "valueMap": [],
+                    },
                 },
             },
         )

@@ -247,7 +247,7 @@
      per-component one-offs stay inline. */
   --spacing-modal-w:           40rem;   /* 640px — Spotlight popup */
   --spacing-modal-top:         20vh;    /* Spotlight vertical offset */
-  --spacing-fields-chooser-w:  45rem;   /* 720px — DataToolbar field chooser */
+  --spacing-fields-chooser-w:  45rem;   /* 720px — resource toolbar field chooser */
   --spacing-preview-max-h:     60vh;    /* FilePreview content cap */
   --spacing-modal-list-max-h:  50vh;    /* Spotlight list cap */
 
@@ -369,8 +369,8 @@
 }
 
 /* ============================================================================
-   ConsoleShell grid utilities — declared via Tailwind 4 @utility so the
-   shell sets layout with single class names instead of arbitrary-value
+   ConsoleLayout grid utilities — declared via Tailwind 4 @utility so the
+   layout sets layout with single class names instead of arbitrary-value
    tuples. The named-area utilities (area-rail, area-topbar, ...) match the
    regions declared in console-grid's grid-template-areas.
    ============================================================================ */

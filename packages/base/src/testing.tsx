@@ -1,14 +1,10 @@
 // Public test helpers for rendered Angee apps. These utilities mount the real
-// createApp provider/router stack while keeping network and shell chrome
+// createApp provider/router stack while keeping network and layout chrome
 // assertions hermetic.
 
 import { createElement, useEffect, type ReactNode } from "react";
 import { waitFor } from "@testing-library/react";
-import {
-  useMenus,
-  type AngeeUrqlClientOptions,
-  type ComposedMenuItem,
-} from "@angee/sdk";
+import { useBreadcrumb as useRefineBreadcrumb } from "@refinedev/core";
 import type { Root } from "react-dom/client";
 
 import {
@@ -17,23 +13,23 @@ import {
   type BaseAddon,
   type CreateAppInput,
 } from "./createApp";
-import {
-  useRouteBreadcrumbItems,
-  useRouteChrome,
-  type BreadcrumbItem,
-  type RouteChromeStaticData,
-} from "./route-static-data";
+import type { ChromeMenuItem } from "./chrome/menu-tree";
+import { useChromeMenuItems } from "./chrome/refine-menu";
 
-/** Captured shell chrome plus runtime menus from a mounted route. */
-export interface CapturedChromeProps extends RouteChromeStaticData {
-  /** The rendered trail: static route crumbs plus dynamic crumb factories. */
-  trail: readonly BreadcrumbItem[];
-  menus: readonly ComposedMenuItem[];
+interface CapturedBreadcrumbItem {
+  label: ReactNode;
+  to?: string;
+}
+
+/** Captured layout chrome plus runtime menus from a mounted route. */
+export interface CapturedChromeProps {
+  /** The rendered trail from refine's resource/router breadcrumb owner. */
+  trail: readonly CapturedBreadcrumbItem[];
+  menus: readonly ChromeMenuItem[];
 }
 
 /** Serializable chrome assertion shape used by addon chrome pins. */
-export interface ChromeSnapshot
-  extends Pick<RouteChromeStaticData, "icon" | "title"> {
+export interface ChromeSnapshot {
   breadcrumbs: { label: ReactNode; to?: string }[];
 }
 
@@ -50,10 +46,10 @@ export interface CaptureChromeOptions {
   addons: readonly BaseAddon[];
   path: string;
   home?: string;
-  schemas?: Record<string, AngeeUrqlClientOptions>;
+  schemas?: CreateAppInput["schemas"];
 }
 
-/** Mount createApp and capture chrome after React commits the active shell. */
+/** Mount createApp and capture chrome after React commits the active layout. */
 export async function captureChrome({
   addons,
   path,
@@ -66,17 +62,17 @@ export async function captureChrome({
   history.replaceState(null, "", path);
 
   function CaptureChrome(): ReactNode {
-    const chrome = useRouteChrome();
-    const trail = useRouteBreadcrumbItems();
-    const menus = useMenus();
+    const trail = useRefineBreadcrumb().breadcrumbs.map((item) => ({
+      label: item.label,
+      ...(item.href ? { to: item.href } : {}),
+    }));
+    const menus = useChromeMenuItems();
     useEffect(() => {
       captures.push({
-        ...chrome,
-        breadcrumbs: trail,
         trail,
         menus,
       });
-    }, [chrome, menus, trail]);
+    }, [menus, trail]);
     return createElement(
       "div",
       null,
@@ -93,7 +89,7 @@ export async function captureChrome({
 
   const root = createApp({
     addons,
-    shells: {
+    layouts: {
       console: { chrome: CaptureChrome, requireAuth: false },
       public: {
         chrome: PassthroughChrome,
@@ -145,8 +141,6 @@ export async function chromeSnapshotForRoute(
 /** Convert captured chrome into the assertion shape used by tests. */
 export function chromeSnapshot(props: CapturedChromeProps): ChromeSnapshot {
   return {
-    title: props.title,
-    icon: props.icon,
     breadcrumbs: props.trail.map((item) => ({
       label: item.label,
       ...(item.to ? { to: item.to } : {}),
@@ -171,7 +165,7 @@ export function testGraphQLFetch(): Promise<Response> {
   return Promise.resolve(
     new Response(
       JSON.stringify({
-        data: { __typename: "Query", currentUser: null },
+        data: { __typename: "Query", current_user: null },
       }),
       {
         status: 200,

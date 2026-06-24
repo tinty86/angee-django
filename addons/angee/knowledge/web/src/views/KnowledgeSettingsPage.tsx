@@ -2,10 +2,10 @@ import { type ReactElement } from "react";
 
 import {
   Column,
-  DrawerDataPage,
+  DrawerResourceList,
   Field,
   Form,
-  GroupListView,
+  ListView,
   List,
 } from "@angee/base";
 import { useKnowledgeT } from "../i18n";
@@ -29,19 +29,19 @@ export function KnowledgeSettingsPage(): ReactElement {
           {t("knowledge.settings.description")}
         </p>
       </header>
-      <DrawerDataPage model={VAULT_MODEL}>
-        <List model={VAULT_MODEL} list={GroupListView} order={{ name: "ASC" }}>
+      <DrawerResourceList resource={VAULT_MODEL}>
+        <List resource={VAULT_MODEL} order={{ name: "ASC" }}>
           <Column field="name" />
           <Column field="owner_label" />
           <Column field="updated_at" />
         </List>
-        <Form model={VAULT_MODEL}>
+        <Form resource={VAULT_MODEL}>
           <Field name="name" widget="text" title />
           <Field name="description" widget="textarea" />
           <Field name="icon" />
           <Field name="accent" />
         </Form>
-      </DrawerDataPage>
+      </DrawerResourceList>
     </div>
   );
 }

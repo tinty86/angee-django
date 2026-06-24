@@ -16,7 +16,7 @@ import {
   type FieldDescriptor,
   type PreviewFile,
 } from "@angee/base";
-import { useAuthoredQuery } from "@angee/sdk";
+import { useAuthoredQuery } from "@angee/data";
 
 import {
   StorageBackends,
@@ -258,7 +258,7 @@ export function StoragePage(): ReactElement {
           explorer.setRootId(value);
           closeDetail();
         }}
-        create={{ model: "Drive", fields: driveCreateFields }}
+        create={{ resource: "Drive", fields: driveCreateFields }}
         onCreated={() => drivesQuery.refetch()}
       />
       <TreeView<StorageTreeRow>

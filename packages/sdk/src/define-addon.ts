@@ -6,7 +6,7 @@
 
 import type { I18nResources } from "./i18n";
 
-/** A route an addon contributes; the chrome is the shell named by `shell`. */
+/** A route an addon contributes; the chrome is the refine layout named by `layout`. */
 export interface AddonRoute {
   /** Stable, addon-namespaced name (e.g. `notes.detail`); unique across addons. */
   name: string;
@@ -14,15 +14,15 @@ export interface AddonRoute {
   path: string;
   /** Optional route name this route nests under in the rendered route tree. */
   parent?: string;
-  /** Which shell renders this route's chrome (`console`, `public`, …). */
-  shell: string;
+  /** Which refine layout renders this route's chrome (`console`, `public`, ...). */
+  layout: string;
   /**
-   * Model whose collection this route lists, e.g. `"OAuthClient"`. Set it on a
-   * routed collection page (not its `$id` child) to make the model "followable":
-   * a relation field targeting it resolves this route as the detail destination.
-   * One route per model — a second claim is a build-time error.
+   * Resource whose collection this route lists, e.g. `"OAuthClient"`. Set it on
+   * a routed collection action (not its `$id` child) to make the resource
+   * followable: a relation field targeting it resolves this route as the detail
+   * destination. One route per resource — a second claim is a build-time error.
    */
-  model?: string;
+  resource?: string;
 }
 
 /** A navigation entry; many menu items may target one route. */
@@ -51,10 +51,10 @@ export interface ComposedMenuItem extends Omit<MenuItem, "children" | "id"> {
 export type WidgetMap = Record<string, unknown>;
 
 /**
- * Per-model create-form override: model name -> a declarative create form (the
- * rendered binding interprets it). An addon registers the form for a model it
- * owns; the standard form renderer uses it wherever that model is created,
- * including the relation-picker inline create. Opaque to the headless SDK.
+ * Per-resource create-form override: resource id -> a declarative create form
+ * (the rendered binding interprets it). An addon registers the form for a
+ * resource it owns; the standard form renderer uses it wherever that resource is
+ * created, including the relation-picker inline create. Opaque to the headless SDK.
  */
 export type FormOverrideMap = Record<string, unknown>;
 

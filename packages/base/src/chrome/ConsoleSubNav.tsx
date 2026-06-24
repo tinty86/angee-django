@@ -1,14 +1,10 @@
-import { useMemo, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useMenus } from "@angee/sdk";
 
 import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
-import {
-  type ChromeMenuItem,
-  type ChromeMenuNode,
-  MenuTree,
-} from "./menu-tree";
+import type { ChromeMenuNode } from "./menu-tree";
+import { useChromeMenuTree } from "./refine-menu";
 
 /**
  * The active app's sections, plus whether the app opts into a left settings-style
@@ -16,7 +12,7 @@ import {
  * sections in the sidebar *as well as* the top bar — the two surfaces are
  * independent, so the top bar always shows the sections (as links or dropdowns)
  * and the sidebar is the opt-in extra. Opt-in is one flag, so any addon turns the
- * sidebar on or off without touching the chrome. `ConsoleShell` reads `show` to
+ * sidebar on or off without touching the chrome. `ConsoleLayout` reads `show` to
  * pick its grid; `ConsoleSubNav` reads the rest to render. Independent of `group`
  * (which only places the app in the rail's domain/platform zone).
  */
@@ -25,11 +21,10 @@ export function useConsoleSubNav(): {
   sections: readonly ChromeMenuNode[];
   pathname: string;
 } {
-  const menus = useMenus() as readonly ChromeMenuItem[];
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const tree = useMemo(() => MenuTree.from(menus), [menus]);
+  const tree = useChromeMenuTree();
   const activeRoot = tree.activeAppRoot(pathname);
   const sections = tree.appSectionItems(pathname);
   const show = activeRoot?.sidebar === true && sections.length > 0;

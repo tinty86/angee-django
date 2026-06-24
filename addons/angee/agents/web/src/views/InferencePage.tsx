@@ -1,26 +1,28 @@
 import * as React from "react";
 import {
+  rowPublicId,
+  type Row,
+} from "@angee/resources";
+import {
   Action,
   Column,
-  DataPage,
+  ResourceList,
   Facet,
   Field,
   Form,
   Group,
-  GroupListView,
+  ListView,
   List,
-  rowPublicId,
   useRecordActionMutation,
   useEnumOptions,
   useImplPrefill,
-  type Row,
-} from "@angee/base";
+  } from "@angee/base";
 import {
   canConnectRecord,
   ConnectOAuthButton,
-  connectCallbackPathForRecord,
-} from "@angee/integrate";
-import { useAuthoredMutation } from "@angee/sdk";
+  } from "@angee/integrate";
+import { useAuthoredMutation,
+} from "@angee/data";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectInferenceProvider } from "../documents";
@@ -31,27 +33,30 @@ const MODEL_MODEL = "agents.InferenceModel";
 
 export function InferenceProvidersPage(): React.ReactElement {
   const t = useAgentsT();
-  const [refreshModels] = useRecordActionMutation<ActionFieldName>("refreshProviderModels");
+  const [refreshModels] = useRecordActionMutation<ActionFieldName>(
+    "refresh_provider_models",
+    { invalidateModels: [MODEL_MODEL] },
+  );
   const backendClassOptions = useEnumOptions(PROVIDER_MODEL, "backend_class");
   const backendClassPrefill = useImplPrefill(PROVIDER_MODEL, "backend_class");
 
   return (
-    <DataPage
-      model={PROVIDER_MODEL}
+    <ResourceList
+      resource={PROVIDER_MODEL}
       placement="inline"
       routed
       cardActions={(row, context) =>
         canConnectRecord(row) ? <ProviderConnectButton row={row} refresh={context.refresh} /> : null
       }
     >
-      <List model={PROVIDER_MODEL} list={GroupListView}>
+      <List resource={PROVIDER_MODEL}>
         <Facet field="vendor" label="Vendor" labelField="display_name" />
         <Column field="name" />
         <Column field="backend_class" />
         <Column field="status" widget="statusBadge" />
         <Column field="credential.display_name" header={t("agents.inference.credential")} />
       </List>
-      <Form model={PROVIDER_MODEL}>
+      <Form resource={PROVIDER_MODEL}>
         <Field name="name" title />
         <Group label={t("agents.inference.backend")} columns={2}>
           <Field name="owner" />
@@ -73,7 +78,7 @@ export function InferenceProvidersPage(): React.ReactElement {
         <Field name="config" widget="json" />
         <Action id="refresh-models" label={t("agents.inference.refreshModels")} icon="refresh" run={refreshModels} />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }
 
@@ -94,12 +99,11 @@ function ProviderConnectButton({
       label={t("agents.inference.connect.action")}
       connectedTitle={t("agents.inference.connect.connected")}
       startErrorTitle={t("agents.inference.connect.startError")}
-      callbackPath={connectCallbackPathForRecord(row)}
       next="/agents/providers"
       onConnected={refresh}
       start={async ({ redirectUri, next }) => {
         const result = await connectProvider({ id, redirectUri, next });
-        return result?.connectInferenceProvider;
+        return result?.connect_inference_provider;
       }}
     />
   );
@@ -117,10 +121,9 @@ export function InferenceModelsPage(): React.ReactElement {
   );
 
   return (
-    <DataPage model={MODEL_MODEL} placement="inline" routed>
+    <ResourceList resource={MODEL_MODEL} placement="inline" routed>
       <List
-        model={MODEL_MODEL}
-        list={GroupListView}
+        resource={MODEL_MODEL}
         defaultGroups={defaultGroups}
       >
         <Facet field="provider" label={t("agents.inference.provider")} labelField="name" />
@@ -130,7 +133,7 @@ export function InferenceModelsPage(): React.ReactElement {
         <Column field="model_use" />
         <Column field="status" widget="statusBadge" />
       </List>
-      <Form model={MODEL_MODEL}>
+      <Form resource={MODEL_MODEL}>
         <Field name="name" title />
         <Field name="display_name" />
         <Group label={t("agents.inference.catalogue")} columns={2}>
@@ -146,6 +149,6 @@ export function InferenceModelsPage(): React.ReactElement {
         <Field name="capabilities" widget="json" />
         <Field name="config" widget="json" />
       </Form>
-    </DataPage>
+    </ResourceList>
   );
 }

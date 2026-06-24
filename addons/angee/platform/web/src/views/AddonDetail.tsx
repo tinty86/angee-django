@@ -53,25 +53,25 @@ export function AddonDetail(): ReactElement {
           ? [
               {
                 label: t("platform.col.models"),
-                value: addon.modelCount,
+                value: addon.model_count,
                 icon: "grid",
-                href: addon.modelCount
+                href: addon.model_count
                   ? modelsPath({ addon: addon.id })
                   : undefined,
                 onNavigate: go,
               },
               {
                 label: t("platform.col.fields"),
-                value: addon.fieldCount,
+                value: addon.field_count,
                 icon: "columns",
-                href: addon.fieldCount
+                href: addon.field_count
                   ? fieldsPath({ addon: addon.id })
                   : undefined,
                 onNavigate: go,
               },
               {
                 label: t("platform.col.resources"),
-                value: addon.resourceCount,
+                value: addon.resource_count,
                 icon: "files",
               },
             ]

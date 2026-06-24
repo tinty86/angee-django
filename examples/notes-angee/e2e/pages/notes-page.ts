@@ -1,6 +1,6 @@
 import { expect, type Locator, PageObject } from "@angee/e2e";
 
-/** The `/notes` data-view page: list/board, toolbar controls, and the pager. */
+/** The `/notes` resource-view page: list/board, toolbar controls, and the pager. */
 export class NotesPage extends PageObject {
   readonly path = "/notes";
 
@@ -163,7 +163,7 @@ export class NotesPage extends PageObject {
   get bodyEditor(): Locator {
     return this.page.locator(".cm-content").first();
   }
-  /** The view toolbar (shell control band) that hosts the dirty Save/Discard
+  /** The view toolbar (layout control band) that hosts the dirty Save/Discard
    *  plus the record pager + view switcher when a record is open. */
   get controlBand(): Locator {
     return this.page.locator(".area-control");

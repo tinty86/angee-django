@@ -4,7 +4,7 @@ import {
   Badge,
   Code,
   RowsListView,
-  type DataToolbarGroupOption,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
 
@@ -78,7 +78,7 @@ function columns(t: (key: string) => string): readonly ListColumn<AddonRow>[] {
   ];
 }
 
-function groupOptions(t: (key: string) => string): readonly DataToolbarGroupOption[] {
+function groupOptions(t: (key: string) => string): readonly ResourceToolbarGroupOption[] {
   return [
     { id: "namespace", label: t("platform.col.namespace"), group: { field: "namespace" }, type: "value" },
     { id: "kind", label: t("platform.col.kind"), group: { field: "kind" }, type: "value" },

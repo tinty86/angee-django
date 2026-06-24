@@ -855,7 +855,7 @@ def test_current_user_preferences_default_to_empty_object(
             public_schema,
             """
             query {
-              currentUser {
+              current_user {
                 username
                 preferences
               }
@@ -865,7 +865,7 @@ def test_current_user_preferences_default_to_empty_object(
         )
     )
 
-    assert data["currentUser"] == {
+    assert data["current_user"] == {
         "username": "prefs-user",
         "preferences": {},
     }

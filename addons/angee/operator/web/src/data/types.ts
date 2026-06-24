@@ -5,7 +5,7 @@
 // the panes render and adds the frontend-only `OperatorSnapshot`: the daemon
 // exposes its state as separate root query fields, not one object, so the console
 // aggregates the roots each pane needs into a single snapshot.
-import type { DocumentData, DocumentVariables } from "@angee/sdk";
+import type { DocumentData, DocumentVariables } from "@angee/refine";
 
 import type {
   SNAPSHOT_QUERY,

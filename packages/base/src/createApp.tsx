@@ -1,61 +1,73 @@
 import {
+  ActiveGraphQLSchemaProvider,
+  createAngeeAccessControlProvider,
+  refineResourcesFromAngeeSchemaMetadata,
+  type RefineResourceMetadata,
+} from "@angee/resources";
+import {
   StrictMode,
   useEffect,
   useMemo,
   type ComponentType,
   type ReactNode,
-} from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { Refine } from "@refinedev/core";
+  } from "react";
+import { createRoot,
+  type Root } from "react-dom/client";
+import { Refine,
+  type AuthProvider as RefineAuthProvider,
+  type ResourceProps } from "@refinedev/core";
 import {
   type AnyRoute,
   type AnyRouter,
   Outlet,
   RouterProvider,
-  type StaticDataRouteOption,
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
+  redirect,
   useNavigate,
-} from "@tanstack/react-router";
+  } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import {
   AuthProvider,
   UserPreferencesProvider,
   createAngeeAuthProvider,
-  createAngeeHasuraDataProviders,
-  createAngeeHasuraLiveProvider,
   createAngeeI18nProvider,
-  refineResourcesFromAngeeSchemaMetadata,
-  tanStackRouterProvider,
   useRuntimeAuthState,
   useUserPreferences,
-  type AngeeHasuraSchemaConfig,
 } from "@angee/data";
 import {
-  AppRuntimeProvider,
-  GraphQLClientProvider,
-  GraphQLProvider,
-  RelayInvalidationProvider,
-  changeSubscriptionFields,
-  composeAddons,
+  ModelMetadataProvider,
   defineAngeeSchemaMetadata,
+  schemaFieldMetadataFromAngeeSchemaMetadata,
+  type AngeeSchemaMetadata,
+  type SchemaFieldMetadata,
+} from "@angee/resources";
+import {
+  OperationDocumentsProvider,
+  createAngeeHasuraDataProviders,
+  createAngeeHasuraLiveProvider,
+  tanStackRouterProvider,
+  type AngeeHasuraSchemaConfig,
+  type SchemaOperationDocuments,
+  } from "@angee/refine";
+import {
+  AppRuntimeProvider,
+  composeAddons,
   mergeSlotContributions,
-  useMenus,
-  useResetClient,
-  useSchemaClients,
   type AddonManifest,
   type AddonRoute,
-  type AngeeSchemaMetadata,
-  type AngeeUrqlClientOptions,
   type AppRuntime,
   type ComposedMenuItem,
   type I18nResources,
   type SlotContribution,
-} from "@angee/sdk";
-
-import { ModalsHost, ToastProvider } from "./feedback";
+  } from "@angee/sdk";
+import {
+  ModalsHost,
+  ToastProvider,
+  useRefineNotificationProvider,
+} from "./feedback";
 import { readAppRailPreferences } from "./chrome/app-rail-preferences";
 import { baseIcons } from "./chrome/icon-registry";
 import {
@@ -64,21 +76,14 @@ import {
   type ChromeMenuItem,
   type ChromeMenuNode,
 } from "./chrome/menu-tree";
-import { enBaseBundle, useBaseT } from "./i18n";
+import { useChromeMenuTree } from "./chrome/refine-menu";
+import { enBaseBundle } from "./i18n";
 import { type PreviewProvider } from "./preview";
-import {
-  useRouteChrome,
-  type BreadcrumbItem,
-  type RouteBreadcrumbFactory,
-  type RouteChromeStaticData,
-} from "./route-static-data";
 import { defaultWidgets } from "./widgets";
 
 /** A route that also carries the page component the chrome renders. */
 export interface BaseAddonRoute extends AddonRoute {
   component?: ComponentType;
-  /** Dynamic crumb factory for this route's match. */
-  crumb?: RouteBreadcrumbFactory;
   /**
    * Menu item id whose trail seeds chrome for routes outside the menu, or
    * disambiguates chrome derivation when multiple menu items target this route.
@@ -86,7 +91,6 @@ export interface BaseAddonRoute extends AddonRoute {
   menu?: string;
   title?: ReactNode;
   icon?: string;
-  breadcrumbs?: readonly BreadcrumbItem[];
 }
 
 /** An addon manifest whose routes carry their page components. */
@@ -113,29 +117,28 @@ export function defineBaseAddon(addon: BaseAddon): BaseAddon {
   return addon;
 }
 
-/** Props passed from the active route into a shell chrome component. */
-export interface ShellChromeProps
-  extends Pick<RouteChromeStaticData, "icon" | "title"> {
+/** Props passed from the active route into a refine layout chrome component. */
+export interface RefineLayoutChromeProps {
   children: ReactNode;
 }
 
-/** A shell registered with `createApp`: the chrome component + auth policy. */
-export interface ShellConfig {
-  /** Chrome wrapping route bodies (e.g. `ConsoleShell`). */
-  chrome?: ComponentType<ShellChromeProps>;
-  /** Gate routes behind sign-in. Defaults to `true` for every shell but `public`. */
+/** A refine layout registered with `createApp`: chrome, auth, and schema policy. */
+export interface RefineLayoutConfig {
+  /** Chrome wrapping route bodies (e.g. `ConsoleLayout`). */
+  chrome?: ComponentType<RefineLayoutChromeProps>;
+  /** Gate routes behind sign-in. Defaults to `true` for every layout but `public`. */
   requireAuth?: boolean;
   /**
-   * GraphQL schema this shell's routes read from; reads inside the shell inherit
+   * GraphQL schema this layout's routes read from; reads inside the layout inherit
    * that client. Defaults to the app's `defaultSchema`, so the common console
-   * surface needs no override and only the public shell pins itself to `public`.
+   * surface needs no override and only the public layout pins itself to `public`.
    */
   schema?: string;
 }
 
 export interface CreateAppInput {
   addons: readonly BaseAddon[];
-  shells: Record<string, ShellConfig>;
+  layouts: Record<string, RefineLayoutConfig>;
   /** One client config per named schema (url, ws endpoint, cache). */
   schemas: Record<string, AngeeAppSchemaConfig>;
   /** Schema bound to the app subtree's reads. Defaults to `public`. */
@@ -149,15 +152,17 @@ export interface CreateAppInput {
 }
 
 export type AngeeAppSchemaConfig =
-  Omit<AngeeUrqlClientOptions, "metadata"> &
   Omit<AngeeHasuraSchemaConfig, "metadata"> & {
     /** Generated schema metadata imported from emitted JSON. */
     metadata?: unknown;
+    /** Generated operation documents imported from emitted project codegen. */
+    operationDocuments?: SchemaOperationDocuments;
   };
 
 type NormalizedAngeeAppSchemaConfig =
   Omit<AngeeAppSchemaConfig, "metadata"> & {
     metadata?: AngeeSchemaMetadata;
+    fieldMetadata: SchemaFieldMetadata;
   };
 
 export interface AngeeApp {
@@ -167,10 +172,10 @@ export interface AngeeApp {
 
 /**
  * `createApp` — the single composition root. It merges the addon manifests into
- * one runtime (routes · route-resolved menus · derived route chrome · widgets ·
+ * one runtime (routes · route-resolved menus · widgets ·
  * i18n · slots), owns the provider stack (GraphQL clients · runtime · live
  * invalidation · auth), builds the router, and mounts one persistent layout
- * route per shell. The host writes one
+ * route per refine layout. The host writes one
  * `createApp({...}).mount(...)`.
  */
 export function createApp(input: CreateAppInput): AngeeApp {
@@ -183,18 +188,19 @@ export function createApp(input: CreateAppInput): AngeeApp {
     routes.map((route) => [route.name, route.path]),
   );
   const routesByName = new Map(routes.map((route) => [route.name, route]));
-  validateRoutes(routes, routesByName, input.shells);
   const menus = resolveMenuRouteTargets(
     composed.menus as readonly ChromeMenuItem[],
     pathByName,
   );
   const menuTree = MenuTree.from(menus);
 
-  const routeChromeByName = routeChromeByNameFromMenu(routes, menuTree);
+  const routeResourceProjection = refineRouteResourceProjection(
+    routes,
+    menuTree,
+  );
 
   const runtime: AppRuntime = {
     widgets: { ...defaultWidgets, ...composed.widgets },
-    menus,
     // Seed the base namespace under the merged addon bundles; an addon key wins.
     i18n: mergeI18n(enBaseBundle, composed.i18n),
     icons: composed.icons,
@@ -204,15 +210,21 @@ export function createApp(input: CreateAppInput): AngeeApp {
     // Built-in renderers are universal (PreviewPane always includes them); the
     // runtime carries only addon-contributed providers.
     previews: composed.previews,
-    routesByModel: modelRouteIndex(routes),
+    routesByResource: resourceRouteIndex(routes),
   };
   const defaultSchema = input.defaultSchema ?? "public";
   const subscriptionSchema = input.subscriptionSchema ?? "console";
   const schemas = normalizeSchemaConfigs(input.schemas);
+  const operationDocuments = operationDocumentsForSchemas(schemas);
   const refineResources = refineResourcesForSchemas(
     schemas,
-    runtime.routesByModel,
+    runtime.routesByResource,
+    routeResourceProjection.metadataByResource,
   );
+  const refineResourceRegistry = [
+    ...refineResources,
+    ...routeResourceProjection.resources,
+  ];
   const refineDataProviders = createAngeeHasuraDataProviders(
     schemas,
     defaultSchema,
@@ -222,59 +234,56 @@ export function createApp(input: CreateAppInput): AngeeApp {
     subscriptionSchema,
   );
   const authSchema = authSchemaNameForSchemas(schemas, defaultSchema);
+  const refineAuthProvider = createAuthProviderForSchema(schemas, authSchema);
   const refineI18nProvider = createAngeeI18nProvider(runtime.i18n);
+  const refineAccessControlProvider = createAngeeAccessControlProvider(
+    refineResourceRegistry,
+  );
 
-  // Only the models the subscription schema actually publishes a change event for
-  // get a live subscription; blind-subscribing an undefined `<model>Changed` errors
-  // server-side. Absent an SDL we keep the prior behaviour (subscribe to all).
-  const subscriptionSdl = schemas[subscriptionSchema]?.sdl;
-  const availableChangeFields = subscriptionSdl
-    ? changeSubscriptionFields(subscriptionSdl)
-    : undefined;
   const home =
     resolvePath(input.home, pathByName) ??
-    routes.find((route) => route.shell !== "public")?.path ??
+    routes.find((route) => route.layout !== "public")?.path ??
     "/";
 
   function RootOutlet(): ReactNode {
-    const resetClient = useResetClient();
-    const refineAuthProvider = useMemo(
-      () => {
-        const schema = schemas[authSchema];
-        if (!schema) {
-          throw new Error(`No GraphQL schema config for auth schema "${authSchema}".`);
-        }
-        return createAngeeAuthProvider({
-          ...schema,
-          onAuthChange: resetClient,
-        });
-      },
-      [resetClient],
-    );
     return (
       <NuqsAdapter>
-        <Refine
-          authProvider={refineAuthProvider}
-          dataProvider={refineDataProviders}
-          i18nProvider={refineI18nProvider}
-          liveProvider={refineLiveProvider}
-          resources={refineResources}
-          routerProvider={tanStackRouterProvider}
-          options={{
-            liveMode: refineLiveProvider ? "auto" : "off",
-            syncWithLocation: false,
-          }}
-        >
-          <AppFrame
-            authSchema={authSchema}
-            runtime={runtime}
-            subscriptionSchema={subscriptionSchema}
-            availableChangeFields={availableChangeFields}
-          >
-            <Outlet />
-          </AppFrame>
-        </Refine>
+        <OperationDocumentsProvider documents={operationDocuments}>
+          <AppRuntimeProvider runtime={runtime}>
+            <ModalsHost>
+              <ToastProvider>
+                <RefineRoot />
+              </ToastProvider>
+            </ModalsHost>
+          </AppRuntimeProvider>
+        </OperationDocumentsProvider>
       </NuqsAdapter>
+    );
+  }
+
+  function RefineRoot(): ReactNode {
+    const refineNotificationProvider = useRefineNotificationProvider();
+    return (
+      <Refine
+        authProvider={refineAuthProvider}
+        accessControlProvider={refineAccessControlProvider}
+        dataProvider={refineDataProviders}
+        i18nProvider={refineI18nProvider}
+        liveProvider={refineLiveProvider}
+        notificationProvider={refineNotificationProvider}
+        resources={refineResourceRegistry}
+        routerProvider={tanStackRouterProvider}
+        options={{
+          liveMode: refineLiveProvider ? "auto" : "off",
+          syncWithLocation: false,
+        }}
+      >
+        <AppFrame
+          authSchema={authSchema}
+        >
+          <Outlet />
+        </AppFrame>
+      </Refine>
     );
   }
 
@@ -286,23 +295,24 @@ export function createApp(input: CreateAppInput): AngeeApp {
     component: () => <HomeRedirect fallback={home} />,
   });
 
-  const shellRoutes = createShellRoutes({
+  const layoutRoutes = createLayoutRoutes({
     rootRoute,
-    shellNames: shellNamesForRoutes(input.shells),
-    shells: input.shells,
+    layoutNames: layoutNamesForRoutes(input.layouts),
+    layouts: input.layouts,
+    schemas,
     defaultSchema,
+    authProvider: refineAuthProvider,
   });
   createAddonRouteNodes({
     routes,
     routesByName,
-    routeChromeByName,
-    shellRoutes,
+    layoutRoutes,
   });
 
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       indexRoute,
-      ...[...shellRoutes.entries()]
+      ...[...layoutRoutes.entries()]
         .sort(([left], [right]) => compareCodePoint(left, right))
         .map(([, route]) => route),
     ]),
@@ -323,9 +333,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
       const root = createRoot(element);
       root.render(
         <StrictMode>
-          <GraphQLClientProvider config={schemas} schema={defaultSchema}>
-            <RouterProvider router={router} />
-          </GraphQLClientProvider>
+          <RouterProvider router={router} />
         </StrictMode>,
       );
       return root;
@@ -335,13 +343,139 @@ export function createApp(input: CreateAppInput): AngeeApp {
 
 function refineResourcesForSchemas(
   schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>,
-  routesByModel: Readonly<Record<string, string>>,
+  routesByResource: Readonly<Record<string, string>>,
+  metadataByResource: Readonly<Record<string, RefineResourceMetadata>>,
 ) {
   return Object.values(schemas).flatMap((schema) =>
     refineResourcesFromAngeeSchemaMetadata(schema.metadata, {
-      pathsByModel: routesByModel,
+      pathsByResource: routesByResource,
+      metadataByResource,
     }),
   );
+}
+
+interface RefineRouteResourceProjection {
+  resources: readonly ResourceProps[];
+  metadataByResource: Readonly<Record<string, RefineResourceMetadata>>;
+}
+
+function refineRouteResourceProjection(
+  routes: readonly BaseAddonRoute[],
+  menuTree: MenuTree,
+): RefineRouteResourceProjection {
+  const resourcesByIdentifier = new Map<string, ResourceProps>();
+  const metadataByResource: Record<string, RefineResourceMetadata> = {};
+  const appRootIds = new Set(menuTree.roots.map((item) => item.id));
+
+  for (const node of menuTree.byId.values()) {
+    const trail = breadcrumbTrailFromMenuTrail(menuTree.trailFor(node.id));
+    trail.forEach((item, index) => {
+      addMenuRouteResource(
+        resourcesByIdentifier,
+        item,
+        trail[index - 1],
+        appRootIds.has(item.id),
+      );
+    });
+  }
+
+  for (const route of routes) {
+    if (!route.resource) continue;
+    const selected = menuNodeForRouteResource(route, menuTree);
+    const trail = selected
+      ? breadcrumbTrailFromMenuTrail(menuTree.trailFor(selected.id))
+      : [];
+    const leaf = trail.at(-1);
+    const parent = trail.length > 1 ? trail[trail.length - 2] : undefined;
+    metadataByResource[route.resource] = {
+      ...(leaf ? { label: leaf.displayLabel } : routeLabel(route)),
+      ...(leaf ? { icon: leaf.iconName } : routeIcon(route)),
+      ...(parent ? { parent: menuRouteResourceIdentifier(parent.id) } : {}),
+    };
+  }
+
+  return {
+    resources: [...resourcesByIdentifier.values()],
+    metadataByResource,
+  };
+}
+
+function addMenuRouteResource(
+  resourcesByIdentifier: Map<string, ResourceProps>,
+  item: ChromeMenuNode,
+  parent: ChromeMenuNode | undefined,
+  appRoot: boolean,
+): void {
+  const target = item.target;
+  if (!target || target === "#") return;
+  const identifier = menuRouteResourceIdentifier(item.id);
+  const existing = resourcesByIdentifier.get(identifier);
+  if (existing) {
+    if (appRoot) {
+      existing.meta = {
+        ...existing.meta,
+        appRoot: true,
+      };
+    }
+    return;
+  }
+  resourcesByIdentifier.set(identifier, {
+    name: identifier,
+    identifier,
+    list: refineRoutePathForTanStack(target),
+    meta: {
+      label: item.displayLabel,
+      icon: item.iconName,
+      menuId: item.id,
+      ...(appRoot ? { appRoot: true } : {}),
+      ...(item.description ? { description: item.description } : {}),
+      ...(item.group ? { group: item.group } : {}),
+      ...(item.sidebar !== undefined ? { sidebar: item.sidebar } : {}),
+      ...(item.status ? { status: item.status } : {}),
+      ...(item.tone ? { tone: item.tone } : {}),
+      ...(item.badge !== undefined ? { badge: item.badge } : {}),
+      ...(parent ? { parent: menuRouteResourceIdentifier(parent.id) } : {}),
+    },
+  });
+}
+
+function menuNodeForRouteResource(
+  route: BaseAddonRoute,
+  menuTree: MenuTree,
+): ChromeMenuNode | undefined {
+  if (route.menu) {
+    const selected = menuTree.byId.get(route.menu);
+    if (!selected) {
+      throw new Error(
+        `Route "${route.name}" references unknown menu item "${route.menu}".`,
+      );
+    }
+    const refs = menuTree.itemsForRoute(route.name);
+    if (refs.length > 0 && !refs.some((item) => item.id === selected.id)) {
+      throw new Error(
+        `Route "${route.name}" sets menu "${route.menu}", but that item does not reference the route.`,
+      );
+    }
+    return selected;
+  }
+  const refs = menuTree.itemsForRoute(route.name);
+  return refs.length === 1 ? refs[0] : undefined;
+}
+
+function menuRouteResourceIdentifier(menuId: string): string {
+  return `menu:${menuId}`;
+}
+
+function refineRoutePathForTanStack(path: string): string {
+  return path.replace(/(^|\/)\$([^/?#]+)/g, "$1:$2");
+}
+
+function routeLabel(route: BaseAddonRoute): RefineResourceMetadata {
+  return typeof route.title === "string" ? { label: route.title } : {};
+}
+
+function routeIcon(route: BaseAddonRoute): RefineResourceMetadata {
+  return route.icon ? { icon: route.icon } : {};
 }
 
 function normalizeSchemaConfigs(
@@ -359,10 +493,24 @@ function normalizeSchemaConfig(
   schema: AngeeAppSchemaConfig,
 ): NormalizedAngeeAppSchemaConfig {
   const { metadata, ...config } = schema;
+  const normalizedMetadata =
+    metadata == null ? undefined : defineAngeeSchemaMetadata(metadata);
   return {
     ...config,
-    ...(metadata == null ? {} : { metadata: defineAngeeSchemaMetadata(metadata) }),
+    fieldMetadata: schemaFieldMetadataFromAngeeSchemaMetadata(normalizedMetadata),
+    ...(normalizedMetadata == null ? {} : { metadata: normalizedMetadata }),
   };
+}
+
+function operationDocumentsForSchemas(
+  schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>,
+): Readonly<Record<string, SchemaOperationDocuments | undefined>> {
+  return Object.fromEntries(
+    Object.entries(schemas).map(([name, schema]) => [
+      name,
+      schema.operationDocuments,
+    ]),
+  );
 }
 
 function createLiveProviderForSchema(
@@ -374,7 +522,6 @@ function createLiveProviderForSchema(
   const liveOptions = schema.live === true
     ? {
         url: schema.url,
-        wsEndpoint: schema.wsEndpoint,
       }
     : schema.live;
   return createAngeeHasuraLiveProvider({
@@ -394,8 +541,19 @@ function authSchemaNameForSchemas(
   return first;
 }
 
+function createAuthProviderForSchema(
+  schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>,
+  authSchema: string,
+): RefineAuthProvider {
+  const schema = schemas[authSchema];
+  if (!schema) {
+    throw new Error(`No GraphQL schema config for auth schema "${authSchema}".`);
+  }
+  return createAngeeAuthProvider(schema);
+}
+
 // Keep search values flat and unquoted so login next round-trips raw and
-// data-view values read like status:year.
+// resource-view values read like status:year.
 export function parseFlatSearch(searchStr: string): Record<string, string> {
   const source = searchStr.startsWith("?") ? searchStr.slice(1) : searchStr;
   const params = new URLSearchParams(source);
@@ -423,123 +581,139 @@ export function stringifyFlatSearch(search: Record<string, unknown>): string {
  */
 function AppFrame({
   authSchema,
-  runtime,
-  subscriptionSchema,
-  availableChangeFields,
   children,
 }: {
   authSchema: string;
-  runtime: AppRuntime;
-  subscriptionSchema: string;
-  availableChangeFields?: ReadonlySet<string>;
   children: ReactNode;
 }): ReactNode {
   const { auth } = useRuntimeAuthState();
-  const clients = useSchemaClients();
   return (
-    <AppRuntimeProvider runtime={runtime}>
-      <ModalsHost>
-        <ToastProvider>
-          <RelayInvalidationProvider
-            client={clients[subscriptionSchema]}
-            availableChangeFields={availableChangeFields}
-          >
-            <AuthProvider auth={auth}>
-              <UserPreferencesProvider dataProviderName={authSchema}>
-                {children}
-              </UserPreferencesProvider>
-            </AuthProvider>
-          </RelayInvalidationProvider>
-        </ToastProvider>
-      </ModalsHost>
-    </AppRuntimeProvider>
+    <AuthProvider auth={auth}>
+      <UserPreferencesProvider dataProviderName={authSchema}>
+        {children}
+      </UserPreferencesProvider>
+    </AuthProvider>
   );
 }
 
 function HomeRedirect({ fallback }: { fallback: string }): ReactNode {
-  const menus = useMenus();
+  const menuTree = useChromeMenuTree();
   const { preferences } = useUserPreferences();
   const target = useMemo(() => {
     const defaultItemId = readAppRailPreferences(preferences).defaultItemId;
     if (!defaultItemId) return fallback;
-    const item = MenuTree
-      .from(menus as readonly ChromeMenuItem[])
+    const item = menuTree
       .railMenuItems()
       .find((node) => node.id === defaultItemId);
     return item?.target ?? fallback;
-  }, [fallback, menus, preferences]);
+  }, [fallback, menuTree, preferences]);
   return <Redirect to={target} />;
 }
 
-function ShellLayoutRoute({
-  shellName,
-  shells,
+function RefineLayoutRoute({
+  layoutName,
+  layouts,
+  schemas,
   defaultSchema,
 }: {
-  shellName: string;
-  shells: Record<string, ShellConfig>;
+  layoutName: string;
+  layouts: Record<string, RefineLayoutConfig>;
+  schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>;
   defaultSchema: string;
 }): ReactNode {
-  const shell = shells[shellName];
-  const clients = useSchemaClients();
-  const Chrome = shell?.chrome ?? PassthroughChrome;
-  const { icon, title } = useRouteChrome();
-  const requireAuth = shell?.requireAuth ?? shellName !== "public";
+  const layout = layouts[layoutName];
+  const Chrome = layout?.chrome ?? PassthroughChrome;
+  const schemaName = layout?.schema ?? defaultSchema;
+  const schema = schemas[schemaName];
+  if (!schema) {
+    const known = Object.keys(schemas).join(", ") || "none";
+    throw new Error(
+      `No GraphQL schema config for layout "${layoutName}" schema ` +
+        `"${schemaName}"; configured schemas: ${known}.`,
+    );
+  }
   const body = (
-    <Chrome icon={icon} title={title}>
+    <Chrome>
       <Outlet />
     </Chrome>
   );
-  const gated = requireAuth ? <RequireAuth>{body}</RequireAuth> : body;
-  // Bind the route to its shell's schema client, so reads inside inherit it.
+  // Bind the route to its layout's schema metadata/provider name for refine calls.
   return (
-    <GraphQLProvider clients={clients} schema={shell?.schema ?? defaultSchema}>
-      {gated}
-    </GraphQLProvider>
+    <ActiveGraphQLSchemaProvider schema={schemaName}>
+      <ModelMetadataProvider metadata={schema.fieldMetadata}>
+        {body}
+      </ModelMetadataProvider>
+    </ActiveGraphQLSchemaProvider>
   );
 }
 
-function createShellRoutes({
+function createLayoutRoutes({
   rootRoute,
-  shellNames,
-  shells,
+  layoutNames,
+  layouts,
+  schemas,
   defaultSchema,
+  authProvider,
 }: {
   rootRoute: AnyRoute;
-  shellNames: readonly string[];
-  shells: Record<string, ShellConfig>;
+  layoutNames: readonly string[];
+  layouts: Record<string, RefineLayoutConfig>;
+  schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>;
   defaultSchema: string;
+  authProvider: RefineAuthProvider;
 }): Map<string, AnyRoute> {
-  const shellRoutes = new Map<string, AnyRoute>();
-  for (const shellName of shellNames) {
-    shellRoutes.set(
-      shellName,
+  const layoutRoutes = new Map<string, AnyRoute>();
+  for (const layoutName of layoutNames) {
+    const requireAuth = layoutRequiresAuth(layoutName, layouts);
+    layoutRoutes.set(
+      layoutName,
       createRoute({
         getParentRoute: () => rootRoute,
-        id: shellLayoutRouteId(shellName),
+        id: refineLayoutRouteId(layoutName),
+        ...(requireAuth
+          ? { beforeLoad: authBeforeLoad(authProvider) }
+          : {}),
         component: () => (
-          <ShellLayoutRoute
-            shellName={shellName}
-            shells={shells}
+          <RefineLayoutRoute
+            layoutName={layoutName}
+            layouts={layouts}
+            schemas={schemas}
             defaultSchema={defaultSchema}
           />
         ),
       }),
     );
   }
-  return shellRoutes;
+  return layoutRoutes;
+}
+
+function layoutRequiresAuth(
+  layoutName: string,
+  layouts: Record<string, RefineLayoutConfig>,
+): boolean {
+  return layouts[layoutName]?.requireAuth ?? layoutName !== "public";
+}
+
+function authBeforeLoad(authProvider: RefineAuthProvider) {
+  return async ({ location }: { location: { href: string } }): Promise<void> => {
+    const result = await authProvider.check();
+    if (result.authenticated) return;
+    throw redirect({
+      to: result.redirectTo ?? "/login",
+      search: { next: location.href },
+      replace: true,
+    });
+  };
 }
 
 function createAddonRouteNodes({
   routes,
   routesByName,
-  routeChromeByName,
-  shellRoutes,
+  layoutRoutes,
 }: {
   routes: readonly BaseAddonRoute[];
   routesByName: ReadonlyMap<string, BaseAddonRoute>;
-  routeChromeByName: ReadonlyMap<string, RouteChromeStaticData>;
-  shellRoutes: ReadonlyMap<string, AnyRoute>;
+  layoutRoutes: ReadonlyMap<string, AnyRoute>;
 }): void {
   const routeNodes = new Map<string, AnyRoute>();
   const childrenByParent = new Map<AnyRoute, Array<NamedRouteNode>>();
@@ -550,14 +724,18 @@ function createAddonRouteNodes({
     const parentManifestRoute = route.parent
       ? routesByName.get(route.parent)
       : undefined;
+    if (route.parent && !parentManifestRoute) {
+      throw new Error(
+        `Route "${route.name}" references unknown parent route "${route.parent}".`,
+      );
+    }
     const parentNode = parentManifestRoute
       ? buildRoute(parentManifestRoute)
-      : shellRoutes.get(route.shell)!;
+      : layoutRouteFor(route, layoutRoutes);
     const node = createAddonRouteNode(
       route,
       parentNode,
       parentManifestRoute,
-      routeChromeByName.get(route.name),
     );
     routeNodes.set(route.name, node);
     const children = childrenByParent.get(parentNode) ?? [];
@@ -578,17 +756,28 @@ function createAddonRouteNodes({
   }
 }
 
+function layoutRouteFor(
+  route: BaseAddonRoute,
+  layoutRoutes: ReadonlyMap<string, AnyRoute>,
+): AnyRoute {
+  const layout = layoutRoutes.get(route.layout);
+  if (!layout) {
+    throw new Error(
+      `Route "${route.name}" references undeclared layout "${route.layout}".`,
+    );
+  }
+  return layout;
+}
+
 function createAddonRouteNode(
   route: BaseAddonRoute,
   parentNode: AnyRoute,
   parentManifestRoute: BaseAddonRoute | undefined,
-  chrome: RouteChromeStaticData | undefined,
 ): AnyRoute {
   const Page = route.component;
   return createRoute({
     getParentRoute: () => parentNode,
     path: routePathUnderParent(route, parentManifestRoute),
-    staticData: routeStaticData(route, chrome),
     ...(Page ? { component: () => <Page /> } : {}),
   });
 }
@@ -598,22 +787,12 @@ interface NamedRouteNode {
   route: AnyRoute;
 }
 
-function routeStaticData(
-  route: BaseAddonRoute,
-  chrome: RouteChromeStaticData | undefined,
-): StaticDataRouteOption {
-  return {
-    ...(chrome ? { chrome } : {}),
-    ...(route.crumb ? { breadcrumb: route.crumb } : {}),
-  };
+function layoutNamesForRoutes(layouts: Record<string, RefineLayoutConfig>): readonly string[] {
+  return Object.keys(layouts).sort(compareCodePoint);
 }
 
-function shellNamesForRoutes(shells: Record<string, ShellConfig>): readonly string[] {
-  return Object.keys(shells).sort(compareCodePoint);
-}
-
-function shellLayoutRouteId(shellName: string): string {
-  return `_angee_shell_${shellName}`;
+function refineLayoutRouteId(layoutName: string): string {
+  return `_angee_layout_${layoutName}`;
 }
 
 function compareRouteNames(
@@ -629,25 +808,6 @@ function compareCodePoint(left: string, right: string): number {
   return 0;
 }
 
-/** Gate a subtree behind sign-in; bounce to `/login` while or after resolving. */
-function RequireAuth({ children }: { children: ReactNode }): ReactNode {
-  const t = useBaseT();
-  const { auth, fetching } = useRuntimeAuthState();
-  const navigate = useNavigate();
-  const signedOut = !fetching && !auth.user;
-  useEffect(() => {
-    if (!signedOut) return;
-    const next =
-      typeof window !== "undefined"
-        ? `${window.location.pathname}${window.location.search}`
-        : "/";
-    void navigate({ to: "/login", search: { next } });
-  }, [signedOut, navigate]);
-  if (fetching && !auth.user) return <FullPageStatus message={t("app.loadingWorkspace")} />;
-  if (!auth.user) return <FullPageStatus message={t("app.redirectingSignIn")} />;
-  return <>{children}</>;
-}
-
 function Redirect({ to }: { to: string }): ReactNode {
   const navigate = useNavigate();
   useEffect(() => {
@@ -656,15 +816,7 @@ function Redirect({ to }: { to: string }): ReactNode {
   return null;
 }
 
-function FullPageStatus({ message }: { message: string }): ReactNode {
-  return (
-    <main className="grid min-h-screen place-content-center bg-canvas text-sm text-fg-muted">
-      {message}
-    </main>
-  );
-}
-
-export function PassthroughChrome({ children }: ShellChromeProps): ReactNode {
+export function PassthroughChrome({ children }: RefineLayoutChromeProps): ReactNode {
   return <>{children}</>;
 }
 
@@ -700,167 +852,45 @@ function resolveMenuRouteTarget(
   };
 }
 
-function routeChromeByNameFromMenu(
-  routes: readonly BaseAddonRoute[],
-  menuTree: MenuTree,
-): Map<string, RouteChromeStaticData> {
-  const routeChromeByName = new Map<string, RouteChromeStaticData>();
-  for (const route of routes) {
-    const refs = menuTree.itemsForRoute(route.name);
-    const fields = chromeFieldsNeedingDerivation(route);
-    const selected = selectedMenuItemForRoute(route, refs, menuTree, fields);
-    const derived = selected
-      ? chromePropsFromTrail(
-          menuTree.trailFor(selected.id),
-          selected.route !== route.name,
-        )
-      : {};
-    const chrome = materializeRouteChrome({
-      title: route.title ?? derived.title,
-      icon: route.icon ?? derived.icon,
-      breadcrumbs: route.breadcrumbs ?? derived.breadcrumbs,
-    });
-    if (hasRouteChrome(chrome)) routeChromeByName.set(route.name, chrome);
-  }
-  return routeChromeByName;
-}
-
-function selectedMenuItemForRoute(
-  route: BaseAddonRoute,
-  refs: readonly ChromeMenuNode[],
-  menuTree: MenuTree,
-  fields: readonly ChromeField[],
-): ChromeMenuNode | undefined {
-  if (route.menu) {
-    const selected = menuTree.byId.get(route.menu);
-    if (!selected) {
-      throw new Error(
-        `Route "${route.name}" references unknown menu item "${route.menu}".`,
-      );
-    }
-    if (refs.length > 0 && !refs.some((item) => item.id === selected.id)) {
-      throw new Error(
-        `Route "${route.name}" sets menu "${route.menu}", but that item does not reference the route.`,
-      );
-    }
-    return selected;
-  }
-  if (refs.length === 1) return refs[0];
-  if (refs.length > 1 && fields.length > 0) {
-    throw new Error(
-      `Route "${route.name}" is referenced by multiple menu items; declare route.menu or explicit chrome for ${fields.join(", ")}.`,
-    );
-  }
-  return undefined;
-}
-
-function chromePropsFromTrail(
+function breadcrumbTrailFromMenuTrail(
   trail: readonly ChromeMenuNode[],
-  linkLeaf: boolean,
-): RouteChromeStaticData {
-  const root = trail[0];
-  return {
-    title: root?.displayLabel,
-    icon: root?.iconName,
-    breadcrumbs: trail.map((item, index) => {
-      const leaf = index === trail.length - 1;
-      return {
-        label: item.displayLabel,
-        to: !leaf || linkLeaf ? item.target : undefined,
-      };
-    }),
-  };
-}
-
-function hasRouteChrome(chrome: RouteChromeStaticData): boolean {
-  return (
-    chrome.title !== undefined ||
-    chrome.icon !== undefined ||
-    chrome.breadcrumbs !== undefined
-  );
-}
-
-function materializeRouteChrome(
-  chrome: RouteChromeStaticData,
-): RouteChromeStaticData {
-  if (chrome.breadcrumbs !== undefined || chrome.title === undefined) {
-    return chrome;
+): readonly ChromeMenuNode[] {
+  const items: ChromeMenuNode[] = [];
+  for (const item of trail) {
+    const previous = items.at(-1);
+    if (
+      previous &&
+      previous.displayLabel === item.displayLabel &&
+      previous.target === item.target
+    ) {
+      items[items.length - 1] = item;
+      continue;
+    }
+    items.push(item);
   }
-  return { ...chrome, breadcrumbs: [{ label: chrome.title }] };
-}
-
-type ChromeField = "title" | "icon" | "breadcrumbs";
-
-const DERIVED_CHROME_FIELDS: readonly ChromeField[] = [
-  "title",
-  "icon",
-  "breadcrumbs",
-];
-
-// Each chrome field has independent precedence: explicit route field first,
-// otherwise derive that field from the selected menu trail when one is needed.
-function chromeFieldsNeedingDerivation(
-  route: BaseAddonRoute,
-): readonly ChromeField[] {
-  return DERIVED_CHROME_FIELDS.filter((field) => route[field] === undefined);
+  return items;
 }
 
 /**
- * Index each model to the base path of the collection route that lists it (the
- * `model`-tagged route), for relation "follow" navigation. A model may be claimed
- * by only one route — a second claim is a build-time error, matching the registry
- * collision discipline elsewhere.
+ * Index each resource to the base path of the collection route that lists it (the
+ * `resource`-tagged route), for relation-follow navigation. A resource may be
+ * claimed by only one route — a second claim is a build-time error, matching the
+ * registry collision discipline elsewhere.
  */
-function modelRouteIndex(
+function resourceRouteIndex(
   routes: readonly BaseAddonRoute[],
 ): Record<string, string> {
-  const byModel: Record<string, string> = {};
+  const byResource: Record<string, string> = {};
   for (const route of routes) {
-    if (!route.model) continue;
-    if (Object.prototype.hasOwnProperty.call(byModel, route.model)) {
+    if (!route.resource) continue;
+    if (Object.prototype.hasOwnProperty.call(byResource, route.resource)) {
       throw new Error(
-        `Route "${route.name}" claims model "${route.model}" already claimed by another route.`,
+        `Route "${route.name}" claims resource "${route.resource}" already claimed by another route.`,
       );
     }
-    byModel[route.model] = route.path;
+    byResource[route.resource] = route.path;
   }
-  return byModel;
-}
-
-function validateRoutes(
-  routes: readonly BaseAddonRoute[],
-  routesByName: ReadonlyMap<string, BaseAddonRoute>,
-  shells: Record<string, ShellConfig>,
-): void {
-  for (const route of routes) {
-    if (!Object.prototype.hasOwnProperty.call(shells, route.shell)) {
-      throw new Error(
-        `Route "${route.name}" references undeclared shell "${route.shell}".`,
-      );
-    }
-    if (!route.component && !route.parent) {
-      throw new Error(
-        `Route "${route.name}" must declare component unless it is nested under parent.`,
-      );
-    }
-    const parent = route.parent ? routesByName.get(route.parent) : undefined;
-    if (route.parent && !parent) {
-      throw new Error(
-        `Route "${route.name}" references unknown parent route "${route.parent}".`,
-      );
-    }
-    if (!parent) continue;
-    if (parent.shell !== route.shell) {
-      throw new Error(
-        `Route "${route.name}" parent "${parent.name}" must use the same shell.`,
-      );
-    }
-    if (!isProperPathPrefix(parent.path, route.path)) {
-      throw new Error(
-        `Route "${route.name}" path "${route.path}" must be nested under parent "${parent.name}" path "${parent.path}".`,
-      );
-    }
-  }
+  return byResource;
 }
 
 function routePathUnderParent(
@@ -870,16 +900,12 @@ function routePathUnderParent(
   if (!parent) return route.path;
   const parentPath = normalizeRoutePath(parent.path);
   const childPath = normalizeRoutePath(route.path);
+  if (parentPath === childPath) return "";
   if (parentPath === "/") return childPath.slice(1);
-  return childPath.slice(parentPath.length + 1);
-}
-
-function isProperPathPrefix(parentPath: string, childPath: string): boolean {
-  const parent = normalizeRoutePath(parentPath);
-  const child = normalizeRoutePath(childPath);
-  if (parent === child) return false;
-  if (parent === "/") return child.startsWith("/");
-  return child.startsWith(`${parent}/`);
+  if (childPath.startsWith(`${parentPath}/`)) {
+    return childPath.slice(parentPath.length + 1);
+  }
+  return childPath.slice(1);
 }
 
 function normalizeRoutePath(path: string): string {

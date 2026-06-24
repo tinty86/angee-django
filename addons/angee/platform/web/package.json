@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@angee/base": "workspace:*",
+    "@angee/data": "workspace:*",
+    "@angee/refine": "workspace:*",
     "@angee/sdk": "workspace:*",
     "nuqs": "^2.5.0"
   },

@@ -55,14 +55,12 @@ Dependency changes must update this file in the same change.
 |---|---|---|
 | React 19 | View library | Component conventions |
 | TypeScript >= 6 | Language and type system | Branded boundary types |
-| @refinedev/core | Resource registry, standard data hooks, react-query cache/invalidation, auth/i18n/live provider contracts | `@angee/data` maps emitted `angee.resources` metadata to refine resources; `createApp` mounts named providers and the TanStack Router binding |
-| @refinedev/hasura + graphql-request 5 + graphql 15 | Hasura GraphQL data provider (`_bool_exp`, `order_by`, `_aggregate`, `_by_pk`, `_set`) and authored `meta.gqlQuery` / `meta.gqlMutation` execution | `@angee/data` pins `idType: "String"` and `namingConvention: "hasura-default"`, uses refine-compatible GraphQL document ASTs, and applies Angee session/CSRF or service auth at the transport boundary |
-| graphql-ws 5 | GraphQL WebSocket lifecycle for the Hasura live provider and temporary authored transports | Endpoint derivation, connection params, and retry policy |
-| urql React 5 + @urql/core 6 | Transitional authored-operation transport during the refine migration | Legacy provider stack and invalidation wiring until the remaining SDK data modules move to refine/codegen |
+| @refinedev/core | Resource registry, standard data hooks, react-query cache/invalidation, auth/i18n/live provider contracts | Angee projects emitted `angee.resources` metadata to refine resources and mounts one composed `<Refine>` root with named providers and the TanStack Router binding |
+| @refinedev/hasura + graphql-request 5 + graphql 15 | Hasura GraphQL data provider (`_bool_exp`, `order_by`, `_aggregate`, `_by_pk`, `_set`) and authored `meta.gqlQuery` / `meta.gqlMutation` execution | Angee pins `idType: "String"` and `namingConvention: "hasura-default"`, uses refine-compatible GraphQL document ASTs, and applies session/CSRF or service auth at the transport boundary |
+| graphql-ws 5 | GraphQL WebSocket lifecycle for the Hasura live provider and daemon-owned operator transport | Endpoint derivation, connection params, retry policy, and the operator daemon quarantine until that transport has its own non-app owner |
 | GraphQL Code Generator (client-preset) + @graphql-typed-document-node/core | Generated TypeScript schema and operation types from emitted Django SDL and daemon-owned SDL, as `TypedDocumentNode` documents | Each project web package owns a `codegen` script that emits `runtime/gql/<schema>` from `runtime/schemas/<schema>.graphql`, routed to a Django schema by document filename (`documents.ts`/`documents.console.ts` → console, `documents.public.ts` → public); the operator web package owns a separate daemon client-preset run from `schema/operator.graphql` scanning only `documents.daemon.ts`; authored operations carry no hand-written result/variables types |
 | TanStack Router | Type-safe routing and search params | `defineAddon` to `createApp` route composition and flat URL search codec |
 | @refinedev/react-hook-form + react-hook-form + @hookform/resolvers + zod | Form state, submit lifecycle, and validation binding | `FormView` keeps Angee's declarative rendered DSL while delegating state/validation to refine/react-hook-form |
-| TanStack Form | Transitional current `FormView` engine during the refine migration | Removed once `FormView` is rebound to `@refinedev/react-hook-form` |
 | @refinedev/react-table + TanStack Table | Server-backed table state, sort/filter/pagination bridge, columns, grouping, selection | `ListView` and `BoardView` keep Angee's rendered controls and domain view modes while delegating standard table/data mechanics |
 | TanStack Virtual | Row and column virtualization | Long-list wiring |
 | nuqs | Type-safe URL query state | Remaining chrome query state such as top-menu tabs |
@@ -85,8 +83,8 @@ Dependency changes must update this file in the same change.
 ## Hasura Dialect Rule
 
 `strawberry-django-hasura`, the operator daemon SDL, `@refinedev/hasura`, and
-`@angee/data` share one Hasura-default wire contract. Grouped resources must keep
-the DDN/NDC-preview shape:
+Angee's refine/data glue share one Hasura-default wire contract. Grouped
+resources must keep the DDN/NDC-preview shape:
 `<resource>_groups(group_by, where, having, order_by, limit, offset): [<resource>_group!]!`,
 with each group returning a typed `key: <Model>GroupKey!` and the free
 `aggregate: <Model>Aggregate!`. The stock `<resource>_aggregate` root remains
@@ -96,26 +94,31 @@ operations owned by the dialect adapters.
 Future grouped features such as bucket ordering, bucket predicates, additional
 date extraction, or JSON drill-down operators must be added at the dialect
 owners together: the Django adapter, operator SDL, emitted resource metadata,
-and the `@angee/data` authored operation helpers. Do not add frontend-only group
+and the refine authored-operation helpers. Do not add frontend-only group
 semantics or local provider dialects.
 
 ## Rendered Binding
 
-`@angee/sdk` stays headless. `@angee/base` is the single rendered binding.
+Angee's frontend is Refine-native: the app composes one `<Refine>` root, resource
+metadata projects into refine resources, and the rendered binding owns only
+domain presentation over refine state. During the current package split,
+composition/runtime contracts still live in `@angee/sdk`, provider/resource glue
+in `@angee/data`, and rendered UI in `@angee/base`; the target owners are
+`@angee/app`, `@angee/refine`, `@angee/resources`, and `@angee/ui`.
 
 | Pick | Owns | Angee adds |
 |---|---|---|
 | @base-ui/react | Headless primitives: dialog, popover, menu, tabs, tooltip, field, toolbar, scroll area, and related UI | Styled binding and composition rules; controlled `open`/`onOpenChange` owns popover/dialog transition timing |
 | @floating-ui/react-dom | Floating-element positioning and virtual anchors | Popover and menu anchoring |
-| @angee/logo-react | Angee brand logo and cube marks | Brand lockup in the public shell |
+| @angee/logo-react | Angee brand logo and cube marks | Brand lockup in the public layout |
 | react-markdown + remark-gfm | Markdown rendering (GitHub-flavored) | Markdown widget preview |
 | tailwind-variants | Variant recipes with slots | Component recipes |
 | tw-animate-css | Tailwind 4 animation utilities | Motion tokens |
-| cmdk | Command menu | Spotlight shell surface |
+| cmdk | Command menu | Spotlight command surface |
 | react-day-picker | Calendar | Date widgets |
-| react-resizable-panels | Split panes | Shell and inspector layouts |
+| react-resizable-panels | Split panes | Layout and inspector panes |
 | CodeMirror 6 (+ @codemirror/lang-json) | Text / Markdown / JSON editor | Markdown and JSON widget editors (shared `useCodeMirrorEditor`) |
-| @xyflow/react | node/edge graph canvas | `@angee/base` `GraphView` shell |
+| @xyflow/react | node/edge graph canvas | `@angee/base` `GraphView` canvas |
 | @dagrejs/dagre | directed-graph layout | `@angee/base` `GraphView` node placement |
 | @dnd-kit | Drag and drop | Board and rail interactions |
 | Native browser drag/drop | File drag enter/leave/drop events and `DataTransfer.files` | `@angee/base` upload drop target primitive |

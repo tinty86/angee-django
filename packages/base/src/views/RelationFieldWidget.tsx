@@ -1,11 +1,13 @@
 import { useMemo, type ReactElement } from "react";
 
 import {
-  useModelMetadata,
-  useModelRoute,
+  useResourceRoute,
 } from "@angee/sdk";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 
-import { recordPath } from "./DataPageRouted";
+import { recordPath } from "./resource-routing";
 import {
   formFieldsFromMetadata,
   type RelationFieldInfo,
@@ -39,15 +41,15 @@ export function RelationFieldWidget({
 }: RelationFieldWidgetProps): ReactElement {
   const { list, options } = useRelationOptions(relation);
 
-  const relatedMetadata = useModelMetadata(relation.model);
+  const relatedMetadata = useModelMetadata(relation.resource);
   const createFields = useMemo(
     () => formFieldsFromMetadata(relatedMetadata),
     [relatedMetadata],
   );
 
-  // A "follow" arrow appears only when the related model has a routed detail page
+  // A "follow" arrow appears only when the related resource has a routed detail page
   // and a record is selected — navigating to it turns the relation into a link.
-  const basePath = useModelRoute(relation.model);
+  const basePath = useResourceRoute(relation.resource);
   const followHref = basePath && value ? recordPath(basePath, value) : undefined;
 
   return (
@@ -62,20 +64,20 @@ export function RelationFieldWidget({
       create={
         relation.canCreate && createFields.length > 0
           ? {
-              model: relation.model,
+              resource: relation.resource,
               fields: createFields,
               prefillField: relation.labelField,
             }
           : undefined
       }
       onCreated={() => list.refetch()}
-      // Edit is offered whenever the model has editable fields — intentionally
-      // UX-only, not gated on a `canEdit` flag (the SDL exposes no per-relation
-      // edit capability). The server is the authorization boundary: a denied
+      // Edit is offered whenever the resource has editable fields — intentionally
+      // UX-only, not gated on a `canEdit` flag (resource metadata exposes no
+      // per-relation edit capability). The server is the authorization boundary: a denied
       // patch surfaces in the dialog's own error banner.
       edit={
         createFields.length > 0
-          ? { model: relation.model, fields: createFields }
+          ? { resource: relation.resource, fields: createFields }
           : undefined
       }
       onEdited={() => list.refetch()}

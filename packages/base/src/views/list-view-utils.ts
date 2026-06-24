@@ -1,31 +1,34 @@
 import type { ReactNode } from "react";
-import type { Row } from "@angee/data";
-import type { ModelFieldMetadata, ModelMetadata } from "@angee/sdk";
+import type {
+  ModelFieldMetadata,
+  ModelMetadata,
+  Row,
+} from "@angee/resources";
 
 import { dedupeBy } from "../lib/dedupe";
+import { statusLabel } from "../lib/labels";
 import type {
-  DataToolbarCustomFilter,
-  DataToolbarCustomFilterChip,
-  DataToolbarFilterField,
-  DataToolbarFilterOption,
-  DataToolbarGroupOption,
+  ResourceToolbarCustomFilter,
+  ResourceToolbarCustomFilterChip,
+  ResourceToolbarFilterField,
+  ResourceToolbarFilterOption,
+  ResourceToolbarGroupOption,
 } from "../toolbars";
 import {
   DEFAULT_TEXT_FILTER_FIELD,
   Filter,
   isLookupOperator,
-  type DataViewFilter,
-  type DataViewGroup,
-  type DataViewLookup,
-  type DataViewLookupOperator,
+  type ResourceViewFilter,
+  type ResourceViewGroup,
+  type ResourceViewLookup,
+  type ResourceViewLookupOperator,
   type FilterFacet,
-} from "./data-view-model";
+} from "./resource-view-model";
 import {
   groupFieldLabel,
   looksLikeDateField,
   readPath,
   resourceGroupDimensionForField,
-  statusLabel,
   fieldToSnake,
 } from "./ListInternals";
 import type { ColumnDescriptor } from "./page";
@@ -40,18 +43,18 @@ const DATE_GROUP_GRANULARITIES = ["year", "quarter", "month", "week", "day"] as 
 export function buildGroupOptions<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   metadata: ModelMetadata | null,
-  defaultGroups: DataViewGroup | readonly DataViewGroup[] | null | undefined,
-): readonly DataToolbarGroupOption[] {
-  const options: DataToolbarGroupOption[] = [];
+  defaultGroups: ResourceViewGroup | readonly ResourceViewGroup[] | null | undefined,
+): readonly ResourceToolbarGroupOption[] {
+  const options: ResourceToolbarGroupOption[] = [];
   const seen = new Set<string>();
-  const addOption = (option: DataToolbarGroupOption) => {
+  const addOption = (option: ResourceToolbarGroupOption) => {
     if (seen.has(option.id)) return;
     seen.add(option.id);
     options.push(option);
   };
 
   for (const defaultGroup of defaultGroupList(defaultGroups)) {
-    const resolvedGroup = resolveDataViewGroup(defaultGroup, metadata);
+    const resolvedGroup = resolveResourceViewGroup(defaultGroup, metadata);
     if (!groupAllowedByResource(resolvedGroup, metadata)) continue;
     const field = metadata?.fields[resolvedGroup.field];
     const type = dateGroupType(resolvedGroup.field, field) ? "date" : "value";
@@ -72,7 +75,7 @@ export function buildGroupOptions<TRow extends Row>(
   );
   for (const alias of groupAliases) {
     if (!metadata) continue;
-    const group = groupAliasToDataViewGroup(alias);
+    const group = groupAliasToResourceViewGroup(alias);
     if (!groupAllowedByResource(group, metadata)) continue;
     const field = metadata.fields[alias.field];
     if (!field) continue;
@@ -140,7 +143,7 @@ export function buildGroupOptions<TRow extends Row>(
 function relationGroupOptionForColumn<TRow extends Row>(
   column: ColumnDescriptor<TRow>,
   metadata: ModelMetadata | null,
-): DataToolbarGroupOption | null {
+): ResourceToolbarGroupOption | null {
   const group = relationGroupForFieldPath(column.field, metadata);
   if (!group) return null;
   const [relationField] = column.field.split(".");
@@ -156,7 +159,7 @@ function relationGroupOptionForColumn<TRow extends Row>(
 function relationGroupForFieldPath(
   fieldPath: string,
   metadata: ModelMetadata | null,
-): DataViewGroup | null {
+): ResourceViewGroup | null {
   const [relationField, labelField, ...rest] = fieldPath.split(".");
   if (!relationField || !labelField || rest.length > 0) return null;
   const field = metadata?.fields[relationField];
@@ -170,7 +173,7 @@ function relationGroupForFieldPath(
 }
 
 function relationGroupLabel(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): ReactNode | null {
   if (!group.aggregateField) return null;
@@ -180,28 +183,28 @@ function relationGroupLabel(
   return field?.kind === "relation" ? fieldLabel(relationField, field) : null;
 }
 
-export function resolveDataViewGroup(
-  group: DataViewGroup,
+export function resolveResourceViewGroup(
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
-): DataViewGroup {
+): ResourceViewGroup {
   if (group.aggregateField && group.aggregateKey) {
-    return canonicalDataViewGroup(group, metadata);
+    return canonicalResourceViewGroup(group, metadata);
   }
   const aliasGroup = groupAliasForField(group.field, metadata);
-  if (aliasGroup) return canonicalDataViewGroup({ ...group, ...aliasGroup }, metadata);
+  if (aliasGroup) return canonicalResourceViewGroup({ ...group, ...aliasGroup }, metadata);
   const relationGroup = relationGroupForFieldPath(group.field, metadata);
-  return canonicalDataViewGroup(
+  return canonicalResourceViewGroup(
     relationGroup ? { ...group, ...relationGroup } : group,
     metadata,
   );
 }
 
-export function validDataViewGroupStack(
-  groupStack: readonly DataViewGroup[],
+export function validResourceViewGroupStack(
+  groupStack: readonly ResourceViewGroup[],
   metadata: ModelMetadata | null,
-): readonly DataViewGroup[] {
+): readonly ResourceViewGroup[] {
   return groupStack.flatMap((group) => {
-    const resolvedGroup = resolveDataViewGroup(group, metadata);
+    const resolvedGroup = resolveResourceViewGroup(group, metadata);
     return groupSupportedByResource(resolvedGroup, metadata)
       ? [resolvedGroup]
       : [];
@@ -211,16 +214,16 @@ export function validDataViewGroupStack(
 function groupAliasForField(
   field: string,
   metadata: ModelMetadata | null,
-): DataViewGroup | null {
+): ResourceViewGroup | null {
   const alias = metadata?.resource?.groupAliases?.find((item) => item.field === field);
-  return alias ? groupAliasToDataViewGroup(alias) : null;
+  return alias ? groupAliasToResourceViewGroup(alias) : null;
 }
 
-function groupAliasToDataViewGroup(alias: {
+function groupAliasToResourceViewGroup(alias: {
   field: string;
   aggregateField: string;
   aggregateKey: string;
-}): DataViewGroup {
+}): ResourceViewGroup {
   return {
     field: alias.field,
     aggregateField: alias.aggregateField,
@@ -228,10 +231,10 @@ function groupAliasToDataViewGroup(alias: {
   };
 }
 
-function canonicalDataViewGroup(
-  group: DataViewGroup,
+function canonicalResourceViewGroup(
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
-): DataViewGroup {
+): ResourceViewGroup {
   const dimension = resourceGroupDimensionForField(
     group.aggregateField ?? group.field,
     metadata,
@@ -246,7 +249,7 @@ function canonicalDataViewGroup(
 }
 
 function groupAllowedByResource(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): boolean {
   const groupByFields = metadata?.resource?.groupByFields;
@@ -269,7 +272,7 @@ function groupAllowedByResource(
 }
 
 function groupSupportedByResource(
-  group: DataViewGroup,
+  group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): boolean {
   if (!groupAllowedByResource(group, metadata)) return false;
@@ -288,23 +291,23 @@ function groupSupportedByResource(
 }
 
 function defaultGroupList(
-  defaultGroups: DataViewGroup | readonly DataViewGroup[] | null | undefined,
-): readonly DataViewGroup[] {
+  defaultGroups: ResourceViewGroup | readonly ResourceViewGroup[] | null | undefined,
+): readonly ResourceViewGroup[] {
   if (!defaultGroups) return [];
-  return isDataViewGroupList(defaultGroups) ? defaultGroups : [defaultGroups];
+  return isResourceViewGroupList(defaultGroups) ? defaultGroups : [defaultGroups];
 }
 
-function isDataViewGroupList(
-  value: DataViewGroup | readonly DataViewGroup[],
-): value is readonly DataViewGroup[] {
+function isResourceViewGroupList(
+  value: ResourceViewGroup | readonly ResourceViewGroup[],
+): value is readonly ResourceViewGroup[] {
   return Array.isArray(value);
 }
 
 export function buildFilterOptions<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   rows: readonly TRow[],
-  fields: readonly DataToolbarFilterField[],
-): readonly DataToolbarFilterOption[] {
+  fields: readonly ResourceToolbarFilterField[],
+): readonly ResourceToolbarFilterOption[] {
   const columnsByField = new Map(columns.map((column) => [column.field, column]));
   return fields.flatMap((filterField) => {
     if (filterField?.type !== "selection") return [];
@@ -325,7 +328,7 @@ export function buildFilterOptions<TRow extends Row>(
 function selectionOptions<TRow extends Row>(
   column: ColumnDescriptor<TRow>,
   rows: readonly TRow[],
-  field: DataToolbarFilterField,
+  field: ResourceToolbarFilterField,
 ): readonly { value: string; label: ReactNode }[] {
   if (field.options) return field.options;
   return statusValues(column, rows).map((value) => ({
@@ -338,8 +341,8 @@ export function buildFilterFields<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
   rows: readonly TRow[],
   metadata: ModelMetadata | null,
-): readonly DataToolbarFilterField[] {
-  const fields: DataToolbarFilterField[] = [];
+): readonly ResourceToolbarFilterField[] {
+  const fields: ResourceToolbarFilterField[] = [];
   const seen = new Set<string>();
   const addField = (
     fieldName: string,
@@ -390,7 +393,7 @@ function filterFieldType<TRow extends Row>(
   fieldName: string,
   column: ColumnDescriptor<TRow> | undefined,
   field: ModelFieldMetadata | undefined,
-): DataToolbarFilterField["type"] | null {
+): ResourceToolbarFilterField["type"] | null {
   if (field?.kind === "enum") return "selection";
   if (field?.kind === "scalar" && field.scalar === "String") return "text";
   if (field?.kind === "scalar" && field.scalar === "Boolean") return "boolean";
@@ -455,8 +458,8 @@ function statusValues<TRow extends Row>(
 }
 
 export function activeFilterIdsFor(
-  filter: DataViewFilter,
-  options: readonly DataToolbarFilterOption[],
+  filter: ResourceViewFilter,
+  options: readonly ResourceToolbarFilterOption[],
 ): readonly string[] {
   const value = Filter.from(filter);
   return options.flatMap((option) => {
@@ -469,10 +472,10 @@ export function activeFilterIdsFor(
 }
 
 export function nextFacetFilter(
-  filter: DataViewFilter,
-  options: readonly DataToolbarFilterOption[],
+  filter: ResourceViewFilter,
+  options: readonly ResourceToolbarFilterOption[],
   id: string,
-): DataViewFilter {
+): ResourceViewFilter {
   const option = options.find((candidate) => candidate.id === id);
   const facet = option ? Filter.facetFromFilter(option.filter) : null;
   if (!facet) return filter;
@@ -491,27 +494,27 @@ export function resolveTextFilterField(
 }
 
 export function textFilterValue(
-  filter: DataViewFilter,
+  filter: ResourceViewFilter,
   field: string = DEFAULT_TEXT_FILTER_FIELD,
 ): string {
   return Filter.from(filter).textTerm(field);
 }
 
 export function nextTextFilter(
-  filter: DataViewFilter,
+  filter: ResourceViewFilter,
   value: string,
   field: string = DEFAULT_TEXT_FILTER_FIELD,
-): DataViewFilter {
+): ResourceViewFilter {
   return Filter.from(filter).withTextTerm(value, field);
 }
 
 export function customFilterChipsFor(
-  filter: DataViewFilter,
-  filterOptions: readonly DataToolbarFilterOption[],
-  fields: readonly DataToolbarFilterField[],
+  filter: ResourceViewFilter,
+  filterOptions: readonly ResourceToolbarFilterOption[],
+  fields: readonly ResourceToolbarFilterField[],
   textField: string = DEFAULT_TEXT_FILTER_FIELD,
-): readonly DataToolbarCustomFilterChip[] {
-  const chips: DataToolbarCustomFilterChip[] = [];
+): readonly ResourceToolbarCustomFilterChip[] {
+  const chips: ResourceToolbarCustomFilterChip[] = [];
   const fieldLabels = new Map(
     fields.map((field) => [field.field ?? field.id, field.label]),
   );
@@ -538,12 +541,12 @@ export function customFilterChipsFor(
 }
 
 export function addCustomFilter(
-  filter: DataViewFilter,
-  customFilter: DataToolbarCustomFilter,
-): DataViewFilter {
+  filter: ResourceViewFilter,
+  customFilter: ResourceToolbarCustomFilter,
+): ResourceViewFilter {
   const next = { ...filter };
   const current = isLookup(next[customFilter.field])
-    ? { ...(next[customFilter.field] as DataViewLookup) }
+    ? { ...(next[customFilter.field] as ResourceViewLookup) }
     : {};
   if (customFilter.operator === "isNotNull") {
     current.isNull = false;
@@ -557,9 +560,9 @@ export function addCustomFilter(
 }
 
 export function removeCustomFilter(
-  filter: DataViewFilter,
+  filter: ResourceViewFilter,
   id: string,
-): DataViewFilter {
+): ResourceViewFilter {
   const [field, operator] = parseCustomFilterId(id);
   if (!field || !operator || !isLookupOperator(operator)) return filter;
   const current = filter[field];
@@ -573,28 +576,28 @@ export function removeCustomFilter(
 }
 
 export function mergeFilterOptions(
-  explicit: readonly DataToolbarFilterOption[] | undefined,
-  inferred: readonly DataToolbarFilterOption[],
-): readonly DataToolbarFilterOption[] {
+  explicit: readonly ResourceToolbarFilterOption[] | undefined,
+  inferred: readonly ResourceToolbarFilterOption[],
+): readonly ResourceToolbarFilterOption[] {
   return mergeById(explicit, inferred);
 }
 
 export function mergeGroupOptions(
-  explicit: readonly DataToolbarGroupOption[] | undefined,
-  inferred: readonly DataToolbarGroupOption[],
-): readonly DataToolbarGroupOption[] {
+  explicit: readonly ResourceToolbarGroupOption[] | undefined,
+  inferred: readonly ResourceToolbarGroupOption[],
+): readonly ResourceToolbarGroupOption[] {
   return mergeById(explicit, inferred);
 }
 
 export function mergeFilterFields(
-  explicit: readonly DataToolbarFilterField[] | undefined,
-  inferred: readonly DataToolbarFilterField[],
-): readonly DataToolbarFilterField[] {
+  explicit: readonly ResourceToolbarFilterField[] | undefined,
+  inferred: readonly ResourceToolbarFilterField[],
+): readonly ResourceToolbarFilterField[] {
   return mergeById(explicit, inferred);
 }
 
-export function createLabelForModel(model: string): string {
-  const name = model.split(".").at(-1) ?? "record";
+export function createLabelForResource(resource: string): string {
+  const name = resource.split(".").at(-1) ?? "record";
   return `New ${groupFieldLabel(name).toLowerCase()}`;
 }
 
@@ -607,9 +610,9 @@ function mergeById<TOption extends { id: string }>(
 
 function isFacetFilter(
   field: string,
-  operator: DataViewLookupOperator,
+  operator: ResourceViewLookupOperator,
   value: unknown,
-  options: readonly DataToolbarFilterOption[],
+  options: readonly ResourceToolbarFilterOption[],
 ): boolean {
   const facets = options
     .map((option) => Filter.facetFromFilter(option.filter))
@@ -633,7 +636,7 @@ function customFilterChipLabel({
   value,
 }: {
   fieldLabel: ReactNode;
-  operator: DataViewLookupOperator;
+  operator: ResourceViewLookupOperator;
   value: unknown;
 }): ReactNode {
   if (operator === "isNull") {
@@ -646,7 +649,7 @@ function customFilterChipLabel({
   }`;
 }
 
-function operatorLabel(operator: DataViewLookupOperator): string {
+function operatorLabel(operator: ResourceViewLookupOperator): string {
   switch (operator) {
     case "exact":
     case "iExact":
@@ -681,7 +684,7 @@ function filterValueLabel(value: unknown): string {
   return String(value ?? "");
 }
 
-function customFilterId(field: string, operator: DataViewLookupOperator): string {
+function customFilterId(field: string, operator: ResourceViewLookupOperator): string {
   return `${encodeURIComponent(field)}:${operator}`;
 }
 
@@ -693,7 +696,7 @@ function parseCustomFilterId(
   return [decodeURIComponent(field), operator];
 }
 
-function isLookup(value: unknown): value is DataViewLookup {
+function isLookup(value: unknown): value is ResourceViewLookup {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 

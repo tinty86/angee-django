@@ -2,10 +2,8 @@
 
 import { createElement, type ReactNode } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
-import {
-  useAuthoredQuery,
-  useModelRoute,
-} from "@angee/sdk";
+import { useAuthoredQuery } from "@angee/data";
+import { useResourceRoute } from "@angee/sdk";
 import { useParams } from "@tanstack/react-router";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -14,19 +12,19 @@ import {
   parseFlatSearch,
   stringifyFlatSearch,
   type BaseAddon,
-  type ShellChromeProps,
+  type RefineLayoutChromeProps,
 } from "./createApp";
-import type { ChromeMenuItem } from "./chrome/menu-tree";
+import { MenuTree, type ChromeMenuItem } from "./chrome/menu-tree";
 import {
   captureChrome,
   chromeSnapshot,
   TEST_SCHEMAS,
 } from "./testing";
 import {
-  dataViewSearchToState,
-  dataViewStateToSearch,
-  mergeDataViewSearch,
-} from "./views/data-view-model";
+  resourceViewSearchToState,
+  resourceViewStateToSearch,
+  mergeResourceViewSearch,
+} from "./views/resource-view-model";
 
 afterEach(() => cleanup());
 
@@ -49,7 +47,7 @@ describe("createApp search codec", () => {
     expect(parseFlatSearch(query).next).toBe(next);
   });
 
-  test("keeps primitive data-view search values unquoted", () => {
+  test("keeps primitive resource-view search values unquoted", () => {
     const query = stringifyFlatSearch({
       page: 2,
       view: "board",
@@ -69,18 +67,18 @@ describe("createApp search codec", () => {
     expect(query).not.toContain("%22board%22");
   });
 
-  test("preserves foreign search keys when data-view state changes", () => {
+  test("preserves foreign search keys when resource-view state changes", () => {
     const current = parseFlatSearch(
       "?tab=archive&page=2&view=board&group=status:year",
     );
-    const currentState = dataViewSearchToState(current);
+    const currentState = resourceViewSearchToState(current);
     const nextState = currentState.reduce({
       type: "setSort",
       sort: { field: "title", dir: "asc" },
     });
 
     const query = stringifyFlatSearch(
-      mergeDataViewSearch(current, dataViewStateToSearch(nextState)),
+      mergeResourceViewSearch(current, resourceViewStateToSearch(nextState)),
     );
     const parsed = parseFlatSearch(query);
 
@@ -95,7 +93,7 @@ describe("createApp search codec", () => {
 });
 
 describe("createApp schema binding", () => {
-  test("pins public shell routes and lets console routes inherit the default schema", async () => {
+  test("pins public layout routes and lets console routes inherit the default schema", async () => {
     const seen: Record<string, string> = {};
     const host = document.createElement("div");
     document.body.append(host);
@@ -121,13 +119,13 @@ describe("createApp schema binding", () => {
             {
               name: "public.page",
               path: "/public-page",
-              shell: "public",
+              layout: "public",
               component: PublicPage,
             },
             {
               name: "console.page",
               path: "/console-page",
-              shell: "console",
+              layout: "console",
               component: ConsolePage,
             },
           ],
@@ -136,7 +134,7 @@ describe("createApp schema binding", () => {
       defaultSchema: "console",
       subscriptionSchema: "console",
       home: "/public-page",
-      shells: {
+      layouts: {
         public: {
           chrome: TestChrome,
           requireAuth: false,
@@ -180,8 +178,79 @@ describe("createApp schema binding", () => {
   });
 });
 
+describe("createApp auth routing", () => {
+  test("redirects protected layouts from beforeLoad before rendering the page", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    history.replaceState(null, "", "/private?tab=activity");
+    let privateRendered = false;
+
+    function PrivatePage(): ReactNode {
+      privateRendered = true;
+      return createElement("span", null, "Private page");
+    }
+
+    function LoginPage(): ReactNode {
+      return createElement("span", null, "Login page");
+    }
+
+    const app = createApp({
+      addons: [
+        {
+          id: "auth-routing",
+          routes: [
+            {
+              name: "auth.login",
+              path: "/login",
+              layout: "public",
+              component: LoginPage,
+            },
+            {
+              name: "auth.private",
+              path: "/private",
+              layout: "console",
+              component: PrivatePage,
+            },
+          ],
+        },
+      ],
+      defaultSchema: "console",
+      subscriptionSchema: "console",
+      home: "/private",
+      layouts: {
+        public: {
+          chrome: TestChrome,
+          requireAuth: false,
+          schema: "public",
+        },
+        console: {
+          chrome: TestChrome,
+          requireAuth: true,
+        },
+      },
+      schemas: TEST_SCHEMAS,
+    });
+
+    const root = app.mount(host);
+    try {
+      await waitFor(() => {
+        expect(window.location.pathname).toBe("/login");
+      });
+
+      expect(new URLSearchParams(window.location.search).get("next")).toBe(
+        "/private?tab=activity",
+      );
+      expect(host.textContent).toContain("Login page");
+      expect(privateRendered).toBe(false);
+    } finally {
+      root.unmount();
+      host.remove();
+    }
+  });
+});
+
 describe("createApp route menu refs", () => {
-  test("resolves menu route refs and derives route chrome from the menu trail", async () => {
+  test("resolves menu route refs and exposes refine breadcrumbs", async () => {
     const menus: readonly ChromeMenuItem[] = [
       {
         id: "admin",
@@ -208,13 +277,13 @@ describe("createApp route menu refs", () => {
             {
               name: "admin.home",
               path: "/admin",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
             },
             {
               name: "admin.users",
               path: "/admin/users",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
             },
           ],
@@ -225,16 +294,122 @@ describe("createApp route menu refs", () => {
 
     try {
       expect(chromeSnapshot(captured.props())).toEqual({
-        title: "Admin",
-        icon: "auth",
         breadcrumbs: [
           { label: "Admin", to: "/admin" },
-          { label: "Users" },
+          { label: "Users", to: "/admin/users" },
         ],
       });
       expect(
         captured.props().menus[0]?.children?.[0]?.to,
       ).toBe("/admin/users");
+    } finally {
+      captured.cleanup();
+    }
+  });
+
+  test("collapses route-less menu groups that duplicate their leaf crumb", async () => {
+    const menus: readonly ChromeMenuItem[] = [
+      {
+        id: "admin",
+        label: "Admin",
+        icon: "auth",
+        route: "admin.home",
+        children: [
+          {
+            id: "admin.users.group",
+            label: "Users",
+            children: [
+              {
+                id: "admin.users",
+                label: "Users",
+                route: "admin.users",
+                icon: "users",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const captured = await captureChrome({
+      path: "/admin/users",
+      addons: [
+        {
+          id: "admin",
+          routes: [
+            {
+              name: "admin.home",
+              path: "/admin",
+              layout: "console",
+              component: EmptyPage,
+            },
+            {
+              name: "admin.users",
+              path: "/admin/users",
+              layout: "console",
+              component: EmptyPage,
+            },
+          ],
+          menus,
+        },
+      ],
+    });
+
+    try {
+      expect(chromeSnapshot(captured.props())).toEqual({
+        breadcrumbs: [
+          { label: "Admin", to: "/admin" },
+          { label: "Users", to: "/admin/users" },
+        ],
+      });
+    } finally {
+      captured.cleanup();
+    }
+  });
+
+  test("marks authored menu roots so repeated crumbs do not become rail apps", async () => {
+    const captured = await captureChrome({
+      path: "/agents",
+      addons: [
+        {
+          id: "agents",
+          routes: [
+            {
+              name: "agents.home",
+              path: "/agents",
+              layout: "console",
+              component: EmptyPage,
+            },
+          ],
+          menus: [
+            {
+              id: "agents",
+              label: "Agents",
+              children: [
+                {
+                  id: "agents.group",
+                  label: "Agents",
+                  children: [
+                    {
+                      id: "agents.home",
+                      label: "Agents",
+                      route: "agents.home",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      const tree = MenuTree.from(captured.props().menus);
+
+      expect(tree.railMenuItems().map((item) => item.id)).toEqual(["agents"]);
+      expect(tree.byId.get("agents")?.appRoot).toBe(true);
+      expect(tree.byId.get("agents.home")?.appRoot).toBeUndefined();
     } finally {
       captured.cleanup();
     }
@@ -249,7 +424,7 @@ describe("createApp route menu refs", () => {
             {
               name: "bad.home",
               path: "/bad",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
             },
           ],
@@ -259,29 +434,7 @@ describe("createApp route menu refs", () => {
     ).toThrow(/declares both route and to/);
   });
 
-  test("rejects ambiguous route chrome when multiple menu items reference one route", () => {
-    expect(() =>
-      createApp(testAppInput([
-        {
-          id: "ambiguous",
-          routes: [
-            {
-              name: "shared.home",
-              path: "/shared",
-              shell: "console",
-              component: EmptyPage,
-            },
-          ],
-          menus: [
-            { id: "shared.a", label: "Shared A", route: "shared.home" },
-            { id: "shared.b", label: "Shared B", route: "shared.home" },
-          ],
-        },
-      ])),
-    ).toThrow(/referenced by multiple menu items/);
-  });
-
-  test("allows multiple menu refs when every chrome field is explicit", () => {
+  test("allows multiple menu refs without route-chrome ambiguity", () => {
     expect(() =>
       createApp(testAppInput([
         {
@@ -290,10 +443,7 @@ describe("createApp route menu refs", () => {
             {
               name: "explicit.home",
               path: "/explicit",
-              shell: "console",
-              title: "Explicit",
-              icon: "auth",
-              breadcrumbs: [{ label: "Explicit" }],
+              layout: "console",
               component: EmptyPage,
             },
           ],
@@ -306,30 +456,7 @@ describe("createApp route menu refs", () => {
     ).not.toThrow();
   });
 
-  test("reports only the explicit chrome fields that would need derivation", () => {
-    expect(() =>
-      createApp(testAppInput([
-        {
-          id: "partial",
-          routes: [
-            {
-              name: "partial.home",
-              path: "/partial",
-              shell: "console",
-              title: "Partial",
-              component: EmptyPage,
-            },
-          ],
-          menus: [
-            { id: "partial.a", label: "Partial A", route: "partial.home" },
-            { id: "partial.b", label: "Partial B", route: "partial.home" },
-          ],
-        },
-      ])),
-    ).toThrow(/explicit chrome for icon, breadcrumbs/);
-  });
-
-  test("requires route.menu to select one of the route's menu refs when refs exist", () => {
+  test("requires resource route.menu to select one of the route's menu refs when refs exist", () => {
     expect(() =>
       createApp(testAppInput([
         {
@@ -338,8 +465,9 @@ describe("createApp route menu refs", () => {
             {
               name: "wrong.home",
               path: "/wrong",
-              shell: "console",
+              layout: "console",
               menu: "wrong.other",
+              resource: "Wrong",
               component: EmptyPage,
             },
           ],
@@ -361,7 +489,7 @@ describe("createApp route menu refs", () => {
             {
               name: "known.home",
               path: "/known",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
             },
           ],
@@ -380,8 +508,9 @@ describe("createApp route menu refs", () => {
             {
               name: "known.home",
               path: "/known",
-              shell: "console",
+              layout: "console",
               menu: "missing-menu",
+              resource: "Known",
               component: EmptyPage,
             },
           ],
@@ -391,14 +520,14 @@ describe("createApp route menu refs", () => {
   });
 });
 
-describe("createApp model route index", () => {
-  test("exposes a model's collection path through useModelRoute", async () => {
+describe("createApp resource route index", () => {
+  test("exposes a resource collection path through useResourceRoute", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     history.replaceState(null, "", "/clients");
 
     function ClientsProbe(): ReactNode {
-      const path = useModelRoute("OAuthClient");
+      const path = useResourceRoute("OAuthClient");
       return createElement("span", null, `route ${path ?? "none"}`);
     }
 
@@ -409,14 +538,14 @@ describe("createApp model route index", () => {
           {
             name: "clients.home",
             path: "/clients",
-            shell: "console",
+            layout: "console",
             component: ClientsProbe,
-            model: "OAuthClient",
+            resource: "OAuthClient",
           },
           {
             name: "clients.record",
             path: "/clients/$id",
-            shell: "console",
+            layout: "console",
             parent: "clients.home",
           },
         ],
@@ -434,7 +563,7 @@ describe("createApp model route index", () => {
     }
   });
 
-  test("rejects two routes claiming the same model", () => {
+  test("rejects two routes claiming the same resource", () => {
     expect(() =>
       createApp(testAppInput([
         {
@@ -443,26 +572,26 @@ describe("createApp model route index", () => {
             {
               name: "a.home",
               path: "/a",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
-              model: "OAuthClient",
+              resource: "OAuthClient",
             },
             {
               name: "b.home",
               path: "/b",
-              shell: "console",
+              layout: "console",
               component: EmptyPage,
-              model: "OAuthClient",
+              resource: "OAuthClient",
             },
           ],
         },
       ])),
-    ).toThrow(/claims model "OAuthClient"/);
+    ).toThrow(/claims resource "OAuthClient"/);
   });
 });
 
 describe("createApp route tree", () => {
-  test("nests addon routes under shell layouts and declared parents", () => {
+  test("nests addon routes under layouts and declared parents", () => {
     const app = createApp(testAppInput([
       {
         id: "notes",
@@ -470,25 +599,25 @@ describe("createApp route tree", () => {
           {
             name: "notes.home",
             path: "/notes",
-            shell: "console",
+            layout: "console",
             component: EmptyPage,
           },
           {
             name: "notes.record",
             path: "/notes/$id",
-            shell: "console",
+            layout: "console",
             parent: "notes.home",
           },
         ],
       },
     ]));
     const routes = routesByFullPath(app.router);
-    const shell = shellRoute(app.router, "console");
+    const layout = layoutRoute(app.router, "console");
     const home = routes.get("/notes");
     const record = routes.get("/notes/$id");
 
-    expect(shell).toBeTruthy();
-    expect(home?.parentRoute).toBe(shell);
+    expect(layout).toBeTruthy();
+    expect(home?.parentRoute).toBe(layout);
     expect(record?.parentRoute).toBe(home);
   });
 
@@ -509,13 +638,13 @@ describe("createApp route tree", () => {
           {
             name: "notes.home",
             path: "/notes",
-            shell: "console",
+            layout: "console",
             component: NotePageProbe,
           },
           {
             name: "notes.record",
             path: "/notes/$id",
-            shell: "console",
+            layout: "console",
             parent: "notes.home",
           },
         ],
@@ -542,7 +671,7 @@ describe("createApp route tree", () => {
             {
               name: "child",
               path: "/child",
-              shell: "console",
+              layout: "console",
               parent: "missing",
             },
           ],
@@ -551,94 +680,103 @@ describe("createApp route tree", () => {
     ).toThrow(/references unknown parent route "missing"/);
   });
 
-  test("rejects a parent route from another shell", () => {
-    expect(() =>
-      createApp(testAppInput([
-        {
-          id: "cross-shell",
-          routes: [
-            {
-              name: "public.parent",
-              path: "/public",
-              shell: "public",
-              component: EmptyPage,
-            },
-            {
-              name: "console.child",
-              path: "/public/child",
-              shell: "console",
-              parent: "public.parent",
-            },
-          ],
-        },
-      ], {
-        console: { chrome: TestChrome, requireAuth: false },
-        public: { chrome: TestChrome, requireAuth: false },
-      })),
-    ).toThrow(/must use the same shell/);
+  test("uses the declared parent route instead of revalidating layout strings", () => {
+    const app = createApp(testAppInput([
+      {
+        id: "cross-layout",
+        routes: [
+          {
+            name: "public.parent",
+            path: "/public",
+            layout: "public",
+            component: EmptyPage,
+          },
+          {
+            name: "console.child",
+            path: "/public/child",
+            layout: "console",
+            parent: "public.parent",
+          },
+        ],
+      },
+    ], {
+      console: { chrome: TestChrome, requireAuth: false },
+      public: { chrome: TestChrome, requireAuth: false },
+    }));
+    const routes = routesByFullPath(app.router);
+
+    expect(routes.get("/public/child")?.parentRoute).toBe(
+      routes.get("/public"),
+    );
   });
 
-  test("rejects a parent route whose path is not a proper prefix", () => {
-    expect(() =>
-      createApp(testAppInput([
-        {
-          id: "bad-prefix",
-          routes: [
-            {
-              name: "notes.home",
-              path: "/notes",
-              shell: "console",
-              component: EmptyPage,
-            },
-            {
-              name: "notes.record",
-              path: "/not-notes/$id",
-              shell: "console",
-              parent: "notes.home",
-            },
-          ],
-        },
-      ])),
-    ).toThrow(/must be nested under parent/);
+  test("nests child route paths under the declared parent route", () => {
+    const app = createApp(testAppInput([
+      {
+        id: "bad-prefix",
+        routes: [
+          {
+            name: "notes.home",
+            path: "/notes",
+            layout: "console",
+            component: EmptyPage,
+          },
+          {
+            name: "notes.record",
+            path: "/not-notes/$id",
+            layout: "console",
+            parent: "notes.home",
+          },
+        ],
+      },
+    ]));
+    const routes = routesByFullPath(app.router);
+
+    expect(routes.get("/notes/not-notes/$id")?.parentRoute).toBe(
+      routes.get("/notes"),
+    );
+    expect(routes.has("/not-notes/$id")).toBe(false);
   });
 
-  test("rejects a non-nested route without a component", () => {
-    expect(() =>
-      createApp(testAppInput([
-        {
-          id: "missing-component",
-          routes: [
-            {
-              name: "empty.home",
-              path: "/empty",
-              shell: "console",
-            },
-          ],
-        },
-      ])),
-    ).toThrow(/must declare component/);
+  test("allows path-only route declarations", () => {
+    const app = createApp(testAppInput([
+      {
+        id: "missing-component",
+        routes: [
+          {
+            name: "empty.home",
+            path: "/empty",
+            layout: "console",
+          },
+        ],
+      },
+    ]));
+    const routes = routesByFullPath(app.router);
+    const layout = layoutRoute(app.router, "console");
+
+    expect(routes.get("/empty")?.parentRoute).toBe(layout);
   });
 
-  test("rejects a route that references an undeclared shell", () => {
+  test("rejects a route that references an undeclared layout", () => {
     expect(() =>
       createApp(testAppInput([
         {
-          id: "bad-shell",
+          id: "bad-layout",
           routes: [
             {
               name: "bad.home",
               path: "/bad",
-              shell: "missing",
+              layout: "missing",
               component: EmptyPage,
             },
           ],
         },
       ])),
-    ).toThrow(/references undeclared shell "missing"/);
+    ).toThrow(/references undeclared layout "missing"/);
   });
 });
 
-function TestChrome({ children }: ShellChromeProps): ReactNode {
+function TestChrome({ children }: RefineLayoutChromeProps): ReactNode {
   return children;
 }
 
@@ -648,13 +786,13 @@ function EmptyPage(): ReactNode {
 
 function testAppInput(
   addons: readonly BaseAddon[],
-  shells: Parameters<typeof createApp>[0]["shells"] = {
+  layouts: Parameters<typeof createApp>[0]["layouts"] = {
     console: { chrome: TestChrome, requireAuth: false },
   },
 ): Parameters<typeof createApp>[0] {
   return {
     addons,
-    shells,
+    layouts,
     schemas: TEST_SCHEMAS,
     defaultSchema: "console",
     subscriptionSchema: "console",
@@ -666,9 +804,9 @@ function routesByFullPath(router: unknown): Map<string, TestRoute> {
   return new Map(routes.map((route) => [route.fullPath, route]));
 }
 
-function shellRoute(router: unknown, shell: string): TestRoute | undefined {
+function layoutRoute(router: unknown, layout: string): TestRoute | undefined {
   return Object.values((router as TestRouter).routesById).find((route) =>
-    route.id.endsWith(`_angee_shell_${shell}`),
+    route.id.endsWith(`_angee_layout_${layout}`),
   );
 }
 
@@ -699,7 +837,7 @@ function probeFetch(
     }
     return new Response(
       JSON.stringify({
-        data: { __typename: "Query", currentUser: null, schemaProbe: schema },
+        data: { __typename: "Query", current_user: null, schemaProbe: schema },
       }),
       {
         status: 200,

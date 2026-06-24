@@ -1,10 +1,12 @@
 import * as React from "react";
-import { useModelMetadata } from "@angee/sdk";
+import {
+  useModelMetadata,
+} from "@angee/resources";
 import {
   useAngeeAggregate,
   useAngeeGroupBy,
-  type AggregateBucket,
 } from "@angee/data";
+import type { AggregateBucket } from "@angee/refine";
 
 import { useBaseT } from "../i18n";
 import { CountBadge } from "../ui/badge";
@@ -21,8 +23,8 @@ export interface AggregateDimension extends GroupByDimension {
 }
 
 export interface AggregatePanelProps {
-  /** Model label, e.g. `"notes.Note"`. */
-  model: string;
+  /** Resource label, e.g. `"notes.Note"`. */
+  resource: string;
   /** Group dimensions; the first drives the buckets, the rest are reserved. */
   dimensions: readonly AggregateDimension[];
   /** Title above the rows; defaults to the first dimension's label. */
@@ -39,7 +41,7 @@ function defaultFormat(key: unknown): React.ReactNode {
 
 /** Count-by-group rows for one model, with a total. */
 export function AggregatePanel({
-  model,
+  resource,
   dimensions,
   title,
   formatKey = defaultFormat,
@@ -47,17 +49,17 @@ export function AggregatePanel({
 }: AggregatePanelProps): React.ReactElement {
   const t = useBaseT();
   const grouped = dimensions.length > 0;
-  const metadata = useModelMetadata(model);
-  const resource = requireDataResource(model, metadata);
+  const metadata = useModelMetadata(resource);
+  const dataResource = requireDataResource(resource, metadata);
   const groupDimensions = React.useMemo(
     () => dimensions.map(hasuraGroupDimension),
     [dimensions],
   );
-  const group = useAngeeGroupBy(resource, {
+  const group = useAngeeGroupBy(dataResource, {
     dimensions: groupDimensions,
     enabled: grouped,
   });
-  const ungrouped = useAngeeAggregate(resource, { enabled: !grouped });
+  const ungrouped = useAngeeAggregate(dataResource, { enabled: !grouped });
 
   const fetching = grouped ? group.fetching : ungrouped.fetching;
   const error = grouped ? group.error : ungrouped.error;
@@ -132,14 +134,14 @@ function bucketKey(
 }
 
 function requireDataResource(
-  model: string,
+  resourceId: string,
   metadata: ReturnType<typeof useModelMetadata>,
 ): NonNullable<NonNullable<ReturnType<typeof useModelMetadata>>["resource"]> {
-  const resource = metadata?.resource;
-  if (!resource) {
-    throw new Error(`Model "${model}" has no data resource metadata.`);
+  const dataResource = metadata?.resource;
+  if (!dataResource) {
+    throw new Error(`Resource "${resourceId}" has no data resource metadata.`);
   }
-  return resource;
+  return dataResource;
 }
 
 function AggregateSkeleton({

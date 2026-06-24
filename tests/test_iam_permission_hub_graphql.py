@@ -483,14 +483,14 @@ def test_role_refs_are_current_user_only(
             public_schema,
             """
             query {
-              currentUser { username role_refs }
+              current_user { username role_refs }
             }
             """,
             user=alice,
         )
     )
 
-    assert data["currentUser"] == {
+    assert data["current_user"] == {
         "username": "hub-alice",
         "role_refs": ["angee/role:alice_only"],
     }
