@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useMenu, type TreeMenuItem } from "@refinedev/core";
 
+import { isMenuTone } from "../lib/tones";
 import {
   type ChromeMenuGroup,
   type ChromeMenuItem,
@@ -94,15 +95,5 @@ function menuStatus(value: unknown): ChromeMenuStatus | undefined {
 }
 
 function menuTone(value: unknown): ChromeMenuTone | undefined {
-  if (
-    value === "brand" ||
-    value === "danger" ||
-    value === "info" ||
-    value === "neutral" ||
-    value === "success" ||
-    value === "warning"
-  ) {
-    return value;
-  }
-  return undefined;
+  return isMenuTone(value) ? value : undefined;
 }

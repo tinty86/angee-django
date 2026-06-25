@@ -1,19 +1,24 @@
 import type { ComposedMenuItem, MenuItem } from "@angee/sdk";
 
 import { titleCase } from "../lib/titleCase";
+import type { Tone } from "../lib/tones";
 
 export type ChromeMenuGroup = "domain" | "platform";
 export type ChromeMenuStatus = "active" | "future";
-export type ChromeMenuTone =
-  | "brand"
-  | "danger"
-  | "info"
-  | "neutral"
-  | "success"
-  | "warning";
+/** The tones a chrome menu item may carry — the curated `MENU_TONES` slice of the
+ *  `Tone` owner (`lib/tones.ts`). `Extract` keeps the nav-tone narrowing rather
+ *  than widening to the full palette. */
+export type ChromeMenuTone = Extract<
+  Tone,
+  "brand" | "danger" | "info" | "neutral" | "success" | "warning"
+>;
 
-export interface BaseMenuItem extends MenuItem {
-  children?: readonly BaseMenuItem[];
+/**
+ * The chrome-extension fields layered onto a menu item by both rendered surfaces.
+ * One owner for the nine fields shared by `BaseMenuItem` and `ChromeMenuItem`;
+ * `children` is excluded because its element type differs per surface.
+ */
+export interface ChromeMenuExtra {
   parent?: string;
   parentId?: string;
   appRoot?: boolean;
@@ -25,17 +30,12 @@ export interface BaseMenuItem extends MenuItem {
   badge?: number;
 }
 
-export interface ChromeMenuItem extends ComposedMenuItem {
+export interface BaseMenuItem extends MenuItem, ChromeMenuExtra {
+  children?: readonly BaseMenuItem[];
+}
+
+export interface ChromeMenuItem extends ComposedMenuItem, ChromeMenuExtra {
   children?: readonly ChromeMenuItem[];
-  parent?: string;
-  parentId?: string;
-  appRoot?: boolean;
-  description?: string;
-  group?: ChromeMenuGroup;
-  sidebar?: boolean;
-  status?: ChromeMenuStatus;
-  tone?: ChromeMenuTone;
-  badge?: number;
 }
 
 /**

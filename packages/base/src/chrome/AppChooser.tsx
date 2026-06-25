@@ -319,19 +319,6 @@ function filterAppChooserItems(
 // The primary app tile is a solid brand fill; the rest are soft. Both route
 // through the shared (tone × fill) matrix so they can't drift from the palette.
 function toneClass(tone: ChromeMenuTone | undefined): string {
-  switch (tone ?? "brand") {
-    case "neutral":
-      return toneFillClass("neutral", "soft");
-    case "danger":
-      return toneFillClass("danger", "soft");
-    case "info":
-      return toneFillClass("info", "soft");
-    case "success":
-      return toneFillClass("success", "soft");
-    case "warning":
-      return toneFillClass("warning", "soft");
-    case "brand":
-    default:
-      return toneFillClass("brand", "solid");
-  }
+  const t = tone ?? "brand";
+  return toneFillClass(t, t === "brand" ? "solid" : "soft");
 }

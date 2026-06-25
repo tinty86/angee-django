@@ -25,6 +25,36 @@ export const TONES = [
 
 export type Tone = (typeof TONES)[number];
 
+/** Whether `value` is one of the known tones — the membership guard at the boundary
+ *  where an untyped value (Refine meta, JSON) must be narrowed to a `Tone`. */
+export function isTone(value: unknown): value is Tone {
+  return TONES.includes(value as Tone);
+}
+
+/**
+ * The tones a navigation menu may carry — the semantic intents (so a menu item can
+ * read "danger"/"success"/… without the brand-family palettes accent/purple/pink,
+ * which aren't menu vocabulary). The curated subset chrome menus narrow against;
+ * `tones.ts` still owns the palette, the menu just borrows this slice of it.
+ */
+export const MENU_TONES = [
+  "brand",
+  "danger",
+  "info",
+  "neutral",
+  "success",
+  "warning",
+] as const satisfies readonly Tone[];
+
+/** A tone a navigation menu may carry — a curated subset of `Tone`. */
+export type MenuTone = (typeof MENU_TONES)[number];
+
+/** Whether `value` is one of the menu tones — the boundary guard that narrows an
+ *  untyped value (Refine meta) to a `MenuTone`. */
+export function isMenuTone(value: unknown): value is MenuTone {
+  return (MENU_TONES as readonly unknown[]).includes(value);
+}
+
 export const FILLS = ["solid", "soft", "surface", "outline", "ghost"] as const;
 
 export type Fill = (typeof FILLS)[number];
