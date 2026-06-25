@@ -718,6 +718,9 @@ importers:
       '@angee/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@angee/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@base-ui/react':
         specifier: ^1.5.0
         version: 1.5.0(@date-fns/tz@1.5.0)(@types/react@19.2.15)(date-fns@4.4.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1057,12 +1060,24 @@ importers:
       '@angee/resources':
         specifier: workspace:*
         version: link:../resources
+      '@angee/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@base-ui/react':
+        specifier: ^1.5.0
+        version: 1.5.0(@date-fns/tz@1.5.0)(@types/react@19.2.15)(date-fns@4.4.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react:
         specifier: ^19.0.0
         version: 19.2.6
       react-dom:
         specifier: ^19.0.0
         version: 19.2.6(react@19.2.6)
+      tailwind-merge:
+        specifier: ^3.6.0
+        version: 3.6.0
+      tailwind-variants:
+        specifier: ^3.2.0
+        version: 3.2.2(tailwind-merge@3.6.0)(tailwindcss@4.3.0)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
