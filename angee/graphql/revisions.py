@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
-from decimal import Decimal
+from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Optional, cast
 
 import strawberry
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
 from rebac.errors import MissingActorError
-from strawberry.scalars import JSON
+from strawberry_django.fields.types import resolve_model_field_type
 
 from angee.base.mixins import RevisionMixin
 from angee.graphql.access import assert_no_gated_read_fields
@@ -30,6 +30,11 @@ _SURFACE_CACHE: dict[tuple[type[models.Model], str], type] = {}
 _REVISION_TYPE_CACHE: dict[tuple[type[models.Model], str], Any] = {}
 _REVISION_FIRST_DEFAULT = 50
 _REVISION_FIRST_MAX = 200
+
+# Revision snapshots are plain output fields: not a filter, not an input. This is
+# the only context strawberry-django's resolve_model_field_type reads to map a
+# Django field to its GraphQL type for the output path.
+_OUTPUT_FIELD_CONTEXT = SimpleNamespace(is_filter=False, is_input=False)
 
 
 def revisions(
@@ -189,27 +194,18 @@ def _revisioned_field(
 
 
 def _field_annotation(field: models.Field[Any, Any]) -> Any:
-    """Return the GraphQL annotation for a revisioned Django field."""
+    """Return the GraphQL annotation for a revisioned Django field.
 
-    annotation: Any
-    if isinstance(field, models.BooleanField):
-        annotation = bool
-    elif isinstance(field, models.IntegerField):
-        annotation = int
-    elif isinstance(field, models.FloatField):
-        annotation = float
-    elif isinstance(field, models.DecimalField):
-        annotation = Decimal
-    elif isinstance(field, models.DateTimeField):
-        annotation = datetime
-    elif isinstance(field, models.DateField):
-        annotation = date
-    elif isinstance(field, models.TimeField):
-        annotation = time
-    elif isinstance(field, models.JSONField):
-        annotation = JSON
-    else:
-        annotation = str
+    strawberry-django owns the Django-field -> GraphQL-type map (``docs/stack.md``),
+    including resolving a choices field (Angee's ``StateField``/``TextChoicesField``)
+    to its native enum rather than a bare ``str``. Delegate to it and keep only the
+    nullable -> ``Optional[...]`` wrapping as Angee glue.
+    """
+
+    # ``resolve_model_field_type`` is typed for a full ``StrawberryDjangoDefinition``
+    # but reads only ``is_filter``/``is_input`` on the output path, so the minimal
+    # stand-in is faithful; cast at the call boundary.
+    annotation = resolve_model_field_type(field, cast(Any, _OUTPUT_FIELD_CONTEXT))
     return Optional[annotation] if field.null else annotation
 
 
