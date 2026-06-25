@@ -49,7 +49,7 @@ from strawberry import auto
 from strawberry.scalars import JSON
 
 from angee.base.models import SqidPublicIdentity, instance_from_public_id
-from angee.graphql.data import hasura_model_resource, hasura_pydantic_resource
+from angee.graphql.data import aggregate_queryset, hasura_model_resource, hasura_pydantic_resource
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
@@ -768,9 +768,7 @@ def _admin_user_queryset(info: strawberry.Info) -> QuerySet[Any]:
 def _admin_user_aggregate_queryset(info: strawberry.Info) -> QuerySet[Any]:
     """Return the user queryset safe for aggregate and grouped math."""
 
-    queryset = _admin_user_queryset(info)
-    scoped = getattr(queryset, "scoped_for_aggregate", None)
-    return cast(QuerySet[Any], scoped() if callable(scoped) else queryset)
+    return aggregate_queryset(_admin_user_queryset(info))
 
 
 def _admin_group_queryset(info: strawberry.Info) -> QuerySet[Any]:

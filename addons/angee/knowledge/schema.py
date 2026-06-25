@@ -110,8 +110,8 @@ class PageType(AngeeNode):
         """
 
         with system_context(reason="knowledge.graphql.vault_label"):
-            row = Vault._default_manager.filter(pk=cast(Any, self).vault_id).only("name").first()
-        return None if row is None else str(row.name)
+            vault = Vault._default_manager.filter(pk=cast(Any, self).vault_id).only("name").first()
+        return None if vault is None else str(vault)
 
     @strawberry_django.field(only=["parent_id"])
     def parent(self) -> strawberry.ID | None:
@@ -180,21 +180,6 @@ class PageBodyPayload:
     error_code: str | None = strawberry.field(name="error_code", default=None)
 
 
-def _resource_queryset(model: type[Any], info: strawberry.Info) -> Any:
-    """Return the row-scoped queryset for one knowledge resource."""
-
-    del info
-    return model.objects.all()
-
-
-def _resource_aggregate_queryset(model: type[Any], info: strawberry.Info) -> Any:
-    """Return the queryset safe for permission-naive aggregate math."""
-
-    queryset = _resource_queryset(model, info)
-    scoped = getattr(queryset, "scoped_for_aggregate", None)
-    return scoped() if callable(scoped) else queryset
-
-
 class VaultWriteBackend(AngeeHasuraWriteBackend):
     """Write semantics for vaults: create belongs to the manager factory."""
 
@@ -232,8 +217,6 @@ _VAULT_RESOURCE = hasura_model_resource(
     groupable=["updated_at"],
     insertable=["name", "description", "icon", "accent"],
     updatable=["name", "description", "icon", "accent"],
-    get_queryset=lambda info: _resource_queryset(Vault, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Vault, info),
     write_backend=VaultWriteBackend(Vault),
 )
 _PAGE_RESOURCE = hasura_model_resource(
@@ -250,8 +233,6 @@ _PAGE_RESOURCE = hasura_model_resource(
         "vault": public_pk_decoder(Vault),
         "parent": public_pk_decoder(Page),
     },
-    get_queryset=lambda info: _resource_queryset(Page, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Page, info),
     write_backend=PageWriteBackend(Page, public_id_fields={"parent": Page}),
 )
 

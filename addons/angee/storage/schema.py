@@ -246,21 +246,6 @@ class StorageQuery:
     mime_types: OffsetPaginated[MimeTypeType] = strawberry_django.offset_paginated()
 
 
-def _resource_queryset(model: type[Any], info: strawberry.Info) -> Any:
-    """Return the row-scoped queryset for one storage resource."""
-
-    del info
-    return model.objects.all()
-
-
-def _resource_aggregate_queryset(model: type[Any], info: strawberry.Info) -> Any:
-    """Return the queryset safe for permission-naive aggregate math."""
-
-    queryset = _resource_queryset(model, info)
-    scoped = getattr(queryset, "scoped_for_aggregate", None)
-    return scoped() if callable(scoped) else queryset
-
-
 class FolderWriteBackend(AngeeHasuraWriteBackend):
     """Write semantics for folders: create belongs to the manager factory."""
 
@@ -290,8 +275,6 @@ _DRIVE_RESOURCE = hasura_model_resource(
     insertable=["backend", "slug", "name", "description", "prefix"],
     updatable=["name", "description", "prefix", "is_archived"],
     field_id_decode={"backend": public_pk_decoder(Backend)},
-    get_queryset=lambda info: _resource_queryset(Drive, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Drive, info),
     write_backend=AngeeHasuraWriteBackend(Drive, public_id_fields={"backend": Backend}),
 )
 _FOLDER_RESOURCE = hasura_model_resource(
@@ -308,8 +291,6 @@ _FOLDER_RESOURCE = hasura_model_resource(
         "drive": public_pk_decoder(Drive),
         "parent": public_pk_decoder(Folder),
     },
-    get_queryset=lambda info: _resource_queryset(Folder, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Folder, info),
     write_backend=FolderWriteBackend(Folder, public_id_fields={"parent": Folder}),
 )
 _FILE_RESOURCE = hasura_model_resource(
@@ -335,8 +316,6 @@ _FILE_RESOURCE = hasura_model_resource(
         "drive": public_pk_decoder(Drive),
         "folder": public_pk_decoder(Folder),
     },
-    get_queryset=lambda info: _resource_queryset(File, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(File, info),
     write_backend=AngeeHasuraWriteBackend(File, public_id_fields={"folder": Folder}),
 )
 _BACKEND_RESOURCE = hasura_model_resource(
@@ -349,8 +328,6 @@ _BACKEND_RESOURCE = hasura_model_resource(
     groupable=["backend_class", "is_default", "is_archived"],
     insertable=["slug", "label", "backend_class", "backend_config", "is_default"],
     updatable=["label", "backend_class", "backend_config", "is_default", "is_archived"],
-    get_queryset=lambda info: _resource_queryset(Backend, info),
-    get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Backend, info),
 )
 
 
