@@ -72,3 +72,24 @@ export * from "./ui/upload-drop-target";
 // relocated from `@angee/base`.)
 export * from "./widgets";
 export * from "./feedback";
+
+// The rendered render layer: data-bound views, the toolbar/page/layout/fragment
+// composition surface, app chrome, the communication surface, and the preview
+// registry. (Wave A.3/A.4: relocated from `@angee/base`.)
+export * from "./views";
+export {
+  GraphView,
+  type GraphViewEdge,
+  type GraphViewEdgeStyle,
+  type GraphViewLayout,
+  type GraphViewNode,
+  type GraphViewNodeStyle,
+  type GraphViewProps,
+} from "./views/GraphView";
+export * from "./toolbars";
+export * from "./page";
+export * from "./layouts";
+export * from "./fragments";
+export * from "./chrome";
+export * from "./communication";
+export * from "./preview";

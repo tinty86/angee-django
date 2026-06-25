@@ -1,0 +1,35 @@
+export { Chatter, type ChatterProps } from "./Chatter";
+export { RevisionsTab, type RevisionsTabProps } from "./RevisionsTab";
+export {
+  CHATTER_DEFAULT_WIDTH,
+  CHATTER_MAX_WIDTH,
+  CHATTER_MIN_WIDTH,
+  ChatterProvider,
+  useChatter,
+  useChatterContent,
+  type ChatterContent,
+  type ChatterContextValue,
+  type ChatterProviderProps,
+  type ChatterTab,
+  type ChatterTabId,
+} from "./chatter-context";
+export {
+  ChatBubble,
+  ChatComposer,
+  ChatComposerHint,
+  ChatHeader,
+  ChatHeaderAction,
+  ContextBlock,
+  MessageReasoningFrame,
+  ToolFallback,
+  chatComposerInputClassName,
+  type ChatBubbleProps,
+  type ChatBubbleRole,
+  type ChatComposerHintProps,
+  type ChatComposerProps,
+  type ChatHeaderActionProps,
+  type ChatHeaderProps,
+  type ContextBlockProps,
+  type MessageReasoningFrameProps,
+  type ToolFallbackProps,
+} from "./chat";
