@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { DocumentNode } from "graphql";
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import { useSubscription as useUrqlSubscription } from "urql";
+import { useStableVariables } from "@angee/refine";
 
 type DocumentInput<TData, TVariables> =
   | string
@@ -64,17 +65,4 @@ export function useDocumentSubscription<
     fetching: state.fetching,
     error: state.error ?? null,
   };
-}
-
-function useStableVariables<T extends Record<string, unknown>>(
-  variables: T | undefined,
-): T {
-  return useStableValue(variables, {} as T);
-}
-
-function useStableValue<T>(value: T | undefined, fallback: T): T {
-  const resolved = value ?? fallback;
-  const key = JSON.stringify(resolved);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => resolved, [key]);
 }
