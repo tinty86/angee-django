@@ -158,8 +158,12 @@ def test_console_resource_metadata_declares_integration_surface() -> None:
     assert metadata.roots.create_name == "insert_integrations_one"
     assert metadata.roots.update_name == "update_integrations_by_pk"
     assert metadata.roots.delete_name == "delete_integrations_by_pk"
-    assert metadata.filter_fields == ("id", "vendor", "impl_class", "status", "updated_at")
-    assert metadata.order_fields == ("vendor", "impl_class", "status", "created_at", "updated_at")
+    assert metadata.filter_fields == (
+        "id", "display_name", "vendor", "impl_class", "status", "updated_at",
+    )
+    assert metadata.order_fields == (
+        "display_name", "vendor", "impl_class", "status", "created_at", "updated_at",
+    )
     assert metadata.aggregate_fields == ("id",)
     assert metadata.group_by_fields == ("impl_class", "vendor", "vendor__display_name", "status")
     assert {
