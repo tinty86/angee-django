@@ -7,17 +7,6 @@
 import { graphql, type DocumentType } from "@angee/gql/console";
 import type { DocumentVariables } from "@angee/refine";
 
-export const IamRoles = graphql(`
-  query IamRoles {
-    roles {
-      id
-      namespace
-      label
-      description
-    }
-  }
-`);
-
 export const IamOverview = graphql(`
   query IamOverview($peekLimit: Int = 6) {
     roles {
@@ -102,8 +91,10 @@ export const IamGrantRole = graphql(`
   }
 `);
 
-/** One `roles` row, derived from the `IamRoles` selection. */
-export type IAMRole = DocumentType<typeof IamRoles>["roles"][number];
+/** One `roles` row, derived from the `IamOverview` selection — the same
+ * `{id, namespace, label, description}` shape the dropped standalone `IamRoles`
+ * query exposed. */
+export type IAMRole = DocumentType<typeof IamOverview>["roles"][number];
 
 export type IAMOverviewVariables = DocumentVariables<typeof IamOverview>;
 
