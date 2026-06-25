@@ -61,6 +61,39 @@ def test_computed_resource_metadata_is_model_optional() -> None:
     assert wire["roots"]["list"] == "platform_addons"
 
 
+def test_resource_metadata_row_model_defaults_to_server() -> None:
+    """A resource defaults to the server row model and emits it as ``rowModel``."""
+
+    metadata = make_data_resource_metadata(
+        model=None,
+        model_label="platform.addon",
+        roots=DataResourceRoots(list_name="platform_addons"),
+        type_names=DataResourceTypeNames(),
+        capabilities=("list",),
+    )
+
+    assert metadata.row_model == "server"
+    [wire] = serialize_data_resources((metadata,), schema_name="console")
+    assert wire["rowModel"] == "server"
+
+
+def test_resource_metadata_row_model_client_reaches_wire() -> None:
+    """A computed resource marks itself ``client`` on the wire."""
+
+    metadata = make_data_resource_metadata(
+        model=None,
+        model_label="platform.addon",
+        roots=DataResourceRoots(list_name="platform_addons"),
+        type_names=DataResourceTypeNames(),
+        capabilities=("list",),
+        row_model="client",
+    )
+
+    assert metadata.row_model == "client"
+    [wire] = serialize_data_resources((metadata,), schema_name="console")
+    assert wire["rowModel"] == "client"
+
+
 def test_computed_resource_metadata_requires_label_without_model() -> None:
     """Without a model, the dotted ``model_label`` is mandatory."""
 

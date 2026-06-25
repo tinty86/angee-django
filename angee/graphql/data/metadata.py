@@ -207,6 +207,7 @@ class DataResourceMetadata:
     public_id_field: str
     roots: DataResourceRoots
     type_names: DataResourceTypeNames
+    row_model: str = "server"
     capabilities: tuple[str, ...] = ()
     fields: tuple[DataResourceFieldMetadata, ...] = ()
     filter_fields: tuple[str, ...] = ()
@@ -294,6 +295,7 @@ def make_data_resource_metadata(
     fields: tuple[DataResourceFieldMetadata, ...] = (),
     model_label: str | None = None,
     public_id_field: str = PUBLIC_ID_FIELD_NAME,
+    row_model: str = "server",
 ) -> DataResourceMetadata:
     """Build one resource metadata contribution from an owning schema surface.
 
@@ -301,6 +303,11 @@ def make_data_resource_metadata(
     (non-model) resource passes ``model=None`` and a dotted ``model_label`` (e.g.
     ``"platform.addon"``); the model is only ever used internally (it is
     ``{"wire": False}``), so the wire payload is identical either way.
+
+    ``row_model`` is the client/server boundary signal the frontend reads
+    (``"server"`` by default — Hasura ``where``/``order_by``/``limit`` + the
+    ``_groups`` aggregate; ``"client"`` for a small computed set that fetches once
+    and filters/sorts/paginates/groups in the browser).
     """
 
     if model_label is not None:
@@ -357,6 +364,7 @@ def make_data_resource_metadata(
         public_id_field=public_id_field,
         roots=roots,
         type_names=type_names,
+        row_model=row_model,
         capabilities=capabilities,
         fields=active_fields,
         filter_fields=filter_fields,
@@ -469,6 +477,7 @@ def _merge_data_resource(
         ),
         roots=_merge_roots(left, right),
         type_names=_merge_type_names(left, right),
+        row_model=_merge_row_model(left, right),
         capabilities=_merge_capabilities(left.capabilities, right.capabilities),
         fields=_merge_resource_fields(left.fields, right.fields),
         filter_fields=left.filter_fields or right.filter_fields,
@@ -529,6 +538,20 @@ def _merge_type_names(
             for field_def in dataclasses.fields(DataResourceTypeNames)
         }
     )
+
+
+def _merge_row_model(
+    left: DataResourceMetadata,
+    right: DataResourceMetadata,
+) -> str:
+    """Return one row-model signal, rejecting conflicting contributions."""
+
+    if left.row_model != right.row_model:
+        raise ImproperlyConfigured(
+            f"resource metadata for {left.model_label} has conflicting row_model: "
+            f"{left.row_model!r} and {right.row_model!r}."
+        )
+    return left.row_model
 
 
 def _merge_value(

@@ -7,6 +7,7 @@ import {
   useAngeeAggregate,
 } from "@angee/data";
 import {
+  isClientRowModel,
   useModelMetadata,
 } from "@angee/resources";
 import type {
@@ -30,7 +31,12 @@ import {
   type ResourceViewKind,
 } from "./resource-view-model";
 import { DeletePreviewDialog } from "./DeletePreviewDialog";
-import { useResourceViewSurface } from "./resource-view-surface";
+import {
+  useClientResourceViewSurface,
+  useResourceViewSurface,
+  type ResourceViewSurface,
+  type UseResourceViewSurfaceProps,
+} from "./resource-view-surface";
 import {
   GroupedListBody,
 } from "./GroupedList";
@@ -47,7 +53,7 @@ import {
   type GroupMeasure,
 } from "./ListInternals";
 import { ResourceListFrame } from "./ResourceListFrame";
-import type { ListViewProps } from "./list-view-types";
+import type { ListEmptyContent, ListViewProps } from "./list-view-types";
 import {
   activeFilterIdsFor,
   addCustomFilter as addCustomFilterToFilter,
@@ -237,16 +243,24 @@ function ListViewBody<TRow extends Row = Row>({
     hasInvalidGroupStack,
   ]);
 
+  // A client resource holds the whole set in the browser, so it groups through
+  // the flat list's groupRows()/listItems machinery — never the server
+  // _groups/GroupedListBody path (the aggregate it would query does not exist).
+  const clientRowModel = isClientRowModel(modelMetadata?.resource);
   const groupDimensions = React.useMemo(
     () =>
-      effectiveGroupStack.map((group) =>
-        resourceViewGroupToAggregateDimension(group, modelMetadata)
-      ),
-    [effectiveGroupStack, modelMetadata],
+      clientRowModel
+        ? []
+        : effectiveGroupStack.map((group) =>
+            resourceViewGroupToAggregateDimension(group, modelMetadata),
+          ),
+    [clientRowModel, effectiveGroupStack, modelMetadata],
   );
   const groupedListMode =
-    resourceView.state.view === "list" && groupDimensions.length > 0;
-  const surface = useResourceViewSurface({
+    resourceView.state.view === "list"
+    && groupDimensions.length > 0
+    && !clientRowModel;
+  const surfaceProps: UseResourceViewSurfaceProps<TRow> = {
     resource,
     columns: resolvedColumns,
     fields,
@@ -258,7 +272,120 @@ function ListViewBody<TRow extends Row = Row>({
     groupStack: effectiveGroupStack,
     enabled: !groupedListMode,
     onListStateChange,
-  });
+  };
+  const content = (surface: ResourceViewSurface<TRow>) => (
+    <ListViewContent<TRow>
+      surface={surface}
+      resource={resource}
+      resolvedColumns={resolvedColumns}
+      modelMetadata={modelMetadata}
+      resourceView={resourceView}
+      effectiveGroupStack={effectiveGroupStack}
+      groupDimensions={groupDimensions}
+      groupedListMode={groupedListMode}
+      declaredFacets={declaredFacets}
+      scalarFacets={scalarFacets}
+      explicitGroupOptions={explicitGroupOptions}
+      explicitFilters={explicitFilters}
+      explicitFilterFields={explicitFilterFields}
+      defaultGroup={defaultGroup}
+      defaultGroups={defaultGroups}
+      order={order}
+      onCreate={onCreate}
+      createLabel={createLabel}
+      onRowClick={onRowClick}
+      onListStateChange={onListStateChange}
+      rowHref={rowHref}
+      toolbarActions={toolbarActions}
+      cardActions={cardActions}
+      emptyContent={emptyContent}
+      className={className}
+    />
+  );
+  // A client resource fetches once and pages in the browser; a server resource
+  // queries Hasura per page. The two surface hooks call different data hooks, so
+  // the choice is a component boundary (never a conditional hook): a metadata
+  // flip remounts the matching surface component rather than reordering hooks.
+  if (clientRowModel) {
+    return <ClientSurfaceBody<TRow> surfaceProps={surfaceProps}>{content}</ClientSurfaceBody>;
+  }
+  return <ServerSurfaceBody<TRow> surfaceProps={surfaceProps}>{content}</ServerSurfaceBody>;
+}
+
+interface SurfaceBodyProps<TRow extends Row> {
+  surfaceProps: UseResourceViewSurfaceProps<TRow>;
+  children: (surface: ResourceViewSurface<TRow>) => React.ReactElement;
+}
+
+function ServerSurfaceBody<TRow extends Row>({
+  surfaceProps,
+  children,
+}: SurfaceBodyProps<TRow>): React.ReactElement {
+  return children(useResourceViewSurface(surfaceProps));
+}
+
+function ClientSurfaceBody<TRow extends Row>({
+  surfaceProps,
+  children,
+}: SurfaceBodyProps<TRow>): React.ReactElement {
+  return children(useClientResourceViewSurface(surfaceProps));
+}
+
+interface ListViewContentProps<TRow extends Row> {
+  surface: ResourceViewSurface<TRow>;
+  resource: string;
+  resolvedColumns: readonly ColumnDescriptor<TRow>[];
+  modelMetadata: ReturnType<typeof useModelMetadata>;
+  resourceView: ResourceViewContextValue;
+  effectiveGroupStack: readonly ResourceViewGroup[];
+  groupDimensions: ReturnType<typeof resourceViewGroupToAggregateDimension>[];
+  groupedListMode: boolean;
+  declaredFacets: ReturnType<typeof useRelationFacets>;
+  scalarFacets: ReturnType<typeof useScalarFacets>;
+  explicitGroupOptions: ListViewProps<TRow>["groupOptions"];
+  explicitFilters: ListViewProps<TRow>["filters"];
+  explicitFilterFields: ListViewProps<TRow>["filterFields"];
+  defaultGroup: ListViewProps<TRow>["defaultGroup"];
+  defaultGroups: ListViewProps<TRow>["defaultGroups"];
+  order: ListViewProps<TRow>["order"];
+  onCreate: ListViewProps<TRow>["onCreate"];
+  createLabel: ListViewProps<TRow>["createLabel"];
+  onRowClick: ListViewProps<TRow>["onRowClick"];
+  onListStateChange: ListViewProps<TRow>["onListStateChange"];
+  rowHref: ListViewProps<TRow>["rowHref"];
+  toolbarActions: ListViewProps<TRow>["toolbarActions"];
+  cardActions: ListViewProps<TRow>["cardActions"];
+  emptyContent: ListEmptyContent;
+  className: string | undefined;
+}
+
+function ListViewContent<TRow extends Row = Row>({
+  surface,
+  resource,
+  resolvedColumns,
+  modelMetadata,
+  resourceView,
+  effectiveGroupStack,
+  groupDimensions,
+  groupedListMode,
+  declaredFacets,
+  scalarFacets,
+  explicitGroupOptions,
+  explicitFilters,
+  explicitFilterFields,
+  defaultGroup,
+  defaultGroups,
+  order,
+  onCreate,
+  createLabel,
+  onRowClick,
+  onListStateChange,
+  rowHref,
+  toolbarActions,
+  cardActions,
+  emptyContent,
+  className,
+}: ListViewContentProps<TRow>): React.ReactElement {
   const flatMeasures = React.useMemo(
     () => groupMeasuresFromColumns(resolvedColumns),
     [resolvedColumns],

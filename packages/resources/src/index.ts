@@ -12,6 +12,7 @@ export {
   EMPTY_SCHEMA_FIELD_METADATA,
   ModelMetadataProvider,
   defineAngeeSchemaMetadata,
+  isClientRowModel,
   modelMetadataForLabel,
   resourceOperationTarget,
   schemaFieldMetadataFromAngeeSchemaMetadata,

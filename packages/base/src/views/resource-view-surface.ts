@@ -5,9 +5,11 @@ import {
 } from "@angee/resources";
 import {
   useTable as useRefineTable } from "@refinedev/react-table";
-import type {
-  BaseRecord,
-  HttpError,
+import {
+  useList,
+  type BaseRecord,
+  type HttpError,
+  type MetaQuery,
   } from "@refinedev/core";
 import {
   functionalUpdate,
@@ -31,6 +33,7 @@ import {
   refineSortersFromAngeeOrder,
   } from "@angee/refine";
 import {
+  isClientRowModel,
   refineResourceName,
 } from "@angee/resources";
 import type {
@@ -428,6 +431,164 @@ export function useResourceViewSurface<TRow extends Row = Row>({
     list,
     listState,
     rows,
+    requestedFields,
+    mergedFilter,
+    sortOrder,
+    ...presentation,
+  };
+}
+
+/** Max rows a client resource fetches in one page; warn (never truncate silently) at the cap. */
+const CLIENT_ROW_MODEL_FETCH_CAP = 1000;
+
+/**
+ * Surface a **client row-model** resource: fetch the whole set once (up to
+ * ``CLIENT_ROW_MODEL_FETCH_CAP``) and filter/sort/paginate it in the browser
+ * with the same Angee dialect engine the rows surface uses. The sibling of
+ * :func:`useResourceViewSurface` (which keeps every list op on the server) — a
+ * caller picks one by ``isClientRowModel(resource)`` at a component boundary, so
+ * only the active path issues a query and resolves a data provider.
+ */
+export function useClientResourceViewSurface<TRow extends Row = Row>({
+  columns,
+  fields,
+  filter,
+  pageSize,
+  resourceView,
+  modelMetadata = null,
+  groupStack,
+  enabled = true,
+  onListStateChange,
+}: UseResourceViewSurfaceProps<TRow>): ResourceViewSurface<TRow> {
+  useSyncPageSize(resourceView, pageSize);
+
+  const requestedFields = React.useMemo(() => {
+    const paths = new Set<string>(["id"]);
+    for (const column of columns) paths.add(column.field);
+    for (const extra of fields ?? []) paths.add(extra);
+    return [...paths];
+  }, [columns, fields]);
+
+  const mergedFilter = React.useMemo(
+    () => Filter.combineOptional(filter, resourceView.state.filter),
+    [resourceView.state.filter, filter],
+  );
+  const sortOrder = React.useMemo(
+    () => resourceView.state.resourceOrder() ?? undefined,
+    [resourceView.state.sort],
+  );
+  const dataResource = modelMetadata?.resource ?? null;
+  const resourceName = dataResource ? refineResourceName(dataResource) : "__angee_disabled__";
+  const listMeta = React.useMemo<MetaQuery>(
+    () => ({ fields: refineFieldsFromPaths(requestedFields) }),
+    [requestedFields],
+  );
+  const active = enabled && Boolean(dataResource);
+
+  const run = useList<RowRecord, HttpError>({
+    resource: resourceName,
+    dataProviderName: dataResource?.schemaName,
+    pagination: {
+      mode: "server",
+      currentPage: 1,
+      pageSize: CLIENT_ROW_MODEL_FETCH_CAP,
+    },
+    meta: listMeta,
+    queryOptions: { enabled: active },
+  });
+  const allRows = React.useMemo(
+    () => (run.result.data ?? []) as readonly RowRecord[] as readonly TRow[],
+    [run.result.data],
+  );
+  React.useEffect(() => {
+    if (allRows.length >= CLIENT_ROW_MODEL_FETCH_CAP) {
+      console.warn(
+        `Client resource "${dataResource?.modelLabel ?? resourceName}" returned ` +
+          `${allRows.length} rows, at or above the ${CLIENT_ROW_MODEL_FETCH_CAP}-row ` +
+          "client fetch cap; in-browser filter/sort/group may be incomplete. " +
+          'Mark the resource rowModel="server" or narrow it.',
+      );
+    }
+  }, [allRows.length, dataResource?.modelLabel, resourceName]);
+
+  const textFields = React.useMemo(
+    () => columns.map((column) => column.field),
+    [columns],
+  );
+  const source = React.useMemo(
+    () => createLocalRowsDataSource(allRows),
+    [allRows],
+  );
+  const localPage = React.useMemo(
+    () =>
+      source.query({
+        filter: mergedFilter,
+        sort: resourceView.state.sort,
+        page: resourceView.state.page,
+        pageSize: resourceView.state.pageSize,
+        textFields,
+      }),
+    [
+      source,
+      mergedFilter,
+      resourceView.state.page,
+      resourceView.state.pageSize,
+      resourceView.state.sort,
+      textFields,
+    ],
+  );
+
+  React.useEffect(() => {
+    if (resourceView.state.page > localPage.pageCount) {
+      resourceView.setPage(localPage.pageCount);
+    }
+  }, [resourceView.setPage, resourceView.state.page, localPage.pageCount]);
+
+  const fetching = run.query.isFetching;
+  const error = errorFromUnknown(run.query.error);
+  const refetch = React.useCallback(() => {
+    void run.query.refetch();
+  }, [run.query]);
+  const list = React.useMemo<ResourceListResult>(
+    () => ({
+      rows: localPage.rows,
+      total: localPage.total,
+      pageCount: localPage.pageCount,
+      page: localPage.page,
+      pageSize: localPage.pageSize,
+      pageInfo: undefined,
+      hasNext: localPage.hasNext,
+      hasPrev: localPage.hasPrev,
+      setPage: resourceView.setPage,
+      firstPage: () => resourceView.setPage(1),
+      nextPage: () =>
+        resourceView.setPage(Math.min(localPage.page + 1, localPage.pageCount)),
+      prevPage: () => resourceView.setPage(Math.max(1, localPage.page - 1)),
+      lastPage: () => resourceView.setPage(localPage.pageCount),
+      fetching,
+      error,
+      refetch,
+    }),
+    [localPage, fetching, error, refetch, resourceView.setPage],
+  );
+  const listState = useResourceRowsSnapshot<TRow>(list);
+  React.useEffect(() => {
+    onListStateChange?.(listState);
+  }, [listState, onListStateChange]);
+
+  const presentation = useResourceViewPresentationSurface<TRow>({
+    rows: localPage.rows as readonly TRow[],
+    columns,
+    resourceView,
+    modelMetadata,
+    groupStack,
+    getRowId: modelRowId,
+  });
+
+  return {
+    list,
+    listState,
+    rows: localPage.rows as readonly TRow[],
     requestedFields,
     mergedFilter,
     sortOrder,

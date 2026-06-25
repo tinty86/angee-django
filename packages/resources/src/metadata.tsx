@@ -83,6 +83,13 @@ export interface DataResourceMetadata {
   publicIdField: string;
   roots: DataResourceRootMetadata;
   typeNames: DataResourceTypeMetadata;
+  /**
+   * Where list operations (filter/sort/paginate/group) resolve: ``"server"``
+   * (Hasura ``where``/``order_by``/``limit`` + the ``_groups`` aggregate) or
+   * ``"client"`` (one fetch, then the grid's client row-model pipeline over the
+   * loaded set). Defaults to ``"server"`` for an older payload without it.
+   */
+  rowModel?: "client" | "server";
   capabilities: readonly string[];
   fields?: readonly DataResourceFieldMetadata[];
   filterFields: readonly string[];
@@ -134,6 +141,17 @@ export interface DataResourceTypeMetadata {
   updateInput?: string | null;
   deletePayload?: string | null;
   revision?: string | null;
+}
+
+/**
+ * Return whether a resource resolves list operations client-side (one fetch,
+ * then the grid's client row-model pipeline). Absent metadata defaults to the
+ * server row model.
+ */
+export function isClientRowModel(
+  resource: DataResourceMetadata | null | undefined,
+): boolean {
+  return resource?.rowModel === "client";
 }
 
 export function resourceOperationTarget(

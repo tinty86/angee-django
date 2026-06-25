@@ -114,6 +114,9 @@ def hasura_pydantic_resource(
                 aggregate=resource_type_name(aggregate_type),
             ),
             capabilities=("list", "detail", "aggregate"),
+            # A computed pydantic source is small and admin-only: the frontend
+            # fetches it once and filters/sorts/paginates/groups in the browser.
+            row_model="client",
             filter_fields=tuple(filterable),
             order_fields=tuple(sortable),
             default_measures=(DataAggregateMeasureMetadata(op="count"),),

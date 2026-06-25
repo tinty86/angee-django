@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import type {
-  ModelFieldMetadata,
-  ModelMetadata,
-  Row,
+import {
+  isClientRowModel,
+  type ModelFieldMetadata,
+  type ModelMetadata,
+  type Row,
 } from "@angee/resources";
 
 import { dedupeBy } from "../lib/dedupe";
@@ -252,6 +253,12 @@ function groupAllowedByResource(
   group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): boolean {
+  // A client resource groups in the browser over the fetched set, so any plain
+  // (non-relation) resource field is a valid group axis — it has no server
+  // group dimensions to validate against.
+  if (isClientRowModel(metadata?.resource)) {
+    return groupFieldAvailableOnResource(group.field, metadata);
+  }
   const groupByFields = metadata?.resource?.groupByFields;
   if (!groupByFields) return true;
   const aggregateField = group.aggregateField ?? group.field;
@@ -271,11 +278,26 @@ function groupAllowedByResource(
   );
 }
 
+function groupFieldAvailableOnResource(
+  field: string,
+  metadata: ModelMetadata | null,
+): boolean {
+  // Accept a plain field the resource exposes; a dotted path (relation.label)
+  // groups by its leading relation segment when that is a known field.
+  const [head] = field.split(".");
+  const fieldMetadata = metadata?.fields[field] ?? metadata?.fields[head ?? field];
+  if (!fieldMetadata) return false;
+  return fieldMetadata.kind !== "list";
+}
+
 function groupSupportedByResource(
   group: ResourceViewGroup,
   metadata: ModelMetadata | null,
 ): boolean {
   if (!groupAllowedByResource(group, metadata)) return false;
+  // A client resource needs no server group dimension: the in-browser groupKey()
+  // resolves the bucket (including date granularities) over the fetched set.
+  if (isClientRowModel(metadata?.resource)) return true;
   const dimensions = metadata?.resource?.groupDimensions;
   if (!dimensions) return true;
   const dimension =
