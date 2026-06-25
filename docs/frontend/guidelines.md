@@ -15,6 +15,100 @@ libraries and what each one owns. Check it before adding a dependency or
 hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
 `pnpm-workspace.yaml`, and `pnpm-lock.yaml`.
 
+## Package layering
+
+The frontend workspace is a strict one-way stack. Each package owns one concern
+and depends only on packages below it. `docs/stack.md` says which rented library
+owns what; this section says which Angee package wraps it and who may import whom.
+
+> **Open for architect confirmation.** This is the target contract for the
+> in-flight Refine package split (`.agents/plans/fork-a1-refine-package-split.md`).
+> Two placements are architect calls that the later code waves depend on and must
+> not be acted on until confirmed: (1) the `@angee/data` data hooks land in
+> `@angee/refine` as metadata-free dialect hooks, with the `resourceOperationTarget`
+> resolved at the caller edge and passed in as `{ root }` (so `refine` stays below
+> `resources` in the DAG); (2) the auth provider and the i18n provider both land in
+> `@angee/app`. These are the plan's recommended defaults; the doc encodes them so
+> the contract exists, but the code slices STOP for confirmation before relying on
+> them.
+
+### Target DAG
+
+Dependencies point down only. A package never imports a package above it.
+
+```
+rented libs   @refinedev/core · @refinedev/hasura · graphql-request/ws ·
+              TanStack Router/Table · react-hook-form/zod · i18next · lucide · Base UI
+   │
+@angee/refine     Hasura-dialect Refine binding — zero domain/metadata knowledge
+   │
+@angee/resources  metadata (angee.resources) → Refine config bridge
+   │
+@angee/ui         the single rendered binding + headless view-state
+   │
+@angee/app        composition + app shell — the only package depending on all above
+   │
+@angee/<domain>   addons: pages + codegen documents
+```
+
+| Package | Owns |
+|---|---|
+| `@angee/refine` | the parts of a Refine+Hasura app every project shares, with **zero domain/metadata knowledge**: data/transport/live providers, the router bridge, typed-document contracts, and the `dialect/` hooks (action, aggregate, groupBy, facets, deletePreview, revisions) over `useCustom`. |
+| `@angee/resources` | the **only** consumer of `angee.resources` metadata: artifact load/validate, projection to Refine `resources[]` + `meta`, the one field kind/scalar/widget classifier, group/facet/drill-down dimension specs, and per-action capabilities → accessControl. |
+| `@angee/ui` | the single rendered binding + headless view-state: `views/{list,form,record,relation,visualizations}` + headless view-models, chrome (rail/topbar/breadcrumb/spotlight), widgets, feedback (toast), and the Base UI primitives binding. |
+| `@angee/app` | assembles the app: `define-addon`, `defineBaseAddon`, `createApp`, the `providers/{auth,i18n,notification,accessControl}`, addon-route → TanStack tree routing, the slot/widget/form/preview/icon registries, and the app shell. |
+| `@angee/<domain>` | a domain addon: its pages and codegen `documents*.ts`. |
+
+### Current → target
+
+Where each concern lives **today** versus where it lives **after** the split. The
+old shells (`@angee/base`, `@angee/data`, `@angee/sdk`) are deleted once their last
+importer flips.
+
+| Concern | Current owner | Target owner |
+|---|---|---|
+| Data/transport/live providers, router bridge, custom-op hooks | `@angee/data` | `@angee/refine` |
+| Typed-document / operation-document contracts, stable-deps | `@angee/data` (already moved) | `@angee/refine` |
+| `@angee/data` data hooks (aggregate/action/deletePreview/facets/groupBy, revisions, authored-hooks) | `@angee/data` | `@angee/refine` dialect (metadata-free; target resolved at the caller edge as `{ root }`) |
+| Metadata artifact, resource projection, field classifier, dimensions, capabilities, row contracts | `@angee/data` → physical `@angee/resources` (already moved) | `@angee/resources` |
+| Invalidation: resource targets vs authored-query metadata | `@angee/data` → split (already moved) | `@angee/resources` (resource targets) + `@angee/refine` (authored-query metadata) |
+| Rendered views / chrome / widgets / feedback / primitives | `@angee/base` | `@angee/ui` |
+| `lib/` styling helpers (cn/tv/tones/dnd) | `@angee/base` | `@angee/ui` |
+| `defineAddon` / runtime / `make-context` (composition contracts + runtime context) | `@angee/sdk` | `@angee/app` |
+| `createApp` / `defineBaseAddon` + app shell (the single `<Refine>`/cache/live owner) | `@angee/base` | `@angee/app` |
+| Auth provider | `@angee/data` (`auth.tsx`) | `@angee/app` `providers/auth` |
+| i18n provider | `@angee/base` + `@angee/data` + `@angee/sdk` (parallel paths) | `@angee/app` i18n provider (collapse the parallel path) |
+
+### One-way rules
+
+These are the dependency invariants; a violation is a layering bug, not a
+convenience.
+
+- `@angee/refine` imports **only rented libs** — never `@angee/resources`,
+  `@angee/ui`, `@angee/app`, and never any `angee.resources` metadata.
+- `@angee/resources` must **NOT** import `@angee/refine`.
+- `@angee/ui` may import `@angee/refine` + `@angee/resources`, but **not**
+  `@angee/app`.
+- `@angee/app` is the **ONLY** package that may import compose / `createApp`-level
+  concerns. `@angee/ui` consumes composition contracts via React context whose
+  Provider `@angee/app` mounts — never by importing `@angee/app`.
+- After the split, **no addon imports `@angee/base`, `@angee/data`, or
+  `@angee/sdk`** — those shells are deleted.
+
+### Carried debts
+
+Two known defects are relocated **as-is** by the split (moving them green is the
+priority; fixing them inside the move would break the green-at-every-step
+guarantee). Each is tracked as a separate follow-up, not entrenched:
+
+- **Local-rows engine** — the hand-rolled `_bool_exp` evaluator in
+  `local-rows.ts` (the shared client filter/sort/paginate engine). Relocated into
+  `@angee/ui`'s views as-is; the evaluator hardening is a tracked follow-up.
+- **Parallel i18n path** — i18n interpolation/fallback exists in more than one
+  shell today (`@angee/base`, `@angee/data`, `@angee/sdk`). Relocated as-is into
+  `@angee/app`; collapsing onto one i18next-native provider path is a tracked
+  follow-up.
+
 ## Rules
 
 - Python ships schema and operations. TypeScript ships UX.
@@ -63,9 +157,8 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
 - Use `defineAddon` for headless addon composition, `defineBaseAddon` for
   rendered addon composition, and `createApp` for the project's host
   composition. One greppable seam per addon — never annotate a bare
-  `const x: BaseAddon = {…}`. The current package names are `@angee/sdk` for
-  composition contracts and `@angee/base` for rendered primitives; the greenfield
-  target owners are `@angee/app` and `@angee/ui`.
+  `const x: BaseAddon = {…}`. These contracts and the packages that own them are
+  described under "Package layering" below.
 - Compose addon capabilities at build time through the manifest + `composeAddons`
   (widgets, i18n, icons, forms, slots, previews, and menu declarations); never
   register or mutate a module-global at runtime. `usePreviews`/`useWidget`/
