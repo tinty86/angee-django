@@ -72,20 +72,6 @@ export const IamUsers = graphql(`
   }
 `);
 
-export const IamGrants = graphql(`
-  query IamGrants($pagination: OffsetPaginationInput) {
-    grants(pagination: $pagination) {
-      total_count
-      results {
-        principal_id
-        principal_type
-        principal_label
-        role
-      }
-    }
-  }
-`);
-
 export const IamRebacSchema = graphql(`
   query IamRebacSchema {
     rebac_schema {
@@ -123,10 +109,13 @@ export type IAMOverviewVariables = DocumentVariables<typeof IamOverview>;
 
 export type IAMUsersVariables = DocumentVariables<typeof IamUsers>;
 
-/** One `grants.results` row, derived from the `IamGrants` selection. */
-export type IAMGrant = DocumentType<typeof IamGrants>["grants"]["results"][number];
-
-export type IAMGrantsVariables = DocumentVariables<typeof IamGrants>;
+/** One privileged-grant row, derived from the `IamOverview` selection — the same
+ * `{principal_id, principal_type, principal_label, role}` shape the dropped
+ * standalone `IamGrants` query exposed. The Grants page now reads the `iam.Grant`
+ * Hasura resource; this type only backs the overview's privileged-grant peek. */
+export type IAMGrant = NonNullable<
+  DocumentType<typeof IamOverview>["iam_overview"]
+>["privileged_grants"][number];
 
 /** One `rebac_schema` resource entry, derived from the `IamRebacSchema` selection. */
 export type IAMResourceSchema =

@@ -47,7 +47,6 @@ from rebac.roles import (
 from rebac.schema.ast import PermArrow, PermBinOp, PermNil, PermRef
 from strawberry import auto
 from strawberry.scalars import JSON
-from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import SqidPublicIdentity, instance_from_public_id
 from angee.graphql.data import hasura_model_resource, hasura_pydantic_resource
@@ -461,13 +460,6 @@ def _permission_hub_grant_rows() -> QuerySet[Any]:
         )
         .order_by(*_relationship_ordering()),
     )
-
-
-def _permission_hub_grants(info: strawberry.Info) -> QuerySet[Any]:
-    """Return direct user role-grant rows in stable order."""
-
-    del info
-    return _permission_hub_grant_rows()
 
 
 def _schema_role_resource_types() -> set[str]:
@@ -1136,11 +1128,6 @@ class IAMConsoleQuery:
         """Return active tuple-derived roles."""
 
         return _permission_hub_roles()
-
-    grants: OffsetPaginated[IAMGrantType] = strawberry_django.offset_paginated(
-        resolver=_permission_hub_grants,
-        permission_classes=_ADMIN_PERMISSION_CLASSES,
-    )
 
     @strawberry.field(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def rebac_schema(self) -> list[IAMResourceSchemaType]:

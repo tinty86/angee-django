@@ -48,14 +48,6 @@ def test_permission_hub_queries_are_admin_only(
         """,
         """
         query {
-          grants(pagination: {limit: 10}) {
-            total_count
-            results { principal_id principal_type role }
-          }
-        }
-        """,
-        """
-        query {
           rebac_schema {
             resource_type
             relations { name allowed_subject_types }
@@ -193,16 +185,14 @@ def test_roles_query_excludes_role_types_missing_from_rebac_schema(
             """
             query {
               roles { id namespace label }
-              grants(pagination: {limit: 10}) {
-                results { role }
-              }
+              iam_grants(limit: 10) { role }
             }
             """,
             user=admin,
         )
     )
     roles = data["roles"]
-    grants = data["grants"]["results"]
+    grants = data["iam_grants"]
     schema_role_types = iam_schema._schema_role_resource_types()
 
     assert {"id": "admin", "namespace": "angee", "label": "Admin"} in roles
@@ -237,9 +227,7 @@ def test_grants_query_labels_principals_by_display_name(
             _schema("console"),
             """
             query {
-              grants(pagination: {limit: 50}) {
-                results { principal_id principal_label }
-              }
+              iam_grants(limit: 50) { principal_id principal_label }
             }
             """,
             user=admin,
@@ -247,7 +235,7 @@ def test_grants_query_labels_principals_by_display_name(
     )
     labels = {
         row["principal_id"]: row["principal_label"]
-        for row in data["grants"]["results"]
+        for row in data["iam_grants"]
     }
     assert labels[str(named.pk)] == "Named Owner"
     assert labels[str(plain.pk)] == "hub-label-plain"
@@ -283,9 +271,9 @@ def test_iam_overview_aggregates_do_not_depend_on_paginated_rows(
               users_aggregate {
                 aggregate { count }
               }
-              grants(pagination: {limit: 1}) {
-                total_count
-                results { role }
+              iam_grants(limit: 1) { role }
+              iam_grants_aggregate {
+                aggregate { count }
               }
               iam_overview(peek_limit: 2) {
                 user_count
@@ -316,9 +304,9 @@ def test_iam_overview_aggregates_do_not_depend_on_paginated_rows(
 
     overview = data["iam_overview"]
     assert len(data["users"]) == 1
-    assert len(data["grants"]["results"]) == 1
+    assert len(data["iam_grants"]) == 1
     assert data["users_aggregate"]["aggregate"]["count"] == 506
-    assert data["grants"]["total_count"] == 3
+    assert data["iam_grants_aggregate"]["aggregate"]["count"] == 3
     assert overview["user_count"] == 506
     assert overview["role_count"] == 2
     assert overview["grant_count"] == 3
