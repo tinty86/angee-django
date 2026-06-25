@@ -361,10 +361,178 @@ _ADDON_RESOURCE = hasura_pydantic_resource(
 )
 
 
+class PlatformModelRow(BaseModel):
+    """Computed platform-explorer model row (no Django table behind it).
+
+    The row-shape SSOT for the ``platform.Model`` Hasura resource. The strawberry
+    ``PlatformModel`` keys by ``label`` and carries no ``id``; the row adds an
+    explicit ``id`` (= ``label``) for by-pk addressing. The nested ``fields`` list
+    stays a detail concern (it is the ``platform.Field`` resource, flattened), so
+    it is dropped here in favour of the ``field_count``/``relation_count`` rollup.
+    """
+
+    id: str
+    label: str
+    app_label: str
+    model_name: str
+    verbose_name: str
+    db_table: str
+    addon_id: str
+    addon_label: str
+    resource_type: str | None
+    field_count: int
+    relation_count: int
+    depends_on: list[str]
+
+
+class PlatformFieldRow(BaseModel):
+    """Computed platform-explorer field row, flattened across all models.
+
+    The row-shape SSOT for the ``platform.Field`` Hasura resource. The strawberry
+    ``PlatformField`` is nested under one model; this row flattens every model's
+    fields into one collection, carrying the owning ``model`` label and ``addon``
+    context plus a synthetic ``id`` (``f"{model}.{name}"``) for by-pk addressing.
+    """
+
+    id: str
+    name: str
+    attname: str
+    kind: str
+    is_relation: bool
+    relation_target: str | None
+    model: str
+    addon: str
+
+
+def _model_rows() -> list[PlatformModelRow]:
+    """Project composed models as rows (the explorer's per-model rollup)."""
+
+    explorer = _build_explorer()
+    return [
+        PlatformModelRow(
+            id=model.label,
+            label=model.label,
+            app_label=model.app_label,
+            model_name=model.model_name,
+            verbose_name=model.verbose_name,
+            db_table=model.db_table,
+            addon_id=model.addon_id,
+            addon_label=model.addon_label,
+            resource_type=model.resource_type,
+            field_count=model.field_count,
+            relation_count=model.relation_count,
+            depends_on=list(model.depends_on),
+        )
+        for model in explorer.models
+    ]
+
+
+def _field_rows_flat() -> list[PlatformFieldRow]:
+    """Project every composed model's fields, flattened into one collection."""
+
+    explorer = _build_explorer()
+    return [
+        PlatformFieldRow(
+            id=f"{model.label}.{field.name}",
+            name=field.name,
+            attname=field.attname,
+            kind=field.kind,
+            is_relation=field.is_relation,
+            relation_target=field.relation_target,
+            model=model.label,
+            addon=field.addon,
+        )
+        for model in explorer.models
+        for field in model.fields
+    ]
+
+
+def _model_rows_for(info: strawberry.Info) -> list[PlatformModelRow]:
+    """Row provider gated on the same platform-admin read as the explorer."""
+
+    del info
+    return _model_rows() if platform_can_read() else []
+
+
+def _field_rows_for(info: strawberry.Info) -> list[PlatformFieldRow]:
+    """Row provider gated on the same platform-admin read as the explorer."""
+
+    del info
+    return _field_rows_flat() if platform_can_read() else []
+
+
+_MODEL_RESOURCE = hasura_pydantic_resource(
+    PlatformModelRow,
+    name="platform_models",
+    model_label="platform.Model",
+    filterable=[
+        "id",
+        "label",
+        "app_label",
+        "model_name",
+        "verbose_name",
+        "db_table",
+        "addon_id",
+        "addon_label",
+        "resource_type",
+        "field_count",
+        "relation_count",
+    ],
+    sortable=[
+        "label",
+        "app_label",
+        "model_name",
+        "verbose_name",
+        "db_table",
+        "addon_id",
+        "addon_label",
+        "field_count",
+        "relation_count",
+    ],
+    rows=_model_rows_for,
+)
+
+
+_FIELD_RESOURCE = hasura_pydantic_resource(
+    PlatformFieldRow,
+    name="platform_fields",
+    model_label="platform.Field",
+    filterable=[
+        "id",
+        "name",
+        "attname",
+        "kind",
+        "is_relation",
+        "relation_target",
+        "model",
+        "addon",
+    ],
+    sortable=[
+        "name",
+        "attname",
+        "kind",
+        "relation_target",
+        "model",
+        "addon",
+    ],
+    rows=_field_rows_for,
+)
+
+
 schemas = {
     "console": {
-        "query": [PlatformQuery, _ADDON_RESOURCE.query],
-        "types": [PlatformExplorerData, *_ADDON_RESOURCE.types],
+        "query": [
+            PlatformQuery,
+            _ADDON_RESOURCE.query,
+            _MODEL_RESOURCE.query,
+            _FIELD_RESOURCE.query,
+        ],
+        "types": [
+            PlatformExplorerData,
+            *_ADDON_RESOURCE.types,
+            *_MODEL_RESOURCE.types,
+            *_FIELD_RESOURCE.types,
+        ],
     },
 }
 """GraphQL contributions installed by the platform addon (console surface)."""
