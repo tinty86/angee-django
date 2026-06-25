@@ -509,7 +509,7 @@ requires-dist = [
     { name = "django-simple-history", specifier = ">=3.7" },
     { name = "django-sqids", specifier = ">=0.1" },
     { name = "django-yamlconf", specifier = ">=1.5.0" },
-    { name = "django-zed-rebac", extras = ["strawberry-django"], specifier = ">=0.12" },
+    { name = "django-zed-rebac", extras = ["strawberry-django"], editable = "../django-zed-rebac" },
     { name = "fastmcp", specifier = ">=2.14.7,<2.15" },
     { name = "mcp", specifier = ">=1.2" },
     { name = "openai", specifier = ">=2.43.0" },
@@ -623,19 +623,36 @@ wheels = [
 [[package]]
 name = "django-zed-rebac"
 version = "0.12.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../django-zed-rebac" }
 dependencies = [
     { name = "django" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/7d/2282eafc8d7b0468a4575334f32b1c28acbcb75d7916d6b0cf47a7496845/django_zed_rebac-0.12.0.tar.gz", hash = "sha256:50ae24e3dc77f2fa57e9128e2fc1353259194dfcb19e868d846dddc35ca7dca8", size = 225279, upload-time = "2026-06-23T09:57:45.594Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/f0/84d93836b77dc7635138149a48bd953e71dbd219d4ca9b60f4af44dec55e/django_zed_rebac-0.12.0-py3-none-any.whl", hash = "sha256:332145779cf5814660ff07bd8cfc6df71a69345f1fd485159214b0799da45dc4", size = 173516, upload-time = "2026-06-23T09:57:44.502Z" },
 ]
 
 [package.optional-dependencies]
 strawberry-django = [
     { name = "strawberry-graphql-django" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "authzed", marker = "extra == 'spicedb'", specifier = ">=0.13" },
+    { name = "cel-python", marker = "extra == 'caveats'", specifier = ">=0.1.5" },
+    { name = "channels", marker = "extra == 'strawberry'", specifier = ">=4.0" },
+    { name = "django", specifier = ">=6.0" },
+    { name = "django-stubs", extras = ["compatible-mypy"], marker = "extra == 'dev'", specifier = ">=5.1" },
+    { name = "django-stubs-ext", marker = "extra == 'dev'", specifier = ">=5.1" },
+    { name = "djangorestframework", marker = "extra == 'drf'", specifier = ">=3.14" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.27" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.350" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-django", marker = "extra == 'dev'", specifier = ">=4.8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+    { name = "strawberry-graphql", marker = "extra == 'strawberry'", specifier = ">=0.220" },
+    { name = "strawberry-graphql-django", marker = "extra == 'dev'", specifier = ">=0.86.0" },
+    { name = "strawberry-graphql-django", marker = "extra == 'strawberry-django'", specifier = ">=0.86.0" },
+]
+provides-extras = ["spicedb", "caveats", "drf", "mcp", "strawberry", "strawberry-django", "dev"]
 
 [[package]]
 name = "dnspython"
