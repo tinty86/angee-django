@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { AppRuntimeProvider } from "@angee/sdk";
+import { AppRuntimeProvider } from "../runtime";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import type { ReactElement } from "react";
 

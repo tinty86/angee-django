@@ -1,4 +1,4 @@
-import { useWidget, type WidgetMap } from "@angee/sdk";
+import { useWidget, type WidgetMap } from "../runtime";
 
 import { booleanBadgeWidget } from "./booleanBadge";
 import { booleanWidget } from "./boolean";

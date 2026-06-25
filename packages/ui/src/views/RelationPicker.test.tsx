@@ -19,7 +19,7 @@ import {
   } from "@tanstack/react-router";
 import {
   AppRuntimeProvider,
-  } from "@angee/sdk";
+  } from "../runtime";
 import {
   ModelMetadataProvider,
 } from "@angee/resources";
@@ -37,13 +37,6 @@ const sdkMocks = vi.hoisted(() => ({
   record: null as Row | null,
   mutate: vi.fn(),
 }));
-
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
-  return {
-    ...actual,
-  };
-});
 
 vi.mock("@angee/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/data")>();

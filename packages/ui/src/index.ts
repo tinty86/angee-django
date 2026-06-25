@@ -6,6 +6,13 @@
 
 export * from "./lib";
 
+// The app-runtime registry + contribution contracts the binding owns: the
+// `AppRuntime` provider and its `useWidget`/`useSlot`/`usePreviews`/`useT`
+// lookups, the `makeContext` factory, and the menu/slot/preview/widget/form
+// contracts the render surfaces consume. (Wave B1: relocated from `@angee/sdk`;
+// the binding owns the runtime it consumes, `@angee/app` mounts the provider.)
+export * from "./runtime";
+
 // Render leaves the primitives/chrome build on: the glyph renderer + icon
 // registry (and the brand/agent marks they resolve) and the base-namespace
 // translator. (Wave A.0b: relocated from `@angee/base`.)

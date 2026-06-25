@@ -55,7 +55,7 @@ rented libs   @refinedev/core · @refinedev/hasura · graphql-request/ws ·
 |---|---|
 | `@angee/refine` | the parts of a Refine+Hasura app every project shares, with **zero domain/metadata knowledge**: data/transport/live providers, the router bridge, typed-document contracts, and the `dialect/` hooks (action, aggregate, groupBy, facets, deletePreview, revisions) over `useCustom`. |
 | `@angee/resources` | the **only** consumer of `angee.resources` metadata: artifact load/validate, projection to Refine `resources[]` + `meta`, the one field kind/scalar/widget classifier, group/facet/drill-down dimension specs, and per-action capabilities → accessControl. |
-| `@angee/ui` | the single rendered binding + headless view-state: `views/{list,form,record,relation,visualizations}` + headless view-models, chrome (rail/topbar/breadcrumb/spotlight), widgets, feedback (toast), and the Base UI primitives binding. |
+| `@angee/ui` | the single rendered binding + headless view-state: `views/{list,form,record,relation,visualizations}` + headless view-models, chrome (rail/topbar/breadcrumb/spotlight), widgets, feedback (toast), the Base UI primitives binding, and the `runtime/` contracts it consumes — the `AppRuntime` registry context + its lookup hooks, `makeContext`, and the menu/slot/preview/widget/form contribution types (the binding owns the runtime it renders against; `@angee/app` only mounts the provider). |
 | `@angee/app` | assembles the app: `define-addon`, `defineBaseAddon`, `createApp`, the `providers/{auth,i18n,notification,accessControl}`, addon-route → TanStack tree routing, the slot/widget/form/preview/icon registries, and the app shell. |
 | `@angee/<domain>` | a domain addon: its pages and codegen `documents*.ts`. |
 
@@ -74,7 +74,8 @@ importer flips.
 | Invalidation: resource targets vs authored-query metadata | `@angee/data` → split (already moved) | `@angee/resources` (resource targets) + `@angee/refine` (authored-query metadata) |
 | Rendered views / chrome / widgets / feedback / primitives | `@angee/base` | `@angee/ui` |
 | `lib/` styling helpers (cn/tv/tones/dnd) | `@angee/base` | `@angee/ui` |
-| `defineAddon` / runtime / `make-context` (composition contracts + runtime context) | `@angee/sdk` | `@angee/app` |
+| Runtime contracts the binding consumes — the `AppRuntime` registry + its `useWidget`/`useSlot`/`usePreviews`/`useT`/`useNamespaceT` lookups, the `makeContext` factory, and the menu/slot/preview/widget/form contribution contracts | `@angee/sdk` (`runtime.ts` / `make-context.ts` + the contribution types in `define-addon.ts`) | **`@angee/ui`** (the binding OWNS the runtime it consumes; `@angee/app` only mounts the provider) |
+| `defineAddon` / `composeAddons` (addon-manifest composition) | `@angee/sdk` (`define-addon.ts`) | `@angee/app` |
 | `createApp` / `defineBaseAddon` + app shell (the single `<Refine>`/cache/live owner) | `@angee/base` | `@angee/app` |
 | Auth provider | `@angee/data` (`auth.tsx`) | `@angee/app` `providers/auth` |
 | i18n provider | `@angee/base` + `@angee/data` + `@angee/sdk` (parallel paths) | `@angee/app` i18n provider (collapse the parallel path) |
@@ -90,8 +91,11 @@ convenience.
 - `@angee/ui` may import `@angee/refine` + `@angee/resources`, but **not**
   `@angee/app`.
 - `@angee/app` is the **ONLY** package that may import compose / `createApp`-level
-  concerns. `@angee/ui` consumes composition contracts via React context whose
-  Provider `@angee/app` mounts — never by importing `@angee/app`.
+  concerns. The `AppRuntime` context and its lookup hooks live in **`@angee/ui`**
+  (the binding owns the runtime it renders against); `@angee/app` composes the
+  addon manifests (`composeAddons`) and mounts that `AppRuntimeProvider` with the
+  merged value. `@angee/ui` reads it via the context — never by importing
+  `@angee/app`.
 - After the split, **no addon imports `@angee/base`, `@angee/data`, or
   `@angee/sdk`** — those shells are deleted.
 

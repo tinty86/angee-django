@@ -1,5 +1,5 @@
 import { Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
-import type { SlotContribution } from "@angee/sdk";
+import type { SlotContribution } from "../runtime";
 
 /**
  * Renders the contributions of a composed slot (`useSlot(name)`), in their

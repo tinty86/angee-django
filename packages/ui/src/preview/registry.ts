@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { PreviewContribution } from "@angee/sdk";
+import type { PreviewContribution } from "../runtime";
 
 import { normaliseMime } from "./model";
 

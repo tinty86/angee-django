@@ -48,6 +48,22 @@
       "types": "./src/i18n/index.ts",
       "import": "./src/i18n/index.ts"
     },
+    "./runtime": {
+      "types": "./src/runtime/index.ts",
+      "import": "./src/runtime/index.ts"
+    },
+    "./runtime/make-context": {
+      "types": "./src/runtime/make-context.ts",
+      "import": "./src/runtime/make-context.ts"
+    },
+    "./runtime/contracts": {
+      "types": "./src/runtime/contracts.ts",
+      "import": "./src/runtime/contracts.ts"
+    },
+    "./runtime/*": {
+      "types": "./src/runtime/*.ts",
+      "import": "./src/runtime/*.ts"
+    },
     "./i18n/en": {
       "types": "./src/i18n/en.ts",
       "import": "./src/i18n/en.ts"
@@ -295,7 +311,6 @@
     "@angee/logo-react": "^0.2.1",
     "@angee/refine": "workspace:*",
     "@angee/resources": "workspace:*",
-    "@angee/sdk": "workspace:*",
     "@base-ui/react": "^1.5.0",
     "@codemirror/commands": "^6.0.0",
     "@codemirror/lang-json": "^6.0.2",

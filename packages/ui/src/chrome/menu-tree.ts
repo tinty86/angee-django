@@ -1,4 +1,4 @@
-import type { ComposedMenuItem, MenuItem } from "@angee/sdk";
+import type { ComposedMenuItem, MenuItem } from "../runtime";
 
 import { titleCase } from "../lib/titleCase";
 import type { Tone } from "../lib/tones";

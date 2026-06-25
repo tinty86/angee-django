@@ -1,5 +1,5 @@
 import { type ComponentType, type SVGProps } from "react";
-import { useAppRuntime } from "@angee/sdk";
+import { useAppRuntime } from "../runtime";
 import {
   Activity,
   Archive,

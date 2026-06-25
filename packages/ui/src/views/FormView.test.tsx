@@ -25,7 +25,7 @@ import {
 import {
   AppRuntimeProvider,
   type AppRuntime,
-  } from "@angee/sdk";
+  } from "../runtime";
 import {
   ModelMetadataProvider,
 } from "@angee/resources";
@@ -52,13 +52,6 @@ const sdkMocks = vi.hoisted(() => ({
   mutationAction: undefined as string | undefined,
   mutationOptions: undefined as { fields?: readonly string[]; enabled?: boolean } | undefined,
 }));
-
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
-  return {
-    ...actual,
-  };
-});
 
 vi.mock("@angee/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/data")>();

@@ -21,7 +21,8 @@
     "react": "^19.0.0"
   },
   "dependencies": {
-    "@angee/data": "workspace:*"
+    "@angee/data": "workspace:*",
+    "@angee/ui": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.1.0",

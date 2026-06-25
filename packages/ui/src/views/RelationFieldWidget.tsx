@@ -2,7 +2,7 @@ import { useMemo, type ReactElement } from "react";
 
 import {
   useResourceRoute,
-} from "@angee/sdk";
+} from "../runtime";
 import {
   useModelMetadata,
 } from "@angee/resources";

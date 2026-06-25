@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { AppRuntimeProvider } from "@angee/sdk";
+import { AppRuntimeProvider } from "../runtime";
 
 import { baseIcons } from "../chrome/icon-registry";
 import { TreeView } from "./TreeView";

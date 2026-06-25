@@ -26,7 +26,7 @@ import {
 import {
   useFormOverride,
   useSlot,
-  } from "@angee/sdk";
+  } from "../runtime";
 import {
   useModelMetadata,
 } from "@angee/resources";

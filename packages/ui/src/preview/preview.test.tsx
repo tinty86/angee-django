@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { AppRuntimeProvider } from "@angee/sdk";
+import { AppRuntimeProvider } from "../runtime";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { displayMime, normaliseMime } from "./model";
