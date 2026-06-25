@@ -22,6 +22,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.models import Group as DjangoGroup
 from django.db import transaction
 from django.db.models import QuerySet
+from pydantic import BaseModel
 from rebac import (
     ObjectRef,
     app_settings,
@@ -49,7 +50,7 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import SqidPublicIdentity, instance_from_public_id
-from angee.graphql.data import hasura_model_resource
+from angee.graphql.data import hasura_model_resource, hasura_pydantic_resource
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
@@ -58,8 +59,8 @@ from angee.graphql.writes import write_queryset
 from angee.iam.identity import user_display_label as _user_display_label
 from angee.iam.identity import user_principal
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
+from angee.iam.permissions import is_platform_admin, require_platform_admin
 from angee.iam.permissions import request_from_info as _request
-from angee.iam.permissions import require_platform_admin
 
 
 def _has_module_spec(dotted_path: str) -> bool:
@@ -910,6 +911,124 @@ class IAMGroupWriteBackend:
             return _delete_instance(_group_for_resource_id(pk, Group.objects.all()))
 
 
+class IAMRoleRow(BaseModel):
+    """Computed IAM role row (no Django table behind it).
+
+    The row-shape SSOT for the ``iam.Role`` Hasura resource. Roles are deduped
+    from active role-relationship tuples and labelled from the REBAC schema AST
+    (the same computation the authored ``roles`` query exposed). ``IAMRoleType``
+    keys by the short ``resource_id`` (``role_id``), which is not unique across
+    namespaces; the row adds an explicit ``id`` (the canonical ``<namespace>/role:<id>``
+    ref) for by-pk addressing.
+    """
+
+    id: str
+    role_id: str
+    namespace: str
+    label: str
+    description: str = ""
+
+
+class IAMGrantRow(BaseModel):
+    """Computed IAM role-grant row (no Django table behind it).
+
+    The row-shape SSOT for the ``iam.Grant`` Hasura resource, projected from the
+    direct user role-grant tuples (the same rows the authored ``grants`` query
+    paginated). The principal/role pair is unique, so ``id`` is the
+    ``<principal_ref>:<role>`` composite for by-pk addressing.
+    """
+
+    id: str
+    principal_id: str
+    principal_type: str
+    principal_ref: str
+    principal_label: str
+    role: str
+    role_name: str
+    namespace: str
+
+
+def _role_rows() -> list[IAMRoleRow]:
+    """Project active tuple-derived roles as computed resource rows."""
+
+    return [
+        IAMRoleRow(
+            id=f"{role.namespace}{_ROLE_SUFFIX}:{role.id}",
+            role_id=role.id,
+            namespace=role.namespace,
+            label=role.label,
+            description=role.description,
+        )
+        for role in _permission_hub_roles()
+    ]
+
+
+def _grant_rows() -> list[IAMGrantRow]:
+    """Project direct user role-grant tuples as computed resource rows."""
+
+    rows: list[IAMGrantRow] = []
+    for row in _permission_hub_grant_rows():
+        resource_type = str(row.resource_type)
+        resource_id = str(row.resource_id)
+        subject_type = str(row.subject_type)
+        subject_id = str(row.subject_id)
+        principal_ref = f"{subject_type}:{subject_id}"
+        role = _role_ref(resource_type, resource_id)
+        rows.append(
+            IAMGrantRow(
+                id=f"{principal_ref}:{role}",
+                principal_id=subject_id,
+                principal_type=subject_type,
+                principal_ref=principal_ref,
+                principal_label=_user_display_label(subject_id) or principal_ref,
+                role=role,
+                role_name=resource_id,
+                namespace=_role_namespace(resource_type),
+            )
+        )
+    return rows
+
+
+def _admin_actor(info: strawberry.Info) -> bool:
+    """Return whether the request actor reaches IAM's platform-admin role."""
+
+    return is_platform_admin(getattr(_request(info), "user", None))
+
+
+def _role_rows_for(info: strawberry.Info) -> list[IAMRoleRow]:
+    """Row provider gated on the same platform-admin reach the authored query had."""
+
+    with system_context(reason="iam.graphql.roles"):
+        return _role_rows() if _admin_actor(info) else []
+
+
+def _grant_rows_for(info: strawberry.Info) -> list[IAMGrantRow]:
+    """Row provider gated on the same platform-admin reach the authored query had."""
+
+    with system_context(reason="iam.graphql.grants"):
+        return _grant_rows() if _admin_actor(info) else []
+
+
+_ROLE_RESOURCE = hasura_pydantic_resource(
+    IAMRoleRow,
+    name="iam_roles",
+    model_label="iam.Role",
+    filterable=["id", "role_id", "namespace", "label", "description"],
+    sortable=["role_id", "namespace", "label"],
+    rows=_role_rows_for,
+)
+
+
+_GRANT_RESOURCE = hasura_pydantic_resource(
+    IAMGrantRow,
+    name="iam_grants",
+    model_label="iam.Grant",
+    filterable=["id", "principal_id", "principal_label", "role", "role_name", "namespace"],
+    sortable=["principal_label", "role", "role_name", "namespace"],
+    rows=_grant_rows_for,
+)
+
+
 _USER_RESOURCE = hasura_model_resource(
     UserType,
     model=User,
@@ -1120,6 +1239,8 @@ schemas = {
             IAMConsoleQuery,
             _USER_RESOURCE.query,
             _GROUP_RESOURCE.query,
+            _ROLE_RESOURCE.query,
+            _GRANT_RESOURCE.query,
         ],
         "mutation": [
             IAMMutation,
@@ -1143,6 +1264,8 @@ schemas = {
             IAMOverviewType,
             *_USER_RESOURCE.types,
             *_GROUP_RESOURCE.types,
+            *_ROLE_RESOURCE.types,
+            *_GRANT_RESOURCE.types,
             IAMRelationshipType,
         ],
     },
