@@ -90,6 +90,7 @@ _LEDGER_RESOURCE = hasura_model_resource(
     filterable=["source_addon", "source_path", "tier", "target_model", "xref"],
     sortable=["source_addon", "source_path", "tier", "target_model", "loaded_at"],
     aggregatable=["id"],
+    groupable=["source_addon", "source_path", "tier"],
     get_queryset=_ledger_queryset,
     insert=False,
     update=False,

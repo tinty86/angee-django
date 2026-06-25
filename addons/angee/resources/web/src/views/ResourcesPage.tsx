@@ -5,15 +5,16 @@ import {
   ListView,
   formatDateTime,
   type ResourceToolbarFilterField,
+  type ResourceToolbarGroupOption,
   type ListColumn,
 } from "@angee/base";
 
 import { useResourcesT } from "../i18n";
 
 // The `resources.Resource` Hasura resource (`hasura_model_resource` over the
-// import ledger, `addons/angee/resources/schema.py`): a real queryset, so a
-// server row model — list/filter/sort resolve server-side. The ledger exposes no
-// groupable axis, so the page does not group.
+// import ledger, `addons/angee/resources/schema.py`): a real queryset on a
+// server row model — list/filter/sort/group resolve server-side via the
+// resource's `_groups` aggregate over the source/tier axes.
 interface ResourceLedgerResourceRow extends Record<string, unknown> {
   id: string;
   source_addon: string;
@@ -92,6 +93,31 @@ function filterFields(t: (key: string) => string): readonly ResourceToolbarFilte
   ];
 }
 
+function groupOptions(
+  t: (key: string) => string,
+): readonly ResourceToolbarGroupOption[] {
+  return [
+    {
+      id: "source_addon",
+      label: t("resources.col.sourceAddon"),
+      group: { field: "source_addon" },
+      type: "value",
+    },
+    {
+      id: "source_path",
+      label: t("resources.col.sourcePath"),
+      group: { field: "source_path" },
+      type: "value",
+    },
+    {
+      id: "tier",
+      label: t("resources.col.tier"),
+      group: { field: "tier" },
+      type: "value",
+    },
+  ];
+}
+
 export function ResourcesPage(): ReactElement {
   const t = useResourcesT();
 
@@ -100,6 +126,8 @@ export function ResourcesPage(): ReactElement {
       resource="resources.Resource"
       columns={columns(t)}
       filterFields={filterFields(t)}
+      groupOptions={groupOptions(t)}
+      defaultGroup={{ field: "tier" }}
       order={{ source_addon: "ASC" }}
       pageSize={100}
       emptyMessage={t("resources.empty.ledger")}

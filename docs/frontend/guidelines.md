@@ -137,9 +137,11 @@ hand-rolling a concern. TypeScript dependency setup belongs in `package.json`,
   memory. A computed/non-model source is exposed **once** as a Hasura resource
   (`hasura_pydantic_resource`) for the uniform fetch + metadata + MCP surface,
   and its admin list processes client-side over the fetched set. Do not
-  hand-roll a separate client filter/sort/paginate engine — compose the grid's
-  owned row-model pipeline (`local-rows.ts` is the legacy hand-roll being retired
-  in favour of it).
+  hand-roll a new client filter/sort/paginate engine — compose the one shared
+  client engine (`local-rows.ts`, applied by `useClientResourceViewSurface` over
+  the fetched set for a `rowModel:"client"` resource); `RowsListView` remains the
+  renderer for the genuinely non-resource in-memory case (the operator-daemon
+  quarantine).
 - A recipe's icon-button size keys are `iconSm`/`iconMd`/`iconLg` (one spelling
   across recipes). A default `size` is a visual contract — do not flip it without a
   requester (differing defaults like `Switch`/`ToggleGroup` `sm` vs `Toggle` `md`

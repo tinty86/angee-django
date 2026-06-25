@@ -496,16 +496,20 @@ export function useClientResourceViewSurface<TRow extends Row = Row>({
     () => (run.result.data ?? []) as readonly RowRecord[] as readonly TRow[],
     [run.result.data],
   );
+  // The fetched page is capped; the only signal the in-browser set is actually
+  // incomplete is the resource's own total exceeding the cap (a page that
+  // returned exactly the cap is not necessarily truncated).
+  const totalRows = run.result.total;
   React.useEffect(() => {
-    if (allRows.length >= CLIENT_ROW_MODEL_FETCH_CAP) {
+    if (totalRows !== undefined && totalRows > CLIENT_ROW_MODEL_FETCH_CAP) {
       console.warn(
-        `Client resource "${dataResource?.modelLabel ?? resourceName}" returned ` +
-          `${allRows.length} rows, at or above the ${CLIENT_ROW_MODEL_FETCH_CAP}-row ` +
-          "client fetch cap; in-browser filter/sort/group may be incomplete. " +
+        `Client resource "${dataResource?.modelLabel ?? resourceName}" has ` +
+          `${totalRows} rows, above the ${CLIENT_ROW_MODEL_FETCH_CAP}-row client ` +
+          "fetch cap; in-browser filter/sort/group is incomplete. " +
           'Mark the resource rowModel="server" or narrow it.',
       );
     }
-  }, [allRows.length, dataResource?.modelLabel, resourceName]);
+  }, [totalRows, dataResource?.modelLabel, resourceName]);
 
   const textFields = React.useMemo(
     () => columns.map((column) => column.field),

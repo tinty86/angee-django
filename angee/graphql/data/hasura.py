@@ -258,6 +258,7 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
     id_column: str = "pk",
     model_label: str | None = None,
     public_id_field: str = PUBLIC_ID_FIELD_NAME,
+    row_model: str = "server",
 ) -> HasuraResource:
     """Build a Hasura resource and attach Angee's model-resource metadata.
 
@@ -309,6 +310,7 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
         delete=delete,
         model_label=model_label,
         public_id_field=public_id_field,
+        row_model=row_model,
     )
 
 
@@ -327,6 +329,7 @@ def attach_hasura_resource_metadata(
     delete: bool = True,
     model_label: str | None = None,
     public_id_field: str = PUBLIC_ID_FIELD_NAME,
+    row_model: str = "server",
 ) -> HasuraResource:
     """Attach Angee resource metadata to a built Hasura resource bundle."""
 
@@ -366,6 +369,7 @@ def attach_hasura_resource_metadata(
             group_dimensions=_hasura_group_dimensions(model, groupable, filterable),
             aggregate_measures=_hasura_aggregate_measures(model, aggregatable),
             default_measures=(DataAggregateMeasureMetadata(op="count"),),
+            row_model=row_model,
         ),
     )
     mutation_capabilities = _mutation_capabilities(

@@ -1101,6 +1101,11 @@ _RELATIONSHIP_RESOURCE = hasura_model_resource(
     id_decode=lambda value: value,
     id_column="id",
     model_label="iam.Relationship",
+    # The group axes (resource_type/subject_type/relation) are denormalized
+    # *display* strings on the node, not RelationshipRegistry columns, so there
+    # is no server _groups over them. Like the original authored page, fetch the
+    # (bounded, admin-only) tuple set once and group/filter/sort in the browser.
+    row_model="client",
 )
 
 

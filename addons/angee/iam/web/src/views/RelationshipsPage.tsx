@@ -5,16 +5,17 @@ import {
   Code,
   ListView,
   type ListColumn,
+  type ResourceToolbarGroupOption,
 } from "@angee/base";
 
 import { useIamT } from "../i18n";
 
 // The `iam.Relationship` Hasura resource (`hasura_model_resource` over the active
-// REBAC relationship store, `addons/angee/iam/schema.py`): a real queryset, so a
-// server row model. The denormalized type strings live behind FKs in registry
-// storage, so the resource exposes no groupable axis — the page lists, filters
-// (relation/caveat), and sorts server-side without grouping. The `resource`/
-// `subject` refs compose `<type>:<id>` in the cell.
+// REBAC relationship store, `addons/angee/iam/schema.py`, marked rowModel
+// "client"): the group axes are denormalized display strings on the node, not
+// RelationshipRegistry columns, so — like the original authored page — it fetches
+// the bounded admin tuple set once and filters/sorts/groups in the browser. The
+// `resource`/`subject` refs compose `<type>:<id>` in the cell.
 interface RelationshipResourceRow extends Record<string, unknown> {
   id: string;
   resource_type: string;
@@ -26,6 +27,31 @@ interface RelationshipResourceRow extends Record<string, unknown> {
 }
 
 const ref = (type: string, id: string): string => `${type}:${id}`;
+
+function relationshipGroupOptions(
+  t: (key: string) => string,
+): readonly ResourceToolbarGroupOption[] {
+  return [
+    {
+      id: "resource_type",
+      label: t("iam.relationships.column.resourceType"),
+      group: { field: "resource_type" },
+      type: "value",
+    },
+    {
+      id: "subject_type",
+      label: t("iam.relationships.column.subjectType"),
+      group: { field: "subject_type" },
+      type: "value",
+    },
+    {
+      id: "relation",
+      label: t("iam.relationships.column.relation"),
+      group: { field: "relation" },
+      type: "value",
+    },
+  ];
+}
 
 export function RelationshipsPage(): ReactElement {
   const t = useIamT();
@@ -68,6 +94,8 @@ export function RelationshipsPage(): ReactElement {
     <ListView<RelationshipResourceRow>
       resource="iam.Relationship"
       columns={relationshipColumns}
+      groupOptions={relationshipGroupOptions(t)}
+      defaultGroup={{ field: "resource_type" }}
       pageSize={50}
     />
   );
