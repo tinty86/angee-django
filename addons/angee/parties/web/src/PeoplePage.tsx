@@ -8,7 +8,6 @@ import {
   Group,
   ListView,
   List,
-  RelatedRowsList,
   type ListColumn,
   type RecordPanelContext,
   type RecordTabDescriptor,
@@ -47,8 +46,8 @@ const affiliationColumns: readonly ListColumn<RelatedRow>[] = [
 
 /**
  * One related collection on the Person detail — the person's handles, addresses,
- * or affiliations — composed on the shared RowsListView (filtered to this party),
- * never a hand-rolled list, so it inherits the toolbar/empty/error affordances.
+ * or affiliations — a local-scoped ListView filtered to this party, the same
+ * shared list primitive the routed pages use (toolbar/empty/error affordances).
  */
 function PartyRelatedTab({
   recordId,
@@ -63,11 +62,11 @@ function PartyRelatedTab({
   emptyMessage: string;
 }): React.ReactElement {
   return (
-    <RelatedRowsList<RelatedRow>
-      recordId={recordId}
+    <ListView<RelatedRow>
       resource={resource}
+      scope="local"
       fields={fields}
-      filterFor={(id) => ({ party: { _eq: id } })}
+      filter={{ party: { _eq: recordId } }}
       columns={columns}
       emptyMessage={emptyMessage}
     />

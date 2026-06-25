@@ -103,6 +103,7 @@ function ListViewFrame<TRow extends Row = Row>(
   props: ListViewProps<TRow>,
 ): React.ReactElement {
   const resourceView = useResourceViewMaybe();
+  const scope = props.scope ?? "inherit";
   const initialState = React.useMemo(
     () => ({
       pageSize: props.pageSize,
@@ -110,9 +111,18 @@ function ListViewFrame<TRow extends Row = Row>(
     }),
     [props.defaultView, props.pageSize],
   );
-  if (resourceView) return <ListViewBody {...props} resourceView={resourceView} />;
+  // A local-scoped list (an embedded related list on a detail panel) owns its own
+  // view state instead of inheriting — and fighting over — the surrounding route
+  // data view. The default "inherit" keeps the routed-page behaviour unchanged.
+  if (scope !== "local" && resourceView) {
+    return <ListViewBody {...props} resourceView={resourceView} />;
+  }
   return (
-    <ResourceViewProvider initialState={initialState} resource={props.resource}>
+    <ResourceViewProvider
+      initialState={initialState}
+      resource={props.resource}
+      scope={scope === "local" ? "local" : "route"}
+    >
       <ListViewBound {...props} />
     </ResourceViewProvider>
   );

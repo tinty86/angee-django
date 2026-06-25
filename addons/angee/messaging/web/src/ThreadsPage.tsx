@@ -9,7 +9,6 @@ import {
   Group,
   ListView,
   List,
-  RelatedRowsList,
   type ListColumn,
   type RecordPanelContext,
   type RecordTabDescriptor,
@@ -39,17 +38,18 @@ const threadMessageColumns: readonly ListColumn<MessageRow>[] = [
 ];
 
 /**
- * The messages in a thread, listed on the thread's detail panel. The relation
- * lookup is the Hasura relation ID comparison, and the shared RowsListView owns
- * the fetching/error/empty states rather than a hand-rolled list.
+ * The messages in a thread, listed on the thread's detail panel. A local-scoped
+ * ListView over the messages resource, filtered to this thread by the Hasura
+ * relation ID comparison — the same shared list primitive the routed pages use,
+ * server-paginating the whole thread (no client-side first-page truncation).
  */
 function ThreadMessagesTab({ recordId }: RecordPanelContext): React.ReactElement {
   return (
-    <RelatedRowsList<MessageRow>
-      recordId={recordId}
+    <ListView<MessageRow>
       resource={MESSAGE_MODEL}
+      scope="local"
       fields={THREAD_MESSAGE_FIELDS}
-      filterFor={(id) => ({ thread: { _eq: id } })}
+      filter={{ thread: { _eq: recordId } }}
       order={{ sent_at: "ASC" }}
       columns={threadMessageColumns}
       rowHref={(row) => `/messaging/inbox/${row.id}`}
