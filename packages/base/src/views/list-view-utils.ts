@@ -505,14 +505,30 @@ export function nextFacetFilter(
 }
 
 /**
- * The field the free-text search box reads/writes. Defaults to the model's
- * ``recordRepresentation`` (e.g. ``displayName`` for Person) so search filters the
- * model's real title field, falling back to the generic ``title`` when unknown.
+ * The field the free-text search box reads/writes — the model's title field
+ * (``recordRepresentation``, e.g. ``display_name``), falling back to the generic
+ * ``title`` when unknown.
+ *
+ * A **server** resource sends the search term as a Hasura ``where`` on this
+ * field, so it must be one the resource declares filterable; otherwise the query
+ * is rejected (the resource simply never declared its title field filterable). A
+ * **client** row model filters in-memory, so any field is fine. When the title
+ * field is not server-filterable, fall back to the first filterable text field
+ * so free-text search degrades to a working field instead of 500-ing.
  */
 export function resolveTextFilterField(
-  metadata: { recordRepresentation?: string } | null | undefined,
+  metadata: ModelMetadata | null | undefined,
 ): string {
-  return metadata?.recordRepresentation ?? DEFAULT_TEXT_FILTER_FIELD;
+  const rep = metadata?.recordRepresentation ?? DEFAULT_TEXT_FILTER_FIELD;
+  const resource = metadata?.resource;
+  if (!resource || isClientRowModel(resource) || resource.filterFields.includes(rep)) {
+    return rep;
+  }
+  const fields = metadata?.fields ?? {};
+  const fallback = resource.filterFields.find(
+    (name) => fields[name]?.kind === "scalar" && fields[name]?.scalar === "String",
+  );
+  return fallback ?? rep;
 }
 
 export function textFilterValue(
