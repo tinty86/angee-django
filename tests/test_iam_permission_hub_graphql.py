@@ -127,6 +127,40 @@ def test_relationships_resource_is_admin_scoped(
     assert all(row["id"] for row in rows)
 
 
+def test_roles_grants_resources_are_admin_scoped(
+    iam_permission_hub_tables: None,
+) -> None:
+    """The ``iam_roles`` / ``iam_grants`` computed resources list for admins only.
+
+    Their provider evaluates the platform-admin gate OUTSIDE ``system_context``:
+    sudo bypasses the REBAC ``auth/user`` read scoping, so gating inside it would
+    resolve admin for any authenticated user. A non-admin must get the empty set.
+    """
+
+    plain = User.objects.create_user(
+        username="rg-plain", email="rg-plain@example.com"
+    )
+    admin = _platform_admin("rg-admin")
+    grant(actor=admin, role="angee/role:auditor")
+    console_schema = _schema("console")
+    query = """
+        query {
+          iam_roles(limit: 50) { id }
+          iam_grants(limit: 50) { id }
+        }
+    """
+
+    denied = _execute(console_schema, query, user=plain)
+    assert denied.errors is None
+    assert _data(denied)["iam_roles"] == []
+    assert _data(denied)["iam_grants"] == []
+
+    allowed = _execute(console_schema, query, user=admin)
+    assert allowed.errors is None
+    assert _data(allowed)["iam_roles"]
+    assert _data(allowed)["iam_grants"]
+
+
 def test_roles_query_excludes_role_types_missing_from_rebac_schema(
     iam_permission_hub_tables: None,
 ) -> None:

@@ -996,17 +996,32 @@ def _admin_actor(info: strawberry.Info) -> bool:
 
 
 def _role_rows_for(info: strawberry.Info) -> list[IAMRoleRow]:
-    """Row provider gated on the same platform-admin reach the authored query had."""
+    """Row provider gated on the same platform-admin reach the authored query had.
 
+    The admin gate is evaluated BEFORE entering ``system_context``: sudo bypasses
+    the REBAC ``auth/user`` read scoping, so an in-sudo ``is_platform_admin``
+    resolves True for any authenticated user. Gate first under the real actor,
+    then sudo only the untyped tuple computation.
+    """
+
+    if not _admin_actor(info):
+        return []
     with system_context(reason="iam.graphql.roles"):
-        return _role_rows() if _admin_actor(info) else []
+        return _role_rows()
 
 
 def _grant_rows_for(info: strawberry.Info) -> list[IAMGrantRow]:
-    """Row provider gated on the same platform-admin reach the authored query had."""
+    """Row provider gated on the same platform-admin reach the authored query had.
 
+    Gate outside ``system_context`` for the same reason as
+    :func:`_role_rows_for` — sudo would defeat the REBAC user-read scoping and
+    grant any authenticated user admin reach.
+    """
+
+    if not _admin_actor(info):
+        return []
     with system_context(reason="iam.graphql.grants"):
-        return _grant_rows() if _admin_actor(info) else []
+        return _grant_rows()
 
 
 _ROLE_RESOURCE = hasura_pydantic_resource(

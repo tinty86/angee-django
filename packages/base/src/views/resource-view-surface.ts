@@ -287,12 +287,10 @@ export function useResourceViewSurface<TRow extends Row = Row>({
 }: UseResourceViewSurfaceProps<TRow>): ResourceViewSurface<TRow> {
   useSyncPageSize(resourceView, pageSize);
 
-  const requestedFields = React.useMemo(() => {
-    const paths = new Set<string>(["id"]);
-    for (const column of columns) paths.add(column.field);
-    for (const extra of fields ?? []) paths.add(extra);
-    return [...paths];
-  }, [columns, fields]);
+  const requestedFields = React.useMemo(
+    () => requestedFieldPaths(columns, fields, modelMetadata),
+    [columns, fields, modelMetadata],
+  );
 
   const mergedFilter = React.useMemo(
     () => Filter.combineOptional(filter, resourceView.state.filter),
@@ -462,12 +460,10 @@ export function useClientResourceViewSurface<TRow extends Row = Row>({
 }: UseResourceViewSurfaceProps<TRow>): ResourceViewSurface<TRow> {
   useSyncPageSize(resourceView, pageSize);
 
-  const requestedFields = React.useMemo(() => {
-    const paths = new Set<string>(["id"]);
-    for (const column of columns) paths.add(column.field);
-    for (const extra of fields ?? []) paths.add(extra);
-    return [...paths];
-  }, [columns, fields]);
+  const requestedFields = React.useMemo(
+    () => requestedFieldPaths(columns, fields, modelMetadata),
+    [columns, fields, modelMetadata],
+  );
 
   const mergedFilter = React.useMemo(
     () => Filter.combineOptional(filter, resourceView.state.filter),
@@ -852,6 +848,32 @@ function useResourceViewPresentationSurfaceFromTable<TRow extends Row>({
     rowVirtualizer,
   };
 }
+
+function requestedFieldPaths<TRow extends Row>(
+  columns: readonly ColumnDescriptor<TRow>[],
+  extraFields: readonly string[] | undefined,
+  modelMetadata: ModelMetadata | null | undefined,
+): readonly string[] {
+  // A render-only column (e.g. an actions button) carries a `field` that is not
+  // a real resource field; including it in the GraphQL selection makes the
+  // Hasura provider request an unknown field and the server rejects the query.
+  // Keep only fields the resource exposes when the field set is known; without
+  // metadata, keep all (the prior behaviour).
+  const known = modelMetadata?.resource?.fields;
+  const knownNames =
+    known && known.length > 0
+      ? new Set(known.map((field) => field.name))
+      : null;
+  const paths = new Set<string>(["id"]);
+  for (const column of columns) {
+    if (knownNames === null || knownNames.has(column.field)) {
+      paths.add(column.field);
+    }
+  }
+  for (const extra of extraFields ?? []) paths.add(extra);
+  return [...paths];
+}
+
 
 function modelRowId<TRow extends Row>(row: TRow, index: number): string {
   return rowPublicId(row) ?? String(index);

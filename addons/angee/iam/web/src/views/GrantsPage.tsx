@@ -35,13 +35,17 @@ interface GrantResourceRow extends Record<string, unknown> {
   namespace: string;
 }
 
-const GRANT_MODEL = "rebac.RelationshipRegistry";
+// Revoking a grant removes a REBAC role tuple, which is what both the grants
+// list (iam.Grant) and the relationships list (iam.Relationship) render — so
+// refresh both. The old "rebac.RelationshipRegistry" label matched no resource
+// and threw in resourceInvalidationTargets at render.
+const GRANT_INVALIDATES = ["iam.Grant", "iam.Relationship"];
 
 export function GrantsPage(): ReactElement {
   const t = useIamT();
   const confirm = useConfirm();
   const [revoke_role, revokeState] = useAuthoredMutation(IamRevokeRole, {
-    invalidateModels: [GRANT_MODEL],
+    invalidateModels: GRANT_INVALIDATES,
     shouldInvalidate: (result) => result?.revoke_role === true,
   });
   const [pendingGrantId, setPendingGrantId] = useState<string | null>(null);
