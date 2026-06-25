@@ -18,11 +18,12 @@ dependencies = [
   "django-sqids>=0.1",
   "django-zed-rebac[strawberry-django]>=0.12",
   "django>=6.0",
+  "pydantic>=2.13",
   "pyjwt[crypto]>=2.12",
   "pyyaml>=6",
   "strawberry-graphql>=0.270",
   "strawberry-django-aggregates>=0.8.0",
-  "strawberry-django-hasura>=0.2.0",
+  "strawberry-django-hasura>=0.3.0",
   "strawberry-graphql-django>=0.86",
   "tablib>=3",
   "django-choices-field>=4.0.0",
@@ -68,6 +69,8 @@ cache-dir = ".angee/caches/uv"
 # strawberry-django-only. Keep pins explicit so every environment resolves identically.
 strawberry-graphql = { git = "ssh://git@github.com/ang-ee/strawberry.git", branch = "codex/input-object-extensions" }
 strawberry-graphql-django = { git = "ssh://git@github.com/ang-ee/strawberry-django.git", branch = "hotfix-angee-django" }
+# Dev against the local run_query branch; switch to a version pin after 0.3.0 is published.
+strawberry-django-hasura = { path = "../strawberry-django-hasura", editable = true }
 
 [tool.hatch.build.targets.wheel]
 # Two source roots merge into the one `angee` PEP 420 namespace: the framework

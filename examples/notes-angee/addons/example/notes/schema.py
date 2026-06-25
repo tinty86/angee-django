@@ -10,7 +10,7 @@ from django.apps import apps
 from django.db import models
 from strawberry import auto
 
-from angee.graphql.data import hasura_resource
+from angee.graphql.data import hasura_model_resource
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata, delete_by_public_id
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
@@ -99,7 +99,7 @@ NoteDeletePreviewMutation = attach_delete_preview_metadata(
 )
 
 
-_NOTE_RESOURCE = hasura_resource(
+_NOTE_RESOURCE = hasura_model_resource(
     NoteType,
     model=Note,
     name="notes",

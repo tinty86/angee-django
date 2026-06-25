@@ -15,7 +15,7 @@ from strawberry import auto
 from strawberry_django_aggregates.errors import GroupByFieldNotAllowed
 
 from angee.base.models import AngeeDataModel
-from angee.graphql.data import hasura_resource
+from angee.graphql.data import hasura_model_resource
 from angee.graphql.data.metadata import (
     DataAggregateMeasureMetadata,
     DataResourceFieldMetadata,
@@ -130,7 +130,7 @@ def test_hasura_resource_attaches_angee_resource_metadata() -> None:
             "delete": lambda self, info, pk: None,
         },
     )()
-    resource = hasura_resource(
+    resource = hasura_model_resource(
         HasuraResourceThingType,
         model=HasuraResourceThing,
         name="things",
@@ -530,7 +530,7 @@ def test_hasura_resource_rejects_unresolvable_axis_paths(
         },
     )()
     with pytest.raises((ImproperlyConfigured, FieldDoesNotExist, GroupByFieldNotAllowed)):
-        hasura_resource(
+        hasura_model_resource(
             ResourceChildResourceType,
             model=ResourceChild,
             name="children",

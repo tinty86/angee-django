@@ -53,11 +53,7 @@ class OAuthClientOidc(AngeeModel):
     def allows_email_domain(self, email: str | None) -> bool:
         """Return whether ``email`` is allowed by this provider's login domain policy."""
 
-        allowed_domains = {
-            domain.strip().lower()
-            for domain in self.allowed_email_domain_values
-            if domain.strip()
-        }
+        allowed_domains = {domain.strip().lower() for domain in self.allowed_email_domain_values if domain.strip()}
         if not allowed_domains:
             return True
         if not email or "@" not in email:

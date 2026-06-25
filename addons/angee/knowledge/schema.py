@@ -12,7 +12,7 @@ from rebac import system_context
 from strawberry import auto
 
 from angee.base.models import public_id_for
-from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, public_pk_decoder
+from angee.graphql.data import AngeeHasuraWriteBackend, hasura_model_resource, public_pk_decoder
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata, delete_by_public_id
 from angee.graphql.ids import PublicID, require_instance_for_id
 from angee.graphql.node import AngeeNode
@@ -222,7 +222,7 @@ class PageWriteBackend(AngeeHasuraWriteBackend):
         return Page._default_manager.create_in(vault, parent=parent, **payload)
 
 
-_VAULT_RESOURCE = hasura_resource(
+_VAULT_RESOURCE = hasura_model_resource(
     VaultType,
     model=Vault,
     name="vaults",
@@ -236,7 +236,7 @@ _VAULT_RESOURCE = hasura_resource(
     get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Vault, info),
     write_backend=VaultWriteBackend(Vault),
 )
-_PAGE_RESOURCE = hasura_resource(
+_PAGE_RESOURCE = hasura_model_resource(
     PageType,
     model=Page,
     name="pages",

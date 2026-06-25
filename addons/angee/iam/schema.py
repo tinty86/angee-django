@@ -49,7 +49,7 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import SqidPublicIdentity, instance_from_public_id
-from angee.graphql.data import hasura_resource
+from angee.graphql.data import hasura_model_resource
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
@@ -910,7 +910,7 @@ class IAMGroupWriteBackend:
             return _delete_instance(_group_for_resource_id(pk, Group.objects.all()))
 
 
-_USER_RESOURCE = hasura_resource(
+_USER_RESOURCE = hasura_model_resource(
     UserType,
     model=User,
     name="users",
@@ -927,7 +927,7 @@ _USER_RESOURCE = hasura_resource(
 )
 
 
-_GROUP_RESOURCE = hasura_resource(
+_GROUP_RESOURCE = hasura_model_resource(
     GroupType,
     model=Group,
     name="groups",

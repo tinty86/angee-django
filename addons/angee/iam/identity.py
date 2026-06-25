@@ -40,7 +40,7 @@ def user_display_label(user_id: Any) -> str | None:
     with system_context(reason="iam.identity.user_label"):
         try:
             user = user_model.objects.filter(pk=user_id).only("first_name", "last_name", "username").first()
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             user = None
     if user is None:
         try:
@@ -56,10 +56,7 @@ def user_principal(principal_id: str, *, graphql_type_name: str = "UserType") ->
     user_model = get_user_model()
     resolved_id = _user_principal_node_id(principal_id, graphql_type_name=graphql_type_name)
     lookups: list[dict[str, Any]] = []
-    subject_id_attr = str(
-        getattr(user_model._meta, "rebac_id_attr", None)
-        or app_settings.REBAC_USER_ID_ATTR
-    )
+    subject_id_attr = str(getattr(user_model._meta, "rebac_id_attr", None) or app_settings.REBAC_USER_ID_ATTR)
     lookups.append({subject_id_attr: resolved_id})
     public_lookup = getattr(user_model, "public_id_lookup", None)
     if callable(public_lookup):
@@ -78,7 +75,7 @@ def user_principal(principal_id: str, *, graphql_type_name: str = "UserType") ->
             tried.add(key)
             try:
                 user = user_model._default_manager.filter(**lookup).first()
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
             if user is not None:
                 return user

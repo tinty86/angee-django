@@ -129,11 +129,7 @@ class AngeeHasuraWriteBackend:
             except FieldDoesNotExist:
                 field = None
             if getattr(field, "many_to_many", False):
-                out[key] = (
-                    [_public_instance(related_model, item) for item in value]
-                    if value is not None
-                    else None
-                )
+                out[key] = [_public_instance(related_model, item) for item in value] if value is not None else None
                 continue
             out[f"{key}_id"] = _public_pk(related_model, value)
         return out
@@ -239,7 +235,7 @@ def _public_instance(model: type[models.Model], value: Any) -> Any:
     return instance
 
 
-def hasura_resource(  # noqa: PLR0913 - mirrors the upstream declarative builder.
+def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative builder.
     node: type,
     *,
     model: type[models.Model],
@@ -391,21 +387,24 @@ def attach_hasura_resource_metadata(
                             resource.mutation,
                             f"insert_{name}_one",
                         )
-                        if insert else None
+                        if insert
+                        else None
                     ),
                     update_name=(
                         resource_wire_field_name(
                             resource.mutation,
                             f"update_{name}_by_pk",
                         )
-                        if update else None
+                        if update
+                        else None
                     ),
                     delete_name=(
                         resource_wire_field_name(
                             resource.mutation,
                             f"delete_{name}_by_pk",
                         )
-                        if delete else None
+                        if delete
+                        else None
                     ),
                 ),
                 type_names=DataResourceTypeNames(
@@ -517,11 +516,7 @@ def _hasura_group_extractions(
     extractions: list[DataGroupExtractionMetadata] = []
     for granularity in (*TimeGranularity, *NumberGranularity):
         extraction_key = f"{key}_{granularity.value}"
-        range_key = (
-            f"{key}_{granularity.value}_range"
-            if isinstance(granularity, TimeGranularity)
-            else None
-        )
+        range_key = f"{key}_{granularity.value}_range" if isinstance(granularity, TimeGranularity) else None
         extractions.append(
             DataGroupExtractionMetadata(
                 name=granularity.value,
@@ -534,7 +529,8 @@ def _hasura_group_extractions(
                         value_key=extraction_key,
                         range_key=range_key,
                     )
-                    if range_key is not None else None
+                    if range_key is not None
+                    else None
                 ),
             )
         )
@@ -658,7 +654,7 @@ def _require_group_field(
         current_model = related_model if isinstance(related_model, type) else None
     if field is None:
         raise ImproperlyConfigured(
-            f"hasura_resource({model._meta.label}) declares unknown groupable field path {path!r}."
+            f"hasura_model_resource({model._meta.label}) declares unknown groupable field path {path!r}."
         )
     return field
 
@@ -702,4 +698,3 @@ def _scalar_for_field(field: models.Field[Any, Any]) -> str | None:
     if isinstance(field, models.JSONField):
         return "JSON"
     return None
-

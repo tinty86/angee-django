@@ -106,6 +106,7 @@ class InferenceBackend(ImplBase):
         del request
         raise NotImplementedError("InferenceBackend subclasses must implement chat().")
 
+
 class ManualInferenceBackend(InferenceBackend):
     """Built-in backend with no client — its catalogue is curated by hand.
 

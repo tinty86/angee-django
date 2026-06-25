@@ -17,7 +17,7 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginated
 
 from angee.base.models import public_id_for
-from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, public_pk_decoder
+from angee.graphql.data import AngeeHasuraWriteBackend, hasura_model_resource, public_pk_decoder
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata, delete_by_public_id
 from angee.graphql.ids import PublicID, instance_for_id
 from angee.graphql.node import AngeeNode
@@ -279,7 +279,7 @@ class FolderWriteBackend(AngeeHasuraWriteBackend):
             raise ValueError(str(error)) from error
 
 
-_DRIVE_RESOURCE = hasura_resource(
+_DRIVE_RESOURCE = hasura_model_resource(
     DriveType,
     model=Drive,
     name="drives",
@@ -294,7 +294,7 @@ _DRIVE_RESOURCE = hasura_resource(
     get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Drive, info),
     write_backend=AngeeHasuraWriteBackend(Drive, public_id_fields={"backend": Backend}),
 )
-_FOLDER_RESOURCE = hasura_resource(
+_FOLDER_RESOURCE = hasura_model_resource(
     FolderType,
     model=Folder,
     name="folders",
@@ -312,7 +312,7 @@ _FOLDER_RESOURCE = hasura_resource(
     get_aggregate_queryset=lambda info: _resource_aggregate_queryset(Folder, info),
     write_backend=FolderWriteBackend(Folder, public_id_fields={"parent": Folder}),
 )
-_FILE_RESOURCE = hasura_resource(
+_FILE_RESOURCE = hasura_model_resource(
     FileType,
     model=File,
     name="files",
@@ -339,7 +339,7 @@ _FILE_RESOURCE = hasura_resource(
     get_aggregate_queryset=lambda info: _resource_aggregate_queryset(File, info),
     write_backend=AngeeHasuraWriteBackend(File, public_id_fields={"folder": Folder}),
 )
-_BACKEND_RESOURCE = hasura_resource(
+_BACKEND_RESOURCE = hasura_model_resource(
     BackendType,
     model=Backend,
     name="backends",

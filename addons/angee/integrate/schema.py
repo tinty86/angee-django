@@ -27,7 +27,7 @@ from angee.graphql.actions import ActionResult, action_target, resolve_action_ta
 from angee.graphql.data import (
     AngeeHasuraWriteBackend,
     declared_hasura_resource_fields,
-    hasura_resource,
+    hasura_model_resource,
     public_pk_decoder,
 )
 from angee.graphql.deletion import DeletePreview, attach_delete_preview_metadata, delete_by_public_id
@@ -434,7 +434,7 @@ _OAUTH_CLIENT_EXTENSION_UPDATE_FIELDS = declared_hasura_resource_fields(
 )
 
 
-_OAUTH_CLIENT_RESOURCE = hasura_resource(
+_OAUTH_CLIENT_RESOURCE = hasura_model_resource(
     OAuthClientType,
     model=OAuthClient,
     name="oauth_clients",
@@ -504,7 +504,7 @@ _OAUTH_CLIENT_RESOURCE = hasura_resource(
     ],
     get_queryset=_console_oauth_clients,
 )
-_EXTERNAL_ACCOUNT_RESOURCE = hasura_resource(
+_EXTERNAL_ACCOUNT_RESOURCE = hasura_model_resource(
     ExternalAccountType,
     model=ExternalAccount,
     name="external_accounts",
@@ -518,7 +518,7 @@ _EXTERNAL_ACCOUNT_RESOURCE = hasura_resource(
     field_id_decode={"oauth_client": public_pk_decoder(OAuthClient)},
     get_queryset=_console_external_accounts,
 )
-_CREDENTIAL_RESOURCE = hasura_resource(
+_CREDENTIAL_RESOURCE = hasura_model_resource(
     CredentialType,
     model=Credential,
     name="credentials",
@@ -1147,6 +1147,7 @@ class IntegrationType(AngeeNode):
             return str(display_label())
         return str(getattr(impl_class, "label", "") or cast(Any, self).impl_class)
 
+
 @strawberry_django.type(Integration)
 class ConnectedIntegrationType(AngeeNode):
     """Public projection of a current-user integration connection."""
@@ -1191,7 +1192,7 @@ class WebhookSubscriptionType(AngeeNode):
     updated_at: auto
 
 
-_VENDOR_RESOURCE = hasura_resource(
+_VENDOR_RESOURCE = hasura_model_resource(
     VendorType,
     model=Vendor,
     name="vendors",
@@ -1202,7 +1203,7 @@ _VENDOR_RESOURCE = hasura_resource(
     insertable=["display_name", "slug", "website_url", "icon", "description"],
     updatable=["slug", "display_name", "website_url", "icon", "description"],
 )
-_INTEGRATION_RESOURCE = hasura_resource(
+_INTEGRATION_RESOURCE = hasura_model_resource(
     IntegrationType,
     model=Integration,
     name="integrations",
@@ -1228,7 +1229,7 @@ _INTEGRATION_RESOURCE = hasura_resource(
         },
     ),
 )
-_WEBHOOK_SUBSCRIPTION_RESOURCE = hasura_resource(
+_WEBHOOK_SUBSCRIPTION_RESOURCE = hasura_model_resource(
     WebhookSubscriptionType,
     model=WebhookSubscription,
     name="webhook_subscriptions",
@@ -1540,7 +1541,7 @@ def _repo_candidate(descriptor: Any) -> RepoCandidate:
     )
 
 
-_VCS_BRIDGE_RESOURCE = hasura_resource(
+_VCS_BRIDGE_RESOURCE = hasura_model_resource(
     VcsBridgeType,
     model=VcsBridge,
     name="vcs_bridges",
@@ -1553,7 +1554,7 @@ _VCS_BRIDGE_RESOURCE = hasura_resource(
     delete=True,
     field_id_decode={"vendor": public_pk_decoder(Vendor)},
 )
-_REPOSITORY_RESOURCE = hasura_resource(
+_REPOSITORY_RESOURCE = hasura_model_resource(
     RepositoryType,
     model=Repository,
     name="repositories",
@@ -1566,7 +1567,7 @@ _REPOSITORY_RESOURCE = hasura_resource(
     delete=True,
     field_id_decode={"vcs_bridge": public_pk_decoder(VcsBridge)},
 )
-_SOURCE_RESOURCE = hasura_resource(
+_SOURCE_RESOURCE = hasura_model_resource(
     SourceType,
     model=Source,
     name="sources",
@@ -1579,7 +1580,7 @@ _SOURCE_RESOURCE = hasura_resource(
     field_id_decode={"repository": public_pk_decoder(Repository)},
     write_backend=AngeeHasuraWriteBackend(Source, public_id_fields={"repository": Repository}),
 )
-_TEMPLATE_RESOURCE = hasura_resource(
+_TEMPLATE_RESOURCE = hasura_model_resource(
     TemplateType,
     model=Template,
     name="templates",

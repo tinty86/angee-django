@@ -30,7 +30,7 @@ from angee.agents.context import render_view_context
 from angee.agents.models import RuntimeStatus
 from angee.base.mixins import actor_user_id
 from angee.graphql.actions import ActionResult, action_target, resolve_action_target
-from angee.graphql.data import AngeeHasuraWriteBackend, hasura_resource, public_pk_decoder
+from angee.graphql.data import AngeeHasuraWriteBackend, hasura_model_resource, public_pk_decoder
 from angee.graphql.ids import PublicID
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
@@ -259,7 +259,7 @@ class InferenceProviderPatch:
     config: JSON | None = strawberry.UNSET
 
 
-_AGENT_RESOURCE = hasura_resource(
+_AGENT_RESOURCE = hasura_model_resource(
     AgentType,
     model=Agent,
     name="agents",
@@ -325,7 +325,7 @@ _AGENT_RESOURCE = hasura_resource(
         delete_guard=lambda agent: agent.delete_blocker(),
     ),
 )
-_SKILL_RESOURCE = hasura_resource(
+_SKILL_RESOURCE = hasura_model_resource(
     SkillType,
     model=Skill,
     name="skills",
@@ -338,7 +338,7 @@ _SKILL_RESOURCE = hasura_resource(
     delete=True,
     field_id_decode={"source": public_pk_decoder(Source)},
 )
-_MCP_SERVER_RESOURCE = hasura_resource(
+_MCP_SERVER_RESOURCE = hasura_model_resource(
     MCPServerType,
     model=MCPServer,
     name="mcp_servers",
@@ -351,7 +351,7 @@ _MCP_SERVER_RESOURCE = hasura_resource(
     field_id_decode={"credential": public_pk_decoder(Credential)},
     write_backend=AngeeHasuraWriteBackend(MCPServer, public_id_fields={"credential": Credential}),
 )
-_MCP_TOOL_RESOURCE = hasura_resource(
+_MCP_TOOL_RESOURCE = hasura_model_resource(
     MCPToolType,
     model=MCPTool,
     name="mcp_tools",
@@ -364,7 +364,7 @@ _MCP_TOOL_RESOURCE = hasura_resource(
     field_id_decode={"server": public_pk_decoder(MCPServer)},
     write_backend=AngeeHasuraWriteBackend(MCPTool, public_id_fields={"server": MCPServer}),
 )
-_INFERENCE_PROVIDER_RESOURCE = hasura_resource(
+_INFERENCE_PROVIDER_RESOURCE = hasura_model_resource(
     InferenceProviderType,
     model=InferenceProvider,
     name="inference_providers",
@@ -382,7 +382,7 @@ _INFERENCE_PROVIDER_RESOURCE = hasura_resource(
         "account": public_pk_decoder(ExternalAccount),
     },
 )
-_INFERENCE_MODEL_RESOURCE = hasura_resource(
+_INFERENCE_MODEL_RESOURCE = hasura_model_resource(
     InferenceModelType,
     model=InferenceModel,
     name="inference_models",

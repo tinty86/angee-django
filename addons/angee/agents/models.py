@@ -632,9 +632,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         self.lifecycle = cast(AgentLifecycle, AgentLifecycle.READY)
         self.runtime_status = cast(RuntimeStatus, RuntimeStatus.RUNNING)
         self.last_error = ""
-        self.save(
-            update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"]
-        )
+        self.save(update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"])
 
     def mark_deprovisioned(self) -> None:
         """Clear the operator instance after teardown: lifecycle deprovisioned, run state stopped."""
@@ -644,9 +642,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         self.lifecycle = cast(AgentLifecycle, AgentLifecycle.DEPROVISIONED)
         self.runtime_status = cast(RuntimeStatus, RuntimeStatus.STOPPED)
         self.last_error = ""
-        self.save(
-            update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"]
-        )
+        self.save(update_fields=["workspace", "service", "lifecycle", "runtime_status", "last_error", "updated_at"])
 
     def mark_deprovisioning(self) -> None:
         """Mark the agent as tearing down through the operator teardown flow."""
@@ -678,9 +674,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         elif clear_service:
             self.service = ""
             update_fields = ["service", *update_fields]
-        self.lifecycle = cast(
-            AgentLifecycle, AgentLifecycle.READY if self.workspace else AgentLifecycle.DRAFT
-        )
+        self.lifecycle = cast(AgentLifecycle, AgentLifecycle.READY if self.workspace else AgentLifecycle.DRAFT)
         self.runtime_status = cast(RuntimeStatus, RuntimeStatus.ERROR)
         self.last_error = message[:2000]
         self.save(update_fields=update_fields)

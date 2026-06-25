@@ -602,12 +602,7 @@ class FileManager(RebacManager.from_queryset(FileQuerySet)):  # type: ignore[mis
         nonce = str(payload.get("nonce") or "")
         if not file_id or not nonce:
             raise exceptions.UploadDenied("invalid upload token")
-        row = (
-            self.system_context(reason="storage.upload.proxy")
-            .select_related("drive")
-            .filter(sqid=file_id)
-            .first()
-        )
+        row = self.system_context(reason="storage.upload.proxy").select_related("drive").filter(sqid=file_id).first()
         if row is None:
             raise exceptions.UploadTargetNotFound("file not found")
         if row.upload_state != UploadState.DRAFT:
@@ -913,9 +908,7 @@ class File(SqidMixin, AuditMixin, AngeeModel):
 
         self.content_hash = actual_hash
         self.size_bytes = actual_size
-        self.mime_type = _mime_row(type(self), detect_mime(head, self.filename)) or _mime_row(
-            type(self), FALLBACK_MIME
-        )
+        self.mime_type = _mime_row(type(self), detect_mime(head, self.filename)) or _mime_row(type(self), FALLBACK_MIME)
         self.upload_state = cast(UploadState, UploadState.READY)
         try:
             with transaction.atomic():

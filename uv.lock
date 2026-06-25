@@ -472,6 +472,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "mcp" },
     { name = "openai" },
+    { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-magic" },
     { name = "pyyaml" },
@@ -512,11 +513,12 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.14.7,<2.15" },
     { name = "mcp", specifier = ">=1.2" },
     { name = "openai", specifier = ">=2.43.0" },
+    { name = "pydantic", specifier = ">=2.13" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.12" },
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "strawberry-django-aggregates", specifier = ">=0.8.0" },
-    { name = "strawberry-django-hasura", specifier = ">=0.2.0" },
+    { name = "strawberry-django-hasura", editable = "../strawberry-django-hasura" },
     { name = "strawberry-graphql", git = "ssh://git@github.com/ang-ee/strawberry.git?branch=codex%2Finput-object-extensions" },
     { name = "strawberry-graphql-django", git = "ssh://git@github.com/ang-ee/strawberry-django.git?branch=hotfix-angee-django" },
     { name = "tablib", specifier = ">=3" },
@@ -1911,17 +1913,30 @@ wheels = [
 
 [[package]]
 name = "strawberry-django-hasura"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.3.0"
+source = { editable = "../strawberry-django-hasura" }
 dependencies = [
     { name = "django" },
     { name = "strawberry-django-aggregates" },
     { name = "strawberry-graphql" },
     { name = "strawberry-graphql-django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/ce/7c5b4d4182db28c38306bbecb483bf0519bb191240145ebe3b552e24c6c7/strawberry_django_hasura-0.2.0.tar.gz", hash = "sha256:6f88bc56ef9e59f45a052c17372b457b88b31f18ca3b050260673306625eea2b", size = 47535, upload-time = "2026-06-24T08:01:16.248Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/dd/30777553d1d949f7c0bb87023636bf0c251768921426eb8ff4d6eddf67c6/strawberry_django_hasura-0.2.0-py3-none-any.whl", hash = "sha256:69475ac073c68e1fd3e1e91899d106922923c564efbb7cb044188976cccd2720", size = 40618, upload-time = "2026-06-24T08:01:15.004Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "django", specifier = ">=6.0" },
+    { name = "strawberry-django-aggregates", specifier = ">=0.7.0" },
+    { name = "strawberry-graphql", specifier = ">=0.315.0" },
+    { name = "strawberry-graphql-django", specifier = ">=0.82.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "django-stubs", specifier = ">=5" },
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-django", specifier = ">=4" },
+    { name = "ruff", specifier = ">=0.6" },
 ]
 
 [[package]]

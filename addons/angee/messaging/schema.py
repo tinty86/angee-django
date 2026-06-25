@@ -15,7 +15,7 @@ import strawberry_django
 from django.apps import apps
 from strawberry import auto
 
-from angee.graphql.data import hasura_resource, public_pk_decoder
+from angee.graphql.data import hasura_model_resource, public_pk_decoder
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.parties.schema import HandleType
@@ -156,7 +156,7 @@ class ReactionType(AngeeNode):
     created_at: auto
 
 
-_CHANNEL_RESOURCE = hasura_resource(
+_CHANNEL_RESOURCE = hasura_model_resource(
     ChannelType,
     model=Channel,
     name="channels",
@@ -176,7 +176,7 @@ _CHANNEL_RESOURCE = hasura_resource(
     update=False,
     delete=False,
 )
-_MESSAGE_RESOURCE = hasura_resource(
+_MESSAGE_RESOURCE = hasura_model_resource(
     MessageType,
     model=Message,
     name="messages",
@@ -212,7 +212,7 @@ _MESSAGE_RESOURCE = hasura_resource(
         "sender": public_pk_decoder(Handle),
     },
 )
-_THREAD_RESOURCE = hasura_resource(
+_THREAD_RESOURCE = hasura_model_resource(
     ThreadType,
     model=Thread,
     name="threads",

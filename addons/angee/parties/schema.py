@@ -20,7 +20,7 @@ from strawberry import auto
 from angee.graphql.data import (
     AngeeHasuraWriteBackend,
     aggregate_queryset,
-    hasura_resource,
+    hasura_model_resource,
     public_pk_decoder,
 )
 from angee.graphql.node import AngeeNode
@@ -263,7 +263,7 @@ class PartiesDirectoryMutation:
         return cast(DirectoryType, directory)
 
 
-_PARTY_RESOURCE = hasura_resource(
+_PARTY_RESOURCE = hasura_model_resource(
     PartyType,
     model=Party,
     name="parties",
@@ -274,7 +274,7 @@ _PARTY_RESOURCE = hasura_resource(
     insert=False,
     updatable=["display_name", "notes"],
 )
-_PERSON_RESOURCE = hasura_resource(
+_PERSON_RESOURCE = hasura_model_resource(
     PersonType,
     model=Person,
     name="people",
@@ -320,7 +320,7 @@ _PERSON_RESOURCE = hasura_resource(
     delete=False,
     field_id_decode={"folder": public_pk_decoder(Folder)},
 )
-_ORGANIZATION_RESOURCE = hasura_resource(
+_ORGANIZATION_RESOURCE = hasura_model_resource(
     OrganizationType,
     model=Organization,
     name="organizations",
@@ -332,7 +332,7 @@ _ORGANIZATION_RESOURCE = hasura_resource(
     updatable=["display_name", "notes", "legal_name", "domain"],
     delete=False,
 )
-_HANDLE_RESOURCE = hasura_resource(
+_HANDLE_RESOURCE = hasura_model_resource(
     HandleType,
     model=Handle,
     name="handles",
@@ -356,7 +356,7 @@ _HANDLE_RESOURCE = hasura_resource(
     get_aggregate_queryset=lambda info: aggregate_queryset(Handle.objects.filter(party__isnull=False)),
     write_backend=AngeeHasuraWriteBackend(Handle, public_id_fields={"party": Party}),
 )
-_ADDRESS_RESOURCE = hasura_resource(
+_ADDRESS_RESOURCE = hasura_model_resource(
     AddressType,
     model=Address,
     name="addresses",
@@ -389,7 +389,7 @@ _ADDRESS_RESOURCE = hasura_resource(
     field_id_decode={"party": public_pk_decoder(Party)},
     write_backend=AngeeHasuraWriteBackend(Address, public_id_fields={"party": Party}),
 )
-_AFFILIATION_RESOURCE = hasura_resource(
+_AFFILIATION_RESOURCE = hasura_model_resource(
     AffiliationType,
     model=Affiliation,
     name="affiliations",
@@ -419,7 +419,7 @@ _AFFILIATION_RESOURCE = hasura_resource(
     },
     write_backend=AngeeHasuraWriteBackend(Affiliation, public_id_fields={"party": Party, "organization": Party}),
 )
-_CONTACT_FOLDER_RESOURCE = hasura_resource(
+_CONTACT_FOLDER_RESOURCE = hasura_model_resource(
     ContactFolderType,
     model=Folder,
     name="contact_folders",
@@ -431,7 +431,7 @@ _CONTACT_FOLDER_RESOURCE = hasura_resource(
     delete=False,
     field_id_decode={"directory": public_pk_decoder(Directory)},
 )
-_DIRECTORY_RESOURCE = hasura_resource(
+_DIRECTORY_RESOURCE = hasura_model_resource(
     DirectoryType,
     model=Directory,
     name="directories",

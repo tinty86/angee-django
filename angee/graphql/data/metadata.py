@@ -200,7 +200,7 @@ class DataResourceFieldMetadata:
 class DataResourceMetadata:
     """Internal metadata for one Angee model data resource."""
 
-    model: type[models.Model] = dataclasses.field(metadata={"wire": False})
+    model: type[models.Model] | None = dataclasses.field(metadata={"wire": False})
     model_label: str
     app_label: str
     model_name: str
@@ -268,7 +268,7 @@ def resource_type_name(surface: type | None) -> str | None:
 
 def make_data_resource_metadata(
     *,
-    model: type[models.Model],
+    model: type[models.Model] | None = None,
     roots: DataResourceRoots,
     type_names: DataResourceTypeNames,
     capabilities: tuple[str, ...],
@@ -295,17 +295,28 @@ def make_data_resource_metadata(
     model_label: str | None = None,
     public_id_field: str = PUBLIC_ID_FIELD_NAME,
 ) -> DataResourceMetadata:
-    """Build one resource metadata contribution from an owning schema surface."""
+    """Build one resource metadata contribution from an owning schema surface.
 
-    exposed_model_label = model_label or model._meta.label
+    ``model`` is the owning Django model for a model-backed resource. A computed
+    (non-model) resource passes ``model=None`` and a dotted ``model_label`` (e.g.
+    ``"platform.addon"``); the model is only ever used internally (it is
+    ``{"wire": False}``), so the wire payload is identical either way.
+    """
+
+    if model_label is not None:
+        exposed_model_label = model_label
+    elif model is not None:
+        exposed_model_label = model._meta.label
+    else:
+        raise ImproperlyConfigured("make_data_resource_metadata requires model_label when model is None.")
     app_label, model_name = _model_label_parts(exposed_model_label, model)
     filter_fields = _require_unique(exposed_model_label, "filter field", filter_fields)
     order_fields = _require_unique(exposed_model_label, "order field", order_fields)
     aggregate_fields = _require_unique(exposed_model_label, "aggregate field", aggregate_fields)
     group_by_fields = _require_unique(exposed_model_label, "group axis", group_by_fields)
-    if roots.group_name is not None and not relation_axes:
+    if model is not None and roots.group_name is not None and not relation_axes:
         relation_axes = _relation_axes(model, group_by_fields)
-    if order_fields and not default_sort:
+    if model is not None and order_fields and not default_sort:
         default_sort = _default_sort(model, order_fields)
     active_create_fields = _require_unique(
         exposed_model_label,
@@ -442,9 +453,10 @@ def _merge_data_resource(
     """Return two same-model resource contributions folded into one."""
 
     if left.model is not right.model:
+        left_owner = left.model._meta.label if left.model is not None else left.model_label
+        right_owner = right.model._meta.label if right.model is not None else right.model_label
         raise ImproperlyConfigured(
-            f"resource metadata model label '{left.model_label}' is contributed by both "
-            f"{left.model._meta.label} and {right.model._meta.label}."
+            f"resource metadata model label '{left.model_label}' is contributed by both {left_owner} and {right_owner}."
         )
     return DataResourceMetadata(
         model=left.model,
@@ -530,8 +542,7 @@ def _merge_value(
 
     if left_value is not None and right_value is not None and left_value != right_value:
         raise ImproperlyConfigured(
-            f"resource metadata for {left.model_label} has conflicting {name}: "
-            f"{left_value!r} and {right_value!r}."
+            f"resource metadata for {left.model_label} has conflicting {name}: {left_value!r} and {right_value!r}."
         )
     return left_value if left_value is not None else right_value
 
@@ -555,9 +566,7 @@ def _require_unique(
     seen: set[str] = set()
     for value in values:
         if value in seen:
-            raise ImproperlyConfigured(
-                f"resource metadata for {model_label} declares duplicate {purpose} '{value}'."
-            )
+            raise ImproperlyConfigured(f"resource metadata for {model_label} declares duplicate {purpose} '{value}'.")
         seen.add(value)
     return values
 
@@ -579,18 +588,15 @@ def _validate_resource_field(model_label: str, field: DataResourceFieldMetadata)
 
     if field.kind not in _RESOURCE_FIELD_KINDS:
         raise ImproperlyConfigured(
-            f"resource metadata for {model_label} field '{field.name}' declares "
-            f"unsupported kind '{field.kind}'."
+            f"resource metadata for {model_label} field '{field.name}' declares unsupported kind '{field.kind}'."
         )
     if field.scalar is not None and field.scalar not in _RESOURCE_FIELD_SCALARS:
         raise ImproperlyConfigured(
-            f"resource metadata for {model_label} field '{field.name}' declares "
-            f"unsupported scalar '{field.scalar}'."
+            f"resource metadata for {model_label} field '{field.name}' declares unsupported scalar '{field.scalar}'."
         )
     if field.widget is not None and field.widget not in _RESOURCE_FIELD_WIDGETS:
         raise ImproperlyConfigured(
-            f"resource metadata for {model_label} field '{field.name}' declares "
-            f"unsupported widget '{field.widget}'."
+            f"resource metadata for {model_label} field '{field.name}' declares unsupported widget '{field.widget}'."
         )
     if field.kind in {"enum", "relation"} and field.scalar is not None:
         raise ImproperlyConfigured(
@@ -684,7 +690,7 @@ def _required_input_wire_fields(surface: type | None) -> tuple[str, ...]:
 
 def _resource_fields(
     node_type: type,
-    model: type[models.Model],
+    model: type[models.Model] | None,
     *,
     filter_fields: tuple[str, ...],
     order_fields: tuple[str, ...],
@@ -925,9 +931,11 @@ def _wire_name(value: str) -> str:
     return to_camel_case(value)
 
 
-def _model_field_or_none(model: type[models.Model], name: str) -> models.Field[Any, Any] | None:
+def _model_field_or_none(model: type[models.Model] | None, name: str) -> models.Field[Any, Any] | None:
     """Return a Django model field for ``name`` when one owns that GraphQL field."""
 
+    if model is None:
+        return None
     try:
         return model._meta.get_field(name)
     except FieldDoesNotExist:
@@ -994,8 +1002,7 @@ def _default_sort(
     for term in model._meta.ordering:
         if not isinstance(term, str):
             raise ImproperlyConfigured(
-                f"resource metadata for {model._meta.label} cannot expose non-string "
-                f"default ordering {term!r}."
+                f"resource metadata for {model._meta.label} cannot expose non-string default ordering {term!r}."
             )
         if term == "?":
             raise ImproperlyConfigured(
@@ -1092,20 +1099,17 @@ def _require_model_field_for_path(
     for part in path.replace(".", "__").split("__"):
         if current_model is None:
             raise ImproperlyConfigured(
-                f"resource metadata for {model._meta.label} declares unknown {purpose} "
-                f"field path '{path}'."
+                f"resource metadata for {model._meta.label} declares unknown {purpose} field path '{path}'."
             )
         try:
             field = current_model._meta.get_field(part)
         except FieldDoesNotExist:
             raise ImproperlyConfigured(
-                f"resource metadata for {model._meta.label} declares unknown {purpose} "
-                f"field path '{path}'."
+                f"resource metadata for {model._meta.label} declares unknown {purpose} field path '{path}'."
             ) from None
         if is_to_many_relation(field):
             raise ImproperlyConfigured(
-                f"resource metadata for {model._meta.label} declares unsupported to-many "
-                f"{purpose} field path '{path}'."
+                f"resource metadata for {model._meta.label} declares unsupported to-many {purpose} field path '{path}'."
             )
         remote_field = getattr(field, "remote_field", None)
         related_model = getattr(remote_field, "model", None)
@@ -1139,11 +1143,16 @@ def _type_name(surface: type) -> str:
 
 def _model_label_parts(
     model_label: str,
-    model: type[models.Model],
+    model: type[models.Model] | None,
 ) -> tuple[str, str]:
-    """Return metadata app/model names for a public model label."""
+    """Return metadata app/model names for a public model label.
 
-    if model_label == model._meta.label:
+    A computed resource has no model; its dotted ``app.model`` label is split
+    directly. A model-backed resource whose label equals ``model._meta.label``
+    reuses the model's own app/model names.
+    """
+
+    if model is not None and model_label == model._meta.label:
         return model._meta.app_label, model._meta.model_name
     app_label, object_name = model_label.split(".", 1)
     return app_label, object_name.lower()

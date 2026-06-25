@@ -177,11 +177,7 @@ class _CompiledTool(Tool):
         data = await execute_under_actor(self.schema_name, self.document, self._variables(arguments))
         payload = data.get(self.payload_field)
         if self.is_list:
-            rows = (
-                (payload or {}).get(self.list_result_field)
-                if self.list_result_field
-                else payload
-            ) or []
+            rows = ((payload or {}).get(self.list_result_field) if self.list_result_field else payload) or []
             return ToolResult(structured_content={"result": [self._project(row) for row in rows]})
         if payload is None:
             raise ValueError(f"{self.name}: no matching record.")
@@ -203,8 +199,7 @@ class _CompiledTool(Tool):
             variables[self.id_arg] = {"id": str(sqid)} if self.id_arg_is_input else str(sqid)
         if self.flatten_arg:
             obj: dict[str, Any] = {
-                self.flatten_fields.get(key, to_camel_case(key)): value
-                for key, value in args.items()
+                self.flatten_fields.get(key, to_camel_case(key)): value for key, value in args.items()
             }
             if sqid is not None and (not self.id_arg or "id" in self.flatten_fields.values()):
                 obj["id"] = str(sqid)
@@ -229,10 +224,7 @@ def _compile(spec: GraphQLTool) -> _CompiledTool:
     op_type, field = _root_field(gc, spec.operation)
     node, is_list, list_result_field = _return_node(field.type)
     leaves = [
-        ("sqid", "id", True)
-        if name == "sqid"
-        else (name, _wire_field(node, name), False)
-        for name in spec.fields
+        ("sqid", "id", True) if name == "sqid" else (name, _wire_field(node, name), False) for name in spec.fields
     ]
     flatten_fields = _flatten_fields(field, spec)
     id_arg_is_input = _id_arg_is_input(field, spec)
