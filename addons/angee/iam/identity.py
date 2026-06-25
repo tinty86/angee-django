@@ -16,6 +16,12 @@ from rebac import app_settings, system_context
 from angee.base.models import instance_from_public_id, public_id_for
 
 
+def user_label(user: Any) -> str:
+    """Return any user model's human label from the Django auth contract."""
+
+    return str(user.get_full_name() or user.username)
+
+
 def user_public_id(user_id: Any) -> str | None:
     """Return a user's opaque public id without fetching the user row."""
 
@@ -47,7 +53,7 @@ def user_display_label(user_id: Any) -> str | None:
             user = user_principal(str(user_id))
         except ValueError:
             return None
-    return str(user.get_full_name() or user.username)
+    return user_label(user)
 
 
 def user_principal(principal_id: str, *, graphql_type_name: str = "UserType") -> Any:

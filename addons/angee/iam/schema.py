@@ -56,7 +56,7 @@ from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.graphql.writes import write_queryset
 from angee.iam.identity import user_display_label as _user_display_label
-from angee.iam.identity import user_principal
+from angee.iam.identity import user_label, user_principal
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
 from angee.iam.permissions import is_platform_admin, require_platform_admin
 from angee.iam.permissions import request_from_info as _request
@@ -117,11 +117,17 @@ class UserType(AngeeNode):
     is_staff: auto
     is_active: auto
 
+    @strawberry_django.field(only=["first_name", "last_name", "username"])
+    def display_name(self) -> str:
+        """Return the user's human label, overriding the username Node default."""
+
+        return user_label(cast(Any, self))
+
     @strawberry_django.field
     def full_name(self) -> str:
         """Return the user's display name assembled by Django's auth contract."""
 
-        return str(cast(Any, self).get_full_name())
+        return user_label(cast(Any, self))
 
     @strawberry_django.field
     def preferences(self) -> JSON:
@@ -140,6 +146,12 @@ class CurrentUserType(AngeeNode):
     email: auto
     is_staff: auto
     is_active: auto
+
+    @strawberry_django.field(only=["first_name", "last_name", "username"])
+    def display_name(self) -> str:
+        """Return the user's human label, overriding the username Node default."""
+
+        return user_label(cast(Any, self))
 
     @strawberry_django.field
     def preferences(self) -> JSON:
