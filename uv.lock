@@ -517,7 +517,7 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.12" },
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "strawberry-django-aggregates", specifier = ">=0.8.0" },
+    { name = "strawberry-django-aggregates", editable = "../strawberry-django-aggregates" },
     { name = "strawberry-django-hasura", editable = "../strawberry-django-hasura" },
     { name = "strawberry-graphql", git = "ssh://git@github.com/ang-ee/strawberry.git?branch=codex%2Finput-object-extensions" },
     { name = "strawberry-graphql-django", git = "ssh://git@github.com/ang-ee/strawberry-django.git?branch=hotfix-angee-django" },
@@ -1916,16 +1916,29 @@ wheels = [
 
 [[package]]
 name = "strawberry-django-aggregates"
-version = "0.8.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.9.0"
+source = { editable = "../strawberry-django-aggregates" }
 dependencies = [
     { name = "django" },
     { name = "strawberry-graphql" },
     { name = "strawberry-graphql-django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/2c/d702aa501845d77b193bb74ebe7c3d347f517edddd739bcf477b897ae7d4/strawberry_django_aggregates-0.8.0.tar.gz", hash = "sha256:87387dbffda6ad1aaf58e593eb5392b1c0a6685a7a870654cd48d50275ee0fb9", size = 152330, upload-time = "2026-06-24T13:05:54.676Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/55/3cebb62a0f7315c2ca9faa4ad12a0d35c7ae8fe10e326612810e60c45309/strawberry_django_aggregates-0.8.0-py3-none-any.whl", hash = "sha256:7156bad65facbef8e60c8eeb5510af8018c9536b3a671594f09c446b405eb10c", size = 101660, upload-time = "2026-06-24T13:05:53.43Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "django", specifier = ">=6.0" },
+    { name = "strawberry-graphql", specifier = ">=0.315.0" },
+    { name = "strawberry-graphql-django", specifier = ">=0.82.0" },
+]
+provides-extras = ["postgres"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "django-stubs", specifier = ">=5" },
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-django", specifier = ">=4" },
+    { name = "ruff", specifier = ">=0.6" },
 ]
 
 [[package]]

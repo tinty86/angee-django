@@ -9,7 +9,7 @@ import strawberry
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models, transaction
 from strawberry_django.mutations import resolvers as mutation_resolvers
-from strawberry_django_aggregates import default_operators_for
+from strawberry_django_aggregates import default_operators_for, group_by_alias
 from strawberry_django_aggregates.granularity import NumberGranularity, TimeGranularity
 from strawberry_django_hasura import (
     HasuraResource,
@@ -663,10 +663,19 @@ def _group_key_path(
     field: models.Field[Any, Any],
     path: str,
 ) -> str:
-    """Return the typed ``<Model>GroupKey`` field for one group axis."""
+    """Return the typed ``<Model>GroupKey`` field for one group axis.
 
-    if "__" not in path and is_to_one_relation(field):
-        return f"{path}_id"
+    The FK-alias rule (many-to-one → ``<path>_id``) is owned upstream by
+    ``group_by_alias``, which appends ``_id`` only for a many-to-one
+    relation; we gate on ``field.many_to_one`` so Angee's alias decision
+    is exactly what ``group_by_alias`` produces (a pure one-to-one axis
+    keeps its bare path there, not ``<path>_id``). Only the Angee
+    dotted-path normalization (``.`` → ``__``) for non-relation axes
+    stays local (no owner).
+    """
+
+    if "__" not in path and getattr(field, "many_to_one", False):
+        return group_by_alias(path, None, field)
     return path.replace(".", "__")
 
 
