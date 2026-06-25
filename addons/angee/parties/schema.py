@@ -26,7 +26,8 @@ from angee.graphql.data import (
 from angee.graphql.ids import optional_public_id
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
-from angee.iam.identity import user_display_label, user_public_id
+from angee.iam.audit import AuthoredRefMixin
+from angee.iam.identity import user_public_id
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES, session_user
 
 Party = apps.get_model("parties", "Party")
@@ -41,7 +42,7 @@ Folder = apps.get_model("parties", "Folder")
 
 
 @strawberry_django.type(Party)
-class PartyType(AngeeNode):
+class PartyType(AuthoredRefMixin, AngeeNode):
     """GraphQL projection of a party (the unified contact)."""
 
     display_name: auto
@@ -54,18 +55,6 @@ class PartyType(AngeeNode):
     party_handles: list["PartyHandleType"]
     addresses: list["AddressType"]
     affiliations: list["AffiliationType"]
-
-    @strawberry_django.field(only=["created_by_id"])
-    def created_by(self) -> strawberry.ID | None:
-        """Return the creator's public id without exposing the user object."""
-
-        return optional_public_id(user_public_id(cast(Any, self).created_by_id))
-
-    @strawberry_django.field(only=["created_by_id"])
-    def created_by_label(self) -> str | None:
-        """Return the creator's display label - no user object exposed."""
-
-        return user_display_label(cast(Any, self).created_by_id)
 
 
 @strawberry_django.type(Person)
