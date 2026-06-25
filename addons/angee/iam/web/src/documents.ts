@@ -30,8 +30,11 @@ export const IamOverview = graphql(`
       privileged_grants {
         principal_id
         principal_type
+        principal_ref
         principal_label
         role
+        role_name
+        namespace
       }
       unassigned_users {
         id
@@ -100,10 +103,11 @@ export type IAMOverviewVariables = DocumentVariables<typeof IamOverview>;
 
 export type IAMUsersVariables = DocumentVariables<typeof IamUsers>;
 
-/** One privileged-grant row, derived from the `IamOverview` selection — the same
- * `{principal_id, principal_type, principal_label, role}` shape the dropped
- * standalone `IamGrants` query exposed. The Grants page now reads the `iam.Grant`
- * Hasura resource; this type only backs the overview's privileged-grant peek. */
+/** One privileged-grant row, derived from the `IamOverview` selection. The
+ * backend `IAMGrantType` computes the full row (`principal_ref`, `role_name`,
+ * `namespace`) via the same helpers as the `iam.Grant` Hasura resource, so the
+ * client no longer re-derives any of them. The Grants page reads that resource
+ * directly; this type only backs the overview's privileged-grant peek. */
 export type IAMGrant = NonNullable<
   DocumentType<typeof IamOverview>["iam_overview"]
 >["privileged_grants"][number];

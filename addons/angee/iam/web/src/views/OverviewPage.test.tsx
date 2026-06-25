@@ -149,7 +149,10 @@ describe("IAM overview page", () => {
           principal_id: "1",
           principal_type: "auth/user",
           principal_label: "Admin User",
+          principal_ref: "auth/user:1",
           role: "angee/role:admin",
+          role_name: "admin",
+          namespace: "angee",
         },
       ],
       unassigned_users: [

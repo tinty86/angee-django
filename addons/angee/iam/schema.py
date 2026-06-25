@@ -217,11 +217,30 @@ class IAMGrantType:
         return _user_display_label(cast(Any, self).subject_id)
 
     @strawberry_django.field
+    def principal_ref(self) -> str:
+        """Return the canonical ``<type>:<id>`` principal ref."""
+
+        row = cast(Any, self)
+        return f"{row.subject_type}:{row.subject_id}"
+
+    @strawberry_django.field
     def role(self) -> str:
         """Return the canonical granted role ref."""
 
         row = cast(Any, self)
         return _role_ref(str(row.resource_type), str(row.resource_id))
+
+    @strawberry_django.field
+    def role_name(self) -> str:
+        """Return the short granted role id."""
+
+        return str(cast(Any, self).resource_id)
+
+    @strawberry_django.field
+    def namespace(self) -> str:
+        """Return the namespace portion of the granted role type."""
+
+        return _role_namespace(str(cast(Any, self).resource_type))
 
 
 @strawberry.type

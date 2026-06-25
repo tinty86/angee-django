@@ -28,11 +28,12 @@ import {
   IamOverview,
   IamRevokeRole,
   IamUsers,
+  type IAMGrant,
   type IAMOverviewVariables,
   type IAMUsersVariables,
 } from "../documents";
 import { titleLabel, userLabel } from "../identity-labels";
-import { grantRows, roleRef, roleRows, type IAMGrantRow } from "../identity-rows";
+import { grantRows, roleRef, roleRows } from "../identity-rows";
 import { IAM_LIST_LIMIT } from "../list-config";
 import { useIamT } from "../i18n";
 
@@ -197,7 +198,7 @@ export function OverviewPage(): ReactElement {
           >
             <div className="divide-y divide-border-subtle">
               {privileged.map((grant) => (
-                <PrivilegedGrantRow key={grant.id} grant={grant} onRevoked={() => {
+                <PrivilegedGrantRow key={`${grant.principal_ref}:${grant.role}`} grant={grant} onRevoked={() => {
                   overview.refetch();
                 }} />
               ))}
@@ -261,7 +262,7 @@ function PrivilegedGrantRow({
   grant,
   onRevoked,
 }: {
-  grant: IAMGrantRow;
+  grant: IAMGrant;
   onRevoked: () => void;
 }): ReactElement {
   const t = useIamT();
@@ -270,7 +271,7 @@ function PrivilegedGrantRow({
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-13 font-medium text-fg">{grant.principal_label}</div>
-        <div className="truncate text-2xs text-fg-muted">{titleLabel(grant.namespace)} · {grant.roleName}</div>
+        <div className="truncate text-2xs text-fg-muted">{titleLabel(grant.namespace)} · {grant.role_name}</div>
       </div>
       <Button
         variant="danger"
