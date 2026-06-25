@@ -3,68 +3,39 @@ import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import type {
   ContextMenuArrowProps as BaseContextMenuArrowProps,
   ContextMenuBackdropProps as BaseContextMenuBackdropProps,
-  ContextMenuCheckboxItemIndicatorProps as BaseContextMenuCheckboxItemIndicatorProps,
-  ContextMenuCheckboxItemProps as BaseContextMenuCheckboxItemProps,
-  ContextMenuGroupLabelProps as BaseContextMenuGroupLabelProps,
   ContextMenuGroupProps as BaseContextMenuGroupProps,
-  ContextMenuItemProps as BaseContextMenuItemProps,
-  ContextMenuLinkItemProps as BaseContextMenuLinkItemProps,
-  ContextMenuPopupProps as BaseContextMenuPopupProps,
   ContextMenuPortalProps as BaseContextMenuPortalProps,
   ContextMenuPositionerProps as BaseContextMenuPositionerProps,
   ContextMenuRadioGroupProps as BaseContextMenuRadioGroupProps,
-  ContextMenuRadioItemIndicatorProps as BaseContextMenuRadioItemIndicatorProps,
-  ContextMenuRadioItemProps as BaseContextMenuRadioItemProps,
   ContextMenuRootProps as BaseContextMenuRootProps,
   ContextMenuSubmenuRootProps as BaseContextMenuSubmenuRootProps,
-  ContextMenuSubmenuTriggerProps as BaseContextMenuSubmenuTriggerProps,
   ContextMenuTriggerProps as BaseContextMenuTriggerProps,
 } from "@base-ui/react/context-menu";
 
-import { Glyph } from "../chrome/Glyph";
-import { tv, type VariantProps } from "../lib/variants";
-import { POPUP_BASE } from "./popover";
+import {
+  createMenuRecipe,
+  createStyledMenuParts,
+  type MenuCheckboxItemIndicatorProps,
+  type MenuCheckboxItemProps,
+  type MenuContentProps,
+  type MenuItemProps,
+  type MenuItemVariant,
+  type MenuLabelProps,
+  type MenuLinkItemProps,
+  type MenuRadioItemIndicatorProps,
+  type MenuRadioItemProps,
+  type MenuSeparatorProps,
+  type MenuShortcutProps,
+  type MenuSubmenuTriggerProps,
+} from "./menu-parts";
 
-export const contextMenuVariants = tv({
-  slots: {
-    content: `${POPUP_BASE} min-w-44 p-1`,
-    trigger:
-      "outline-none focus-visible:focus-ring data-[popup-open]:focus-ring",
-    item:
-      "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded px-2 text-13 text-fg outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset [&_.glyph]:size-3.5 [&_.glyph]:shrink-0 [&_.glyph]:text-fg-muted",
-    indicator:
-      "absolute left-2 flex size-3.5 items-center justify-center text-brand [&_.glyph]:size-3.5",
-    radioIndicator:
-      "absolute left-2 flex size-3.5 items-center justify-center text-brand before:size-1.5 before:rounded-full before:bg-current before:content-['']",
-    label: "px-2 py-1.5 text-2xs font-semibold uppercase text-fg-muted",
-    separator: "-mx-1 my-1 h-px bg-border-subtle",
-    shortcut: "ml-auto text-2xs text-fg-muted",
-    submenuIcon:
-      "ml-auto flex size-3.5 items-center justify-center text-fg-muted transition-transform data-[open]:rotate-90 [&_.glyph]:size-3.5",
-  },
-  variants: {
-    inset: {
-      true: { item: "pl-8" },
-      false: { item: "" },
-    },
-    variant: {
-      default: { item: "" },
-      danger: {
-        item: "text-danger-text data-[highlighted]:bg-danger-soft data-[highlighted]:text-danger-text",
-      },
-    },
-  },
-  defaultVariants: {
-    inset: false,
-    variant: "default",
-  },
+// ContextMenu adds a styled `trigger` slot; everything else is the shared menu
+// recipe (slots/variants/defaults), owned by `./menu-parts`.
+export const contextMenuVariants = createMenuRecipe({
+  trigger: "outline-none focus-visible:focus-ring data-[popup-open]:focus-ring",
 });
 
-type ContextMenuRecipeProps = VariantProps<typeof contextMenuVariants>;
-
-export type ContextMenuItemVariant = NonNullable<
-  ContextMenuRecipeProps["variant"]
->;
+export type ContextMenuItemVariant = MenuItemVariant;
 export type ContextMenuRootProps = BaseContextMenuRootProps;
 export type ContextMenuPortalProps = BaseContextMenuPortalProps;
 export type ContextMenuPositionerProps = BaseContextMenuPositionerProps;
@@ -83,6 +54,7 @@ export const ContextMenuGroup = BaseContextMenu.Group;
 export const ContextMenuRadioGroup = BaseContextMenu.RadioGroup;
 export const ContextMenuSubmenuRoot = BaseContextMenu.SubmenuRoot;
 
+// ContextMenu carries its own styled Trigger slot (Menu/DropdownMenu have none).
 export type ContextMenuTriggerProps = Omit<
   BaseContextMenuTriggerProps,
   "className"
@@ -105,281 +77,42 @@ export const ContextMenuTrigger = React.forwardRef<
 });
 ContextMenuTrigger.displayName = "ContextMenuTrigger";
 
-export type ContextMenuContentProps = Omit<
-  BaseContextMenuPopupProps,
-  "className"
-> & {
-  className?: string;
-};
+// The styled parts shared with DropdownMenu, built over the context recipe.
+const parts = createStyledMenuParts(contextMenuVariants, "ContextMenu");
 
-export const ContextMenuContent = React.forwardRef<
-  HTMLDivElement,
-  ContextMenuContentProps
->(function ContextMenuContent({ className, ...props }, ref) {
-  const styles = contextMenuVariants();
-  return (
-    <BaseContextMenu.Popup
-      ref={ref}
-      className={styles.content({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuContent.displayName = "ContextMenuContent";
+export type ContextMenuContentProps = MenuContentProps;
+export const ContextMenuContent = parts.Content;
 
-export type ContextMenuItemProps = Omit<
-  BaseContextMenuItemProps,
-  "className"
-> &
-  Pick<ContextMenuRecipeProps, "inset" | "variant"> & {
-    className?: string;
-  };
+export type ContextMenuItemProps = MenuItemProps;
+export const ContextMenuItem = parts.Item;
 
-export const ContextMenuItem = React.forwardRef<
-  HTMLElement,
-  ContextMenuItemProps
->(function ContextMenuItem(
-  { className, inset = false, variant = "default", ...props },
-  ref,
-) {
-  const styles = contextMenuVariants({ inset, variant });
-  return (
-    <BaseContextMenu.Item
-      ref={ref}
-      className={styles.item({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuItem.displayName = "ContextMenuItem";
+export type ContextMenuLinkItemProps = MenuLinkItemProps;
+export const ContextMenuLinkItem = parts.LinkItem;
 
-export type ContextMenuLinkItemProps = Omit<
-  BaseContextMenuLinkItemProps,
-  "className"
-> &
-  Pick<ContextMenuRecipeProps, "inset" | "variant"> & {
-    className?: string;
-  };
+export type ContextMenuCheckboxItemProps = MenuCheckboxItemProps;
+export const ContextMenuCheckboxItem = parts.CheckboxItem;
 
-export const ContextMenuLinkItem = React.forwardRef<
-  Element,
-  ContextMenuLinkItemProps
->(function ContextMenuLinkItem(
-  { className, inset = false, variant = "default", ...props },
-  ref,
-) {
-  const styles = contextMenuVariants({ inset, variant });
-  return (
-    <BaseContextMenu.LinkItem
-      ref={ref}
-      className={styles.item({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuLinkItem.displayName = "ContextMenuLinkItem";
+export type ContextMenuCheckboxItemIndicatorProps =
+  MenuCheckboxItemIndicatorProps;
+export const ContextMenuCheckboxItemIndicator = parts.CheckboxItemIndicator;
 
-export type ContextMenuCheckboxItemProps = Omit<
-  BaseContextMenuCheckboxItemProps,
-  "className"
-> &
-  Pick<ContextMenuRecipeProps, "inset" | "variant"> & {
-    className?: string;
-  };
+export type ContextMenuRadioItemProps = MenuRadioItemProps;
+export const ContextMenuRadioItem = parts.RadioItem;
 
-export const ContextMenuCheckboxItem = React.forwardRef<
-  HTMLElement,
-  ContextMenuCheckboxItemProps
->(function ContextMenuCheckboxItem(
-  { className, inset = true, variant = "default", ...props },
-  ref,
-) {
-  const styles = contextMenuVariants({ inset, variant });
-  return (
-    <BaseContextMenu.CheckboxItem
-      ref={ref}
-      className={styles.item({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuCheckboxItem.displayName = "ContextMenuCheckboxItem";
+export type ContextMenuRadioItemIndicatorProps = MenuRadioItemIndicatorProps;
+export const ContextMenuRadioItemIndicator = parts.RadioItemIndicator;
 
-export type ContextMenuCheckboxItemIndicatorProps = Omit<
-  BaseContextMenuCheckboxItemIndicatorProps,
-  "className"
-> & {
-  className?: string;
-};
+export type ContextMenuSubmenuTriggerProps = MenuSubmenuTriggerProps;
+export const ContextMenuSubmenuTrigger = parts.SubmenuTrigger;
 
-export const ContextMenuCheckboxItemIndicator = React.forwardRef<
-  HTMLSpanElement,
-  ContextMenuCheckboxItemIndicatorProps
->(function ContextMenuCheckboxItemIndicator(
-  { className, children = <Glyph name="check" />, ...props },
-  ref,
-) {
-  const styles = contextMenuVariants();
-  return (
-    <BaseContextMenu.CheckboxItemIndicator
-      ref={ref}
-      className={styles.indicator({ className })}
-      {...props}
-    >
-      {children}
-    </BaseContextMenu.CheckboxItemIndicator>
-  );
-});
-ContextMenuCheckboxItemIndicator.displayName =
-  "ContextMenuCheckboxItemIndicator";
+export type ContextMenuLabelProps = MenuLabelProps;
+export const ContextMenuLabel = parts.Label;
 
-export type ContextMenuRadioItemProps = Omit<
-  BaseContextMenuRadioItemProps,
-  "className"
-> &
-  Pick<ContextMenuRecipeProps, "inset" | "variant"> & {
-    className?: string;
-  };
+export type ContextMenuSeparatorProps = MenuSeparatorProps;
+export const ContextMenuSeparator = parts.Separator;
 
-export const ContextMenuRadioItem = React.forwardRef<
-  HTMLElement,
-  ContextMenuRadioItemProps
->(function ContextMenuRadioItem(
-  { className, inset = true, variant = "default", ...props },
-  ref,
-) {
-  const styles = contextMenuVariants({ inset, variant });
-  return (
-    <BaseContextMenu.RadioItem
-      ref={ref}
-      className={styles.item({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuRadioItem.displayName = "ContextMenuRadioItem";
-
-export type ContextMenuRadioItemIndicatorProps = Omit<
-  BaseContextMenuRadioItemIndicatorProps,
-  "className"
-> & {
-  className?: string;
-};
-
-export const ContextMenuRadioItemIndicator = React.forwardRef<
-  HTMLSpanElement,
-  ContextMenuRadioItemIndicatorProps
->(function ContextMenuRadioItemIndicator({ className, children, ...props }, ref) {
-  const styles = contextMenuVariants();
-  return (
-    <BaseContextMenu.RadioItemIndicator
-      ref={ref}
-      className={styles.radioIndicator({ className })}
-      {...props}
-    >
-      {children}
-    </BaseContextMenu.RadioItemIndicator>
-  );
-});
-ContextMenuRadioItemIndicator.displayName = "ContextMenuRadioItemIndicator";
-
-export type ContextMenuSubmenuTriggerProps = Omit<
-  BaseContextMenuSubmenuTriggerProps,
-  "className" | "children"
-> &
-  Pick<ContextMenuRecipeProps, "inset" | "variant"> & {
-    children?: React.ReactNode;
-    className?: string;
-    icon?: React.ReactNode;
-  };
-
-export const ContextMenuSubmenuTrigger = React.forwardRef<
-  HTMLElement,
-  ContextMenuSubmenuTriggerProps
->(function ContextMenuSubmenuTrigger(
-  {
-    children,
-    className,
-    icon = <Glyph name="chevron-right" />,
-    inset = false,
-    variant = "default",
-    ...props
-  },
-  ref,
-) {
-  const styles = contextMenuVariants({ inset, variant });
-  return (
-    <BaseContextMenu.SubmenuTrigger
-      ref={ref}
-      className={styles.item({ className })}
-      {...props}
-    >
-      {children}
-      <span className={styles.submenuIcon()}>{icon}</span>
-    </BaseContextMenu.SubmenuTrigger>
-  );
-});
-ContextMenuSubmenuTrigger.displayName = "ContextMenuSubmenuTrigger";
-
-export type ContextMenuLabelProps = Omit<
-  BaseContextMenuGroupLabelProps,
-  "className"
-> & {
-  className?: string;
-};
-
-export const ContextMenuLabel = React.forwardRef<
-  HTMLDivElement,
-  ContextMenuLabelProps
->(function ContextMenuLabel({ className, ...props }, ref) {
-  const styles = contextMenuVariants();
-  return (
-    <BaseContextMenu.GroupLabel
-      ref={ref}
-      className={styles.label({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuLabel.displayName = "ContextMenuLabel";
-
-export type ContextMenuSeparatorProps = Omit<
-  React.ComponentPropsWithoutRef<typeof BaseContextMenu.Separator>,
-  "className"
-> & {
-  className?: string;
-};
-
-export const ContextMenuSeparator = React.forwardRef<
-  HTMLDivElement,
-  ContextMenuSeparatorProps
->(function ContextMenuSeparator({ className, ...props }, ref) {
-  const styles = contextMenuVariants();
-  return (
-    <BaseContextMenu.Separator
-      ref={ref}
-      className={styles.separator({ className })}
-      {...props}
-    />
-  );
-});
-ContextMenuSeparator.displayName = "ContextMenuSeparator";
-
-export type ContextMenuShortcutProps =
-  React.HTMLAttributes<HTMLSpanElement> & {
-    className?: string;
-  };
-
-export const ContextMenuShortcut = React.forwardRef<
-  HTMLSpanElement,
-  ContextMenuShortcutProps
->(function ContextMenuShortcut({ className, ...props }, ref) {
-  const styles = contextMenuVariants();
-  return (
-    <span ref={ref} className={styles.shortcut({ className })} {...props} />
-  );
-});
-ContextMenuShortcut.displayName = "ContextMenuShortcut";
+export type ContextMenuShortcutProps = MenuShortcutProps;
+export const ContextMenuShortcut = parts.Shortcut;
 
 export const ContextMenu = Object.assign(ContextMenuRoot, {
   Root: ContextMenuRoot,
