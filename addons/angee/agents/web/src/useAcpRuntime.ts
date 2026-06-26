@@ -66,7 +66,7 @@ export interface AcpRuntime {
   modelHandle: string;
   /** The agent's advertised slash commands (from `available_commands_update`), for the
    *  composer's `/` palette; empty until the agent advertises any. */
-  availableCommands: AvailableCommand[];
+  availableCommands: readonly AvailableCommand[];
   /** Whether the agent advertises `promptCapabilities.image` — gates the composer's image
    *  attachment controls (the paperclip + the attachment adapter). */
   imageSupported: boolean;
@@ -340,22 +340,32 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
  *  part's `args` bag (its typed JSON input slot), which the view's `ToolPart` reads. */
 function convertMessage(message: ChatMessage): ThreadMessageLike {
   const content = message.parts.map((part) => {
-    if (part.kind === "text") return { type: "text" as const, text: part.text };
-    if (part.kind === "reasoning") return { type: "reasoning" as const, text: part.text };
-    if (part.kind === "image")
-      return { type: "image" as const, image: part.image, filename: part.filename };
-    return {
-      type: "tool-call" as const,
-      toolCallId: part.id,
-      toolName: part.toolName,
-      args: {
-        status: part.status,
-        input: part.input ?? null,
-        result: part.result ?? null,
-        isError: part.isError ?? false,
-      },
-      argsText: "",
-    };
+    switch (part.kind) {
+      case "text":
+        return { type: "text" as const, text: part.text };
+      case "reasoning":
+        return { type: "reasoning" as const, text: part.text };
+      case "image":
+        return { type: "image" as const, image: part.image, filename: part.filename };
+      case "tool":
+        return {
+          type: "tool-call" as const,
+          toolCallId: part.id,
+          toolName: part.toolName,
+          args: {
+            status: part.status,
+            input: part.input ?? null,
+            result: part.result ?? null,
+            isError: part.isError ?? false,
+          },
+          argsText: "",
+        };
+      default: {
+        // Exhaustive: a new ChatPart kind must add a case above, or this fails to compile.
+        const exhaustive: never = part;
+        return exhaustive;
+      }
+    }
   });
   // The parts map cleanly onto assistant-ui text/reasoning/tool-call content; cast at this
   // boundary because the tool `args` bag carries `unknown` input/result that the JSON-typed

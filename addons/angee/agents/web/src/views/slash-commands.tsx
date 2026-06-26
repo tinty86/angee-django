@@ -67,9 +67,11 @@ export const slashCommandFormatter: DirectiveFormatter = {
  * Wrap a composer subtree so a leading `/` opens a palette of the agent's `availableCommands`.
  * `children` is the composer subtree (it must contain `ComposerPrimitive.Input`, which feeds the
  * trigger's cursor/keydown registry). Selecting a command inserts `/<name> ` and the user sends
- * normally. Fail-safe: with no advertised commands the trigger surface is not mounted at all — the
- * popover's `open` gate needs only an adapter + behavior (not non-empty items), so mounting it would
- * open an empty listbox on `/`; rendering just `children` leaves the composer unchanged.
+ * normally. The popover root + positioning wrapper are ALWAYS rendered so a late
+ * `available_commands_update` (it arrives async after session start) never changes the element type
+ * around `children` and remounts the composer; only the trigger itself mounts once commands exist
+ * (mounting it empty would open an empty listbox on `/`, since the `open` gate needs only an adapter,
+ * not non-empty items).
  */
 export function SlashCommandComposer({
   commands,
@@ -81,36 +83,37 @@ export function SlashCommandComposer({
   const t = useAgentsT();
   const adapter = React.useMemo(() => commandAdapter(commands), [commands]);
 
-  if (commands.length === 0) return <>{children}</>;
-
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       {/* The root renders no DOM, so this module owns the positioning context; the panel floats
-          above the composer with `absolute bottom-full`. */}
+          above the composer with `absolute bottom-full`. Root + wrapper stay mounted so a late
+          command update never remounts `children`. */}
       <div className="relative">
-        <ComposerPrimitive.Unstable_TriggerPopover
-          char="/"
-          adapter={adapter}
-          aria-label={t("agents.chat.commands")}
-          render={<ChatCommandList className="absolute inset-x-2 bottom-full z-10 mb-1" />}
-        >
-          <ComposerPrimitive.Unstable_TriggerPopover.Directive formatter={slashCommandFormatter} />
-          <ComposerPrimitive.Unstable_TriggerPopoverItems>
-            {(items) =>
-              items.length === 0 ? (
-                <ChatCommandEmpty>{t("agents.chat.commandsEmpty")}</ChatCommandEmpty>
-              ) : (
-                items.map((item) => (
-                  <ComposerPrimitive.Unstable_TriggerPopoverItem
-                    key={item.id}
-                    item={item}
-                    render={<ChatCommandItem label={item.label} description={item.description} />}
-                  />
-                ))
-              )
-            }
-          </ComposerPrimitive.Unstable_TriggerPopoverItems>
-        </ComposerPrimitive.Unstable_TriggerPopover>
+        {commands.length > 0 ? (
+          <ComposerPrimitive.Unstable_TriggerPopover
+            char="/"
+            adapter={adapter}
+            aria-label={t("agents.chat.commands")}
+            render={<ChatCommandList className="absolute inset-x-2 bottom-full z-10 mb-1" />}
+          >
+            <ComposerPrimitive.Unstable_TriggerPopover.Directive formatter={slashCommandFormatter} />
+            <ComposerPrimitive.Unstable_TriggerPopoverItems>
+              {(items) =>
+                items.length === 0 ? (
+                  <ChatCommandEmpty>{t("agents.chat.commandsEmpty")}</ChatCommandEmpty>
+                ) : (
+                  items.map((item) => (
+                    <ComposerPrimitive.Unstable_TriggerPopoverItem
+                      key={item.id}
+                      item={item}
+                      render={<ChatCommandItem label={item.label} description={item.description} />}
+                    />
+                  ))
+                )
+              }
+            </ComposerPrimitive.Unstable_TriggerPopoverItems>
+          </ComposerPrimitive.Unstable_TriggerPopover>
+        ) : null}
         {children}
       </div>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>

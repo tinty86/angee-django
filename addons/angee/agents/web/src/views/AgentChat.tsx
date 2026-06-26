@@ -184,8 +184,8 @@ function UserMessage(): React.ReactElement {
   );
 }
 
-const UserImagePart: ImageMessagePartComponent = ({ image }) => (
-  <img src={image} className="max-h-40 rounded-md" alt="" />
+const UserImagePart: ImageMessagePartComponent = ({ image, filename }) => (
+  <img src={image} alt={filename ?? ""} className="max-h-40 rounded-md" />
 );
 
 /** A pending composer image attachment, rendered as a chip with a remove control. The
@@ -236,17 +236,7 @@ function RecordAttachmentChip({
 }): React.ReactElement {
   const t = useAgentsT();
   const [open, setOpen] = React.useState(false);
-  const [context, setContext] = React.useState("");
-  React.useEffect(() => {
-    if (!open) return;
-    let active = true;
-    void renderContext().then((text) => {
-      if (active) setContext(text);
-    });
-    return () => {
-      active = false;
-    };
-  }, [open, renderContext]);
+  const context = useRenderedContext(renderContext, open);
 
   if (!attached) {
     return <ChatHeaderAction onClick={attachRecord}>{t("agents.chat.attachView")}</ChatHeaderAction>;
@@ -391,16 +381,7 @@ function SessionInfo({
   renderContext: () => Promise<string>;
 }): React.ReactElement {
   const t = useAgentsT();
-  const [context, setContext] = React.useState("");
-  React.useEffect(() => {
-    let active = true;
-    void renderContext().then((text) => {
-      if (active) setContext(text);
-    });
-    return () => {
-      active = false;
-    };
-  }, [renderContext]);
+  const context = useRenderedContext(renderContext);
 
   const servers = Object.keys(mcpServers);
   return (
@@ -431,4 +412,22 @@ function InfoRow({ label, value }: { label: string; value: string }): React.Reac
       <span className="truncate text-fg">{value}</span>
     </div>
   );
+}
+
+/** Fetch the freshly rendered `<system_context>` into state. Re-fetches when `renderContext`
+ *  changes; `enabled` gates it (e.g. only while an inspector dialog is open). Shared by the
+ *  session-info popover and the view-record inspector so the fetch lives in one place. */
+function useRenderedContext(renderContext: () => Promise<string>, enabled = true): string {
+  const [context, setContext] = React.useState("");
+  React.useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    void renderContext().then((text) => {
+      if (active) setContext(text);
+    });
+    return () => {
+      active = false;
+    };
+  }, [enabled, renderContext]);
+  return context;
 }
