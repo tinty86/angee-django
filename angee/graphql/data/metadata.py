@@ -14,6 +14,7 @@ from strawberry.types import get_object_definition
 from strawberry.types.base import StrawberryList, StrawberryOptional
 from strawberry.types.enum import StrawberryEnumDefinition
 from strawberry.utils.str_converters import to_camel_case
+from strawberry_django_hasura import SnakeNameConverter
 
 from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
 from angee.graphql.introspection import (
@@ -257,7 +258,7 @@ def resource_wire_field_names(surface: type | None, *, exclude: tuple[str, ...] 
         return ()
     excluded = set(exclude)
     return tuple(
-        _surface_wire_field_name(surface, name) or _wire_name(name)
+        _surface_wire_field_name(surface, name) or name
         for name in surface_field_names(surface)
         if name not in excluded
     )
@@ -486,8 +487,9 @@ def _wire_dataclass(instance: Any) -> dict[str, object]:
     """Serialize one metadata dataclass through its own declared wire shape.
 
     Each dataclass owns its wire mapping: a field serializes under its
-    ``to_camel_case`` name unless it declares a ``wire`` key in field metadata,
-    and fields marked ``{"wire": False}`` (the Python type handles) are omitted.
+    ``_metadata_key`` (camelCase) name unless it declares a ``wire`` key in field
+    metadata, and fields marked ``{"wire": False}`` (the Python type handles) are
+    omitted.
     """
 
     payload: dict[str, object] = {}
@@ -495,7 +497,7 @@ def _wire_dataclass(instance: Any) -> dict[str, object]:
         wire = field_def.metadata.get("wire", True)
         if wire is False:
             continue
-        key = wire if isinstance(wire, str) else _wire_name(field_def.name)
+        key = wire if isinstance(wire, str) else _metadata_key(field_def.name)
         payload[key] = _wire_value(getattr(instance, field_def.name))
     return payload
 
@@ -741,7 +743,7 @@ def _input_wire_fields(surface: type | None, *, exclude: tuple[str, ...] = ()) -
 
     excluded = set(exclude)
     return tuple(
-        _surface_wire_field_name(surface, name) or _wire_name(name)
+        _surface_wire_field_name(surface, name) or name
         for name in _input_fields(surface)
         if name not in excluded
     )
@@ -763,7 +765,7 @@ def _required_input_wire_fields(surface: type | None) -> tuple[str, ...]:
         default_factory = getattr(field, "default_factory", dataclasses.MISSING)
         if default is not dataclasses.MISSING or default_factory is not dataclasses.MISSING:
             continue
-        required.append(str(field.graphql_name or to_camel_case(field.python_name)))
+        required.append(_wire_field_name(field))
     return tuple(required)
 
 
@@ -919,6 +921,22 @@ def model_field_scalar(field: models.Field[Any, Any]) -> str | None:
     return None
 
 
+# The schema is built with ``hasura_config()`` (``angee/graphql/schema.py``); its
+# ``SnakeNameConverter`` owns the python-name -> wire-name rule, keeping snake_case
+# verbatim unless a field pins an explicit ``graphql_name``. The metadata the
+# frontend codegen reads must name every field exactly as the schema does, so it
+# asks the same converter instead of re-deriving the rule — re-deriving it as
+# camelCase is what made an unpinned field (the revision query) drift from its
+# snake_case schema name.
+_WIRE_NAME_CONVERTER = SnakeNameConverter()
+
+
+def _wire_field_name(field: Any) -> str:
+    """Return the GraphQL wire name the schema gives one Strawberry field."""
+
+    return str(_WIRE_NAME_CONVERTER.get_graphql_name(field))
+
+
 def _surface_wire_field_name(surface: type | None, name: str | None) -> str | None:
     """Return the actual GraphQL wire field name for a Strawberry field."""
 
@@ -928,8 +946,8 @@ def _surface_wire_field_name(surface: type | None, name: str | None) -> str | No
     if definition is not None:
         for field in definition.fields:
             if field.python_name == name:
-                return str(field.graphql_name or to_camel_case(field.python_name))
-    return _wire_name(name)
+                return _wire_field_name(field)
+    return name
 
 
 def _surface_field_type(surface: type | None, name: str) -> object | None:
@@ -1092,10 +1110,15 @@ def _strawberry_type_is_object(value: object | None) -> bool:
     return _surface_type_name(value) == "UNRESOLVED"
 
 
-def _wire_name(value: str) -> str:
-    """Return Strawberry's GraphQL wire field name for a Python field name."""
+def _metadata_key(name: str) -> str:
+    """Return the camelCase JSON key for one metadata-envelope dataclass field.
 
-    return to_camel_case(value)
+    The frontend ``DataResourceMetadata`` contract keys its objects in camelCase
+    (``revisionFields``, ``typeNames``); that is the metadata envelope's own
+    naming, distinct from the snake_case GraphQL wire field names above.
+    """
+
+    return to_camel_case(name)
 
 
 def _model_field_or_none(model: type[models.Model] | None, name: str) -> models.Field[Any, Any] | None:
