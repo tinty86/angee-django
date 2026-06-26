@@ -2,14 +2,20 @@ import { useMemo, type ReactElement } from "react";
 
 import { RelationField, type RelationOption } from "./RelationField";
 import { widgetLabel } from "./label";
-import { optionLabel, type WidgetDefinition, type WidgetRenderProps } from "./types";
+import {
+  optionLabel,
+  relationValueId,
+  type WidgetDefinition,
+  type WidgetRenderProps,
+} from "./types";
 
 function Many2OneEdit({
   value,
   onChange,
   field,
   readOnly,
-}: WidgetRenderProps<string>): ReactElement {
+}: WidgetRenderProps<unknown>): ReactElement {
+  const selected = relationValueId(value);
   const options = useMemo<RelationOption[]>(
     () =>
       (field?.options ?? []).map((option) => ({
@@ -20,7 +26,7 @@ function Many2OneEdit({
   );
   return (
     <RelationField
-      value={value ?? ""}
+      value={selected}
       onChange={(next) => onChange?.(next)}
       options={options}
       readOnly={readOnly}
@@ -32,8 +38,8 @@ function Many2OneEdit({
 function Many2OneRead({
   value,
   field,
-}: WidgetRenderProps<string>): ReactElement {
-  const label = optionLabel(field?.options, value);
+}: WidgetRenderProps<unknown>): ReactElement {
+  const label = optionLabel(field?.options, relationValueId(value));
   return <span className="text-13 text-fg">{label}</span>;
 }
 
@@ -41,4 +47,4 @@ export const many2oneWidget = {
   edit: Many2OneEdit,
   read: Many2OneRead,
   cell: Many2OneRead,
-} satisfies WidgetDefinition<string>;
+} satisfies WidgetDefinition<unknown>;

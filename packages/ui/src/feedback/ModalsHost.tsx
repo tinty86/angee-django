@@ -290,12 +290,13 @@ function PromptDialogForm({
                     aria-label={
                       typeof field.label === "string" ? field.label : field.name
                     }
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const next = event.currentTarget.value;
                       setValues((current) => ({
                         ...current,
-                        [field.name]: event.currentTarget.value,
-                      }))
-                    }
+                        [field.name]: next,
+                      }));
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !readOnly) {
                         event.preventDefault();

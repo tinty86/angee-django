@@ -23,6 +23,10 @@ import {
   createRouter,
   } from "@tanstack/react-router";
 import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import {
   AppRuntimeProvider,
   type AppRuntime,
   } from "../runtime";
@@ -1176,16 +1180,19 @@ describe("FormView", () => {
     let router: ReturnType<typeof createRouter> | undefined;
 
     function Root(): ReactElement {
+      const queryClient = useMemo(() => createTestQueryClient(), []);
       return (
-        <ModalsHost>
-          <ToastProvider>
-            <ModelMetadataProvider metadata={withDefaultResourceMetadata(undefined)}>
-              <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
-                <Outlet />
-              </AppRuntimeProvider>
-            </ModelMetadataProvider>
-          </ToastProvider>
-        </ModalsHost>
+        <QueryClientProvider client={queryClient}>
+          <ModalsHost>
+            <ToastProvider>
+              <ModelMetadataProvider metadata={withDefaultResourceMetadata(undefined)}>
+                <AppRuntimeProvider runtime={{ widgets: defaultWidgets }}>
+                  <Outlet />
+                </AppRuntimeProvider>
+              </ModelMetadataProvider>
+            </ToastProvider>
+          </ModalsHost>
+        </QueryClientProvider>
       );
     }
 
@@ -1462,26 +1469,38 @@ function renderWithProviders(
     routeTree: rootRoute.addChildren([indexRoute]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
+  const queryClient = createTestQueryClient();
 
   render(
-    <RouterContextProvider router={router}>
-      <ModalsHost>
-        <ToastProvider>
-          <ModelMetadataProvider metadata={withDefaultResourceMetadata(metadata)}>
-            <AppRuntimeProvider
-              runtime={{
-                widgets: defaultWidgets,
-                ...(forms ? { forms } : {}),
-                ...runtime,
-              }}
-            >
-              {children}
-            </AppRuntimeProvider>
-          </ModelMetadataProvider>
-        </ToastProvider>
-      </ModalsHost>
-    </RouterContextProvider>,
+    <QueryClientProvider client={queryClient}>
+      <RouterContextProvider router={router}>
+        <ModalsHost>
+          <ToastProvider>
+            <ModelMetadataProvider metadata={withDefaultResourceMetadata(metadata)}>
+              <AppRuntimeProvider
+                runtime={{
+                  widgets: defaultWidgets,
+                  ...(forms ? { forms } : {}),
+                  ...runtime,
+                }}
+              >
+                {children}
+              </AppRuntimeProvider>
+            </ModelMetadataProvider>
+          </ToastProvider>
+        </ModalsHost>
+      </RouterContextProvider>
+    </QueryClientProvider>,
   );
+}
+
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  });
 }
 
 function withDefaultResourceMetadata(

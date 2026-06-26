@@ -17,7 +17,11 @@ import {
   createRoute,
   createRouter,
   useRouterState,
-  } from "@tanstack/react-router";
+} from "@tanstack/react-router";
+import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   createContext,
   useContext,
@@ -623,15 +627,27 @@ function TestRouteError({ error }: { error: unknown }): ReactElement {
 }
 
 function TestRootRoute(): ReactElement {
+  const queryClient = useMemo(() => createTestQueryClient(), []);
   return (
-    <ModalsHost>
-      <ModelMetadataProvider metadata={TEST_SCHEMA_METADATA}>
-        <ToastProvider>
-          <Outlet />
-        </ToastProvider>
-      </ModelMetadataProvider>
-    </ModalsHost>
+    <QueryClientProvider client={queryClient}>
+      <ModalsHost>
+        <ModelMetadataProvider metadata={TEST_SCHEMA_METADATA}>
+          <ToastProvider>
+            <Outlet />
+          </ToastProvider>
+        </ModelMetadataProvider>
+      </ModalsHost>
+    </QueryClientProvider>
   );
+}
+
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  });
 }
 
 function TestRecordRoutesScreen(): ReactElement {

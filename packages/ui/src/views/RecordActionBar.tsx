@@ -3,17 +3,23 @@ import {
   rowPublicId,
   type Row,
 } from "@angee/resources";
+import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "../ui/button";
 import { DropdownMenu } from "../ui/dropdown-menu";
 import { Glyph } from "../chrome/Glyph";
 import { errorMessage, useConfirm, usePrompt, useToast } from "../feedback";
-import type { ActionDescriptor } from "./page";
+import type { ActionDescriptor, ActionResult } from "./page";
 
 export interface RecordDeleteAction {
   canDelete: boolean;
   isPending: boolean;
   onDelete: () => void;
+}
+
+interface ActionMutationVariables {
+  action: ActionDescriptor;
+  values: Record<string, string>;
 }
 
 /**
@@ -42,13 +48,39 @@ export function RecordActionBar({
   const confirm = useConfirm();
   const prompt = usePrompt();
   const toast = useToast();
-  const [pendingId, setPendingId] = React.useState<string | null>(null);
-  // A `run` action often closes/navigates the record, unmounting this bar before
-  // its mutation resolves; guard the trailing setState against that.
-  const mountedRef = React.useRef(true);
-  React.useEffect(() => () => {
-    mountedRef.current = false;
-  }, []);
+  const actionMutation = useMutation<
+    ActionResult,
+    unknown,
+    ActionMutationVariables
+  >({
+    mutationFn: async ({ action, values }) => {
+      if (action.run) {
+        return action.run({
+          record,
+          values,
+          refresh: reload,
+          update: applyPatch,
+          prompt,
+        });
+      }
+      await applyPatch({ ...(action.set ?? {}), ...values });
+      return undefined;
+    },
+    onSuccess: (message) => {
+      if (typeof message === "string" && message) {
+        toast.success({ title: message });
+      }
+    },
+    onError: (error, { action }) => {
+      toast.danger({
+        title: actionLabelText(action),
+        description: errorMessage(error, "The action failed."),
+      });
+    },
+  });
+  const pendingId = actionMutation.isPending
+    ? actionMutation.variables?.action.id ?? null
+    : null;
 
   const recordId = rowPublicId(record);
 
@@ -74,32 +106,11 @@ export function RecordActionBar({
         values = result;
       }
 
-      setPendingId(action.id);
-      try {
-        if (action.run) {
-          const message = await action.run({
-            record,
-            values,
-            refresh: reload,
-            update: applyPatch,
-            prompt,
-          });
-          if (typeof message === "string" && message) {
-            toast.success({ title: message });
-          }
-        } else {
-          await applyPatch({ ...(action.set ?? {}), ...values });
-        }
-      } catch (error) {
-        toast.danger({
-          title: actionLabelText(action),
-          description: errorMessage(error, "The action failed."),
-        });
-      } finally {
-        if (mountedRef.current) setPendingId(null);
-      }
+      await actionMutation
+        .mutateAsync({ action, values })
+        .catch(() => undefined);
     },
-    [applyPatch, confirm, prompt, record, reload, toast],
+    [actionMutation, confirm, prompt],
   );
 
   // An action with a `visibleWhen` predicate shows only when the open record

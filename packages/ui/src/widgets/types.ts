@@ -9,6 +9,19 @@ export interface WidgetOption {
 }
 
 /**
+ * Extract the scalar id a relation widget reads and writes. Refine/Hasura detail
+ * reads may carry a nested related record (`{ id }`) while write inputs expect
+ * the flat public id.
+ */
+export function relationValueId(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const id = (value as { id?: unknown }).id;
+  return typeof id === "string" || typeof id === "number" ? String(id) : "";
+}
+
+/**
  * The label for an option `value`: the matching option's `label`, else the raw
  * value, else "". The one owner of the
  * `options.find(o => o.value === v)?.label ?? v ?? ""` lookup the scalar and

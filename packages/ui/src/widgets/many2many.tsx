@@ -8,6 +8,7 @@ import { widgetLabel } from "./label";
 import {
   optionLabel,
   optionTextLabel,
+  relationValueId,
   type WidgetDefinition,
   type WidgetOption,
   type WidgetRenderProps,
@@ -18,7 +19,7 @@ function Many2ManyEdit({
   onChange,
   field,
   readOnly,
-}: WidgetRenderProps<readonly string[]>): ReactElement {
+}: WidgetRenderProps<readonly unknown[]>): ReactElement {
   const selected = normaliseValues(value);
   const options = field?.options ?? [];
   const available = options.filter((option) => !selected.includes(option.value));
@@ -53,7 +54,7 @@ function Many2ManyEdit({
 function Many2ManyRead({
   value,
   field,
-}: WidgetRenderProps<readonly string[]>): ReactElement {
+}: WidgetRenderProps<readonly unknown[]>): ReactElement {
   return (
     <Many2ManyChips
       values={normaliseValues(value)}
@@ -105,8 +106,8 @@ export const many2manyWidget = {
   edit: Many2ManyEdit,
   read: Many2ManyRead,
   cell: Many2ManyRead,
-} satisfies WidgetDefinition<readonly string[]>;
+} satisfies WidgetDefinition<readonly unknown[]>;
 
-function normaliseValues(value: readonly string[] | null | undefined): string[] {
-  return [...new Set(value ?? [])].filter(Boolean);
+function normaliseValues(value: readonly unknown[] | null | undefined): string[] {
+  return [...new Set((value ?? []).map(relationValueId))].filter(Boolean);
 }

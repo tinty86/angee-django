@@ -19,7 +19,11 @@ import {
   createRoute,
   createRouter,
   useRouterState,
-  } from "@tanstack/react-router";
+} from "@tanstack/react-router";
+import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   createContext,
   useContext,
@@ -2318,13 +2322,25 @@ function TestUrlState({
 }
 
 function TestUrlStateRoot(): ReactElement {
+  const queryClient = useMemo(() => createTestQueryClient(), []);
   return (
-    <ModalsHost>
-      <ToastProvider>
-        <Outlet />
-      </ToastProvider>
-    </ModalsHost>
+    <QueryClientProvider client={queryClient}>
+      <ModalsHost>
+        <ToastProvider>
+          <Outlet />
+        </ToastProvider>
+      </ModalsHost>
+    </QueryClientProvider>
   );
+}
+
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  });
 }
 
 function TestUrlStateScreen(): ReactElement {
