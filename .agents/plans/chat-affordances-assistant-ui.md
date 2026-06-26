@@ -7,6 +7,16 @@ onto the existing ACP `ExternalStore` runtime, sourcing each from ACP
 `session/update` events we already receive but currently drop. Decision +
 rejected alternatives: `.agents/notes/chat-ui-library-evaluation.md`.
 
+> **Status (2026-06-26): merged to main (PR #5); re-verified against main.** The
+> A1 package-split refactor that landed only retargeted web imports — the chat
+> code is unchanged (`useAcpRuntime.ts` still 366 lines; `acp-log.ts`,
+> `AgentChat.tsx`, `@angee/ui` chat primitives intact), `@angee/agents` and the
+> predecessor `agent-chat.md` still exist, and every file/line citation below was
+> re-confirmed. The assistant-ui / ACP / streamdown stack rows are unchanged, and
+> the frontend data layer on main is **still Refine-based** — so the owner facts
+> here and in the evaluation note continue to hold. No rewrite needed; ready to
+> execute.
+
 Scope is `addons/angee/agents/web` + `packages/ui` (chat primitives). No backend
 schema change expected (call it out if a phase needs one).
 
@@ -43,7 +53,7 @@ schema change expected (call it out if a phase needs one).
   It preempts a hand-rolled slash/threads/attachment build — the real DRY win,
   though not a deletion this plan itself makes. (The `requestPermission`
   auto-approve stub at `useAcpRuntime.ts:281` and the `ToolPart` `args`-bag cast at
-  `useAcpRuntime.ts:255` are separate follow-ups, not touched here.) No phase may
+  `useAcpRuntime.ts:254-270` are separate follow-ups, not touched here.) No phase may
   fake a capability ACP lacks (see "Out of scope").
 - **Naming.** One name per concept across runtime/view/story/tests
   (`availableCommands`, `attachments`, `plan`, `mode`) matching ACP's field names.
