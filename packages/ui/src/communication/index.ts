@@ -15,6 +15,7 @@ export {
 } from "./chatter-context";
 export {
   ChatAttachmentChip,
+  ChatBar,
   ChatBubble,
   ChatBubbleActions,
   ChatCommandEmpty,
@@ -27,9 +28,13 @@ export {
   ChatTypingIndicator,
   ContextBlock,
   MessageReasoningFrame,
+  SessionRail,
+  SessionRailItem,
   ToolFallback,
   chatComposerInputClassName,
+  sessionRailItemVariants,
   type ChatAttachmentChipProps,
+  type ChatBarProps,
   type ChatBubbleActionsProps,
   type ChatBubbleProps,
   type ChatBubbleRole,
@@ -43,5 +48,7 @@ export {
   type ChatTypingIndicatorProps,
   type ContextBlockProps,
   type MessageReasoningFrameProps,
+  type SessionRailItemProps,
+  type SessionRailProps,
   type ToolFallbackProps,
 } from "./chat";

@@ -53,7 +53,35 @@ describe("full addon composition", () => {
     const composed = composeAddons(HOST_ADDONS);
     expect(unresolvedMenuIcons(composed.menus, composed.icons)).toEqual([]);
   });
+
+  test("registers the full-page sessions route + child placeholder + Sessions nav item", () => {
+    const routes = agents.routes ?? [];
+    const sessions = routes.find((route) => route.name === "agents.sessions");
+    expect(sessions?.path).toBe("/agents/sessions");
+    expect(sessions?.component).toBeTruthy();
+
+    // The `$id` child is the URL placeholder only — no component, parented to the page
+    // route, so the parent stays mounted across `:id` changes (the keep-alive substrate).
+    const child = routes.find((route) => route.name === "agents.session");
+    expect(child?.path).toBe("/agents/sessions/$id");
+    expect(child?.parent).toBe("agents.sessions");
+    expect(child?.component).toBeUndefined();
+
+    const item = findMenuItem(agents.menus ?? [], "agents.sessions");
+    expect(item?.route).toBe("agents.sessions");
+  });
 });
+
+type NavNode = { id?: string; route?: string; children?: readonly NavNode[] };
+
+function findMenuItem(items: readonly NavNode[], id: string): NavNode | undefined {
+  for (const item of items) {
+    if (item.id === id) return item;
+    const found = item.children ? findMenuItem(item.children, id) : undefined;
+    if (found) return found;
+  }
+  return undefined;
+}
 
 function unresolvedMenuIcons(
   items: readonly ComposedMenuItem[],

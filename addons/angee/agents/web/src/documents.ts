@@ -131,3 +131,29 @@ export const ResolveSessionForView = graphql(`
 export type AgentSession = NonNullable<
   DocumentType<typeof ResolveSessionForView>["resolve_session_for_view"]
 >;
+
+// The full agent roster the chat surfaces switch between: EVERY agent ordered by recent
+// activity (templates and stopped/errored agents included), filtered client-side to the
+// running ones by `useRunningAgents`. Each running agent owns its own durable ACP session,
+// so the filtered result is a SESSION/THREAD list, not a model catalogue. `runtime_status`
+// types as the `RuntimeStatus` enum union (UPPERCASE — RUNNING/STOPPED/…) and `model` is
+// nullable on `AgentType`, so consumers read `agent.model?.name`.
+export const AgentRoster = graphql(`
+  query AgentRoster {
+    agents(order_by: [{ updated_at: desc }]) {
+      id
+      name
+      runtime_status
+      is_template
+      updated_at
+      model {
+        name
+      }
+    }
+  }
+`);
+
+/** One roster row from `AgentRoster` (the chooser + sessions rail item, after filtering). */
+export type AgentRosterItem = NonNullable<
+  DocumentType<typeof AgentRoster>["agents"]
+>[number];

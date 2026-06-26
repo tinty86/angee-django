@@ -38,6 +38,10 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.chat.clear": "Clear",
   "agents.chat.reconnect": "Reconnect",
   "agents.chat.settings": "Session settings",
+  // Dense top bar: the agent (session/thread) chooser + the ⋯ overflow menu.
+  "agents.chat.switchAgent": "Switch agent",
+  "agents.chat.conversationOptions": "Conversation options",
+  "agents.chat.running": "Running",
   "agents.chat.model": "Model",
   "agents.chat.viewLabel": "View",
   "agents.chat.mcpServers": "MCP servers",
@@ -47,6 +51,12 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.chat.status.ready": "Ready",
   "agents.chat.status.error": "Error",
   "agents.chat.status.closed": "Disconnected",
+
+  // AgentSessionsPage — the full-page sessions view (left rail + conversation).
+  "agents.sessions.title": "Sessions",
+  "agents.sessions.railLabel": "Running agents",
+  "agents.sessions.new": "New agent",
+  "agents.sessions.running": "Running",
 
   // McpPage — bespoke form-section labels.
   "agents.mcp.endpoint": "Endpoint",

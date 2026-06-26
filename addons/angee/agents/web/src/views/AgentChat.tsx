@@ -2,11 +2,11 @@ import * as React from "react";
 import {
   Alert,
   ChatAttachmentChip,
+  ChatBar,
   ChatBubble,
   ChatBubbleActions,
   ChatComposer,
   ChatComposerHint,
-  ChatHeader,
   ChatHeaderAction,
   ChatTypingIndicator,
   ContextBlock,
@@ -16,16 +16,13 @@ import {
   DialogPortal,
   DialogRoot,
   DialogTitle,
+  DropdownMenu,
   Glyph,
   MessageReasoningFrame,
-  PopoverContent,
-  PopoverPortal,
-  PopoverPositioner,
-  PopoverRoot,
-  PopoverTrigger,
+  StatusDot,
   ToolFallback,
   chatComposerInputClassName,
-  statusTone as resolveStatusTone,
+  statusTone,
 } from "@angee/ui";
 import {
   ActionBarPrimitive,
@@ -45,25 +42,41 @@ import { Streamdown } from "streamdown";
 
 import { useAcpRuntime } from "../useAcpRuntime";
 import { useAgentsT } from "../i18n";
+import { AgentChooser } from "./AgentChooser";
 import { SlashCommandComposer } from "./slash-commands";
-import type { AgentChatView, McpServerConfig } from "../documents";
+import type { AgentChatView, McpServerConfig, AgentRosterItem } from "../documents";
 
 /**
  * Chat with a running agent over ACP. The session is minted per `agentId`; the browser
  * speaks ACP to the agent's routed WebSocket through the operator's central Caddy. The
- * surface is the `@angee/ui` chat primitives: a status header with a settings cog
- * (model + MCP servers + the rendered `<system_context>`) and Clear/Reconnect, streamed
- * markdown replies, reasoning frames, and tool-call cards. `modelHandle` (when known)
- * labels the agent's model in the header subtitle + settings.
+ * surface is the `@angee/ui` chat primitives: a dense top bar (an agent chooser + a single
+ * ⋯ overflow holding Settings/Reconnect/Clear), streamed markdown replies, reasoning frames,
+ * and tool-call cards. `modelHandle` (when known) labels the agent's model in the bar + the
+ * Settings dialog.
+ *
+ * When `agents` + `onSelectAgent` are passed, the bar's leading slot is an `AgentChooser`
+ * (the session/thread switcher); selecting drives `onSelectAgent`, which the caller routes
+ * into its keep-alive selection — never back into this component's `agentId` (that would
+ * reset the runtime). Without them (e.g. the AgentsPage detail Chat tab) the bar shows a
+ * static agent label. `fallbackName`/`modelHandle` label the chooser before the `AgentRoster`
+ * loads or for a default agent not yet in the list.
  */
 export function AgentChat({
   agentId,
   view,
   modelHandle,
+  agents,
+  selectedAgentId,
+  onSelectAgent,
+  fallbackName,
 }: {
   agentId: string;
   view: AgentChatView;
   modelHandle?: string;
+  agents?: readonly AgentRosterItem[];
+  selectedAgentId?: string;
+  onSelectAgent?: (id: string) => void;
+  fallbackName?: string;
 }): React.ReactElement {
   const t = useAgentsT();
   const runtimeState = useAcpRuntime(agentId, view);
@@ -83,27 +96,86 @@ export function AgentChat({
   } = runtimeState;
   const effectiveModelHandle = runtimeState.modelHandle || modelHandle;
   const ready = status === "ready";
+  const statusLabel = t(`agents.chat.status.${status}`);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full min-h-[28rem] flex-col bg-sheet">
-        <ChatHeader
-          title={t("agents.chat.title")}
-          subtitle={effectiveModelHandle}
-          statusLabel={t(`agents.chat.status.${status}`)}
-          statusTone={resolveStatusTone(status)}
-          actions={
+        <ChatBar
+          start={
             <>
-              <SessionInfoPopover
-                modelHandle={effectiveModelHandle}
-                view={view}
-                mcpServers={mcpServers}
-                renderContext={renderContext}
-              />
-              <ChatHeaderAction onClick={clear}>{t("agents.chat.clear")}</ChatHeaderAction>
-              <ChatHeaderAction onClick={reconnect}>{t("agents.chat.reconnect")}</ChatHeaderAction>
+              {agents && onSelectAgent ? (
+                <AgentChooser
+                  agents={agents}
+                  value={selectedAgentId ?? agentId}
+                  onSelect={onSelectAgent}
+                  status={status}
+                  statusLabel={statusLabel}
+                  fallbackName={fallbackName}
+                  fallbackHandle={effectiveModelHandle}
+                />
+              ) : (
+                <span className="flex min-w-0 items-center gap-2">
+                  <StatusDot
+                    tone={statusTone(status, { closed: "danger" })}
+                    label={statusLabel}
+                    className={status === "connecting" ? "motion-safe:animate-pulse" : undefined}
+                  />
+                  <span className="truncate text-13 font-medium text-fg">
+                    {t("agents.chat.title")}
+                    {effectiveModelHandle ? (
+                      <span className="font-normal text-fg-muted"> · {effectiveModelHandle}</span>
+                    ) : null}
+                  </span>
+                </span>
+              )}
+              {/* The single connection live region — re-homes what the dropped status Tag
+                  announced. Hidden keep-alive instances are display:none, so only the visible
+                  agent announces its connecting → ready → error transitions. */}
+              <span role="status" aria-live="polite" className="sr-only">
+                {statusLabel}
+              </span>
             </>
           }
+          end={
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                aria-label={t("agents.chat.conversationOptions")}
+                className="inline-flex size-7 items-center justify-center rounded text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:focus-ring [&_.glyph]:size-4"
+              >
+                <Glyph name="more-horizontal" />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Positioner side="bottom" align="end" sideOffset={4}>
+                  <DropdownMenu.Content>
+                    <DropdownMenu.Item onClick={() => setSettingsOpen(true)}>
+                      <Glyph name="settings" />
+                      <span className="flex-1 truncate">{t("agents.chat.settings")}</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onClick={reconnect}>
+                      <Glyph name="link" />
+                      <span className="flex-1 truncate">{t("agents.chat.reconnect")}</span>
+                    </DropdownMenu.Item>
+                    {/* Clear is destructive → last, after a separator. */}
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item variant="danger" onClick={clear}>
+                      <Glyph name="trash" />
+                      <span className="flex-1 truncate">{t("agents.chat.clear")}</span>
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Positioner>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          }
+        />
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          modelHandle={effectiveModelHandle}
+          view={view}
+          mcpServers={mcpServers}
+          renderContext={renderContext}
         />
         {error !== null ? (
           <Alert tone="danger" className="m-3">
@@ -387,14 +459,19 @@ const ToolPart: ToolCallMessagePartComponent = ({ toolName, args }) => {
   );
 };
 
-/** The header settings cog: a popover with the agent's model, MCP servers, the open view,
- *  and the rendered `<system_context>` for it. */
-function SessionInfoPopover({
+/** The Settings dialog opened from the ⋯ overflow: the agent's model, MCP servers, the open
+ *  view, and the rendered `<system_context>`. Controlled by the header; its body mounts on
+ *  open, so the context fetch (and any per-instance work) only runs when the user opens it. */
+function SettingsDialog({
+  open,
+  onOpenChange,
   modelHandle,
   view,
   mcpServers,
   renderContext,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   modelHandle?: string;
   view: AgentChatView;
   mcpServers: Record<string, McpServerConfig>;
@@ -402,30 +479,26 @@ function SessionInfoPopover({
 }): React.ReactElement {
   const t = useAgentsT();
   return (
-    <PopoverRoot>
-      <PopoverTrigger
-        aria-label={t("agents.chat.settings")}
-        className="inline-flex h-6 items-center rounded px-2 text-2xs text-fg-muted hover:bg-inset"
-      >
-        ⚙
-      </PopoverTrigger>
-      <PopoverPortal>
-        <PopoverPositioner sideOffset={4} align="end">
-          <PopoverContent className="w-72 p-3">
+    <DialogRoot open={open} onOpenChange={onOpenChange}>
+      <DialogPortal>
+        <DialogBackdrop />
+        <DialogContent>
+          <DialogTitle>{t("agents.chat.settings")}</DialogTitle>
+          <DialogBody>
             <SessionInfo
               modelHandle={modelHandle}
               view={view}
               mcpServers={mcpServers}
               renderContext={renderContext}
             />
-          </PopoverContent>
-        </PopoverPositioner>
-      </PopoverPortal>
-    </PopoverRoot>
+          </DialogBody>
+        </DialogContent>
+      </DialogPortal>
+    </DialogRoot>
   );
 }
 
-/** The settings popover body: model + view + MCP servers + the rendered context (fetched
+/** The settings dialog body: model + view + MCP servers + the rendered context (fetched
  *  on open). */
 function SessionInfo({
   modelHandle,

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Button,
   ChatAttachmentChip,
+  ChatBar,
   ChatBubble,
   ChatCommandEmpty,
   ChatCommandItem,
@@ -14,6 +15,9 @@ import {
   ContextBlock,
   Glyph,
   MessageReasoningFrame,
+  SessionRail,
+  SessionRailItem,
+  StatusDot,
   ToolFallback,
   chatComposerInputClassName,
 } from "@angee/ui";
@@ -51,6 +55,65 @@ export const Header: Story = {
         }
       />
     </Surface>
+  ),
+};
+
+export const Bar: Story = {
+  render: () => (
+    <Surface>
+      {/* The dense single-row chat header: a leading status + agent/model label (the agents
+          addon swaps a status dot + label for the live `AgentChooser`), and a trailing overflow
+          (⋯) menu. Pure presentation — the consumer composes the chooser/menu. */}
+      <ChatBar
+        start={
+          <span className="flex min-w-0 items-center gap-2">
+            <StatusDot tone="success" label="Ready" />
+            <span className="truncate text-13 font-medium text-fg">
+              Demo Agent
+              <span className="font-normal text-fg-muted"> · claude-sonnet-4-6</span>
+            </span>
+          </span>
+        }
+        end={
+          <Button size="sm" variant="ghost" aria-label="Conversation options" className="size-7 px-0">
+            <Glyph name="more-horizontal" className="h-4 w-4" />
+          </Button>
+        }
+      />
+    </Surface>
+  ),
+};
+
+export const Sessions: Story = {
+  render: () => (
+    // The left rail of the full-page sessions view: a labelled `nav` with a "+ New" header
+    // action over a `ul` of `SessionRailItem` rows. The active row carries `aria-current="page"`;
+    // the consumer (the agents addon) renders each row through its router `Link` via `render`.
+    <div className="flex h-80 overflow-hidden rounded-md border border-border-subtle bg-sheet">
+      <SessionRail
+        label="Running agents"
+        action={
+          <Button size="sm" variant="ghost">
+            <Glyph name="plus" className="h-4 w-4" />
+            New agent
+          </Button>
+        }
+      >
+        <SessionRailItem
+          active
+          status={<StatusDot tone="success" label="Running" />}
+          handle="claude-opus"
+        >
+          Scout
+        </SessionRailItem>
+        <SessionRailItem
+          status={<StatusDot tone="success" label="Running" />}
+          handle="claude-haiku"
+        >
+          Ranger
+        </SessionRailItem>
+      </SessionRail>
+    </div>
   ),
 };
 

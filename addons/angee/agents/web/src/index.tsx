@@ -5,6 +5,7 @@ import { Box, Cpu, GitBranch, LayoutTemplate, Server, Sparkles, Wrench } from "l
 
 import { enAgentsMessages } from "./i18n";
 import { AgentsPage, TemplatesPage } from "./views/AgentsPage";
+import { AgentSessionsPage } from "./views/AgentSessionsPage";
 import { InferenceModelsPage, InferenceProvidersPage } from "./views/InferencePage";
 import { McpServersPage, McpToolsPage } from "./views/McpPage";
 import { SkillsPage } from "./views/SkillsPage";
@@ -18,6 +19,11 @@ const agentsRoutes: readonly BaseAddonRoute[] = [
   // Static segments outrank the `/agents/$id` param route.
   { name: "agents.templates", path: "/agents/templates", layout: "console", component: TemplatesPage },
   { name: "agents.template", path: "/agents/templates/$id", layout: "console", parent: "agents.templates" },
+  // The full-page sessions view. The `$id` child carries no component — it is the URL
+  // placeholder the parent renders through, so the parent stays mounted across `:id`
+  // changes (the substrate keep-alive needs). Static `/agents/sessions` outranks `/agents/$id`.
+  { name: "agents.sessions", path: "/agents/sessions", layout: "console", component: AgentSessionsPage },
+  { name: "agents.session", path: "/agents/sessions/$id", layout: "console", parent: "agents.sessions" },
   { name: "agents.skills", path: "/agents/skills", layout: "console", component: SkillsPage, resource: "agents.Skill" },
   { name: "agents.sources", path: "/agents/sources", layout: "console", component: SourcesPage },
   { name: "agents.source", path: "/agents/sources/$id", layout: "console", parent: "agents.sources" },
@@ -52,6 +58,8 @@ const agentsMenu: readonly BaseMenuItem[] = [
         children: [
           { id: "agents.agents", label: "Agents", icon: "agent", route: "agents.agents" },
           { id: "agents.templates", label: "Templates", icon: "agent-template", route: "agents.templates" },
+          // Reuse the registered `comments` glyph — no new icon registration.
+          { id: "agents.sessions", label: "Sessions", icon: "comments", route: "agents.sessions" },
         ],
       },
       {

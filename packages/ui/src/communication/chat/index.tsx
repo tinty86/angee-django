@@ -13,7 +13,9 @@ import type {
 
 import { useBaseT } from "../../i18n";
 import { cn } from "../../lib/cn";
+import { useRender, type UseRenderRenderProp } from "../../lib/slot";
 import type { Tone } from "../../lib/tones";
+import { tv } from "../../lib/variants";
 import { Button, type ButtonProps } from "../../ui/button";
 import { Tag } from "../../ui/badge";
 import { Chip, type ChipTone } from "../../ui/chip";
@@ -70,6 +72,31 @@ export function ChatHeader({
   );
 }
 
+export interface ChatBarProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  /** The leading slot — e.g. a status dot + an agent/thread chooser. */
+  start?: ReactNode;
+  /** The trailing slot — e.g. a single overflow (⋯) menu. */
+  end?: ReactNode;
+}
+
+/** A dense, single-row chat header frame: a leading `start` slot (status + chooser) and a
+ *  trailing `end` slot (overflow menu), divided by a bottom border. Pure presentation — the
+ *  consumer composes the chooser/menu; this owns only the dense bar layout. */
+export function ChatBar({ start, end, className, ...props }: ChatBarProps): ReactElement {
+  return (
+    <header
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-2 border-b border-border-subtle bg-sheet-2 px-3 py-2",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex min-w-0 items-center gap-2">{start}</div>
+      {end ? <div className="flex shrink-0 items-center gap-1.5">{end}</div> : null}
+    </header>
+  );
+}
+
 export interface ChatHeaderActionProps extends Omit<ButtonProps, "size" | "variant"> {
   size?: ButtonProps["size"];
   variant?: ButtonProps["variant"];
@@ -83,6 +110,118 @@ export function ChatHeaderAction({
   ...props
 }: ChatHeaderActionProps): ReactElement {
   return <Button size={size} variant={variant} className={cn("h-6 px-2 text-2xs", className)} {...props} />;
+}
+
+// ---------------------------------------------------------------------------
+// Session rail (thread/session switcher list)
+// ---------------------------------------------------------------------------
+// A semantic `nav > ul > li > a` list for switching between sessions/threads (the
+// full-page agent sessions view backs it with its running-agents query). Distinct
+// from a Menu (these are navigable destinations, not commands) and from a Select
+// listbox (the active row is `aria-current="page"`, not `aria-selected`). Pure
+// presentation — the consumer supplies the status slot and the router `Link` via
+// `render`.
+
+export interface SessionRailProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  /** Accessible name for the nav landmark (e.g. "Running agents"). */
+  label: string;
+  /** Optional header slot above the list — e.g. a "+ New" control. */
+  action?: ReactNode;
+  /** Marks the list busy while sessions load (skeleton rows render as children). */
+  busy?: boolean;
+  children: ReactNode;
+}
+
+/** The left rail of a sessions view: a labelled `nav` with an optional header action
+ *  ("+ New") over a scrollable `ul` of `SessionRailItem` rows. */
+export function SessionRail({
+  label,
+  action,
+  busy,
+  className,
+  children,
+  ...props
+}: SessionRailProps): ReactElement {
+  return (
+    <nav
+      aria-label={label}
+      className={cn(
+        "flex h-full min-h-0 w-60 shrink-0 flex-col border-r border-border-subtle bg-sheet-2",
+        className,
+      )}
+      {...props}
+    >
+      {action ? <div className="border-b border-border-subtle p-2">{action}</div> : null}
+      <ul aria-busy={busy || undefined} className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+        {children}
+      </ul>
+    </nav>
+  );
+}
+
+// The dense active-row look is intentionally shared in spirit with the chrome
+// `SubNavLink` (`ConsoleSubNav`), but kept separate per AGENTS.md DRY's
+// "similar code, different intent": `SubNavLink` is a single-label section link
+// bound to the chrome menu tree's route-active matching, whereas this is a generic
+// multi-slot session row (status dot + name + muted handle) the consumer binds to
+// any router `Link` via `render`. Extracting one recipe would couple two unrelated
+// layers (chrome navigation ↔ the communication surface) for a few utility classes.
+export const sessionRailItemVariants = tv({
+  base: "flex h-8 items-center gap-2 rounded-md px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
+  variants: {
+    active: {
+      true: "bg-brand-soft font-medium text-brand-soft-text hover:bg-brand-soft",
+      false: "",
+    },
+  },
+  defaultVariants: { active: false },
+});
+
+export interface SessionRailItemProps {
+  /** Whether this row is the open session — sets `aria-current="page"` + `data-active`. */
+  active?: boolean;
+  /** Leading status slot — e.g. a `StatusDot` for the session's runtime status. */
+  status?: ReactNode;
+  /** Trailing muted handle slot — e.g. the model handle. */
+  handle?: ReactNode;
+  /** The router `Link` element to render the row as (defaults to a plain `<a>`). */
+  render?: UseRenderRenderProp<{ active: boolean }>;
+  className?: string;
+  /** The row's primary label (the session/agent name). */
+  children: ReactNode;
+}
+
+/** One session rail row: a `<li>` wrapping an anchor (the consumer's router `Link` via
+ *  `render`) with a leading status slot, a truncated name, and an optional muted handle.
+ *  The active row carries `aria-current="page"` and a `data-active` highlight. */
+export function SessionRailItem({
+  active = false,
+  status,
+  handle,
+  render,
+  className,
+  children,
+}: SessionRailItemProps): ReactElement {
+  const anchor = useRender<{ active: boolean }, HTMLElement>({
+    defaultTagName: "a",
+    render,
+    state: { active },
+    props: {
+      "aria-current": active ? "page" : undefined,
+      "data-active": active || undefined,
+      className: sessionRailItemVariants({ active, className }),
+      children: (
+        <>
+          {status}
+          <span className="min-w-0 flex-1 truncate">{children}</span>
+          {handle ? (
+            <span className="shrink-0 truncate text-2xs text-fg-muted">{handle}</span>
+          ) : null}
+        </>
+      ),
+    },
+  });
+  return <li>{anchor}</li>;
 }
 
 // ---------------------------------------------------------------------------
