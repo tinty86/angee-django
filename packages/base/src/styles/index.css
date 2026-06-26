@@ -1,5 +1,0 @@
-/* Re-export shim. The Tailwind 4 entry stylesheet + design tokens (the
-   semantic-color vocabulary the rendered binding owns) moved to `@angee/ui`;
-   this `@import` preserves the `@angee/base/styles.css` import surface for the
-   storybook + host entry stylesheets that still load it from here. */
-@import "@angee/ui/styles.css";
