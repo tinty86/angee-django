@@ -81,6 +81,10 @@ Dependency changes must update this file in the same change.
 | pnpm | JavaScript dependency resolution and workspaces | Workspace layout |
 | Node >= 22.13 | JavaScript build runtime | Project runtime |
 
+Chat-UI library choice: `@assistant-ui/react` owns the chat-UX surface (composed
+over ACP); CopilotKit and `@headlessui/react` were evaluated and rejected, and
+TanStack AI is a watch item — see `.agents/notes/chat-ui-library-evaluation.md`.
+
 ## Hasura Dialect Rule
 
 `strawberry-django-hasura`, the operator daemon SDL, `@refinedev/hasura`, and
