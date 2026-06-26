@@ -8,6 +8,7 @@ import {
   ChatComposerHint,
   ChatHeader,
   ChatHeaderAction,
+  ChatTypingIndicator,
   ContextBlock,
   DialogBackdrop,
   DialogBody,
@@ -33,6 +34,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAttachment,
   type ImageMessagePartComponent,
   type ReasoningMessagePartComponent,
   type TextMessagePartComponent,
@@ -108,12 +110,20 @@ export function AgentChat({
           </Alert>
         ) : null}
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-          <ThreadPrimitive.Viewport autoScroll className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-            <ThreadPrimitive.Empty>
-              <p className="text-13 leading-relaxed text-fg-muted">{t("agents.chat.empty")}</p>
-            </ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
-          </ThreadPrimitive.Viewport>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <ThreadPrimitive.Viewport autoScroll className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+              <ThreadPrimitive.Empty>
+                <p className="text-13 leading-relaxed text-fg-muted">{t("agents.chat.empty")}</p>
+              </ThreadPrimitive.Empty>
+              <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+            </ThreadPrimitive.Viewport>
+            <ThreadPrimitive.ScrollToBottom
+              aria-label={t("agents.chat.scrollToBottom")}
+              className="absolute bottom-3 right-3 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-sheet-2 text-fg-muted shadow-xs hover:bg-inset disabled:pointer-events-none disabled:opacity-0"
+            >
+              <Glyph name="arrow-down" className="h-4 w-4" />
+            </ThreadPrimitive.ScrollToBottom>
+          </div>
           <SlashCommandComposer commands={availableCommands}>
             <ComposerPrimitive.Root className="border-t border-border-subtle p-3">
               <ChatComposer
@@ -188,28 +198,62 @@ const UserImagePart: ImageMessagePartComponent = ({ image, filename }) => (
   <img src={image} alt={filename ?? ""} className="max-h-40 rounded-md" />
 );
 
-/** A pending composer image attachment, rendered as a chip with a remove control. The
- *  `display:contents` root supplies the attachment context without adding a box, so the chip is
- *  the only visual. */
+/** A pending composer image attachment. `SimpleImageAttachmentAdapter` only fills the data-URL
+ *  `content` on send, so the preview comes from the pending `file` itself (read via assistant-ui's
+ *  `useAttachment`) turned into an object URL. When a file is present it renders a real thumbnail
+ *  with an overlaid remove control; it falls back to the labelled chip for any future non-image
+ *  (file) adapter. The `display:contents` root supplies the attachment context without adding a box. */
 function ComposerImageAttachment(): React.ReactElement {
   const t = useAgentsT();
+  const file = useAttachment((a) => a.file);
+  const name = useAttachment((a) => a.name);
+  const previewUrl = useObjectUrl(file);
   return (
     <AttachmentPrimitive.Root className="contents">
-      <ChatAttachmentChip
-        icon={<Glyph name="attachment" className="h-3 w-3" />}
-        remove={
+      {previewUrl !== null ? (
+        <div className="relative">
+          <img src={previewUrl} alt={name} title={name} className="h-12 w-12 rounded-md object-cover" />
           <AttachmentPrimitive.Remove
             aria-label={t("agents.chat.removeAttachment")}
-            className="flex shrink-0 items-center text-fg-muted hover:text-fg"
+            className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full border border-border-subtle bg-sheet-2 text-fg-muted shadow-xs hover:text-fg"
           >
             <Glyph name="x" className="h-3 w-3" />
           </AttachmentPrimitive.Remove>
-        }
-      >
-        <AttachmentPrimitive.Name />
-      </ChatAttachmentChip>
+        </div>
+      ) : (
+        <ChatAttachmentChip
+          icon={<Glyph name="attachment" className="h-3 w-3" />}
+          remove={
+            <AttachmentPrimitive.Remove
+              aria-label={t("agents.chat.removeAttachment")}
+              className="flex shrink-0 items-center text-fg-muted hover:text-fg"
+            >
+              <Glyph name="x" className="h-3 w-3" />
+            </AttachmentPrimitive.Remove>
+          }
+        >
+          <AttachmentPrimitive.Name />
+        </ChatAttachmentChip>
+      )}
     </AttachmentPrimitive.Root>
   );
+}
+
+/** Hold a live object URL for a `File`, revoking the previous one on change/unmount. Returns null
+ *  when no file is present. Owns the `createObjectURL`/`revokeObjectURL` lifecycle so the preview
+ *  never leaks a blob URL. */
+function useObjectUrl(file: File | undefined): string | null {
+  const [url, setUrl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (file === undefined) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  return url;
 }
 
 /**
@@ -285,6 +329,14 @@ function AssistantMessage(): React.ReactElement {
         <MessagePrimitive.Parts
           components={{ Text: AssistantText, Reasoning: ReasoningPart, tools: { Fallback: ToolPart } }}
         />
+        {/* Pre-token "thinking" dots: only on the last assistant turn that has started but has no
+            content yet, and only while the thread is running. `hasContent` flips true the moment
+            the first text/reasoning/tool part streams in, which removes the indicator. */}
+        <MessagePrimitive.If last hasContent={false}>
+          <ThreadPrimitive.If running>
+            <ChatTypingIndicator />
+          </ThreadPrimitive.If>
+        </MessagePrimitive.If>
       </ChatBubble>
       <ChatBubbleActions role="assistant">
         <ActionBarPrimitive.Root>

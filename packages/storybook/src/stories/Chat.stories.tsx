@@ -10,6 +10,7 @@ import {
   ChatComposerHint,
   ChatHeader,
   ChatHeaderAction,
+  ChatTypingIndicator,
   ContextBlock,
   Glyph,
   MessageReasoningFrame,
@@ -61,6 +62,18 @@ export const Bubbles: Story = {
         This note captures the Q3 planning decisions and three open follow-ups.
       </ChatBubble>
       <ChatBubble role="system">Context: viewing notes/note nt_8Hd2.</ChatBubble>
+    </div>
+  ),
+};
+
+export const TypingIndicator: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon gates this on assistant-ui's running state for the
+          last started-but-empty assistant turn; here it renders standalone. */}
+      <ChatBubble role="assistant">
+        <ChatTypingIndicator />
+      </ChatBubble>
     </div>
   ),
 };

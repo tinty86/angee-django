@@ -144,6 +144,31 @@ export function ChatBubbleActions({
   );
 }
 
+export interface ChatTypingIndicatorProps {
+  /** Overrides the announced label (defaults to `chat.typing`). */
+  label?: ReactNode;
+  className?: string;
+}
+
+/** An animated three-dot "thinking" indicator for a started-but-empty assistant turn.
+ *  Presentation only — the consumer gates it on the runtime's running state (e.g. the
+ *  assistant-ui `ThreadPrimitive.If running` filter on the last empty message). The dots are
+ *  `aria-hidden`; an `aria-live="polite"` label (default `chat.typing`) announces it to
+ *  assistive tech, and the motion is gated behind `motion-safe`. */
+export function ChatTypingIndicator({ label, className }: ChatTypingIndicatorProps): ReactElement {
+  const t = useBaseT();
+  return (
+    <div aria-live="polite" className={cn("flex items-center gap-1.5", className)}>
+      <span className="sr-only">{label ?? t("chat.typing")}</span>
+      <span aria-hidden className="flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce [animation-delay:-0.3s]" />
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce [animation-delay:-0.15s]" />
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce" />
+      </span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Composer
 // ---------------------------------------------------------------------------

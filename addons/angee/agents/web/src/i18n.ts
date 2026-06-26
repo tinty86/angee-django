@@ -27,6 +27,7 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.chat.send": "Send",
   "agents.chat.stop": "Stop",
   "agents.chat.copy": "Copy",
+  "agents.chat.scrollToBottom": "Scroll to latest",
   "agents.chat.commands": "Slash commands",
   "agents.chat.commandsEmpty": "No matching commands",
   "agents.chat.attach": "Attach image",
