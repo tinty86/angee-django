@@ -311,58 +311,37 @@ const killedBlock = killed.length > 0
     killed.map(c => "- \"" + c.claim + "\" (" + c.sourceUrl + ", vote " + (c.verdicts.length - c.refutedVotes) + "-" + c.refutedVotes + ")").join("\n")
   : ""
 
+// Markdown synthesis (no schema) — free text CANNOT hit the StructuredOutput
+// retry cap that killed the schema-based version; the salvage below only fires
+// on a genuine agent error, not on a formatting failure.
 let report = null
 try {
   report = await agent(
-  "## Synthesis: research report\n\n" +
-  "**Question:** " + QUESTION + "\n\n" +
-  confirmed.length + " claims survived " + VOTES_PER_CLAIM + "-vote adversarial verification. Merge semantic duplicates and synthesize.\n\n" +
-  "## Confirmed claims\n" + block + "\n" + killedBlock + "\n\n" +
-  "## Instructions\n" +
-  "1. Identify claims that say the same thing — merge them, combine their sources.\n" +
-  "2. Group related claims into coherent findings. Each finding should directly address the research question.\n" +
-  "3. Assign confidence per finding: high (multiple primary sources, unanimous votes), medium (secondary sources or split votes), low (single source or blog-quality).\n" +
-  "4. Write a 3-5 sentence executive summary answering the research question.\n" +
-  "5. Note caveats: what's uncertain, what sources were weak, what time-sensitivity applies.\n" +
-  "6. List 2-4 open questions that emerged but weren't answered.\n\nStructured output only.",
-    { label: "synthesize", model: SYNTH_MODEL, schema: REPORT_SCHEMA }
+    "## Synthesis: research report\n\n" +
+    "**Question:** " + QUESTION + "\n\n" +
+    confirmed.length + " claims survived " + VOTES_PER_CLAIM + "-vote adversarial verification. Merge semantic duplicates and synthesize.\n\n" +
+    "## Confirmed claims\n" + block + "\n" + killedBlock + "\n\n" +
+    "## Instructions\n" +
+    "1. Identify claims that say the same thing — merge them, combine their sources.\n" +
+    "2. Group related claims into coherent findings. Each finding should directly address the research question.\n" +
+    "3. Assign confidence per finding: high (multiple primary sources, unanimous votes), medium (secondary sources or split votes), low (single source or blog-quality).\n" +
+    "4. Open with a 3-5 sentence executive summary answering the research question.\n" +
+    "5. Note caveats: what's uncertain, what sources were weak, what time-sensitivity applies.\n" +
+    "6. End with 2-4 open questions that emerged but weren't answered.\n\n" +
+    "Write the report as a thorough, well-structured MARKDOWN document: headings, grouped findings each tagged with its confidence, and inline source URLs. Return the markdown directly — do NOT call any tool.",
+    { label: "synthesize", model: SYNTH_MODEL }
   )
 } catch (err) {
-  // A StructuredOutput cap-exceeded THROWS (it does not return null), which
-  // would discard the whole verified run. Degrade to the salvage path below.
   log("Synthesis failed (" + (err && err.message ? err.message.slice(0, 80) : "unknown") + ") — salvaging verified claims.")
   report = null
 }
 
-if (!report) {
-  // Synthesis skipped/errored — salvage the verified claims raw rather
-  // than throwing on report.findings and discarding the whole run.
-  return {
-    question: QUESTION,
-    summary: "Synthesis step was skipped or failed — returning " + confirmed.length + " verified claims unmerged.",
-    findings: [],
-    confirmed: confirmed.map(c => ({ claim: c.claim, source: c.sourceUrl, quote: c.quote, vote: (c.verdicts.length - c.refutedVotes) + "-" + c.refutedVotes })),
-    refuted: killed.map(c => ({ claim: c.claim, vote: (c.verdicts.length - c.refutedVotes) + "-" + c.refutedVotes, source: c.sourceUrl })),
-    sources: allSources.map(s => ({ url: s.url, quality: s.sourceQuality, claimCount: s.claims.length })),
-    stats: { angles: scope.angles.length, sources: allSources.length, claims: allClaims.length, verified: voted.length, confirmed: confirmed.length, killed: killed.length, afterSynthesis: 0 },
-  }
-}
-
-return {
+const salvage = {
   question: QUESTION,
-  ...report,
+  confirmed: confirmed.map(c => ({ claim: c.claim, source: c.sourceUrl, quote: c.quote, confidence: (c.verdicts.filter(v => !v.refuted)[0] || {}).confidence || null, vote: (c.verdicts.length - c.refutedVotes) + "-" + c.refutedVotes })),
   refuted: killed.map(c => ({ claim: c.claim, vote: (c.verdicts.length - c.refutedVotes) + "-" + c.refutedVotes, source: c.sourceUrl })),
   sources: allSources.map(s => ({ url: s.url, quality: s.sourceQuality, angle: s.angle, claimCount: s.claims.length })),
-  stats: {
-    angles: scope.angles.length,
-    sourcesFetched: allSources.length,
-    claimsExtracted: allClaims.length,
-    claimsVerified: voted.length,
-    confirmed: confirmed.length,
-    killed: killed.length,
-    afterSynthesis: report.findings.length,
-    urlDupes: dupes.length,
-    budgetDropped: budgetDropped.length,
-    agentCalls: 1 + scope.angles.length + allSources.length + (voted.length * VOTES_PER_CLAIM) + 1,
-  },
+  stats: { angles: scope.angles.length, sourcesFetched: allSources.length, claimsExtracted: allClaims.length, claimsVerified: voted.length, confirmed: confirmed.length, killed: killed.length, urlDupes: dupes.length, budgetDropped: budgetDropped.length },
 }
+
+return report ? { ...salvage, report } : { ...salvage, report: null, note: "Synthesis failed — verified claims returned raw." }
