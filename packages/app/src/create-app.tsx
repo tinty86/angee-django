@@ -15,6 +15,8 @@ import { createRoot,
   type Root } from "react-dom/client";
 import { Refine,
   type AuthProvider as RefineAuthProvider,
+  type DataProvider as RefineDataProvider,
+  type DataProviders,
   type ResourceProps } from "@refinedev/core";
 import {
   type AnyRoute,
@@ -106,6 +108,13 @@ export interface BaseAddon
    * its addon authors the whole renderer here — `PreviewPane` reads it back.
    */
   previews?: readonly PreviewProvider[];
+  /**
+   * Refine data providers keyed by provider name. The SDK manifest tracks only
+   * the name (for collision detection); the rendered binding owns the live
+   * `DataProvider`, so its addon authors the whole provider here — `createApp`
+   * registers it alongside the schema-named providers.
+   */
+  dataProviders?: Readonly<Record<string, Required<RefineDataProvider>>>;
 }
 
 /**
@@ -227,9 +236,11 @@ export function createApp(input: CreateAppInput): AngeeApp {
     ...refineResources,
     ...routeResourceProjection.resources,
   ];
-  const refineDataProviders = createAngeeHasuraDataProviders(
-    schemas,
-    defaultSchema,
+  const refineDataProviders = mergeAddonDataProviders(
+    createAngeeHasuraDataProviders(schemas, defaultSchema),
+    composed.dataProviders as Readonly<
+      Record<string, Required<RefineDataProvider>>
+    >,
   );
   const refineLiveProvider = createLiveProviderForSchema(
     schemas,
@@ -513,6 +524,29 @@ function operationDocumentsForSchemas(
       schema.operationDocuments,
     ]),
   );
+}
+
+/**
+ * Register addon-contributed data providers next to the schema-named ones. A
+ * schema name (and the reserved `default` key) is owned by `createApp`'s schema
+ * config, so an addon claiming one would silently shadow it — that is a
+ * build-time error, matching the registry collision discipline elsewhere.
+ */
+function mergeAddonDataProviders(
+  schemaProviders: DataProviders,
+  addonProviders: Readonly<Record<string, Required<RefineDataProvider>>>,
+): DataProviders {
+  const merged: DataProviders = { ...schemaProviders };
+  for (const [name, provider] of Object.entries(addonProviders)) {
+    if (Object.prototype.hasOwnProperty.call(schemaProviders, name)) {
+      throw new Error(
+        `Addon data provider "${name}" collides with a schema-named provider; ` +
+          "rename the provider so it does not shadow a configured schema.",
+      );
+    }
+    merged[name] = provider;
+  }
+  return merged;
 }
 
 function createLiveProviderForSchema(

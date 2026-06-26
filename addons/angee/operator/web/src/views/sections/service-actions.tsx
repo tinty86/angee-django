@@ -43,7 +43,7 @@ export function useServiceActions(refetch: () => void): {
       field: string,
       label: string,
       variant: ServiceRowAction["variant"],
-      run: (variables: V) => Promise<object>,
+      run: (variables: V) => Promise<object | undefined>,
       variablesFor: (service: ServiceState) => V,
       dangerous = false,
     ): ServiceRowAction => ({

@@ -231,8 +231,8 @@ export const SNAPSHOT_QUERY = graphql(`
 // The live snapshot push. `onStackSnapshotChange` fires whenever the daemon's
 // aggregate snapshot hash changes and carries the whole `StackSnapshot`. Unlike
 // `SNAPSHOT_QUERY`, this deliberately drops the per-pane `@include` gating and
-// selects every root: one variable-free document means urql dedupes the panes'
-// hooks to a single upstream subscription.
+// selects every root: one variable-free document so the active pane's hook needs
+// no per-section variables to receive the live snapshot.
 export const STACK_SNAPSHOT_SUBSCRIPTION = graphql(`
   subscription OperatorStackSnapshot {
     onStackSnapshotChange {

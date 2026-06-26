@@ -253,3 +253,48 @@ provider client and call it from the gate on first resolve. Do **not** block Pha
 - **C. Is the consistency worth it now?** The win is real (uniform hook surface, urql deleted),
   but Phase 1 touches ~12 files for a surface that is stable. If the operator console is frozen,
   this can sit as a documented, ready plan rather than execute immediately.
+
+## 10. Status — Phase 1 + Phase 2 done
+
+**Phase 1 is complete.** The `operator` Refine data provider is registered through the
+`dataProviders` addon-contribution seam (Open decision A, addon-contributed) and merged into the
+root `<Refine>` map by `create-app`. `bearerAuthFromGetter` exists in `@angee/refine`. All
+command RPCs and `insert_*_one`/`delete_*_by_pk` docs ride the bearer-authed `operator` provider
+via `useAuthoredMutation` (wrapped, still named `useOperatorAction`/`{ run, result }`); the two
+one-shot reads (`SERVICE_ENDPOINT_QUERY`, `workspaceLogs` history) use `useAuthoredQuery` with
+`dataProviderName: "operator"`. The post-mutation snapshot refetch (`run-action.ts`) is preserved.
+`docs/stack.md` updated.
+
+**Phase 2 is complete — `urql` is fully removed from the operator addon.**
+
+- `document-subscription.ts` now subscribes over a `graphql-ws` client directly (firing `onData`
+  from the socket's `next` callback), reading the client from `useOperatorWsClient` (new context in
+  `operator-client.ts`). `operator-client.ts` builds a plain `graphql-ws` client (no urql
+  cache/fetch/subscription exchanges); `transport.tsx` provides it via `OperatorWsClientProvider`
+  and dropped `UrqlProvider`/`useOperatorClient`.
+- `SNAPSHOT_QUERY` first-paint moved to `useAuthoredQuery` on the `operator` provider; the live
+  push stays on ws and the "whichever updated most recently" merge is unchanged.
+- `urql` dropped from `addons/angee/operator/web/package.json` (and `pnpm-lock.yaml`). No `urql`
+  import remains anywhere in the operator addon — confirmed by grep; only the raw `useServiceLogStream`
+  WebSocket and the daemon `graphql-ws` client carry live transport now.
+- **Hardening (separate, owner-level):** `useAuthoredQuery`'s `refetch` is now referentially
+  stable (ref-backed in `packages/ui/src/data/authored-hooks.tsx`), so the gate's 15-min token-
+  refresh interval (`transport.tsx`, dep `[connectionQuery.refetch]`) can no longer be starved by
+  react-query state churn — the latent "long-running console degrades to a dead token" defect.
+- Verified: `tsc --noEmit` clean across `@angee/{ui,refine,app,operator,agents}`; unit tests green
+  (ui 261, refine 38, app 121, operator 29, agents 18); `angee dev` smoke-tested by the architect.
+
+**Trailing slash — resolved (intentional, no change).** The provider endpoint `/operator/graphql`
+is deliberately slash-less, unlike the Django GraphQL routes (`/graphql/<schema>/`, `path()` +
+`APPEND_SLASH`). It is *not* a Django route: the browser hits the exact path `/operator/graphql`
+(default `ANGEE_OPERATOR_GRAPHQL_ENDPOINT`, `operator/autoconfig.py`), which the dev proxy
+(`examples/notes-angee/web/vite.config.ts`) strips of its `/operator` prefix and forwards to the
+**daemon's own slash-less `/graphql`**. The proxy key is scoped to the exact path so the SPA's
+`/operator/*` page routes still hard-reload to `index.html`. So there is no `APPEND_SLASH` redirect
+to worry about, and a trailing slash would target a path the daemon does not serve. Confirmed
+working live (snapshot POST returns data, no 3xx).
+
+**Remaining follow-up (not blocking):** custom off-origin daemon endpoint — the provider hardcodes
+the same-origin `/operator/graphql`; if a deployment routes the daemon HTTP surface off-origin, add
+an `endpoint` parameter to `createOperatorDataProvider` and widen the token store to carry the
+connection endpoint. (No speculative parameter is added now — there is no off-origin caller yet.)

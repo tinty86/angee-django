@@ -58,7 +58,7 @@ Dependency changes must update this file in the same change.
 | TypeScript >= 6 | Language and type system | Branded boundary types |
 | @refinedev/core | Resource registry, standard data hooks, react-query cache/invalidation, auth/i18n/live provider contracts | Angee projects emitted `angee.resources` metadata to refine resources and mounts one composed `<Refine>` root with named providers and the TanStack Router binding |
 | @refinedev/hasura + graphql-request 5 + graphql 15 | Hasura GraphQL data provider (`_bool_exp`, `order_by`, `_aggregate`, `_by_pk`, `_set`) and authored `meta.gqlQuery` / `meta.gqlMutation` execution | Angee pins `idType: "String"` and `namingConvention: "hasura-default"`, uses refine-compatible GraphQL document ASTs, and applies session/CSRF or service auth at the transport boundary |
-| graphql-ws 5 | GraphQL WebSocket lifecycle for the Hasura live provider and daemon-owned operator transport | Endpoint derivation, connection params, retry policy, and the operator daemon quarantine until that transport has its own non-app owner |
+| graphql-ws 5 | GraphQL WebSocket lifecycle for the Hasura live provider and daemon-owned operator transport | Endpoint derivation, connection params, retry policy, and the operator daemon subscription + raw log socket transport — request/response now rides a Refine `operator` data provider, leaving only the intrinsically streaming surfaces on this ws transport |
 | GraphQL Code Generator (client-preset) + @graphql-typed-document-node/core | Generated TypeScript schema and operation types from emitted Django SDL and daemon-owned SDL, as `TypedDocumentNode` documents | Each project web package owns a `codegen` script that emits `runtime/gql/<schema>` from `runtime/schemas/<schema>.graphql`, routed to a Django schema by document filename (`documents.ts`/`documents.console.ts` → console, `documents.public.ts` → public); the operator web package owns a separate daemon client-preset run from `schema/operator.graphql` scanning only `documents.daemon.ts`; authored operations carry no hand-written result/variables types |
 | TanStack Router | Type-safe routing and search params | `defineAddon` to `createApp` route composition and flat URL search codec |
 | @refinedev/react-hook-form + react-hook-form + @hookform/resolvers + zod | Form state, submit lifecycle, and validation binding | `FormView` keeps Angee's declarative rendered DSL while delegating state/validation to refine/react-hook-form |
@@ -84,7 +84,12 @@ Dependency changes must update this file in the same change.
 ## Hasura Dialect Rule
 
 `strawberry-django-hasura`, the operator daemon SDL, `@refinedev/hasura`, and
-Angee's refine/data glue share one Hasura-default wire contract. Grouped
+Angee's refine/data glue share one Hasura-default wire contract. Because the
+daemon already speaks this contract, the operator web package consumes it as a
+Refine `operator` data provider (bearer-authed `createAngeeHasuraDataProvider`)
+for request/response, the same shape as the `console`/`public` providers; only
+its live subscriptions and the raw log socket stay on the daemon ws transport.
+Grouped
 resources must keep the DDN/NDC-preview shape:
 `<resource>_groups(group_by, where, having, order_by, limit, offset): [<resource>_group!]!`,
 with each group returning a typed `key: <Model>GroupKey!` and the free
@@ -138,6 +143,7 @@ in `@angee/data`, and rendered UI in `@angee/base`; the target owners are
 | happy-dom | DOM environment for Vitest | Per-file env opt-in for hook and component tests |
 | @testing-library/react | React component and hook test rendering | Provider-wrapped render and hook harnesses |
 | Playwright | Browser tests | `@angee/e2e` harness: workspace-isolated runner, role `storageState` login, GraphQL `api` fixture, Page Object base (`docs/testing/e2e.md`) |
+| @playwright/mcp | Interactive browser-driving for host coding agents | Repo-root `.mcp.json` server (npx-run, pinned), bound to the base stack's `chrome-profile` (`.angee/data/chrome`); the agent navigates to the stack's `ANGEE_UI_PORT` (`:5173`). Distinct from `@angee/e2e` (the deterministic test runner) and `agents.MCPServer` (the MCP config rendered for operator-provisioned product agents) |
 | Storybook | Component workshop | `@angee/base` and addon previews |
 | GitHub Actions | CI | Build, lint, type, test gates |
 | Copier | Project and addon templates | Angee templates |

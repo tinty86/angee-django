@@ -101,6 +101,7 @@ export type {
 } from "./typed-document";
 export {
   bearerAuth,
+  bearerAuthFromGetter,
   createCsrfTokenProvider,
   graphQLWebSocketUrl,
   isFatalGraphQLWsClose,

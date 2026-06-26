@@ -1,64 +1,51 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parse } from "graphql";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { useDocumentSubscription } from "./document-subscription";
 
-const sub = vi.hoisted(() => ({
-  listeners: new Set<(value: unknown) => void>(),
-  afterReducer: null as (() => void) | null,
-  emit(value: unknown) {
-    for (const listener of this.listeners) listener(value);
-  },
-}));
+interface Sink {
+  next: (value: { data: unknown }) => void;
+  error: (error: unknown) => void;
+  complete: () => void;
+}
 
-vi.mock("urql", () => ({
-  Provider: ({ children }: { children: ReactNode }) => children,
-  useMutation: () => [{ fetching: false, error: null }, vi.fn()],
-  useQuery: () => [{ data: undefined, fetching: false, error: null }, vi.fn()],
-  useSubscription: (
-    _request: unknown,
-    handler: (previous: unknown, value: unknown) => unknown,
-  ) => {
-    const handlerRef = useRef(handler);
-    handlerRef.current = handler;
-    const resultRef = useRef<unknown>(undefined);
-    const [state, setState] = useState<{ data: unknown; fetching: boolean; error: null }>({
-      data: undefined,
-      fetching: true,
-      error: null,
-    });
-    useEffect(() => {
-      const onPush = (value: unknown) => {
-        resultRef.current = handlerRef.current(resultRef.current, value);
-        sub.afterReducer?.();
-        setState({ data: resultRef.current, fetching: false, error: null });
-      };
-      sub.listeners.add(onPush);
-      return () => {
-        sub.listeners.delete(onPush);
-      };
-    }, []);
-    return [state];
-  },
+// One fake daemon ws client: `subscribe` registers the sink and `emit` pushes a
+// frame to every open sink, the same shape graphql-ws delivers to `next`. The
+// client reference is stable (as the real context value is), so the hook's
+// `[client]` effect does not re-run every render.
+const ws = vi.hoisted(() => {
+  const sinks = new Set<Sink>();
+  return {
+    sinks,
+    client: {
+      subscribe: (_payload: unknown, sink: Sink) => {
+        sinks.add(sink);
+        return () => {
+          sinks.delete(sink);
+        };
+      },
+    },
+    emit(value: unknown) {
+      for (const sink of sinks) sink.next({ data: value });
+    },
+  };
+});
+
+vi.mock("./operator-client", () => ({
+  useOperatorWsClient: () => ws.client,
 }));
 
 describe("useDocumentSubscription", () => {
-  beforeEach(() => {
-    sub.afterReducer = null;
-  });
-
   afterEach(() => {
     cleanup();
-    sub.listeners.clear();
+    ws.sinks.clear();
   });
 
-  test("fires onData from an effect after the push, never from the reducer", async () => {
+  test("fires onData once per push over the daemon ws client", async () => {
     const onData = vi.fn();
     const document = parse("subscription { ping }");
-    sub.afterReducer = () => expect(onData).not.toHaveBeenCalled();
 
     renderHook(() =>
       useDocumentSubscription<{ ping: string }, Record<string, never>>(
@@ -69,11 +56,12 @@ describe("useDocumentSubscription", () => {
     );
     expect(onData).not.toHaveBeenCalled();
 
-    act(() => sub.emit({ ping: "pong" }));
+    act(() => ws.emit({ ping: "pong" }));
     await waitFor(() => expect(onData).toHaveBeenCalledWith({ ping: "pong" }));
+    expect(onData).toHaveBeenCalledTimes(1);
   });
 
-  test("fires onData once per push, not on bare rerenders", async () => {
+  test("fires onData per push, not on bare rerenders", async () => {
     const onData = vi.fn();
     const document = parse("subscription { ping }");
     const { rerender } = renderHook(() =>
@@ -84,14 +72,14 @@ describe("useDocumentSubscription", () => {
       ),
     );
 
-    act(() => sub.emit({ ping: "one" }));
+    act(() => ws.emit({ ping: "one" }));
     await waitFor(() => expect(onData).toHaveBeenCalledTimes(1));
     expect(onData).toHaveBeenLastCalledWith({ ping: "one" });
 
     rerender();
     expect(onData).toHaveBeenCalledTimes(1);
 
-    act(() => sub.emit({ ping: "two" }));
+    act(() => ws.emit({ ping: "two" }));
     await waitFor(() => expect(onData).toHaveBeenCalledTimes(2));
     expect(onData).toHaveBeenLastCalledWith({ ping: "two" });
   });

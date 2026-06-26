@@ -2,6 +2,7 @@
 
 import { createElement, type ReactNode } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
+import { createAngeeHasuraDataProvider } from "@angee/refine";
 import { useAuthoredQuery } from "@angee/ui/data/authored-hooks";
 import { useResourceRoute } from "@angee/ui/runtime";
 import { useParams } from "@tanstack/react-router";
@@ -18,6 +19,7 @@ import { MenuTree, type ChromeMenuItem } from "@angee/ui/chrome/menu-tree";
 import {
   captureChrome,
   chromeSnapshot,
+  testGraphQLFetch,
   TEST_SCHEMAS,
 } from "./testing";
 import {
@@ -175,6 +177,91 @@ describe("createApp schema binding", () => {
       expect(seen.console).toBe("https://example.test/graphql/console/"),
     );
     root.unmount();
+  });
+});
+
+describe("createApp addon data providers", () => {
+  test("registers an addon-contributed provider for reads under its name", async () => {
+    const seen: Record<string, string> = {};
+    const host = document.createElement("div");
+    document.body.append(host);
+    history.replaceState(null, "", "/operator-page");
+    const operatorProbe = typedDocument("query OperatorProbe { schemaProbe }");
+
+    function OperatorPage(): ReactNode {
+      useAuthoredQuery(operatorProbe, undefined, {
+        dataProviderName: "operator",
+      });
+      return createElement("span", null, "Operator probe");
+    }
+
+    const app = createApp({
+      addons: [
+        {
+          id: "operator",
+          routes: [
+            {
+              name: "operator.page",
+              path: "/operator-page",
+              layout: "console",
+              component: OperatorPage,
+            },
+          ],
+          dataProviders: {
+            operator: createAngeeHasuraDataProvider({
+              url: "https://example.test/operator/graphql/",
+              fetch: probeFetch("operator", seen),
+            }),
+          },
+        },
+      ],
+      defaultSchema: "console",
+      subscriptionSchema: "console",
+      home: "/operator-page",
+      layouts: {
+        console: { chrome: TestChrome, requireAuth: false },
+      },
+      schemas: TEST_SCHEMAS,
+    });
+
+    const root = app.mount(host);
+    try {
+      await waitFor(() => {
+        expect(host.textContent).toContain("Operator probe");
+      });
+      await waitFor(() =>
+        expect(seen.operator).toBe("https://example.test/operator/graphql/"),
+      );
+    } finally {
+      root.unmount();
+      host.remove();
+    }
+  });
+
+  test("rejects an addon provider that shadows a configured schema name", () => {
+    expect(() =>
+      createApp(
+        testAppInput([
+          {
+            id: "shadow",
+            routes: [
+              {
+                name: "shadow.home",
+                path: "/shadow",
+                layout: "console",
+                component: EmptyPage,
+              },
+            ],
+            dataProviders: {
+              console: createAngeeHasuraDataProvider({
+                url: "https://example.test/operator/graphql/",
+                fetch: testGraphQLFetch,
+              }),
+            },
+          },
+        ]),
+      ),
+    ).toThrow(/collides with a schema-named provider/);
   });
 });
 

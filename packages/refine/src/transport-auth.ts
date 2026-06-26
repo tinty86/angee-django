@@ -79,6 +79,20 @@ export function bearerAuth(token: string): AuthFetch {
   };
 }
 
+/**
+ * Like {@link bearerAuth}, but reads the token per request from `getToken` so a
+ * rotated token flows through without rebuilding the client. When the getter
+ * returns null the `Authorization` header is omitted.
+ */
+export function bearerAuthFromGetter(getToken: () => string | null): AuthFetch {
+  return (baseFetch) => (input, init) => {
+    const headers = new Headers(init?.headers);
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return baseFetch(input, { ...init, headers });
+  };
+}
+
 const FATAL_WS_CLOSE_CODES = new Set([1000, 1008, 4400, 4401, 4403, 4406, 4409]);
 
 /** Whether a graphql-ws close code is terminal rather than retryable. */

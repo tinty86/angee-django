@@ -2,6 +2,10 @@ import type { BaseMenuItem } from "@angee/ui";
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import { createElement, type ComponentType, type ReactNode } from "react";
 
+import {
+  createOperatorDataProvider,
+  OPERATOR_PROVIDER,
+} from "./data/operator-provider";
 import { OperatorTransportProvider } from "./data/transport";
 import { enOperatorBundleForMenu, enOperatorMessages } from "./i18n";
 import { OperatorGlyph } from "./OperatorGlyph";
@@ -187,6 +191,10 @@ const operator = defineBaseAddon({
     },
   },
   icons: { operator: OperatorGlyph },
+  // The daemon's GraphQL surface as a refine data provider, authed by the live
+  // bearer the token gate mints. `createApp` registers it alongside the
+  // schema-named providers, so panes read/write it via `dataProviderName`.
+  dataProviders: { [OPERATOR_PROVIDER]: createOperatorDataProvider() },
 });
 
 export default operator;

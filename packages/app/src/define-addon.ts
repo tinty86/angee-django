@@ -60,6 +60,15 @@ export interface AddonManifest {
   chatter?: readonly ChatterContribution[];
   slots?: readonly SlotContribution[];
   previews?: readonly PreviewContribution[];
+  /**
+   * Refine data providers an addon contributes, keyed by provider name. The SDK
+   * manifest keeps the value opaque (only the name matters for collision
+   * detection); the rendered binding owns the live `DataProvider` and overrides
+   * the value type. `createApp` merges these into the schema-named providers it
+   * passes to `<Refine dataProvider>`, so an addon can serve its own GraphQL
+   * endpoint (e.g. the operator daemon) under its own provider name.
+   */
+  dataProviders?: Readonly<Record<string, unknown>>;
 }
 
 /** The merged runtime an app composes from its addon manifests. */
@@ -73,6 +82,7 @@ export interface ComposedAddons {
   chatter: readonly ChatterContribution[];
   slots: readonly SlotContribution[];
   previews: readonly PreviewContribution[];
+  dataProviders: Readonly<Record<string, unknown>>;
 }
 
 /** Brand an object as an addon manifest, giving one greppable declaration site. */
@@ -135,6 +145,7 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
   const i18n: Record<string, Record<string, string>> = {};
   const icons: Record<string, unknown> = {};
   const forms: Record<string, unknown> = {};
+  const dataProviders: Record<string, unknown> = {};
   const previews: PreviewContribution[] = [];
   const routeNames: Record<string, true> = {};
   const menuIds: Record<string, true> = {};
@@ -169,6 +180,12 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
         forms[model] = form;
       }
     }
+    if (addon.dataProviders) {
+      for (const [name, provider] of Object.entries(addon.dataProviders)) {
+        claim(dataProviders, name, addon.id, "data provider");
+        dataProviders[name] = provider;
+      }
+    }
     if (addon.i18n) {
       for (const [namespace, messages] of Object.entries(addon.i18n)) {
         const target = (i18n[namespace] ??= {});
@@ -193,6 +210,7 @@ export function composeAddons(addons: readonly AddonManifest[]): ComposedAddons 
     i18n,
     icons,
     forms,
+    dataProviders,
     chatter: mergeChatterContributions(...addons.map((a) => a.chatter ?? [])),
     slots: mergeSlotContributions(...addons.map((a) => a.slots ?? [])),
     previews,

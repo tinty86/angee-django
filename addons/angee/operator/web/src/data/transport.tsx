@@ -3,6 +3,7 @@ import {
   EmptyState,
   LoadingPanel,
   errorMessage,
+  useAuthoredMutation,
   useAuthoredQuery,
 } from "@angee/ui";
 import type {
@@ -11,25 +12,16 @@ import type {
 } from "@angee/refine";
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
 import {
-  Provider as UrqlProvider,
-  useMutation,
-  useQuery,
-  type Client,
-  type OperationResult,
-  type UseMutationState,
-  type UseQueryState,
-} from "urql";
-import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 
+import { OPERATOR_PROVIDER } from "./operator-provider";
 import { useOperatorT } from "../i18n";
 import { OperatorConnectionQuery } from "./documents.console";
 import { useDocumentSubscription } from "./document-subscription";
@@ -37,7 +29,8 @@ import {
   SNAPSHOT_QUERY,
   STACK_SNAPSHOT_SUBSCRIPTION,
 } from "./documents.daemon";
-import { createOperatorClient } from "./operator-client";
+import { createOperatorClient, OperatorWsClientProvider } from "./operator-client";
+import { operatorToken } from "./operator-token";
 import type {
   OperatorConnectionInfo,
   OperatorSnapshot,
@@ -89,8 +82,6 @@ type ConnectionState =
   | { kind: "error"; message: string }
   | { kind: "ready"; connection: OperatorConnectionInfo };
 
-const OperatorClientContext = createContext<Client | null>(null);
-
 /** The resolved daemon connection — the same-origin endpoint and minted bearer. */
 export interface OperatorConnection {
   endpoint: string;
@@ -139,9 +130,21 @@ export function OperatorTransportProvider({
 
   const endpoint = state.kind === "ready" ? state.connection.endpoint : null;
   const token = state.kind === "ready" ? state.connection.token : null;
-  // Rebuilt whenever the token rotates, so daemon requests carry the live bearer.
+  // Publish the live bearer to the module store the `operator` refine provider
+  // reads per request (via `bearerAuthFromGetter`). This MUST run during render,
+  // not in an effect: a child pane's first request fires in the child's mount
+  // effect, which React runs before this parent's effects — an effect-time set
+  // would race that request to a 401. Writing here each render also covers token
+  // rotation. We do not null on unmount: only this gate's own subtree calls the
+  // operator provider, so a lingering token is never read after the gate leaves,
+  // and a null-on-unmount cleanup would be fired spuriously by StrictMode's
+  // mount/unmount probe (leaving the store null for the real render in dev).
+  operatorToken.set(token);
+  // The daemon graphql-ws client for live subscriptions. Rebuilt on token
+  // rotation (graphql-ws captures the bearer in connectionParams at connect, so a
+  // new token needs a fresh socket) and absent without a WebSocket (SSR/test).
   const daemonClient = useMemo(() => {
-    if (!endpoint || !token) return null;
+    if (!endpoint || !token || typeof WebSocket === "undefined") return null;
     return createOperatorClient({ endpoint, token });
   }, [endpoint, token]);
   // Stable connection value for non-GraphQL transports; non-null exactly when
@@ -170,11 +173,11 @@ export function OperatorTransportProvider({
   }
 
   return (
-    <OperatorClientContext.Provider value={daemonClient}>
+    <OperatorWsClientProvider value={daemonClient}>
       <OperatorConnectionContext.Provider value={connection}>
-        <UrqlProvider value={daemonClient}>{children}</UrqlProvider>
+        {children}
       </OperatorConnectionContext.Provider>
-    </OperatorClientContext.Provider>
+    </OperatorWsClientProvider>
   );
 }
 
@@ -189,18 +192,8 @@ export function useOperatorConnection(): OperatorConnection {
   return connection;
 }
 
-export function useOperatorClient(): Client {
-  const client = useContext(OperatorClientContext);
-  if (!client) {
-    throw new Error(
-      "useOperatorClient must be used inside OperatorTransportProvider.",
-    );
-  }
-  return client;
-}
-
 export interface OperatorSnapshotResult {
-  result: UseQueryState<OperatorSnapshotQueryData, SnapshotVariables>;
+  result: { fetching: boolean; error: Error | null };
   snapshot: OperatorSnapshot | null;
   refetch: () => void;
 }
@@ -228,78 +221,70 @@ export function useOperatorSnapshot(
   );
 
   // The one-shot query owns first paint: the daemon emits no snapshot on connect,
-  // so the console reads the current state once. The live subscription supersedes
-  // it for every subsequent change (no polling — see docs/frontend/guidelines.md).
-  const [result, reexecute] = useQuery({
-    query: SNAPSHOT_QUERY,
-    variables,
-    requestPolicy: "cache-and-network",
+  // so the console reads the current state once through the `operator` provider.
+  // The live subscription supersedes it for every subsequent change (no polling —
+  // see docs/frontend/guidelines.md).
+  const query = useAuthoredQuery(SNAPSHOT_QUERY, variables, {
+    dataProviderName: OPERATOR_PROVIDER,
   });
 
   // `onStackSnapshotChange` pushes the whole `StackSnapshot` whenever the daemon's
-  // aggregate hash changes; urql dedupes the (variable-free) document so the 8 panes
-  // share one upstream subscription. The latest push is the live snapshot.
+  // aggregate hash changes; the variable-free document shares one upstream socket
+  // across the 8 panes. The latest push is the live snapshot.
   const live = useOperatorSubscription(STACK_SNAPSHOT_SUBSCRIPTION);
-
-  const reexecuteRef = useRef(reexecute);
-  useEffect(() => {
-    reexecuteRef.current = reexecute;
-  }, [reexecute]);
 
   // An imperative re-pull of the one-shot query, for an instant local refresh
   // after a mutation rather than waiting for the daemon's next snapshot push.
-  const refetch = useCallback(() => {
-    reexecuteRef.current({ requestPolicy: "network-only" });
-  }, []);
+  const refetch = query.refetch;
 
   // Keep whichever source updated most recently. The live push wins as it
-  // arrives, but an explicit refetch (network-only, after a mutation) must be
-  // able to supersede a stale push — a static `live ?? query` would mask refetch
-  // forever once any push landed.
+  // arrives, but an explicit refetch (after a mutation) must be able to supersede
+  // a stale push — a static `live ?? query` would mask refetch forever once any
+  // push landed.
   const [data, setData] = useState<OperatorSnapshotQueryData | null>(null);
   useEffect(() => {
     const pushed = live.data?.onStackSnapshotChange;
     if (pushed) setData(pushed);
   }, [live.data]);
   useEffect(() => {
-    if (result.data) setData(result.data);
-  }, [result.data]);
+    if (query.data) setData(query.data);
+  }, [query.data]);
   const snapshot = useMemo(() => snapshotFromQueryData(data), [data]);
 
-  return { result, snapshot, refetch };
+  return {
+    result: { fetching: query.fetching, error: query.error },
+    snapshot,
+    refetch,
+  };
 }
 
 export interface OperatorActionHook<TDocument extends OperatorDocument> {
-  result: UseMutationState<
-    DocumentData<TDocument>,
-    OperatorVariables<TDocument>
-  >;
+  result: { fetching: boolean; error: Error | null };
   run: (
     variables: OperatorVariables<TDocument>,
-  ) => Promise<DocumentData<TDocument>>;
+  ) => Promise<DocumentData<TDocument> | undefined>;
 }
 
+/**
+ * A daemon mutation on the `operator` refine data provider. Wraps
+ * `useAuthoredMutation` (the shared authored-mutation owner) bound to the daemon
+ * provider so every command RPC and Hasura CRUD doc rides the same bearer-authed
+ * transport as the rest of the console. The daemon refreshes its own state
+ * imperatively (`useRunDaemonAction` → snapshot refetch), not through refine's
+ * resource invalidation, so no `invalidateModels` is wired here.
+ */
 export function useOperatorAction<TDocument extends OperatorDocument>(
   document: TDocument,
 ): OperatorActionHook<TDocument> {
-  type Data = DocumentData<TDocument>;
   type Variables = OperatorVariables<TDocument>;
-  const [result, execute] = useMutation<Data, Variables>(document);
+  const [mutate, state] = useAuthoredMutation(document, {
+    dataProviderName: OPERATOR_PROVIDER,
+  });
   const run = useCallback(
-    async (variables: Variables): Promise<Data> => {
-      const operationResult: OperationResult<Data, Variables> =
-        await execute(variables);
-      if (operationResult.error) {
-        throw operationResult.error;
-      }
-      if (!operationResult.data) {
-        throw new Error("Operator action returned no data.");
-      }
-      return operationResult.data;
-    },
-    [execute],
+    (variables: Variables) => mutate(variables),
+    [mutate],
   );
-  return { result, run };
+  return { result: state, run };
 }
 
 export interface OperatorSubscriptionOptions<TData> {
@@ -334,10 +319,9 @@ export function useOperatorSubscription<
   variables?: TVariables,
   options: OperatorSubscriptionOptions<TData> = {},
 ): OperatorSubscriptionResult<TData> {
-  // Delegate to the SDK document runner, the owner of subscription semantics: it fires
-  // `onData` from an effect once per push, never from the urql reducer. A reducer must
-  // stay a pure (previous, value) => next accumulator — a side effect there (e.g. the
-  // `setState` the agent service-log path wires in) runs during urql's render phase.
+  // Delegate to the document subscription runner over the daemon graphql-ws
+  // client: it fires `onData` from the socket's `next` callback (a real event, not
+  // a render-phase reducer), so a caller can set React state in it.
   return useDocumentSubscription<TData, TVariables>(document, variables, options);
 }
 

@@ -126,4 +126,19 @@ describe("composeAddons", () => {
     const b = defineAddon({ id: "b", widgets: { text: "B" } });
     expect(() => composeAddons([a, b])).toThrow(/text/);
   });
+
+  test("merges data providers keyed by provider name", () => {
+    const a = defineAddon({ id: "a", dataProviders: { operator: "OP" } });
+    const b = defineAddon({ id: "b", dataProviders: { ledger: "LEDGER" } });
+    expect(composeAddons([a, b]).dataProviders).toEqual({
+      operator: "OP",
+      ledger: "LEDGER",
+    });
+  });
+
+  test("rejects two addons that claim the same data provider name", () => {
+    const a = defineAddon({ id: "a", dataProviders: { operator: "A" } });
+    const b = defineAddon({ id: "b", dataProviders: { operator: "B" } });
+    expect(() => composeAddons([a, b])).toThrow(/data provider "operator"/);
+  });
 });

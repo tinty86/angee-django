@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   useCustom,
   useCustomMutation,
@@ -75,9 +75,14 @@ export function useAuthoredQuery<TDocument extends AuthoredDocument>(
       meta: authoredQueryMeta(models),
     },
   });
+  // Stable identity: callers (e.g. the operator token-refresh interval) put
+  // `refetch` in effect deps, and react-query churns `run.query`'s identity on
+  // every state change — depending on it would tear those effects down.
+  const queryRef = useRef(run.query);
+  queryRef.current = run.query;
   const refetch = useCallback(() => {
-    void run.query.refetch();
-  }, [run.query]);
+    void queryRef.current.refetch();
+  }, []);
   const data = authoredQueryData(run.query.data);
   return {
     data: data as DocumentData<TDocument> | undefined,
