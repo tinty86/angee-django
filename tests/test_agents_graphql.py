@@ -423,13 +423,11 @@ def test_create_inference_provider_creates_child_row(agents_console_tables: None
               backend_class: "manual"
               name: "Provider"
               base_url: "https://api.example.test"
-              credential_env: "MODEL_API_KEY"
             }
           ) {
             name
             base_url
             backend_class
-            credential_env
             status
           }
         }
@@ -450,7 +448,6 @@ def test_create_inference_provider_creates_child_row(agents_console_tables: None
         "name": "Provider",
         "base_url": "https://api.example.test",
         "backend_class": "MANUAL",
-        "credential_env": "MODEL_API_KEY",
         "status": "DRAFT",
     }
     with system_context(reason="test.agents.provider_mti.verify"):
@@ -471,7 +468,6 @@ def test_update_inference_provider_backend_rematerializes_defaults(agents_consol
         "agt-provider-update",
         backend_class="manual",
         name="Custom",
-        credential_env="CUSTOM_KEY",
     )
     with system_context(reason="test.agents.provider_update.account"):
         oauth_client = OAuthClient.objects.create(
@@ -489,7 +485,6 @@ def test_update_inference_provider_backend_rematerializes_defaults(agents_consol
           update_inference_provider(data: {id: $id, backend_class: "anthropic", account: $account}) {
             backend_class
             name
-            credential_env
             vendor { slug }
             account { external_id }
           }
@@ -508,7 +503,6 @@ def test_update_inference_provider_backend_rematerializes_defaults(agents_consol
     assert updated == {
         "backend_class": "ANTHROPIC",
         "name": "Anthropic",
-        "credential_env": "ANTHROPIC_API_KEY",
         "vendor": {"slug": "anthropic"},
         "account": {"external_id": "agt-provider-update-ext"},
     }

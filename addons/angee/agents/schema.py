@@ -77,7 +77,6 @@ class InferenceProviderType(AngeeNode):
     status: auto
     name: auto
     base_url: auto
-    credential_env: auto
     config: JSON
     created_at: auto
     updated_at: auto
@@ -235,7 +234,6 @@ class InferenceProviderInput:
     status: str | None = strawberry.UNSET
     name: str = ""
     base_url: str = ""
-    credential_env: str = ""
     # UNSET (not None): an omitted field must fall back to the model default, not
     # overwrite a non-null column with null (see docs/backend/guidelines.md Pitfalls).
     config: JSON | None = strawberry.UNSET
@@ -254,7 +252,6 @@ class InferenceProviderPatch:
     status: str | None = strawberry.UNSET
     name: str | None = strawberry.UNSET
     base_url: str | None = strawberry.UNSET
-    credential_env: str | None = strawberry.UNSET
     config: JSON | None = strawberry.UNSET
 
 
@@ -458,8 +455,6 @@ class InferenceProviderCreateMutation:
             attrs["name"] = data.name
         if data.base_url:
             attrs["base_url"] = data.base_url
-        if data.credential_env:
-            attrs["credential_env"] = data.credential_env
         if data.config is not strawberry.UNSET:
             attrs["config"] = data.config
         with system_context(reason="agents.graphql.inference_provider.create"), transaction.atomic():
@@ -529,9 +524,6 @@ class InferenceProviderUpdateMutation:
             if data.base_url is not strawberry.UNSET:
                 provider.base_url = data.base_url or ""
                 provided.add("base_url")
-            if data.credential_env is not strawberry.UNSET:
-                provider.credential_env = data.credential_env or ""
-                provided.add("credential_env")
             if data.config is not strawberry.UNSET:
                 provider.config = data.config
                 provided.add("config")
