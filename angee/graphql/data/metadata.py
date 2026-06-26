@@ -343,9 +343,9 @@ def make_data_resource_metadata(
         required_create_fields or _required_input_wire_fields(create_input_type),
     )
     revision_fields = _require_unique(exposed_model_label, "revision field", revision_fields)
-    active_fields = _require_unique_resource_fields(exposed_model_label, fields)
-    if not active_fields and node_type is not None:
-        active_fields = _resource_fields(
+    declared_fields = _require_unique_resource_fields(exposed_model_label, fields)
+    generated_fields = (
+        _resource_fields(
             node_type,
             model,
             filter_fields=filter_fields,
@@ -357,6 +357,14 @@ def make_data_resource_metadata(
             required_create_fields=active_required_create_fields,
             relation_axes=relation_axes,
         )
+        if node_type is not None
+        else ()
+    )
+    active_fields = (
+        _merge_resource_fields(generated_fields, declared_fields)
+        if declared_fields
+        else generated_fields
+    )
     active_fields = _require_unique_resource_fields(exposed_model_label, active_fields)
     return DataResourceMetadata(
         model=model,
@@ -386,6 +394,52 @@ def make_data_resource_metadata(
         node_type=node_type,
         filter_type=filter_type,
         order_type=order_type,
+    )
+
+
+def model_resource_fields(
+    model: type[models.Model],
+    fields: tuple[str, ...],
+    *,
+    filter_fields: tuple[str, ...] = (),
+    order_fields: tuple[str, ...] = (),
+    aggregate_fields: tuple[str, ...] = (),
+    group_by_fields: tuple[str, ...] = (),
+    create_fields: tuple[str, ...] = (),
+    update_fields: tuple[str, ...] = (),
+    required_create_fields: tuple[str, ...] = (),
+    relation_axes: tuple[DataRelationAxisMetadata, ...] = (),
+) -> tuple[DataResourceFieldMetadata, ...]:
+    """Return resource metadata for model fields exposed outside the node class.
+
+    Same-row model extensions can expose fields through Strawberry type
+    extensions. The node class that owns the Hasura resource cannot import those
+    downstream extension classes, so this builds matching field metadata directly
+    from the composed Django model fields.
+    """
+
+    filterable = set(filter_fields)
+    sortable = set(order_fields)
+    aggregatable = set(aggregate_fields)
+    groupable = set(group_by_fields)
+    creatable = set(create_fields)
+    updatable = set(update_fields)
+    required_on_create = set(required_create_fields)
+    relation_by_field = {axis.field: axis for axis in relation_axes}
+    return tuple(
+        _model_resource_field(
+            model,
+            name,
+            relation_axis=relation_by_field.get(name),
+            filterable=name in filterable,
+            sortable=name in sortable,
+            aggregatable=name in aggregatable,
+            groupable=name in groupable,
+            creatable=name in creatable,
+            updatable=name in updatable,
+            required_on_create=name in required_on_create,
+        )
+        for name in fields
     )
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import reversion
 from django.conf import settings
@@ -85,9 +85,9 @@ class SqidMixin(models.Model):
     def public_id_from_pk(cls, value: Any) -> str:
         """Return the public id encoded from this model's primary-key value."""
 
-        field = cls._meta.get_field("sqid")
-        if not isinstance(field, SqidField):
-            return ""
+        # SqidMixin declares ``sqid = SqidField(...)`` unconditionally, so the column
+        # is always a SqidField on any subclass.
+        field = cast(SqidField, cls._meta.get_field("sqid"))
         return field.public_id_from_value(value)
 
 

@@ -12,8 +12,7 @@ from strawberry_django.utils.typing import get_django_definition
 
 from angee.base.models import (
     instance_from_public_id,
-    public_data_id_owner,
-    public_data_id_prefix,
+    public_data_id_field,
     public_id_for,
 )
 
@@ -85,12 +84,11 @@ def assert_unique_sqid_prefixes(types: tuple[object, ...]) -> None:
 
     prefixes_by_owner: dict[str, type[models.Model]] = {}
     for model in _exposed_models(types):
-        prefix = public_data_id_prefix(model)
-        if not prefix:
+        field = public_data_id_field(model)
+        if field is None or not field.prefix:
             continue
-        owner_model = public_data_id_owner(model)
-        if owner_model is None:
-            continue
+        prefix = field.prefix
+        owner_model = field.model
         existing = prefixes_by_owner.setdefault(prefix, owner_model)
         if existing._meta.label != owner_model._meta.label:
             raise ImproperlyConfigured(

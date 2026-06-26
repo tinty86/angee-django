@@ -18,7 +18,7 @@ from rebac.managers import RebacManager, RebacQuerySet
 from rebac.resources import model_resource_type
 from sqids import Sqids
 
-from angee.base.fields import SqidField
+from angee.base.fields import SqidField, canonical_sqid_prefix, encode_public_id
 from angee.base.mixins import SqidMixin, TimestampMixin
 
 _ModelT = TypeVar("_ModelT", bound=models.Model)
@@ -221,10 +221,7 @@ class SqidPublicIdentity:
     def public_id_from_pk(self, value: Any) -> str:
         """Return the public id encoded from a primary-key value."""
 
-        if value in (None, ""):
-            return ""
-        encoded_value = self._codec().encode([int(value)])
-        return f"{self.canonical_prefix}{encoded_value}" if encoded_value is not None else ""
+        return encode_public_id(self._codec(), self.canonical_prefix, value)
 
     def public_id_to_pk(self, value: str) -> int | None:
         """Decode one public id to the backing primary-key value."""
@@ -247,7 +244,7 @@ class SqidPublicIdentity:
     def canonical_prefix(self) -> str:
         """Return the canonical Angee sqid prefix."""
 
-        return SqidField._canonical_prefix(self.prefix)
+        return canonical_sqid_prefix(self.prefix)
 
     def _codec(self) -> Sqids:
         """Return the sqids codec for this identity."""
@@ -269,24 +266,6 @@ def public_data_id_field(model: type[models.Model]) -> SqidField | None:
     return None
 
 
-def public_data_id_prefix(model: type[models.Model]) -> str:
-    """Return the public sqid prefix declared by ``model``."""
-
-    field = public_data_id_field(model)
-    if field is not None:
-        return field.prefix
-    return ""
-
-
-def public_data_id_owner(model: type[models.Model]) -> type[models.Model] | None:
-    """Return the model class that owns ``model``'s public data identity."""
-
-    field = public_data_id_field(model)
-    if field is not None:
-        return cast(type[models.Model], field.model)
-    return None
-
-
 def instance_from_public_id(
     model: type[_ModelT],
     value: str,
@@ -305,7 +284,12 @@ def instance_from_public_id(
 
 
 def public_id_of(instance: models.Model) -> str:
-    """Return the Angee public ID or Django primary key for ``instance``."""
+    """Return the Angee public id or Django primary key for ``instance``.
+
+    The user model is swappable, so ``instance`` may be a plain Django model
+    (e.g. ``django.contrib.auth.User``) that Angee does not own — those carry no
+    ``public_id_value`` and fall back to the primary key.
+    """
 
     resolver = getattr(instance, "public_id_value", None)
     value = resolver() if callable(resolver) else instance.pk
@@ -320,7 +304,12 @@ def public_id_for(
     *,
     public_identity: SqidPublicIdentity | None = None,
 ) -> str:
-    """Return the public id for ``model`` when only its primary key is known."""
+    """Return the public id for ``model`` when only its primary key is known.
+
+    ``model`` may be a plain Django model Angee does not own (the swappable user
+    model, or a third-party model reached with a ``public_identity`` decoder);
+    one without the public-id contract falls back to its primary key.
+    """
 
     if pk in (None, ""):
         return ""
@@ -355,7 +344,7 @@ def _instance_from_public_id_queryset(
     try:
         lookup = _public_id_lookup(queryset.model, value, public_identity=public_identity)
         instance = queryset.filter(**lookup).first()
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     return cast(_ModelT | None, instance)
 

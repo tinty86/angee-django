@@ -21,6 +21,7 @@ from django.db import models
 from django.utils.module_loading import import_string
 from django_choices_field import TextChoicesField
 from django_sqids import SqidsField
+from sqids import Sqids
 
 from angee.base.impl import ImplBase
 
@@ -38,6 +39,28 @@ def _derive_fernet(label: str) -> Fernet:
         info=label.encode(),
     ).derive(secret_key.encode())
     return Fernet(base64.urlsafe_b64encode(key))
+
+
+def canonical_sqid_prefix(prefix: str) -> str:
+    """Return ``prefix`` carrying Angee's public-id separator (``abc`` -> ``abc_``)."""
+
+    if not prefix:
+        return ""
+    return prefix if prefix.endswith("_") else f"{prefix}_"
+
+
+def encode_public_id(sqids: Sqids, prefix: str, value: Any) -> str:
+    """Return the public id encoding ``value``'s backing integer under ``prefix``.
+
+    The one reading of "encode a primary-key value to an Angee public id" — the
+    shared body behind ``SqidField.public_id_from_value`` and
+    ``SqidPublicIdentity.public_id_from_pk``. ``prefix`` is already canonical.
+    """
+
+    if value in (None, ""):
+        return ""
+    encoded = sqids.encode([int(value)])
+    return f"{prefix}{encoded}" if encoded is not None else ""
 
 
 class SqidField(SqidsField):
@@ -60,7 +83,7 @@ class SqidField(SqidsField):
         """Normalize Angee public-id prefixes to the canonical ``abc_`` shape."""
 
         self._angee_declared_prefix = prefix
-        super().__init__(*args, prefix=self._canonical_prefix(prefix), **kwargs)
+        super().__init__(*args, prefix=canonical_sqid_prefix(prefix), **kwargs)
 
     def contribute_to_class(self, cls: type[models.Model], name: str) -> None:
         """Resolve the prefix from the model's ``<field>_prefix`` when unset.
@@ -78,7 +101,7 @@ class SqidField(SqidsField):
                 raise ImproperlyConfigured(
                     f"{cls.__name__}.{name}_prefix must be a str, got {type(declared).__name__}."
                 )
-            self.prefix = self._canonical_prefix(declared)
+            self.prefix = canonical_sqid_prefix(declared)
 
     def deconstruct(self) -> tuple[str | None, str, list[Any], dict[str, Any]]:
         """Serialize the full public-id contract for generated/runtime models.
@@ -101,7 +124,13 @@ class SqidField(SqidsField):
         return name, path, args, kwargs
 
     def from_db_value(self, value: Any, expression: Any, connection: Any, *args: Any) -> Any:
-        """Return the encoded public id, passing NULL columns through."""
+        """Return the encoded public id, passing NULL columns through.
+
+        ``django_sqids`` ``from_db_value`` encodes unconditionally, so a NULL
+        arriving through a nullable join crashes it (``sqids.encode([None])``
+        raises ``TypeError``); this guard is the workaround. The durable fix is an
+        upstream ``django_sqids`` PR, after which this override can be deleted.
+        """
 
         if value is None:
             return None
@@ -110,18 +139,7 @@ class SqidField(SqidsField):
     def public_id_from_value(self, value: Any) -> str:
         """Return the encoded public id for one backing integer value."""
 
-        if value in (None, ""):
-            return ""
-        encoded_value = self.sqids_instance.encode([int(value)])
-        return f"{self.prefix}{encoded_value}" if encoded_value is not None else ""
-
-    @staticmethod
-    def _canonical_prefix(prefix: str) -> str:
-        """Return ``prefix`` with Angee's public-id separator."""
-
-        if not prefix:
-            return ""
-        return prefix if prefix.endswith("_") else f"{prefix}_"
+        return encode_public_id(self.sqids_instance, self.prefix, value)
 
 
 class StateField(TextChoicesField):
