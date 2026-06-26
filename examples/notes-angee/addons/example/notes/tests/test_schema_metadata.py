@@ -33,7 +33,7 @@ class NotesSchemaMetadataTests(SimpleTestCase):
                 "detail": "notes_by_pk",
                 "groups": "notes_groups",
                 "list": "notes",
-                "revisions": "noteRevisions",
+                "revisions": "note_revisions",
                 "update": "update_notes_by_pk",
             },
         )
@@ -169,7 +169,7 @@ class NotesSchemaMetadataTests(SimpleTestCase):
             note["updateFields"],
             ["title", "body", "status", "tags", "is_starred", "reminder_at"],
         )
-        self.assertEqual(note["revisionFields"], ["createdAt", "comment", "body"])
+        self.assertEqual(note["revisionFields"], ["created_at", "comment", "body"])
         self.assertEqual(
             {
                 key: fields["title"][key]

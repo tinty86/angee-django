@@ -325,9 +325,9 @@ class IAMGraphQLTests(TransactionTestCase):
             alice,
             """
             query NoteRevisions($id: ID!) {
-              noteRevisions(id: $id) {
+              note_revisions(id: $id) {
                 id
-                createdAt
+                created_at
                 comment
                 body
               }
@@ -336,7 +336,7 @@ class IAMGraphQLTests(TransactionTestCase):
             {"id": welcome_id},
         )
 
-        revisions = visible["data"]["noteRevisions"]
+        revisions = visible["data"]["note_revisions"]
         self.assertEqual(
             [revision["body"] for revision in revisions],
             ["Second reviewed body", "First reviewed body"],
@@ -346,7 +346,7 @@ class IAMGraphQLTests(TransactionTestCase):
             ["second body", "first body"],
         )
         self.assertTrue(all(revision["id"] for revision in revisions))
-        self.assertTrue(all(revision["createdAt"] for revision in revisions))
+        self.assertTrue(all(revision["created_at"] for revision in revisions))
 
         bob = Client()
         self.login(bob, "bob")
@@ -354,12 +354,12 @@ class IAMGraphQLTests(TransactionTestCase):
             bob,
             """
             query NoteRevisions($id: ID!) {
-              noteRevisions(id: $id) { id }
+              note_revisions(id: $id) { id }
             }
             """,
             {"id": welcome_id},
         )
-        self.assertEqual(scoped_out["data"]["noteRevisions"], [])
+        self.assertEqual(scoped_out["data"]["note_revisions"], [])
 
     def test_notes_paginate_in_declared_order(self) -> None:
         alice = Client()
