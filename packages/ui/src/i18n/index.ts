@@ -1,5 +1,5 @@
 import { useNamespaceT } from "../runtime";
-import type { MessageVars } from "@angee/data";
+import type { MessageVars } from "@angee/refine";
 
 import { enBaseMessages } from "./en";
 

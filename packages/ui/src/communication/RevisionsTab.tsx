@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useResourceRevisions } from "@angee/data";
+import { useResourceRevisions } from "../data/revisions";
 import { revisionSnapshot } from "@angee/refine";
 
 import { useBaseT } from "../i18n";

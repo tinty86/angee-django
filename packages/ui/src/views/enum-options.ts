@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useAuthoredQuery } from "@angee/data";
+import { useAuthoredQuery } from "../data/authored-hooks";
 import {
   useModelMetadata,
 } from "@angee/resources";

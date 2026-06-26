@@ -37,7 +37,7 @@ import {
   useRuntimeAuthState,
   useUserPreferences,
   type I18nResources,
-} from "@angee/data";
+} from "@angee/refine";
 import {
   ModelMetadataProvider,
   defineAngeeSchemaMetadata,

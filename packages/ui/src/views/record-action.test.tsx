@@ -15,7 +15,7 @@ const dataMocks = vi.hoisted(() => ({
   useActionMutation: vi.fn(),
 }));
 
-vi.mock("@angee/data", () => ({
+vi.mock("../data/hooks", () => ({
   useActionMutation: dataMocks.useActionMutation,
 }));
 

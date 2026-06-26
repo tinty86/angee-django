@@ -669,9 +669,6 @@ importers:
 
   packages/app:
     dependencies:
-      '@angee/data':
-        specifier: workspace:*
-        version: link:../data
       '@angee/logo-react':
         specifier: ^0.2.1
         version: 0.2.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1087,9 +1084,6 @@ importers:
 
   packages/ui:
     dependencies:
-      '@angee/data':
-        specifier: workspace:*
-        version: link:../data
       '@angee/logo-react':
         specifier: ^0.2.1
         version: 0.2.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)

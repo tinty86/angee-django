@@ -75,8 +75,8 @@ vi.mock("@refinedev/core", async (importOriginal) => {
 
 // The computed resource has no group aggregate; record any server group query so
 // the test can assert none is issued.
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui/data/hooks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui/data/hooks")>();
   return {
     ...actual,
     useAngeeFacets: () => ({ facets: [], fetching: false }),

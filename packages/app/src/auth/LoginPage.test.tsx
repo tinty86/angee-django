@@ -22,8 +22,8 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/refine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/refine")>();
   return {
     ...actual,
     useLoginWithPassword: () => ({

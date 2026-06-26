@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
   useAngeeFacets,
-} from "@angee/data";
+} from "../data/hooks";
 import type {
   FacetRequestSpec,
   } from "@angee/refine";

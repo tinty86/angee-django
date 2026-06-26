@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type UserPreferences, useUserPreferences } from "@angee/data";
+import { type UserPreferences, useUserPreferences } from "@angee/refine";
 
 import { dedupeBy } from "../lib/dedupe";
 

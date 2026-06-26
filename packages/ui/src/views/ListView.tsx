@@ -5,7 +5,7 @@ import {
 } from "@angee/refine";
 import {
   useAngeeAggregate,
-} from "@angee/data";
+} from "../data/hooks";
 import {
   isClientRowModel,
   useModelMetadata,

@@ -53,8 +53,8 @@ const sdkMocks = vi.hoisted(() => ({
   mutationOptions: undefined as { fields?: readonly string[]; enabled?: boolean } | undefined,
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("../data/hooks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../data/hooks")>();
   return actual;
 });
 

@@ -30,7 +30,7 @@ import {
 import {
   useAngeeAggregate,
   useAngeeGroupBy,
-} from "@angee/data";
+} from "../data/hooks";
 import type {
   ModelMetadata,
 } from "@angee/resources";

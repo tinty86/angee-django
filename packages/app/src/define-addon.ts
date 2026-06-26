@@ -4,7 +4,7 @@
 // addon — a collision is a build-time error. Ordered contribution lists
 // (chatter tabs, slot entries) dedupe by key, last wins, and sort by sequence.
 
-import type { I18nResources } from "@angee/data";
+import type { I18nResources } from "@angee/refine";
 // The contribution contracts moved down into the binding (`@angee/ui` owns the
 // runtime registry that consumes them); composition here builds manifests
 // against them. Re-exported so `@angee/sdk` importers (via the shim) resolve

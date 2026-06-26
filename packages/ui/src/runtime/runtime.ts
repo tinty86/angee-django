@@ -6,7 +6,7 @@ import {
   type I18nResources,
   type MessageResources,
   type MessageVars,
-} from "@angee/data";
+} from "@angee/refine";
 
 import type {
   ChatterContribution,

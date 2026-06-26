@@ -33,7 +33,6 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@angee/data": "workspace:*",
     "@angee/logo-react": "^0.2.1",
     "@angee/refine": "workspace:*",
     "@angee/resources": "workspace:*",

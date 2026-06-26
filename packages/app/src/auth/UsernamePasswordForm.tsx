@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
-import { useLoginWithPassword } from "@angee/data";
+import { useLoginWithPassword } from "@angee/refine";
 
 import { errorMessage } from "@angee/ui/feedback/index";
 import { useBaseT } from "@angee/ui/i18n";

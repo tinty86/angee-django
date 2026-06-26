@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useActionMutation } from "@angee/data";
+import { useActionMutation } from "../data/hooks";
 
 import type { ActionContext, ActionResult } from "./page";
 

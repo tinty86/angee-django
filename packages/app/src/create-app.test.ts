@@ -2,7 +2,7 @@
 
 import { createElement, type ReactNode } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
-import { useAuthoredQuery } from "@angee/data";
+import { useAuthoredQuery } from "@angee/ui/data/authored-hooks";
 import { useResourceRoute } from "@angee/ui/runtime";
 import { useParams } from "@tanstack/react-router";
 import { afterEach, describe, expect, test } from "vitest";

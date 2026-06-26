@@ -18,8 +18,8 @@ const dataMocks = vi.hoisted(() => ({
   facets: vi.fn(),
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("../data/hooks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../data/hooks")>();
   return {
     ...actual,
     useAngeeFacets: dataMocks.facets,

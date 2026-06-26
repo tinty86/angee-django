@@ -17,8 +17,8 @@ const dataMocks = vi.hoisted(() => ({
   useResourceRevisions: vi.fn(),
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("../data/revisions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../data/revisions")>();
   return {
     ...actual,
     useResourceRevisions: dataMocks.useResourceRevisions,
