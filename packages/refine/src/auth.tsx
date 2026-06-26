@@ -22,7 +22,7 @@ import {
 import {
   createAngeeGraphQLClient,
   type AngeeHasuraClientOptions,
-} from "@angee/refine";
+} from "./provider";
 
 export type UserPreferences = Record<string, unknown>;
 

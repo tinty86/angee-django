@@ -100,3 +100,39 @@ export * from "./fragments";
 export * from "./chrome";
 export * from "./communication";
 export * from "./preview";
+
+// The data-bound hooks the rendered views consume: the metadata-driven Refine
+// operation hooks (aggregate/action/deletePreview/facets/groupBy), the authored
+// query/mutation hooks, and the resource revisions hook. These compose
+// `@angee/refine` (the Hasura dialect) and `@angee/resources` (the metadata
+// bridge) — both already `@angee/ui` dependencies — so they live with their
+// consumer. (Wave C: relocated from `@angee/data`.)
+export {
+  useAngeeAggregate,
+  useActionMutation,
+  useAngeeDeletePreview,
+  useAngeeFacets,
+  useAngeeGroupBy,
+  type ActionMutate,
+  type UseActionMutationOptions,
+  type UseActionMutationState,
+  type UseAngeeAggregateResult,
+  type UseAngeeDeletePreviewResult,
+  type UseAngeeFacetsOptions,
+  type UseAngeeFacetsResult,
+  type UseAngeeGroupByResult,
+} from "./data/hooks";
+export {
+  useAuthoredMutation,
+  useAuthoredQuery,
+  type AuthoredMutate,
+  type AuthoredMutationOptions,
+  type AuthoredOperationOptions,
+  type AuthoredQueryOptions,
+  type AuthoredQueryResult,
+} from "./data/authored-hooks";
+export {
+  useResourceRevisions,
+  type UseResourceRevisionsOptions,
+  type UseResourceRevisionsResult,
+} from "./data/revisions";

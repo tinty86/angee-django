@@ -299,6 +299,26 @@
     "./views/*": {
       "types": "./src/views/*.tsx",
       "import": "./src/views/*.tsx"
+    },
+    "./data/hooks": {
+      "types": "./src/data/hooks.tsx",
+      "import": "./src/data/hooks.tsx"
+    },
+    "./data/authored-hooks": {
+      "types": "./src/data/authored-hooks.tsx",
+      "import": "./src/data/authored-hooks.tsx"
+    },
+    "./data/revisions": {
+      "types": "./src/data/revisions.ts",
+      "import": "./src/data/revisions.ts"
+    },
+    "./data/errors": {
+      "types": "./src/data/errors.ts",
+      "import": "./src/data/errors.ts"
+    },
+    "./data/*": {
+      "types": "./src/data/*.ts",
+      "import": "./src/data/*.ts"
     }
   },
   "scripts": {

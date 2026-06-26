@@ -19,7 +19,9 @@
   "dependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
     "@refinedev/core": "^5.0.12",
-    "@refinedev/hasura": "^7.0.1"
+    "@refinedev/hasura": "^7.0.1",
+    "graphql": "^16.14.0",
+    "i18next": "^26.0.0"
   },
   "peerDependencies": {
     "@tanstack/react-router": "^1",
@@ -28,7 +30,6 @@
   "devDependencies": {
     "@tanstack/react-router": "^1.170.8",
     "@types/react": "^19.0.0",
-    "graphql": "^16.14.0",
     "react": "^19.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
