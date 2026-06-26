@@ -109,6 +109,33 @@ export function ChatBubble({ role, className, children, ...props }: ChatBubblePr
   );
 }
 
+export interface ChatBubbleActionsProps extends HTMLAttributes<HTMLDivElement> {
+  role?: ChatBubbleRole;
+}
+
+/** A presentational action row under a chat bubble (copy, etc.). Aligns with the bubble
+ *  (assistant/system lead left, user trails right) and reveals on hover/focus of the
+ *  enclosing `group` message. The assistant-ui ActionBar binding composes inside it. */
+export function ChatBubbleActions({
+  role = "assistant",
+  className,
+  children,
+  ...props
+}: ChatBubbleActionsProps): ReactElement {
+  return (
+    <div
+      className={cn(
+        "mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100",
+        role === "user" ? "justify-end" : "justify-start",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Composer
 // ---------------------------------------------------------------------------

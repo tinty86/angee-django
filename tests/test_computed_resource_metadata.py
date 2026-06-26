@@ -53,7 +53,7 @@ def test_computed_resource_metadata_is_model_optional() -> None:
     assert metadata.roots.list_name == "platform_addons"
     # Fields derive from the node surface even with no Django model behind it.
     field_names = {field.name for field in metadata.fields}
-    assert {"id", "label", "modelCount"} <= field_names
+    assert {"id", "label", "model_count"} <= field_names
 
     [wire] = serialize_data_resources((metadata,), schema_name="console")
     assert "model" not in wire  # the Python model handle never reaches the wire

@@ -128,7 +128,7 @@ export interface ByIdVariables extends Record<string, unknown> {
 
 export interface ResourceRevision extends Record<string, unknown> {
   id: string;
-  createdAt: string;
+  created_at: string;
   comment: string | null;
 }
 
@@ -333,13 +333,13 @@ export function extractRevisions(
     return [{
       ...row,
       id: row.id,
-      createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
+      created_at: typeof row.created_at === "string" ? row.created_at : "",
       comment: typeof row.comment === "string" ? row.comment : null,
     }];
   });
 }
 
-const REVISION_META_FIELDS = new Set(["id", "createdAt", "comment", "__typename"]);
+const REVISION_META_FIELDS = new Set(["id", "created_at", "comment", "__typename"]);
 
 export function revisionSnapshot(revision: ResourceRevision): unknown {
   for (const [field, value] of Object.entries(revision)) {

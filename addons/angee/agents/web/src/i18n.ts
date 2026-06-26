@@ -25,6 +25,8 @@ export const enAgentsMessages: Record<string, string> = {
   "agents.chat.empty": "Ask the agent about what you're looking at — it has the notes tools.",
   "agents.chat.placeholder": "Message the agent…",
   "agents.chat.send": "Send",
+  "agents.chat.stop": "Stop",
+  "agents.chat.copy": "Copy",
   "agents.chat.clear": "Clear",
   "agents.chat.reconnect": "Reconnect",
   "agents.chat.settings": "Session settings",

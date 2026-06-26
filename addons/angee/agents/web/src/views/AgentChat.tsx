@@ -2,6 +2,7 @@ import * as React from "react";
 import {
   Alert,
   ChatBubble,
+  ChatBubbleActions,
   ChatComposer,
   ChatComposerHint,
   ChatHeader,
@@ -18,6 +19,7 @@ import {
   statusTone as resolveStatusTone,
 } from "@angee/ui";
 import {
+  ActionBarPrimitive,
   AssistantRuntimeProvider,
   ComposerPrimitive,
   MessagePrimitive,
@@ -26,6 +28,7 @@ import {
   type TextMessagePartComponent,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
+import { Copy } from "lucide-react";
 import { Streamdown } from "streamdown";
 
 import { useAcpRuntime } from "../useAcpRuntime";
@@ -100,12 +103,21 @@ export function AgentChat({
               }
               hint={<ChatComposerHint />}
               actions={
-                <ComposerPrimitive.Send
-                  disabled={!ready}
-                  className="text-13 text-accent disabled:text-fg-muted"
-                >
-                  {t("agents.chat.send")}
-                </ComposerPrimitive.Send>
+                <>
+                  <ThreadPrimitive.If running={false}>
+                    <ComposerPrimitive.Send
+                      disabled={!ready}
+                      className="text-13 text-accent disabled:text-fg-muted"
+                    >
+                      {t("agents.chat.send")}
+                    </ComposerPrimitive.Send>
+                  </ThreadPrimitive.If>
+                  <ThreadPrimitive.If running>
+                    <ComposerPrimitive.Cancel className="text-13 text-danger-text">
+                      {t("agents.chat.stop")}
+                    </ComposerPrimitive.Cancel>
+                  </ThreadPrimitive.If>
+                </>
               }
             />
           </ComposerPrimitive.Root>
@@ -126,15 +138,27 @@ function UserMessage(): React.ReactElement {
   );
 }
 
-/** One assistant message: streamed markdown text, reasoning frames, and tool-call cards. */
+/** One assistant message: streamed markdown text, reasoning frames, and tool-call cards,
+ *  with a hover/focus action row to copy the reply text. */
 function AssistantMessage(): React.ReactElement {
+  const t = useAgentsT();
   return (
-    <MessagePrimitive.Root className="mb-3">
+    <MessagePrimitive.Root className="group mb-3">
       <ChatBubble role="assistant">
         <MessagePrimitive.Parts
           components={{ Text: AssistantText, Reasoning: ReasoningPart, tools: { Fallback: ToolPart } }}
         />
       </ChatBubble>
+      <ChatBubbleActions role="assistant">
+        <ActionBarPrimitive.Root>
+          <ActionBarPrimitive.Copy
+            aria-label={t("agents.chat.copy")}
+            className="inline-flex h-6 items-center gap-1 rounded px-2 text-2xs text-fg-muted hover:bg-inset"
+          >
+            <Copy className="h-3 w-3" aria-hidden />
+          </ActionBarPrimitive.Copy>
+        </ActionBarPrimitive.Root>
+      </ChatBubbleActions>
     </MessagePrimitive.Root>
   );
 }

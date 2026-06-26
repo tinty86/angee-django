@@ -30,15 +30,17 @@ export interface RelationFieldInfo {
   filter?: ModelRelationFilterMetadata;
 }
 
-// Server-owned fields a create form never edits.
+// Server-owned fields a create form never edits. These are GraphQL wire field
+// names, which are snake_case (the schema's Hasura naming) — match what the
+// resource metadata exposes as `field.name`.
 const NON_EDITABLE_FIELDS = new Set([
   "id",
-  "createdAt",
-  "updatedAt",
-  "createdBy",
-  "createdByLabel",
-  "updatedBy",
-  "updatedByLabel",
+  "created_at",
+  "updated_at",
+  "created_by",
+  "created_by_label",
+  "updated_by",
+  "updated_by_label",
 ]);
 
 const SCALAR_WIDGET: Readonly<Record<string, string>> = {

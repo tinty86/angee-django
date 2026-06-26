@@ -15,6 +15,7 @@ export {
 } from "./chatter-context";
 export {
   ChatBubble,
+  ChatBubbleActions,
   ChatComposer,
   ChatComposerHint,
   ChatHeader,
@@ -23,6 +24,7 @@ export {
   MessageReasoningFrame,
   ToolFallback,
   chatComposerInputClassName,
+  type ChatBubbleActionsProps,
   type ChatBubbleProps,
   type ChatBubbleRole,
   type ChatComposerHintProps,

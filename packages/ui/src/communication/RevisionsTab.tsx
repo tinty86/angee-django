@@ -65,7 +65,7 @@ export function RevisionsTab({
         <TimelineEntry
           key={revision.id}
           title={revision.comment ?? t("revisions.recordUpdated")}
-          timestamp={revision.createdAt}
+          timestamp={revision.created_at}
           body={revisionSnapshot(revision)}
         />
       ))}

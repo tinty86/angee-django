@@ -532,9 +532,9 @@ def test_data_resource_metadata_marks_to_many_node_fields_as_lists() -> None:
     )
     fields = {field.name: field for field in resource.fields}
 
-    assert fields["relatedParents"].kind == "list"
-    assert fields["relatedParents"].scalar is None
-    assert fields["relatedParents"].widget is None
+    assert fields["related_parents"].kind == "list"
+    assert fields["related_parents"].scalar is None
+    assert fields["related_parents"].widget is None
 
 
 def test_data_resource_metadata_marks_plain_relation_targets() -> None:

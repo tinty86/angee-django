@@ -80,10 +80,10 @@ describe("Hasura custom operations", () => {
 
   test("builds an authored revisions request with a generated document", () => {
     const document = { kind: "Document", definitions: [] } as unknown as DocumentNode;
-    const request = revisionsRequest(target("noteRevisions"), "note_123", { document });
+    const request = revisionsRequest(target("note_revisions"), "note_123", { document });
 
     expect(request.dataProviderName).toBe("console");
-    expect(request.root).toBe("noteRevisions");
+    expect(request.root).toBe("note_revisions");
     expect(request.meta.gqlVariables).toEqual({ id: "note_123" });
     expect(request.meta.gqlQuery).toBe(document);
   });
@@ -185,21 +185,21 @@ describe("Hasura custom operations", () => {
   test("extracts revisions and snapshots changed fields", () => {
     const [revision] = extractRevisions(
       {
-        noteRevisions: [
+        note_revisions: [
           {
             id: "rev_2",
-            createdAt: "2026-01-02T00:00:00Z",
+            created_at: "2026-01-02T00:00:00Z",
             comment: "updated",
             body: "Second",
           },
         ],
       },
-      "noteRevisions",
+      "note_revisions",
     );
 
     expect(revision).toEqual({
       id: "rev_2",
-      createdAt: "2026-01-02T00:00:00Z",
+      created_at: "2026-01-02T00:00:00Z",
       comment: "updated",
       body: "Second",
     });

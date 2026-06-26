@@ -68,7 +68,7 @@ describe("RevisionsTab", () => {
         revisions: [
           {
             id: "v1",
-            createdAt: "2026-01-01T00:00:00Z",
+            created_at: "2026-01-01T00:00:00Z",
             comment: "Body changed",
             title: "Snapshot title",
           },
