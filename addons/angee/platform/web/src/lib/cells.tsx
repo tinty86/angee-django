@@ -1,4 +1,4 @@
-import { Chip, TextLink } from "@angee/base";
+import { Chip, TextLink } from "@angee/ui";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, type ReactElement, type ReactNode } from "react";
 

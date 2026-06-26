@@ -12,13 +12,13 @@ import {
   type HttpError,
   } from "@refinedev/core";
 
-import { useDebouncedCallback } from "@angee/base";
+import { useDebouncedCallback } from "use-debounce";
 import {
   refineFieldsFromPaths,
   } from "@angee/refine";
 import {
   useAuthoredMutation,
-} from "@angee/data";
+} from "@angee/ui";
 import {
   refineResourceName,
   useModelMetadata,

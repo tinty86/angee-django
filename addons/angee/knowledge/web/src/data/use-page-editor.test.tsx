@@ -24,8 +24,8 @@ const sdkMocks = vi.hoisted(() => ({
   useUpdate: vi.fn(),
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredMutation: sdkMocks.useAuthoredMutation,

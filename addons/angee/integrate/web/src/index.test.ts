@@ -1,4 +1,4 @@
-import { MenuTree, type BaseMenuItem, type ChromeMenuItem } from "@angee/base";
+import { MenuTree, type BaseMenuItem, type ChromeMenuItem } from "@angee/ui";
 import { describe, expect, test } from "vitest";
 
 import integrate from "./index";

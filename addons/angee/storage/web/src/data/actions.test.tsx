@@ -30,8 +30,8 @@ const sdk = vi.hoisted(() => {
   };
 });
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredMutation: vi.fn(() => [
@@ -41,19 +41,16 @@ vi.mock("@angee/data", async (importOriginal) => {
       }),
       { error: null, fetching: false },
     ]),
+    useBusyRun: vi.fn((onChanged?: () => void) => ({
+      busy: false,
+      run: async <T,>(task: () => Promise<T>) => {
+        const result = await task();
+        onChanged?.();
+        return result;
+      },
+    })),
   };
 });
-
-vi.mock("@angee/base", () => ({
-  useBusyRun: vi.fn((onChanged?: () => void) => ({
-    busy: false,
-    run: async <T,>(task: () => Promise<T>) => {
-      const result = await task();
-      onChanged?.();
-      return result;
-    },
-  })),
-}));
 
 vi.mock("@refinedev/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@refinedev/core")>();

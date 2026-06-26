@@ -8,9 +8,9 @@ import {
   Group,
   List,
   recordActionId,
+  useAuthoredMutation,
   type ActionContext,
-} from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+} from "@angee/ui";
 
 import { useIntegrateT } from "../../i18n";
 import { IntegrateRevealCredential } from "../documents.console";

@@ -12,10 +12,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@angee/base": "workspace:*",
-    "@angee/data": "workspace:*",
+    "@angee/app": "workspace:*",
     "@angee/refine": "workspace:*",
-    "@angee/sdk": "workspace:*"
+    "@angee/resources": "workspace:*",
+    "@angee/ui": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-router": "^1",

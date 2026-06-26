@@ -1,4 +1,4 @@
-import type { BaseMenuItem } from "@angee/base";
+import type { BaseMenuItem } from "@angee/ui";
 import { describe, expect, test } from "vitest";
 
 import platform from "./index";

@@ -9,7 +9,7 @@ import {
   Group,
   List,
   useRecordActionMutation,
-} from "@angee/base";
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useAgentsT } from "../i18n";

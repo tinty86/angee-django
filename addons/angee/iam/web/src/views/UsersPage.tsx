@@ -7,7 +7,7 @@ import {
   Form,
   Group,
   List,
-} from "@angee/base";
+} from "@angee/ui";
 
 import { useIamT } from "../i18n";
 

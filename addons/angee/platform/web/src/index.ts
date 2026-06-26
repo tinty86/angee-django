@@ -1,8 +1,5 @@
-import {
-  defineBaseAddon,
-  type BaseAddonRoute,
-  type BaseMenuItem,
-} from "@angee/base";
+import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
+import { type BaseMenuItem } from "@angee/ui";
 
 import { enPlatformMessages } from "./i18n";
 import { PlatformGlyph } from "./PlatformGlyph";

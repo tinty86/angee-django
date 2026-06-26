@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Row } from "@angee/base";
+import type { Row } from "@angee/resources";
 
 import { canConnectRecord } from "../connect/ConnectOAuthButton";
 

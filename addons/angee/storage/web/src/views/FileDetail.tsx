@@ -1,6 +1,6 @@
 import { type ReactElement } from "react";
 
-import { Button, Field, FormView, Glyph, Group, buttonVariants } from "@angee/base";
+import { Button, Field, FormView, Glyph, Group, buttonVariants } from "@angee/ui";
 
 import { useStorageT } from "../i18n";
 import type { StorageFile } from "../data/documents";

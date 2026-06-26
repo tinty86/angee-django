@@ -1,4 +1,4 @@
-import { useConfirm } from "@angee/base";
+import { useConfirm } from "@angee/ui";
 import { useMemo } from "react";
 
 import {

@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
 
-import { Button, Glyph, InlineTextAction } from "@angee/base";
+import { Button, Glyph, InlineTextAction } from "@angee/ui";
 
 import { useKnowledgeT } from "../i18n";
 

@@ -8,7 +8,7 @@ import {
   formatDate as formatBaseDate,
   useResolvedWidget,
   type WidgetField,
-} from "@angee/base";
+} from "@angee/ui";
 import { useKnowledgeT } from "../i18n";
 import type { KnowledgePageDetail } from "../data/documents";
 import { usePageEditor, type SaveStatus } from "../data/use-page-editor";

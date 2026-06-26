@@ -1,5 +1,6 @@
-import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
-import { defineBaseAddon } from "@angee/base";
+import type { BaseAddonRoute } from "@angee/app";
+import { defineBaseAddon } from "@angee/app";
+import type { BaseMenuItem } from "@angee/ui";
 import { ArchiveRestore, Download, HardDrive, Image, Pencil } from "lucide-react";
 
 import { enStorageMessages } from "./i18n";

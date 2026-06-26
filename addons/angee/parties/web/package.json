@@ -10,9 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@angee/base": "workspace:*",
-    "@angee/data": "workspace:*",
-    "@angee/sdk": "workspace:*",
+    "@angee/app": "workspace:*",
+    "@angee/ui": "workspace:*",
     "lucide-react": "^1.17.0"
   },
   "peerDependencies": {

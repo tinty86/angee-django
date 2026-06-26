@@ -4,7 +4,7 @@ import {
   type ResourceToolbarGroupOption,
   type ListColumn,
   type MetricGridTile,
-} from "@angee/base";
+} from "@angee/ui";
 import { useMemo, type ReactNode } from "react";
 
 import { useOperatorT } from "../../i18n";

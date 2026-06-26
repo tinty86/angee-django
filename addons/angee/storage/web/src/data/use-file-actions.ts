@@ -18,8 +18,8 @@ import {
   } from "@angee/refine";
 import {
   useAuthoredMutation,
-} from "@angee/data";
-import { useBusyRun } from "@angee/base";
+  useBusyRun,
+} from "@angee/ui";
 import {
   refineResourceName,
   useModelMetadata,

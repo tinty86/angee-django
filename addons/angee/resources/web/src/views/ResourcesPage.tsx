@@ -7,7 +7,7 @@ import {
   type ResourceToolbarFilterField,
   type ResourceToolbarGroupOption,
   type ListColumn,
-} from "@angee/base";
+} from "@angee/ui";
 
 import { useResourcesT } from "../i18n";
 

@@ -8,7 +8,7 @@ import {
   Group,
   List,
   useEnumOptions,
-} from "@angee/base";
+} from "@angee/ui";
 
 import { useAgentsT } from "../i18n";
 

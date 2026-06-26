@@ -23,7 +23,7 @@ import {
 import {
   refineResourceName,
 } from "@angee/resources";
-import { useBusyRun } from "@angee/base";
+import { useBusyRun } from "@angee/ui";
 import {
   useModelMetadata,
 } from "@angee/resources";

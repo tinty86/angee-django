@@ -23,8 +23,7 @@ import {
   type ReactNode,
 } from "react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import { AppRuntimeProvider } from "@angee/sdk";
-import { ModalsHost, baseIcons } from "@angee/base";
+import { AppRuntimeProvider, ModalsHost, baseIcons } from "@angee/ui";
 
 import { OverviewPage } from "./OverviewPage";
 import { documentName } from "./test-documents";
@@ -52,8 +51,8 @@ const sdkMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredQuery: (document: unknown) => {

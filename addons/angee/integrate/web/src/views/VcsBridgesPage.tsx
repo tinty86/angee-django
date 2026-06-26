@@ -11,8 +11,8 @@ import {
   useImplPrefill,
   useRecordAction,
   useRecordActionMutation,
-} from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+  useAuthoredMutation,
+} from "@angee/ui";
 import { runActionResult } from "@angee/refine";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 

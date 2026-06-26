@@ -12,7 +12,7 @@ import {
   type RecordPanelContext,
   type RecordTabDescriptor,
   type StringIdRow,
-} from "@angee/base";
+} from "@angee/ui";
 
 const MODEL = "parties.Person";
 

@@ -1,5 +1,6 @@
-import type { BaseAddonRoute, BaseMenuItem } from "@angee/base";
-import { defineBaseAddon } from "@angee/base";
+import type { BaseAddonRoute } from "@angee/app";
+import { defineBaseAddon } from "@angee/app";
+import type { BaseMenuItem } from "@angee/ui";
 import { BookOpen, FileStack, FileText, Library } from "lucide-react";
 
 import { enKnowledgeMessages } from "./i18n";

@@ -12,10 +12,8 @@ import {
   errorMessage,
   useConfirm,
   type ListColumn,
-} from "@angee/base";
-import {
   useAuthoredMutation,
-} from "@angee/data";
+} from "@angee/ui";
 
 import { IamRevokeRole } from "../documents";
 import { useIamT } from "../i18n";

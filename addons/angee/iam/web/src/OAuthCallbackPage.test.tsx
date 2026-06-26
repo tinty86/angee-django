@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { AppRuntimeProvider } from "@angee/sdk";
-import { baseIcons } from "@angee/base";
+import { AppRuntimeProvider, baseIcons } from "@angee/ui";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -10,8 +9,8 @@ import { OAuthCallbackPage } from "./OAuthCallbackPage";
 
 const mocks = vi.hoisted(() => ({ mutate: vi.fn() }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredMutation: () => [mocks.mutate, { fetching: false, error: null }],

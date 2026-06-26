@@ -15,8 +15,8 @@ import {
   List,
   errorMessage,
   useRecordActionMutation,
-} from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+  useAuthoredMutation,
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectCardDavDirectory } from "./documents.console";

@@ -7,13 +7,11 @@ import {
   RelationField,
   Spinner,
   errorMessage,
-  useDebounce,
   useRelationOptions,
-} from "@angee/base";
-import {
   useAuthoredMutation,
   useAuthoredQuery,
-} from "@angee/data";
+} from "@angee/ui";
+import { useDebounce } from "use-debounce";
 import type { DocumentVariables } from "@angee/refine";
 
 import { useIntegrateT } from "../i18n";

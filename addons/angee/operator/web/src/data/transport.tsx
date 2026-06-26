@@ -1,7 +1,10 @@
-import { Alert, EmptyState, LoadingPanel, errorMessage } from "@angee/base";
 import {
+  Alert,
+  EmptyState,
+  LoadingPanel,
+  errorMessage,
   useAuthoredQuery,
-} from "@angee/data";
+} from "@angee/ui";
 import type {
   DocumentData,
   DocumentVariables,

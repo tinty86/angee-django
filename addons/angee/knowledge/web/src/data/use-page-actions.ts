@@ -27,7 +27,7 @@ import {
   rowPublicId,
 } from "@angee/resources";
 import {
-  useBusyRun } from "@angee/base";
+  useBusyRun } from "@angee/ui";
 import {
   useModelMetadata,
 } from "@angee/resources";

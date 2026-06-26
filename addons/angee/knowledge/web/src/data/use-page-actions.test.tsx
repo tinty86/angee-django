@@ -29,7 +29,7 @@ const sdk = vi.hoisted(() => {
   };
 });
 
-vi.mock("@angee/base", () => ({
+vi.mock("@angee/ui", () => ({
   rowPublicId: (record: { id?: string } | null | undefined) => record?.id ?? null,
   useBusyRun: vi.fn((onChanged?: () => void) => ({
     busy: false,

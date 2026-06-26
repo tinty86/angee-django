@@ -1,7 +1,7 @@
 import { type ReactElement } from "react";
 import { useParams } from "@tanstack/react-router";
 
-import { Badge, Code, DetailSection, DetailSurface } from "@angee/base";
+import { Badge, Code, DetailSection, DetailSurface } from "@angee/ui";
 
 import { usePlatformT } from "../i18n";
 import {

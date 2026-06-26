@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Column, ResourceList, Field, Form, List } from "@angee/base";
+import { Column, ResourceList, Field, Form, List } from "@angee/ui";
 
 const MODEL = "iam.Group";
 

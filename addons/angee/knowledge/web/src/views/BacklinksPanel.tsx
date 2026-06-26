@@ -1,6 +1,6 @@
 import { type ReactElement } from "react";
 
-import { EmptyState, Glyph } from "@angee/base";
+import { EmptyState, Glyph } from "@angee/ui";
 
 import { useKnowledgeT } from "../i18n";
 import type { Backlink } from "../data/documents";

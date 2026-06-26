@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { errorMessage } from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+import { errorMessage, useAuthoredMutation } from "@angee/ui";
 
 import { useStorageT } from "../i18n";
 import { StorageFileUploadBegin, StorageFileUploadFinalize } from "./documents";

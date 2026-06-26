@@ -1,8 +1,5 @@
-import type {
-  BaseMenuItem,
-  BaseAddonRoute,
-} from "@angee/base";
-import { defineBaseAddon } from "@angee/base";
+import type { BaseMenuItem } from "@angee/ui";
+import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import { createElement, type ComponentType, type ReactNode } from "react";
 
 import { OperatorTransportProvider } from "./data/transport";

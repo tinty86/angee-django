@@ -14,7 +14,7 @@ import {
   SettingsSection,
   SettingsShell,
   useRecordActionMutation,
-} from "@angee/base";
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";

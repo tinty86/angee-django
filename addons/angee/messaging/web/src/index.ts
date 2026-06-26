@@ -1,8 +1,8 @@
 import {
   defineBaseAddon,
   type BaseAddonRoute,
-  type BaseMenuItem,
-} from "@angee/base";
+} from "@angee/app";
+import { type BaseMenuItem } from "@angee/ui";
 import { Inbox, MessagesSquare } from "lucide-react";
 
 import { MessagesPage } from "./MessagesPage";

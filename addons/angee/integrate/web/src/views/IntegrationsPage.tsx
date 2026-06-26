@@ -12,9 +12,8 @@ import {
   List,
   useEnumOptions,
   useImplPrefill,
-  } from "@angee/base";
-import { useAuthoredMutation,
-} from "@angee/data";
+  useAuthoredMutation,
+} from "@angee/ui";
 
 import { canConnectRecord, ConnectOAuthButton } from "../connect/ConnectOAuthButton";
 import { ConnectIntegration } from "../documents";

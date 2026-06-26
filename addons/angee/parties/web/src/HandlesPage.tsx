@@ -6,7 +6,7 @@ import {
   Form,
   Group,
   List,
-} from "@angee/base";
+} from "@angee/ui";
 
 const MODEL = "parties.Handle";
 

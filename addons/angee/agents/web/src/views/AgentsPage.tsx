@@ -24,7 +24,7 @@ import {
   useToast,
   type RecordToolbarContext,
   type RecordTabDescriptor,
-  } from "@angee/base";
+  } from "@angee/ui";
 import {
   useModelMetadata,
 } from "@angee/resources";
@@ -33,7 +33,7 @@ import {
 } from "@angee/refine";
 import {
   useActionMutation,
-} from "@angee/data";
+} from "@angee/ui";
 import {
   refineResourceName,
 } from "@angee/resources";

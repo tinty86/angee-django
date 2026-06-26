@@ -1,4 +1,4 @@
-import { Code, DetailSection, DetailSurface, TextLink } from "@angee/base";
+import { Code, DetailSection, DetailSurface, TextLink } from "@angee/ui";
 import { type ReactElement } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useQuery } from "urql";

@@ -22,9 +22,9 @@ import {
   type GraphViewEdgeStyle,
   type GraphViewNode,
   type GraphViewNodeStyle,
-} from "@angee/base";
-import { useAuthoredQuery } from "@angee/data";
-import { type MessageVars } from "@angee/sdk";
+  useAuthoredQuery,
+} from "@angee/ui";
+import { type MessageVars } from "@angee/refine";
 
 import {
   IamRebacSchema,

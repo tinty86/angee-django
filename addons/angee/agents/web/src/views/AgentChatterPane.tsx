@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Card, CardContent, EmptyState, buttonVariants } from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+import { Card, CardContent, EmptyState, buttonVariants } from "@angee/ui";
+import { useAuthoredMutation } from "@angee/ui";
 import { Link } from "@tanstack/react-router";
 
 import { useAgentsT } from "../i18n";

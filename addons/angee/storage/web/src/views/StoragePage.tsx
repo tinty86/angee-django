@@ -13,10 +13,10 @@ import {
   TreeView,
   useConfirm,
   useScopedTreeExplorer,
+  useAuthoredQuery,
   type FieldDescriptor,
   type PreviewFile,
-} from "@angee/base";
-import { useAuthoredQuery } from "@angee/data";
+} from "@angee/ui";
 
 import {
   StorageBackends,

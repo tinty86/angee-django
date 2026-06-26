@@ -3,7 +3,7 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { AuthoredQueryResult } from "@angee/data";
+import type { AuthoredQueryResult } from "@angee/ui";
 
 import type {
   PlatformAddonData,
@@ -23,8 +23,8 @@ const sdkMocks = vi.hoisted(() => ({
   query: null as AuthoredQueryResult<PlatformExplorerResult> | null,
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredQuery: () => {

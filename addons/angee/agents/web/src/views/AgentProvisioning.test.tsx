@@ -41,14 +41,18 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }));
 
-vi.mock("@angee/sdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/sdk")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useNamespaceT:
       (_namespace: string, messages: Record<string, string>) =>
       (key: string): string =>
         messages[key] ?? key,
+    Card: ({ children }: { children: ReactNode }) => <article>{children}</article>,
+    CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    CardHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+    CardTitle: ({ children }: { children: ReactNode }) => <h3>{children}</h3>,
   };
 });
 
@@ -66,13 +70,6 @@ vi.mock("@refinedev/core", async (importOriginal) => {
     }),
   };
 });
-
-vi.mock("@angee/base", () => ({
-  Card: ({ children }: { children: ReactNode }) => <article>{children}</article>,
-  CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CardHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
-  CardTitle: ({ children }: { children: ReactNode }) => <h3>{children}</h3>,
-}));
 
 vi.mock("@angee/operator/runtime", () => ({
   OperatorTransportProvider: ({ children }: { children: ReactNode }) => children,

@@ -13,7 +13,7 @@ import {
   type RecordPanelContext,
   type RecordTabDescriptor,
   type StringIdRow,
-} from "@angee/base";
+} from "@angee/ui";
 
 const MODEL = "messaging.Thread";
 const MESSAGE_MODEL = "messaging.Message";

@@ -12,8 +12,8 @@ import {
   useConfirm,
   useScopedTreeExplorer,
   type WikilinkResolver,
-} from "@angee/base";
-import { useAuthoredQuery } from "@angee/data";
+} from "@angee/ui";
+import { useAuthoredQuery } from "@angee/ui";
 
 import {
   KnowledgePage as KnowledgePageQuery,

@@ -23,7 +23,7 @@ import {
   type SessionNotification,
 } from "@zed-industries/agent-client-protocol";
 import * as v from "valibot";
-import { useAuthoredMutation } from "@angee/data";
+import { useAuthoredMutation } from "@angee/ui";
 import type { DocumentVariables } from "@angee/refine";
 
 import { messageOf } from "./acp-error";

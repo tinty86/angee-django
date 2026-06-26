@@ -8,7 +8,7 @@ import {
   List,
   SettingsSection,
   SettingsShell,
-} from "@angee/base";
+} from "@angee/ui";
 import { useKnowledgeT } from "../i18n";
 
 const VAULT_MODEL = "knowledge.Vault";

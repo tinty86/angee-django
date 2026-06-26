@@ -1,8 +1,5 @@
-import {
-  defineBaseAddon,
-  type BaseAddonRoute,
-  type BaseMenuItem,
-} from "@angee/base";
+import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
+import type { BaseMenuItem } from "@angee/ui";
 
 import { enResourcesMessages } from "./i18n";
 import { ResourcesPage } from "./views/ResourcesPage";

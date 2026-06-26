@@ -23,31 +23,21 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => routerMocks.params,
 }));
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
     useAuthoredQuery: sdkMocks.useAuthoredQuery,
-  };
-});
-
-vi.mock("@angee/sdk", () => ({
-  useNamespaceT: (
-    _namespace: string,
-    messages: Record<string, string>,
-  ) => (key: string, vars?: Record<string, string>) => {
-    let message = messages[key] ?? key;
-    for (const [name, value] of Object.entries(vars ?? {})) {
-      message = message.replace(`{${name}}`, value);
-    }
-    return message;
-  },
-}));
-
-vi.mock("@angee/base", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/base")>();
-  return {
-    ...actual,
+    useNamespaceT: (
+      _namespace: string,
+      messages: Record<string, string>,
+    ) => (key: string, vars?: Record<string, string>) => {
+      let message = messages[key] ?? key;
+      for (const [name, value] of Object.entries(vars ?? {})) {
+        message = message.replace(`{${name}}`, value);
+      }
+      return message;
+    },
     EmptyState: ({ title }: { title: string }) => (
       <section data-testid="empty-state">{title}</section>
     ),

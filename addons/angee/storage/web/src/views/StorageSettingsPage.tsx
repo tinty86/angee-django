@@ -8,7 +8,7 @@ import {
   List,
   SettingsSection,
   SettingsShell,
-} from "@angee/base";
+} from "@angee/ui";
 import { useStorageT } from "../i18n";
 
 const DRIVE_MODEL = "storage.Drive";

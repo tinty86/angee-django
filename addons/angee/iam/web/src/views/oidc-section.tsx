@@ -1,4 +1,5 @@
-import { Field, Group, type Row } from "@angee/base";
+import { Field, Group } from "@angee/ui";
+import { type Row } from "@angee/resources";
 
 // iam owns the OIDC provider-type impls (GenericOidc, Google). The tab those impls
 // enable shows only when the OAuth client's provider_type is one of them — keeping

@@ -1,6 +1,5 @@
 import * as React from "react";
-import { Button, Glyph, errorMessage, usePrompt, useToast } from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+import { Button, Glyph, errorMessage, usePrompt, useToast, useAuthoredMutation } from "@angee/ui";
 import { type DocumentType } from "@angee/gql/console";
 
 import { useIntegrateT } from "../i18n";

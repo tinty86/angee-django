@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Column, ResourceList, Facet, List } from "@angee/base";
+import { Column, ResourceList, Facet, List } from "@angee/ui";
 
 const MODEL = "agents.Skill";
 

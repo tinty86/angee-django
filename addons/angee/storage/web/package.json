@@ -12,11 +12,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@angee/base": "workspace:*",
-    "@angee/data": "workspace:*",
+    "@angee/app": "workspace:*",
     "@angee/refine": "workspace:*",
     "@angee/resources": "workspace:*",
-    "@angee/sdk": "workspace:*",
+    "@angee/ui": "workspace:*",
     "@refinedev/core": "^5.0.12",
     "@vidstack/react": "^1.12.13",
     "heic-to": "^1.2.1",

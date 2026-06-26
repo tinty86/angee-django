@@ -1,4 +1,5 @@
-import { useNamespaceT, type MessageVars } from "@angee/sdk";
+import { useNamespaceT } from "@angee/ui";
+import type { MessageVars } from "@angee/refine";
 
 // English fallback strings for the integrate addon's hard-coded UI copy. The host
 // runtime owns the active translations; these are the defaults used when a key is

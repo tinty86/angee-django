@@ -1,4 +1,4 @@
-import type { GraphViewEdge, GraphViewNode } from "@angee/base";
+import type { GraphViewEdge, GraphViewNode } from "@angee/ui";
 
 import type {
   PlatformEdgeData,

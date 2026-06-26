@@ -20,8 +20,9 @@ import {
   Select,
   SurfacePanel,
   errorMessage,
-} from "@angee/base";
-import { useAuthoredMutation, useAuthoredQuery } from "@angee/data";
+  useAuthoredMutation,
+  useAuthoredQuery,
+} from "@angee/ui";
 
 import {
   IamGrantRole,

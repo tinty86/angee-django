@@ -11,10 +11,10 @@ import {
   useEnumOptions,
   useImplPrefill,
   useRecordActionMutation,
+  useAuthoredMutation,
   type ActionContext,
-} from "@angee/base";
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
-import { useAuthoredMutation } from "@angee/data";
 
 import { useIntegrateT } from "../../i18n";
 import {

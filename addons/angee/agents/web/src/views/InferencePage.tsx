@@ -15,13 +15,13 @@ import {
   useRecordActionMutation,
   useEnumOptions,
   useImplPrefill,
-  } from "@angee/base";
+  } from "@angee/ui";
 import {
   canConnectRecord,
   ConnectOAuthButton,
   } from "@angee/integrate";
 import { useAuthoredMutation,
-} from "@angee/data";
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { ConnectInferenceProvider } from "../documents";

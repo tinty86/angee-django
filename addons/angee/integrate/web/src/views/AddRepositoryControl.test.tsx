@@ -8,8 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import { AppRuntimeProvider } from "@angee/sdk";
-import { baseIcons } from "@angee/base";
+import { AppRuntimeProvider, baseIcons } from "@angee/ui";
 
 import { AddRepositoryControl } from "./AddRepositoryControl";
 
@@ -17,17 +16,6 @@ const baseMocks = vi.hoisted(() => ({
   bridgeOptions: [] as Array<{ value: string; label: string }>,
   refetchBridges: vi.fn(),
 }));
-
-vi.mock("@angee/base", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/base")>();
-  return {
-    ...actual,
-    useRelationOptions: () => ({
-      list: { fetching: false, refetch: baseMocks.refetchBridges },
-      options: baseMocks.bridgeOptions,
-    }),
-  };
-});
 
 // The mocked authored-operation surface: repo search and add mutation. VCS bridge
 // options come from the shared refine-backed relation options owner.
@@ -52,10 +40,14 @@ function operationName(document: unknown): string {
   return (definition as { name?: { value?: string } })?.name?.value ?? "";
 }
 
-vi.mock("@angee/data", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@angee/data")>();
+vi.mock("@angee/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@angee/ui")>();
   return {
     ...actual,
+    useRelationOptions: () => ({
+      list: { fetching: false, refetch: baseMocks.refetchBridges },
+      options: baseMocks.bridgeOptions,
+    }),
     useAuthoredQuery: (document: unknown, variables: unknown) => {
       const name = operationName(document);
       if (name === "IntegrateSearchRepositories") {

@@ -1,10 +1,6 @@
-import {
-  AUTH_LOGIN_METHOD_SLOT,
-  defineBaseAddon,
-  formViewSectionsSlot,
-  type BaseAddonRoute,
-  type BaseMenuItem,
-} from "@angee/base";
+import { AUTH_LOGIN_METHOD_SLOT } from "@angee/app/auth";
+import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
+import { formViewSectionsSlot, type BaseMenuItem } from "@angee/ui";
 import { createElement } from "react";
 
 import { enIamMessages } from "./i18n";

@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
   LogStream,
-} from "@angee/base";
+} from "@angee/ui";
 import {
   isFatalGraphQLWsCloseCode,
 } from "@angee/refine";

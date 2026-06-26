@@ -9,9 +9,9 @@ import {
   List,
   recordActionId,
   useRecordActionMutation,
+  useAuthoredMutation,
   type ActionContext,
-} from "@angee/base";
-import { useAuthoredMutation } from "@angee/data";
+} from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";

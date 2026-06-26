@@ -1,10 +1,10 @@
+import { AUTH_LOGIN_METHOD_SLOT } from "@angee/app/auth";
 import {
-  AUTH_LOGIN_METHOD_SLOT,
   formViewSectionsSlot,
   MenuTree,
   type BaseMenuItem,
   type ChromeMenuItem,
-} from "@angee/base";
+} from "@angee/ui";
 import { describe, expect, test } from "vitest";
 
 import iam, { IAM_LOGIN_BACKGROUND_IMAGE_URLS } from "./index";

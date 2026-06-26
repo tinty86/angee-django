@@ -7,7 +7,7 @@ import {
   Form,
   Group,
   List,
-} from "@angee/base";
+} from "@angee/ui";
 
 import { useIntegrateT } from "../i18n";
 import { AddRepositoryControl } from "./AddRepositoryControl";

@@ -5,7 +5,7 @@ import {
   ListView,
   type ResourceToolbarGroupOption,
   type ListColumn,
-} from "@angee/base";
+} from "@angee/ui";
 
 import { usePlatformT } from "../i18n";
 import { TextRouteLink } from "../lib/cells";

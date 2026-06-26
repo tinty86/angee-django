@@ -1,5 +1,12 @@
-import { Alert, Button, Glyph, Spinner, errorMessage } from "@angee/base";
-import { useAuthoredMutation, useAuthoredQuery } from "@angee/data";
+import {
+  Alert,
+  Button,
+  Glyph,
+  Spinner,
+  errorMessage,
+  useAuthoredMutation,
+  useAuthoredQuery,
+} from "@angee/ui";
 import { useState, type ReactNode } from "react";
 
 import {
