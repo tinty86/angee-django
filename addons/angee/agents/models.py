@@ -124,8 +124,6 @@ class InferenceProvider(ImplDefaultsMixin, AngeeModel):
     name = models.CharField(max_length=128)
     base_url = models.URLField(blank=True)
     """Base endpoint for OpenAI-compatible providers; blank uses the backend default."""
-    credential_env = models.CharField(max_length=128, blank=True)
-    """Environment variable name used when rendering this provider's credential."""
     config = models.JSONField(default=dict, blank=True)
     """Provider-scoped settings used by inference implementations."""
 
@@ -187,18 +185,6 @@ class InferenceProvider(ImplDefaultsMixin, AngeeModel):
             options={} if options is None else dict(options),
         )
         return self.backend.chat(request)
-
-    def service_environment(self) -> dict[str, str]:
-        """Return credential-backed environment variables for rendered services."""
-
-        env_name = str(getattr(self, "credential_env", "") or "").strip()
-        if not env_name:
-            return {}
-        credential = getattr(self, "credential", None)
-        if credential is None:
-            return {}
-        secret = str(credential.secret_value() or "")
-        return {env_name: secret} if secret else {}
 
 
 class InferenceModelManager(AngeeManager):
@@ -686,15 +672,6 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         self.runtime_status = cast(RuntimeStatus, RuntimeStatus.ERROR)
         self.last_error = message[:2000]
         self.save(update_fields=update_fields)
-
-    def service_environment(self) -> dict[str, str]:
-        """Return model-provider environment variables for rendered services."""
-
-        model = getattr(self, "model", None)
-        provider = getattr(model, "provider", None) if model is not None else None
-        if provider is None:
-            return {}
-        return cast(dict[str, str], provider.service_environment())
 
     def provision_workspace_inputs(self) -> dict[str, str]:
         """Resolve the ``agent-default`` workspace template inputs from this agent.
