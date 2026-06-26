@@ -25,7 +25,6 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 from rebac import system_context
 
-from angee.agents.models import Agent as AbstractAgent
 from angee.agents.models import InferenceModel as AbstractInferenceModel
 from angee.agents.models import InferenceProvider as AbstractInferenceProvider
 from angee.agents.models import Skill as AbstractSkill
@@ -37,9 +36,7 @@ from angee.integrate.credentials import CredentialKind
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
-    Credential,
     Integration,
-    OAuthClient,
     _create_missing_tables,
     make_integration,
 )
@@ -251,7 +248,6 @@ def test_inference_provider_materializes_backend_defaults(agents_tables: None) -
     )
 
     assert provider.name == "Anthropic"
-    assert provider.credential_env == "ANTHROPIC_API_KEY"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -301,46 +297,6 @@ def test_sdk_backend_wraps_missing_client_package_error() -> None:
 
     with pytest.raises(RuntimeError, match="missing-provider-sdk.*Missing inference backend"):
         MissingSDKBackend(SimpleNamespace())._load_client_class()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_inference_provider_service_environment_reads_provider_credential_env(
-    agents_tables: None,
-) -> None:
-    """Provider service env exposes only the provider-declared credential token."""
-
-    del agents_tables
-    integration = make_integration("anthropic-env")
-    with system_context(reason="test service env setup"):
-        oauth_client = OAuthClient.objects.create(
-            slug="anthropic-oauth",
-            display_name="Anthropic OAuth",
-            client_id="public-client",
-        )
-        credential = Credential.objects.upsert_for_user(
-            integration.owner,
-            oauth_client,
-            CredentialKind.OAUTH,
-            {"access_token": "oauth-token"},
-        )
-        provider = _provider(
-            "anthropic-env-provider",
-            backend_class="manual",
-            name="Anthropic",
-            credential=credential,
-            credential_env="ANTHROPIC_OAUTH_TOKEN",
-        )
-
-    assert provider.service_environment() == {"ANTHROPIC_OAUTH_TOKEN": "oauth-token"}
-    agent_like = SimpleNamespace(model=SimpleNamespace(provider=provider))
-    assert AbstractAgent.service_environment(agent_like) == {"ANTHROPIC_OAUTH_TOKEN": "oauth-token"}
-
-    with system_context(reason="test service env disabled"):
-        provider.credential_env = ""
-        provider.save(update_fields=["credential_env", "updated_at"])
-        provider.refresh_from_db()
-
-    assert provider.service_environment() == {}
 
 
 class _FakeModelPage:

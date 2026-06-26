@@ -46,7 +46,6 @@ class OpenAIInferenceBackend(SDKInferenceBackend):
     defaults = {
         "vendor": "openai",
         "name": "OpenAI",
-        "credential_env": "OPENAI_API_KEY",
     }
     default_broker_name = DEFAULT_BROKER_NAME
     client_class_path = "openai.OpenAI"

@@ -95,7 +95,6 @@ export const UpdateInferenceProvider = graphql(`
       }
       status
       base_url
-      credential_env
       config
       created_at
       updated_at

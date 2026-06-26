@@ -99,7 +99,6 @@ export function InferenceProvidersPage(): React.ReactElement {
         </Group>
         <Group label={t("agents.inference.provider")} columns={2}>
           <Field name="base_url" />
-          <Field name="credential_env" />
         </Group>
         <Field name="config" widget="json" />
         <Action id="refresh-models" label={t("agents.inference.refreshModels")} icon="refresh" run={refreshModels} />
