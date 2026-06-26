@@ -75,7 +75,10 @@ schema change expected (call it out if a phase needs one).
 ### Phase 1 — Cancel + Copy (zero-risk, pure assistant-ui)
 - Composer: show **Stop while running**. In `AgentChat.tsx`, gate `ComposerPrimitive.Send`
   on not-running and render `ComposerPrimitive.Cancel` when running (assistant-ui
-  exposes the running state via `ThreadPrimitive.If`). `onCancel` already wired.
+  exposes the running state via `ThreadPrimitive.If`). `onCancel` already wired. Both
+  ride the composer's existing `actions` slot — `ChatComposer` already takes
+  `input`/`actions`/`hint` (`packages/ui/src/communication/chat/index.tsx:116-145`),
+  so no `@angee/ui` change is needed for the Stop/Send swap.
 - Assistant message: add `ActionBarPrimitive.Root` + `ActionBarPrimitive.Copy`
   (copy assistant text). Compose into `ChatBubble` via an `@angee/ui` action-row
   slot — add `ChatBubbleActions` to `packages/ui/src/communication/chat/` if no
@@ -153,17 +156,28 @@ schema change expected (call it out if a phase needs one).
   — today `newSession`'s result only feeds `selectSessionModel` and `session.modes`
   is dropped (`useAcpRuntime.ts:153-158`). Mirrors the existing `setSessionModel`
   model-selection path.
+- **Caveat — the set-model/set-mode wire shim.** ACP 0.4.5 has a bug where
+  `setSessionModel()` is sent over `session/set_mode`; `acp-transport.ts`
+  (`rewriteBrokenSetModelRequest`, lines 155-161) rewrites a **`modelId`**-bearing
+  `set_mode` → `set_model` and deliberately leaves a **`modeId`**-bearing `set_mode`
+  alone. So the mode call must carry `modeId` (not `modelId`) to pass through
+  unrewritten. Remove that shim once the dep emits `session/set_model`.
 - Not in the original ask, but free affordances already on the wire.
 
-### Phase 5 — SideChat + (optional) ThreadList — needs a scope decision
-- **Clarify "SideChat":**
-  - (a) **Placement** — a docked side-panel rendering of the *same* `AgentChat`
-    (likely; `Chatter.tsx` is the tab container). Cheap: `AgentChat` is already
-    `flex h-full`; add a narrow `SideChat` wrapper / responsive composition.
-  - (b) **Multi-thread** — assistant-ui `ThreadListPrimitive` with each thread
-    mapped to an ACP `newSession`. Requires a multi-session runtime (today it's
-    one session per `agentId`). Bigger; defer unless wanted.
-- Verify: docked render in storybook; (if (b)) thread create/switch.
+### Phase 5 — SideChat (docked side-chatter); (optional) ThreadList
+- **The backend already exists — compose, don't invent.** `documents.ts` ships
+  `ResolveSessionForView` (comment: *"the side chatter"*) → `{ agent_id, agent_name,
+  status, model_handle }` or `null` (`null` ⇒ the chatter shows a call-to-action),
+  plus the `AgentSession` type. So the **primary path is (a) placement + auto-resolve**:
+  a docked panel that calls `ResolveSessionForView` for the user's current `view`, then
+  drives `AgentChat`/`useAcpRuntime` against the resolved `agent_id` (which mints its
+  own endpoint). `AgentChat` is already `flex h-full`; add a narrow `SideChat` wrapper
+  that composes it (`Chatter.tsx` is the tab container).
+- **(b) Multi-thread (defer).** assistant-ui `ThreadListPrimitive` with each thread
+  mapped to an ACP `newSession`; needs a multi-session runtime (today it's one session
+  per `agentId`). Secondary — do only if multiple concurrent threads per agent are wanted.
+- Verify: the side-chatter resolves the agent for a record view and chats; `null`
+  renders the call-to-action; (if (b)) thread create/switch.
 
 ## Out of scope (do not fake)
 - **Edit / branch / regenerate.** ACP sessions are append-only streams — there is
