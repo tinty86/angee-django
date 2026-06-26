@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   Alert,
+  ChatAttachmentChip,
   ChatBubble,
   ChatBubbleActions,
   ChatComposer,
@@ -8,6 +9,12 @@ import {
   ChatHeader,
   ChatHeaderAction,
   ContextBlock,
+  DialogBackdrop,
+  DialogBody,
+  DialogContent,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
   Glyph,
   MessageReasoningFrame,
   PopoverContent,
@@ -22,9 +29,11 @@ import {
 import {
   ActionBarPrimitive,
   AssistantRuntimeProvider,
+  AttachmentPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  type ImageMessagePartComponent,
   type ReasoningMessagePartComponent,
   type TextMessagePartComponent,
   type ToolCallMessagePartComponent,
@@ -33,6 +42,7 @@ import { Streamdown } from "streamdown";
 
 import { useAcpRuntime } from "../useAcpRuntime";
 import { useAgentsT } from "../i18n";
+import { SlashCommandComposer } from "./slash-commands";
 import type { AgentChatView, McpServerConfig } from "../documents";
 
 /**
@@ -54,7 +64,20 @@ export function AgentChat({
 }): React.ReactElement {
   const t = useAgentsT();
   const runtimeState = useAcpRuntime(agentId, view);
-  const { runtime, status, error, reconnect, clear, mcpServers, renderContext } = runtimeState;
+  const {
+    runtime,
+    status,
+    error,
+    reconnect,
+    clear,
+    mcpServers,
+    availableCommands,
+    imageSupported,
+    recordAttached,
+    attachRecord,
+    clearRecord,
+    renderContext,
+  } = runtimeState;
   const effectiveModelHandle = runtimeState.modelHandle || modelHandle;
   const ready = status === "ready";
 
@@ -91,50 +114,174 @@ export function AgentChat({
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           </ThreadPrimitive.Viewport>
-          <ComposerPrimitive.Root className="border-t border-border-subtle p-3">
-            <ChatComposer
-              input={
-                <ComposerPrimitive.Input
-                  className={chatComposerInputClassName}
-                  rows={3}
-                  placeholder={ready ? t("agents.chat.placeholder") : t(`agents.chat.status.${status}`)}
-                  disabled={!ready}
-                />
-              }
-              hint={<ChatComposerHint />}
-              actions={
-                <>
-                  <ThreadPrimitive.If running={false}>
-                    <ComposerPrimitive.Send
-                      disabled={!ready}
-                      className="text-13 text-accent disabled:text-fg-muted"
-                    >
-                      {t("agents.chat.send")}
-                    </ComposerPrimitive.Send>
-                  </ThreadPrimitive.If>
-                  <ThreadPrimitive.If running>
-                    <ComposerPrimitive.Cancel className="text-13 text-danger-text">
-                      {t("agents.chat.stop")}
-                    </ComposerPrimitive.Cancel>
-                  </ThreadPrimitive.If>
-                </>
-              }
-            />
-          </ComposerPrimitive.Root>
+          <SlashCommandComposer commands={availableCommands}>
+            <ComposerPrimitive.Root className="border-t border-border-subtle p-3">
+              <ChatComposer
+                input={
+                  <ComposerPrimitive.Input
+                    className={chatComposerInputClassName}
+                    rows={3}
+                    placeholder={ready ? t("agents.chat.placeholder") : t(`agents.chat.status.${status}`)}
+                    disabled={!ready}
+                  />
+                }
+                attachments={
+                  <>
+                    <RecordAttachmentChip
+                      attached={recordAttached}
+                      attachRecord={attachRecord}
+                      clearRecord={clearRecord}
+                      renderContext={renderContext}
+                    />
+                    <ComposerPrimitive.Attachments>
+                      {() => <ComposerImageAttachment />}
+                    </ComposerPrimitive.Attachments>
+                  </>
+                }
+                hint={<ChatComposerHint />}
+                actions={
+                  <>
+                    {imageSupported ? (
+                      <ComposerPrimitive.AddAttachment
+                        aria-label={t("agents.chat.attach")}
+                        className="inline-flex h-6 items-center rounded px-2 text-fg-muted hover:bg-inset disabled:text-fg-subtle"
+                      >
+                        <Glyph name="attachment" className="h-4 w-4" />
+                      </ComposerPrimitive.AddAttachment>
+                    ) : null}
+                    <ThreadPrimitive.If running={false}>
+                      <ComposerPrimitive.Send
+                        disabled={!ready}
+                        className="text-13 text-accent disabled:text-fg-muted"
+                      >
+                        {t("agents.chat.send")}
+                      </ComposerPrimitive.Send>
+                    </ThreadPrimitive.If>
+                    <ThreadPrimitive.If running>
+                      <ComposerPrimitive.Cancel className="text-13 text-danger-text">
+                        {t("agents.chat.stop")}
+                      </ComposerPrimitive.Cancel>
+                    </ThreadPrimitive.If>
+                  </>
+                }
+              />
+            </ComposerPrimitive.Root>
+          </SlashCommandComposer>
         </ThreadPrimitive.Root>
       </div>
     </AssistantRuntimeProvider>
   );
 }
 
-/** One user message: a right-aligned bubble of plain text. */
+/** One user message: a right-aligned bubble of plain text and any inline images sent with it. */
 function UserMessage(): React.ReactElement {
   return (
     <MessagePrimitive.Root className="mb-3">
       <ChatBubble role="user">
-        <MessagePrimitive.Parts components={{ Text: PlainText }} />
+        <MessagePrimitive.Parts components={{ Text: PlainText, Image: UserImagePart }} />
       </ChatBubble>
     </MessagePrimitive.Root>
+  );
+}
+
+const UserImagePart: ImageMessagePartComponent = ({ image }) => (
+  <img src={image} className="max-h-40 rounded-md" alt="" />
+);
+
+/** A pending composer image attachment, rendered as a chip with a remove control. The
+ *  `display:contents` root supplies the attachment context without adding a box, so the chip is
+ *  the only visual. */
+function ComposerImageAttachment(): React.ReactElement {
+  const t = useAgentsT();
+  return (
+    <AttachmentPrimitive.Root className="contents">
+      <ChatAttachmentChip
+        icon={<Glyph name="attachment" className="h-3 w-3" />}
+        remove={
+          <AttachmentPrimitive.Remove
+            aria-label={t("agents.chat.removeAttachment")}
+            className="flex shrink-0 items-center text-fg-muted hover:text-fg"
+          >
+            <Glyph name="x" className="h-3 w-3" />
+          </AttachmentPrimitive.Remove>
+        }
+      >
+        <AttachmentPrimitive.Name />
+      </ChatAttachmentChip>
+    </AttachmentPrimitive.Root>
+  );
+}
+
+/**
+ * The current-view-as-record chip. This is deliberately NOT a native assistant-ui attachment:
+ * composer attachments are cleared on every send and freeze their content at create-time, which
+ * would break the record's default-present/persistent and fresh-at-send requirements, and would
+ * route a second context-assembly path through `onNew`. Instead its presence is runtime state
+ * (`recordAttached`) that gates the single leading context block in `buildPromptBlocks`.
+ *
+ * When attached it shows a chip whose label opens an inspector (the freshly rendered
+ * `<system_context>`) and whose remove control clears the record; when cleared it shows a button
+ * to re-attach the current view.
+ */
+function RecordAttachmentChip({
+  attached,
+  attachRecord,
+  clearRecord,
+  renderContext,
+}: {
+  attached: boolean;
+  attachRecord: () => void;
+  clearRecord: () => void;
+  renderContext: () => Promise<string>;
+}): React.ReactElement {
+  const t = useAgentsT();
+  const [open, setOpen] = React.useState(false);
+  const [context, setContext] = React.useState("");
+  React.useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void renderContext().then((text) => {
+      if (active) setContext(text);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, renderContext]);
+
+  if (!attached) {
+    return <ChatHeaderAction onClick={attachRecord}>{t("agents.chat.attachView")}</ChatHeaderAction>;
+  }
+
+  return (
+    <>
+      <ChatAttachmentChip
+        icon={<Glyph name="file" className="h-3 w-3" />}
+        onClick={() => setOpen(true)}
+        remove={
+          <button
+            type="button"
+            onClick={clearRecord}
+            aria-label={t("agents.chat.removeAttachment")}
+            className="flex shrink-0 items-center text-fg-muted hover:text-fg"
+          >
+            <Glyph name="x" className="h-3 w-3" />
+          </button>
+        }
+      >
+        {t("agents.chat.viewAttachment")}
+      </ChatAttachmentChip>
+      <DialogRoot open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogBackdrop />
+          <DialogContent>
+            <DialogTitle>{t("agents.chat.context")}</DialogTitle>
+            <DialogBody>
+              <ContextBlock label={t("agents.chat.inspectContext")}>{context || "—"}</ContextBlock>
+            </DialogBody>
+          </DialogContent>
+        </DialogPortal>
+      </DialogRoot>
+    </>
   );
 }
 

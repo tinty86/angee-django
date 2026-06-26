@@ -1,12 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Button,
+  ChatAttachmentChip,
   ChatBubble,
+  ChatCommandEmpty,
+  ChatCommandItem,
+  ChatCommandList,
   ChatComposer,
   ChatComposerHint,
   ChatHeader,
   ChatHeaderAction,
   ContextBlock,
+  Glyph,
   MessageReasoningFrame,
   ToolFallback,
   chatComposerInputClassName,
@@ -72,6 +77,71 @@ export const Composer: Story = {
           </Button>
         }
       />
+    </div>
+  ),
+};
+
+export const ComposerWithAttachments: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon wires the image chip to assistant-ui's attachment
+          adapter and the "Current view" chip to runtime presence state; here both are static. */}
+      <ChatComposer
+        input={<textarea className={chatComposerInputClassName} rows={3} placeholder="Message the agent…" />}
+        attachments={
+          <>
+            <ChatAttachmentChip
+              icon={<Glyph name="file" className="h-3 w-3" />}
+              onClick={() => undefined}
+              remove={
+                <button type="button" aria-label="Remove attachment" className="flex items-center text-fg-muted hover:text-fg">
+                  <Glyph name="x" className="h-3 w-3" />
+                </button>
+              }
+            >
+              Current view
+            </ChatAttachmentChip>
+            <ChatAttachmentChip
+              icon={<Glyph name="attachment" className="h-3 w-3" />}
+              remove={
+                <button type="button" aria-label="Remove attachment" className="flex items-center text-fg-muted hover:text-fg">
+                  <Glyph name="x" className="h-3 w-3" />
+                </button>
+              }
+            >
+              screenshot.png
+            </ChatAttachmentChip>
+          </>
+        }
+        hint={<ChatComposerHint />}
+        actions={
+          <>
+            <Button size="sm" variant="ghost" aria-label="Attach image">
+              <Glyph name="attachment" className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="primary">
+              Send
+            </Button>
+          </>
+        }
+      />
+    </div>
+  ),
+};
+
+export const CommandPalette: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon binds these slots to assistant-ui's `/` trigger
+          popover, which supplies role/highlight; here the highlighted row is shown statically. */}
+      <ChatCommandList role="listbox" aria-label="Slash commands" className="relative">
+        <ChatCommandItem label="/summarize" description="Summarize the note" data-highlighted="" />
+        <ChatCommandItem label="/translate" description="Translate the note" />
+        <ChatCommandItem label="/clear" description="Clear the conversation" />
+      </ChatCommandList>
+      <ChatCommandList role="listbox" aria-label="Slash commands" className="relative mt-3">
+        <ChatCommandEmpty>No matching commands</ChatCommandEmpty>
+      </ChatCommandList>
     </div>
   ),
 };

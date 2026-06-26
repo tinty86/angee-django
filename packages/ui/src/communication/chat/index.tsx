@@ -3,15 +3,23 @@
 // streaming runtime and markdown around these. Tokens + `tone`/`Fill` follow the base
 // design system; copy routes through `useBaseT`.
 
-import type { HTMLAttributes, ReactElement, ReactNode } from "react";
+import { forwardRef } from "react";
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  ReactElement,
+  ReactNode,
+} from "react";
 
 import { useBaseT } from "../../i18n";
 import { cn } from "../../lib/cn";
 import type { Tone } from "../../lib/tones";
 import { Button, type ButtonProps } from "../../ui/button";
 import { Tag } from "../../ui/badge";
+import { Chip, type ChipTone } from "../../ui/chip";
 import { CodeBlock } from "../../ui/code";
 import { Kbd } from "../../ui/kbd";
+import { POPUP_BASE, POPUP_LIST } from "../../ui/popover";
 import { StatusDot } from "../../ui/status-icon";
 import { Textarea, textareaVariants } from "../../ui/textarea";
 
@@ -143,16 +151,21 @@ export function ChatBubbleActions({
 export interface ChatComposerProps extends HTMLAttributes<HTMLDivElement> {
   input?: ReactNode;
   actions?: ReactNode;
+  /** An attachment row above the input — chips for pending images / the current-view record
+   *  (`ChatAttachmentChip`). Renders only when present. */
+  attachments?: ReactNode;
   /** Keyboard-shortcut hint in the footer row, left of the actions (`<ChatComposerHint/>`).
    *  When set, the footer row renders even without actions. */
   hint?: ReactNode;
 }
 
-/** Composer frame: an input slot (a textarea, or an assistant-ui `ComposerPrimitive.Input`)
- *  above a footer row carrying the hint and the send/cancel actions. */
+/** Composer frame: an optional attachment chip row, then an input slot (a textarea, or an
+ *  assistant-ui `ComposerPrimitive.Input`), above a footer row carrying the hint and the
+ *  send/cancel actions. */
 export function ChatComposer({
   input,
   actions,
+  attachments,
   hint,
   className,
   children,
@@ -160,6 +173,9 @@ export function ChatComposer({
 }: ChatComposerProps): ReactElement {
   return (
     <div className={cn("space-y-2", className)} {...props}>
+      {attachments ? (
+        <div className="flex flex-wrap items-center gap-1.5">{attachments}</div>
+      ) : null}
       {input ?? children ?? <Textarea rows={3} resize="none" />}
       {hint || actions ? (
         <div className="flex items-center justify-between gap-2">
@@ -200,6 +216,107 @@ export function ChatComposerHint({ children, className }: ChatComposerHintProps)
 /** The shared textarea class for a chat composer input — lets a consumer style an
  *  assistant-ui `ComposerPrimitive.Input` like the default `<Textarea>`. */
 export const chatComposerInputClassName = textareaVariants({ size: "md", resize: "none" });
+
+export interface ChatAttachmentChipProps {
+  /** A leading glyph slot (e.g. paperclip / file). */
+  icon?: ReactNode;
+  /** The chip label (a filename, "Current view", …). */
+  children: ReactNode;
+  /** A trailing remove control slot — the consumer passes the binding's remove button. */
+  remove?: ReactNode;
+  /** When set, the label becomes a button (e.g. to inspect the attachment). */
+  onClick?: () => void;
+  tone?: ChipTone;
+  className?: string;
+}
+
+/** A composer attachment chip: a leading icon, a truncated label, and an optional remove
+ *  control. Presentation only — the consumer (the agents addon) supplies the icon glyph and
+ *  wires the assistant-ui remove binding (or a plain button) into the `remove` slot; an
+ *  `onClick` makes the label a button (the view-record chip uses it to open an inspector). */
+export function ChatAttachmentChip({
+  icon,
+  children,
+  remove,
+  onClick,
+  tone = "neutral",
+  className,
+}: ChatAttachmentChipProps): ReactElement {
+  const body = (
+    <>
+      {icon ? <span className="flex shrink-0 items-center">{icon}</span> : null}
+      <span className="truncate">{children}</span>
+    </>
+  );
+  return (
+    <Chip tone={tone} size="sm" className={cn("gap-1", className)}>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="flex min-w-0 items-center gap-1">
+          {body}
+        </button>
+      ) : (
+        body
+      )}
+      {remove}
+    </Chip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slash-command palette (presentational slots)
+// ---------------------------------------------------------------------------
+// Styled, assistant-ui-free slots a consumer composes into a trigger/slash popover.
+// The popover binding (e.g. assistant-ui's `Unstable_TriggerPopover`) supplies the
+// listbox `role`/`id`/`aria-*` and the per-item `role`/`data-highlighted` via a Slot
+// merge, so each slot must SPREAD the merged props + ref and never hard-set those.
+
+export type ChatCommandListProps = HTMLAttributes<HTMLDivElement>;
+
+/** The floating command-palette panel: a popover-surfaced, scrollable list. The binding
+ *  merges `role="listbox"`/`id`/`aria-*` onto it, so it only spreads props + ref. */
+export const ChatCommandList = forwardRef<HTMLDivElement, ChatCommandListProps>(
+  function ChatCommandList({ className, ...props }, ref) {
+    return <div ref={ref} className={cn(POPUP_BASE, POPUP_LIST, className)} {...props} />;
+  },
+);
+
+export interface ChatCommandItemProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+  label: ReactNode;
+  description?: ReactNode;
+}
+
+/** One command row: a left-aligned label over an optional muted description. The binding
+ *  merges `role="option"`/`data-highlighted`/handlers onto the button, so it spreads the
+ *  rest + ref and only owns the visual. */
+export const ChatCommandItem = forwardRef<HTMLButtonElement, ChatCommandItemProps>(
+  function ChatCommandItem({ label, description, className, ...props }, ref) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={cn(
+          "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left outline-none data-[highlighted]:bg-inset",
+          className,
+        )}
+        {...props}
+      >
+        <span className="text-13 text-fg">{label}</span>
+        {description ? <span className="truncate text-2xs text-fg-muted">{description}</span> : null}
+      </button>
+    );
+  },
+);
+
+export interface ChatCommandEmptyProps {
+  children: ReactNode;
+  className?: string;
+}
+
+/** The "no matching commands" row shown when the query filters every command out. */
+export function ChatCommandEmpty({ children, className }: ChatCommandEmptyProps): ReactElement {
+  return <div className={cn("px-2 py-1.5 text-2xs text-fg-muted", className)}>{children}</div>;
+}
 
 // ---------------------------------------------------------------------------
 // Tool call + reasoning + context

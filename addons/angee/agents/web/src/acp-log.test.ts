@@ -55,4 +55,16 @@ describe("foldIntoLog", () => {
     const next = foldIntoLog(log, note({ sessionUpdate: "tool_call_update", toolCallId: "ghost", status: "completed" }));
     expect(next).toBe(log);
   });
+
+  // Latent session state (slash commands, plan, mode) is NOT a transcript part: the transcript
+  // reducer drops it and `foldIntoSession` (acp-session.ts) owns it. Returning the same log ref
+  // proves the ownership split and avoids a needless re-render.
+  it("drops available_commands_update — it is session state, not a transcript part", () => {
+    const log: ChatMessage[] = [];
+    const next = foldIntoLog(
+      log,
+      note({ sessionUpdate: "available_commands_update", availableCommands: [{ name: "summarize", description: "Summarize" }] }),
+    );
+    expect(next).toBe(log);
+  });
 });

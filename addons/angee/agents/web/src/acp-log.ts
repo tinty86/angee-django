@@ -5,11 +5,14 @@
 
 import type { SessionNotification, ToolCallStatus } from "@zed-industries/agent-client-protocol";
 
-/** One rendered part of an assistant message, in arrival order: streamed assistant
- *  text, the agent's reasoning/thinking, or a tool call with its input and result. */
+/** One rendered part of a message, in arrival order: streamed assistant text, the agent's
+ *  reasoning/thinking, a tool call with its input and result, or an inline image the user
+ *  attached. The pure reducer never PRODUCES an `image` part (the agent does not stream user
+ *  images); `useAcpRuntime` builds it for the user echo and `convertMessage` renders it. */
 export type ChatPart =
   | { kind: "text"; text: string }
   | { kind: "reasoning"; text: string }
+  | { kind: "image"; image: string; filename?: string }
   | {
       kind: "tool";
       id: string;

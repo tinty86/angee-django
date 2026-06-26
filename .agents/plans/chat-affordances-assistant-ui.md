@@ -41,6 +41,28 @@ rejected alternatives: `.agents/notes/chat-ui-library-evaluation.md`.
 >   in `useAcpRuntime.test.ts`. Phase 3 remains the only phase that may further
 >   edit `onNew`.
 
+> **Update (2026-06-26, cont.): Phases 2 + 3 implemented (ultracode) and live-verified.**
+> Landed — typecheck clean; 39 `@angee/agents` + 278 `@angee/ui` tests; arch/react/invariant
+> reviews pass:
+> - **Phase 3 — attachments + current-view-as-record.** The view is an `@angee/ui` "Current
+>   view" chip (presence-state in `useAcpRuntime`, fetched fresh at send) — deliberately *not*
+>   a native assistant-ui attachment (that would route through `AppendMessage.attachments` =
+>   a 2nd context path, and hit the composer-clears-on-send + accept-validation gotchas).
+>   Inspect opens a "System context" dialog; clear/re-attach gate the context block. Images
+>   use `SimpleImageAttachmentAdapter` → `dataUrlToImageBlock` → ACP `image` block (gated on
+>   `image:true`). All exercised live in the browser.
+> - **Phase 2 — slash commands.** Palette sourced from `available_commands_update`, inserted
+>   via the Directive (text only — never a second send path). **Live finding (investigated):**
+>   `claude-code-acp` runs a slash command only when the message is a *clean* `/command` — an
+>   embedded-resource context block becomes a URI-link text block in the SDK message
+>   (`promptToClaude`), so the command falls through to the model. Fix: `buildPromptBlocks`
+>   drops the context block for `/command` sends. Verified live: `/context` now returns the
+>   real Context-Usage breakdown, not a conversational reply.
+> - **Follow-ups from review (non-blocking):** de-dupe the render-context effect (SessionInfo +
+>   RecordAttachmentChip); give `SlashCommandComposer` a stable root so a late
+>   `available_commands_update` doesn't remount the composer; `readonly availableCommands`;
+>   `convertMessage` exhaustiveness; user-image `alt` text.
+
 Scope is `addons/angee/agents/web` + `packages/ui` (chat primitives). No backend
 schema change expected (call it out if a phase needs one).
 
