@@ -25,8 +25,10 @@ import {
   type PromptCapabilities,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type SessionConfigSelectGroup,
+  type SessionConfigSelectOption,
   type SessionNotification,
-} from "@zed-industries/agent-client-protocol";
+} from "@agentclientprotocol/sdk";
 import * as v from "valibot";
 import { useAuthoredMutation } from "@angee/ui";
 import type { DocumentVariables } from "@angee/refine";
@@ -435,29 +437,36 @@ function toMcpServers(servers: Record<string, McpServerConfig>): McpServer[] {
   }));
 }
 
-/** Select the Agent row's model for the ACP session before the first prompt. */
+/** Select the Agent row's model for the ACP session before the first prompt. In sdk 1.0.0 the
+ *  model is a session config option (`category: "model"`), applied via `setSessionConfigOption`. */
 export async function selectSessionModel(
   connection: Agent,
   session: NewSessionResponse,
   modelHandle: string,
 ): Promise<void> {
   if (modelHandle === "") return;
-  const models = session.models;
-  // No standard ACP model state means the agent owns its own model (e.g. opencode selects
-  // from its config / OPENCODE_MODEL and advertises models through a non-standard
-  // `configOptions` field this client can't drive). Defer to its configured model rather
-  // than failing the whole session — the handle is pinned in the agent's container. A
-  // claude-code-style agent does advertise `models`, so its selection below still runs.
-  if (models == null) return;
-  if (models.currentModelId === modelHandle) return;
-  if (!models.availableModels.some((model) => model.modelId === modelHandle)) {
-    const available = models.availableModels.map((model) => model.modelId).join(", ") || "none";
+  const option = session.configOptions?.find((opt) => opt.category === "model");
+  // No model config option means the agent owns its own model (env/config-pinned in its
+  // container, e.g. opencode) — defer rather than failing the whole session.
+  if (option === undefined || option.type !== "select") return;
+  // The select's values are either flat or grouped; flatten to the selectable options.
+  const values = (
+    option.options as ReadonlyArray<SessionConfigSelectOption | SessionConfigSelectGroup>
+  ).flatMap((entry) => ("options" in entry ? entry.options : [entry]));
+  const match = values.find((value) => value.value === modelHandle || value.name === modelHandle);
+  if (match === undefined) {
+    const available = values.map((value) => value.value).join(", ") || "none";
     throw new Error(`The selected model ${modelHandle} is not available in this agent session (${available}).`);
   }
-  if (connection.setSessionModel === undefined) {
+  if (option.currentValue === match.value) return;
+  if (connection.setSessionConfigOption === undefined) {
     throw new Error(`The agent does not support selecting ${modelHandle} for this session.`);
   }
-  await connection.setSessionModel({ sessionId: session.sessionId, modelId: modelHandle });
+  await connection.setSessionConfigOption({
+    sessionId: session.sessionId,
+    configId: option.id,
+    value: match.value,
+  });
 }
 
 /** Opaque identifier for the embedded view-context resource (its content is inline). */
@@ -466,7 +475,7 @@ const CONTEXT_RESOURCE_URI = "angee:///agent/system-context";
 /**
  * Build the ACP prompt for one send. Context and the user's text are each their OWN `ContentBlock`
  * (context as an embedded `resource` when the agent advertises `embeddedContext`, else a plain
- * `text` block) — never string-merged. A `/command` send carries NO context block: claude-code-acp
+ * `text` block) — never string-merged. A `/command` send carries NO context block: claude-agent-acp
  * runs a slash command only when the message is a clean "/command" — any extra block (an embedded
  * resource becomes a URI-link text block in the SDK message) makes the SDK treat it as prose and
  * invoke the model instead. A normal send leads with context. Attachments always trail; the empty

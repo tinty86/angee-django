@@ -72,7 +72,7 @@ Dependency changes must update this file in the same change.
 | tailwind-merge | Safe class merging | `cn()` helper |
 | lucide-react | Icons | Name-referenced icon registry |
 | Vite | Bundling, dev server, HMR | Project integration |
-| @zed-industries/agent-client-protocol | ACP client — agent JSON-RPC session, prompt/cancel, session-update stream | WebSocket ndjson transport to a routed agent + assistant-ui runtime bridge |
+| @agentclientprotocol/sdk | ACP client — agent JSON-RPC session, prompt/cancel, session-update stream (the agent image runs `@agentclientprotocol/claude-agent-acp`; both replace the deprecated `@zed-industries/*` names) | WebSocket ndjson transport to a routed agent + assistant-ui runtime bridge |
 | @assistant-ui/react | Chat thread UI — message store, composer, tool-call rendering | ACP-streaming runtime adapter and styled thread surface |
 | streamdown | Streamed-markdown render for assistant chunks | Assistant message body in the agent chat |
 | react-pdf (+ pdfjs-dist) | Inline PDF rendering (pdf.js) | storage file previewer |

@@ -16,74 +16,64 @@ function imageAttachment(dataUrl: string): CompleteAttachment {
 }
 
 describe("selectSessionModel", () => {
-  test("switches from ACP default to the agent model handle", async () => {
-    const setSessionModel = vi.fn(async () => undefined);
+  // In sdk 1.0.0 the model is a "model"-category select config option, applied via
+  // setSessionConfigOption; the session fixtures below mirror that shape.
+  const modelOption = (currentValue: string, values: string[]) => ({
+    id: "model",
+    type: "select" as const,
+    category: "model" as const,
+    name: "Model",
+    currentValue,
+    options: values.map((value) => ({ value, name: value })),
+  });
+
+  test("sets the model config option to the agent model handle", async () => {
+    const setSessionConfigOption = vi.fn(async () => undefined);
 
     await selectSessionModel(
-      { setSessionModel } as never,
-      {
-        sessionId: "session-1",
-        models: {
-          currentModelId: "default",
-          availableModels: [
-            { modelId: "default", name: "Default" },
-            { modelId: "claude-opus-4-8", name: "claude-opus-4-8" },
-          ],
-        },
-      },
+      { setSessionConfigOption } as never,
+      { sessionId: "session-1", configOptions: [modelOption("default", ["default", "claude-opus-4-8"])] } as never,
       "claude-opus-4-8",
     );
 
-    expect(setSessionModel).toHaveBeenCalledWith({
+    expect(setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "session-1",
-      modelId: "claude-opus-4-8",
+      configId: "model",
+      value: "claude-opus-4-8",
     });
   });
 
-  test("does not switch when the selected model is already current", async () => {
-    const setSessionModel = vi.fn(async () => undefined);
+  test("does not set when the selected model is already current", async () => {
+    const setSessionConfigOption = vi.fn(async () => undefined);
 
     await selectSessionModel(
-      { setSessionModel } as never,
-      {
-        sessionId: "session-1",
-        models: {
-          currentModelId: "claude-opus-4-8",
-          availableModels: [{ modelId: "claude-opus-4-8", name: "claude-opus-4-8" }],
-        },
-      },
+      { setSessionConfigOption } as never,
+      { sessionId: "session-1", configOptions: [modelOption("claude-opus-4-8", ["claude-opus-4-8"])] } as never,
       "claude-opus-4-8",
     );
 
-    expect(setSessionModel).not.toHaveBeenCalled();
+    expect(setSessionConfigOption).not.toHaveBeenCalled();
   });
 
-  test("defers to the agent when it advertises no standard model state", async () => {
-    // opencode owns its model via its own config (it advertises models through a
-    // non-standard `configOptions` field, not ACP `models`), so the client must not
-    // fail the session — it leaves the container-pinned model in place.
-    const setSessionModel = vi.fn(async () => undefined);
+  test("defers when the agent advertises no model config option", async () => {
+    // The agent owns its model (env/config-pinned in its container), so the client must not
+    // fail the session — it leaves the configured model in place.
+    const setSessionConfigOption = vi.fn(async () => undefined);
 
     await selectSessionModel(
-      { setSessionModel } as never,
-      { sessionId: "session-1" },
+      { setSessionConfigOption } as never,
+      { sessionId: "session-1" } as never,
       "anthropic/claude-sonnet-4-6",
     );
 
-    expect(setSessionModel).not.toHaveBeenCalled();
+    expect(setSessionConfigOption).not.toHaveBeenCalled();
   });
 
-  test("fails loudly when the selected model is not advertised", async () => {
+  test("fails loudly when the selected model is not available", async () => {
     await expect(
       selectSessionModel(
-        { setSessionModel: vi.fn() } as never,
-        {
-          sessionId: "session-1",
-          models: {
-            currentModelId: "default",
-            availableModels: [{ modelId: "default", name: "Default" }],
-          },
-        },
+        { setSessionConfigOption: vi.fn() } as never,
+        { sessionId: "session-1", configOptions: [modelOption("default", ["default"])] } as never,
         "claude-opus-4-8",
       ),
     ).rejects.toThrow("claude-opus-4-8");
@@ -120,7 +110,7 @@ describe("buildPromptBlocks", () => {
     ]);
   });
 
-  // claude-code-acp runs a slash command only when the message is a clean "/command"; any extra
+  // claude-agent-acp runs a slash command only when the message is a clean "/command"; any extra
   // block makes the SDK treat it as prose. So a /command send carries NO context block.
   test("a /command send carries no context block — a clean command for the agent to run", () => {
     expect(buildPromptBlocks("CTX", "/context", { embeddedContext: true })).toEqual([

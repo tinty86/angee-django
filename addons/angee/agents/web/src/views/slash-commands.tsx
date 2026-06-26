@@ -16,7 +16,7 @@
 
 import * as React from "react";
 import { ComposerPrimitive } from "@assistant-ui/react";
-import type { AvailableCommand } from "@zed-industries/agent-client-protocol";
+import type { AvailableCommand } from "@agentclientprotocol/sdk";
 import { ChatCommandEmpty, ChatCommandItem, ChatCommandList } from "@angee/ui";
 
 import { useAgentsT } from "../i18n";

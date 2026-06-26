@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AvailableCommand } from "@zed-industries/agent-client-protocol";
+import type { AvailableCommand } from "@agentclientprotocol/sdk";
 
 import { commandAdapter, slashCommandFormatter } from "./slash-commands";
 

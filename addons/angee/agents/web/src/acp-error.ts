@@ -5,7 +5,7 @@
  *
  * A failed ACP request rejects with the raw JSON-RPC error object
  * (`{ code, message, data }`), *not* an `Error`: the connection does
- * `reject(response.error)` (see @zed-industries/agent-client-protocol
+ * `reject(response.error)` (see @agentclientprotocol/sdk
  * `#handleResponse`). So an agent-side failure — e.g. a 401 from its model API —
  * carries its detail on that object's `message`, which must be read off the
  * object shape too, not just `Error.message`, or it is dropped for the fallback

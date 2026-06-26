@@ -6,7 +6,7 @@
 // everything else the agent advertises about the session. The slash-command list lands here
 // now; the agent's task `plan` and `current_mode` arrive here in a later phase.
 
-import type { AvailableCommand, SessionNotification } from "@zed-industries/agent-client-protocol";
+import type { AvailableCommand, SessionNotification } from "@agentclientprotocol/sdk";
 
 /** A snapshot of the live session's latent state, held outside the message transcript. */
 export interface AcpSession {

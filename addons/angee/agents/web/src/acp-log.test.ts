@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionNotification } from "@zed-industries/agent-client-protocol";
+import type { SessionNotification } from "@agentclientprotocol/sdk";
 
 import { foldIntoLog, type ChatMessage, type ChatPart } from "./acp-log";
 
