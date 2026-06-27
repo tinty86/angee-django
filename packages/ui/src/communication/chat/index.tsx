@@ -3,15 +3,25 @@
 // streaming runtime and markdown around these. Tokens + `tone`/`Fill` follow the base
 // design system; copy routes through `useBaseT`.
 
-import type { HTMLAttributes, ReactElement, ReactNode } from "react";
+import { forwardRef } from "react";
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  ReactElement,
+  ReactNode,
+} from "react";
 
 import { useBaseT } from "../../i18n";
 import { cn } from "../../lib/cn";
+import { useRender, type UseRenderRenderProp } from "../../lib/slot";
 import type { Tone } from "../../lib/tones";
+import { tv } from "../../lib/variants";
 import { Button, type ButtonProps } from "../../ui/button";
 import { Tag } from "../../ui/badge";
+import { Chip, type ChipTone } from "../../ui/chip";
 import { CodeBlock } from "../../ui/code";
 import { Kbd } from "../../ui/kbd";
+import { POPUP_BASE, POPUP_LIST } from "../../ui/popover";
 import { StatusDot } from "../../ui/status-icon";
 import { Textarea, textareaVariants } from "../../ui/textarea";
 
@@ -62,6 +72,31 @@ export function ChatHeader({
   );
 }
 
+export interface ChatBarProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  /** The leading slot — e.g. a status dot + an agent/thread chooser. */
+  start?: ReactNode;
+  /** The trailing slot — e.g. a single overflow (⋯) menu. */
+  end?: ReactNode;
+}
+
+/** A dense, single-row chat header frame: a leading `start` slot (status + chooser) and a
+ *  trailing `end` slot (overflow menu), divided by a bottom border. Pure presentation — the
+ *  consumer composes the chooser/menu; this owns only the dense bar layout. */
+export function ChatBar({ start, end, className, ...props }: ChatBarProps): ReactElement {
+  return (
+    <header
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-2 border-b border-border-subtle bg-sheet-2 px-3 py-2",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex min-w-0 items-center gap-2">{start}</div>
+      {end ? <div className="flex shrink-0 items-center gap-1.5">{end}</div> : null}
+    </header>
+  );
+}
+
 export interface ChatHeaderActionProps extends Omit<ButtonProps, "size" | "variant"> {
   size?: ButtonProps["size"];
   variant?: ButtonProps["variant"];
@@ -75,6 +110,118 @@ export function ChatHeaderAction({
   ...props
 }: ChatHeaderActionProps): ReactElement {
   return <Button size={size} variant={variant} className={cn("h-6 px-2 text-2xs", className)} {...props} />;
+}
+
+// ---------------------------------------------------------------------------
+// Session rail (thread/session switcher list)
+// ---------------------------------------------------------------------------
+// A semantic `nav > ul > li > a` list for switching between sessions/threads (the
+// full-page agent sessions view backs it with its running-agents query). Distinct
+// from a Menu (these are navigable destinations, not commands) and from a Select
+// listbox (the active row is `aria-current="page"`, not `aria-selected`). Pure
+// presentation — the consumer supplies the status slot and the router `Link` via
+// `render`.
+
+export interface SessionRailProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  /** Accessible name for the nav landmark (e.g. "Running agents"). */
+  label: string;
+  /** Optional header slot above the list — e.g. a "+ New" control. */
+  action?: ReactNode;
+  /** Marks the list busy while sessions load (skeleton rows render as children). */
+  busy?: boolean;
+  children: ReactNode;
+}
+
+/** The left rail of a sessions view: a labelled `nav` with an optional header action
+ *  ("+ New") over a scrollable `ul` of `SessionRailItem` rows. */
+export function SessionRail({
+  label,
+  action,
+  busy,
+  className,
+  children,
+  ...props
+}: SessionRailProps): ReactElement {
+  return (
+    <nav
+      aria-label={label}
+      className={cn(
+        "flex h-full min-h-0 w-60 shrink-0 flex-col border-r border-border-subtle bg-sheet-2",
+        className,
+      )}
+      {...props}
+    >
+      {action ? <div className="border-b border-border-subtle p-2">{action}</div> : null}
+      <ul aria-busy={busy || undefined} className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+        {children}
+      </ul>
+    </nav>
+  );
+}
+
+// The dense active-row look is intentionally shared in spirit with the chrome
+// `SubNavLink` (`ConsoleSubNav`), but kept separate per AGENTS.md DRY's
+// "similar code, different intent": `SubNavLink` is a single-label section link
+// bound to the chrome menu tree's route-active matching, whereas this is a generic
+// multi-slot session row (status dot + name + muted handle) the consumer binds to
+// any router `Link` via `render`. Extracting one recipe would couple two unrelated
+// layers (chrome navigation ↔ the communication surface) for a few utility classes.
+export const sessionRailItemVariants = tv({
+  base: "flex h-8 items-center gap-2 rounded-md px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
+  variants: {
+    active: {
+      true: "bg-brand-soft font-medium text-brand-soft-text hover:bg-brand-soft",
+      false: "",
+    },
+  },
+  defaultVariants: { active: false },
+});
+
+export interface SessionRailItemProps {
+  /** Whether this row is the open session — sets `aria-current="page"` + `data-active`. */
+  active?: boolean;
+  /** Leading status slot — e.g. a `StatusDot` for the session's runtime status. */
+  status?: ReactNode;
+  /** Trailing muted handle slot — e.g. the model handle. */
+  handle?: ReactNode;
+  /** The router `Link` element to render the row as (defaults to a plain `<a>`). */
+  render?: UseRenderRenderProp<{ active: boolean }>;
+  className?: string;
+  /** The row's primary label (the session/agent name). */
+  children: ReactNode;
+}
+
+/** One session rail row: a `<li>` wrapping an anchor (the consumer's router `Link` via
+ *  `render`) with a leading status slot, a truncated name, and an optional muted handle.
+ *  The active row carries `aria-current="page"` and a `data-active` highlight. */
+export function SessionRailItem({
+  active = false,
+  status,
+  handle,
+  render,
+  className,
+  children,
+}: SessionRailItemProps): ReactElement {
+  const anchor = useRender<{ active: boolean }, HTMLElement>({
+    defaultTagName: "a",
+    render,
+    state: { active },
+    props: {
+      "aria-current": active ? "page" : undefined,
+      "data-active": active || undefined,
+      className: sessionRailItemVariants({ active, className }),
+      children: (
+        <>
+          {status}
+          <span className="min-w-0 flex-1 truncate">{children}</span>
+          {handle ? (
+            <span className="shrink-0 truncate text-2xs text-fg-muted">{handle}</span>
+          ) : null}
+        </>
+      ),
+    },
+  });
+  return <li>{anchor}</li>;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +283,31 @@ export function ChatBubbleActions({
   );
 }
 
+export interface ChatTypingIndicatorProps {
+  /** Overrides the announced label (defaults to `chat.typing`). */
+  label?: ReactNode;
+  className?: string;
+}
+
+/** An animated three-dot "thinking" indicator for a started-but-empty assistant turn.
+ *  Presentation only — the consumer gates it on the runtime's running state (e.g. the
+ *  assistant-ui `ThreadPrimitive.If running` filter on the last empty message). The dots are
+ *  `aria-hidden`; an `aria-live="polite"` label (default `chat.typing`) announces it to
+ *  assistive tech, and the motion is gated behind `motion-safe`. */
+export function ChatTypingIndicator({ label, className }: ChatTypingIndicatorProps): ReactElement {
+  const t = useBaseT();
+  return (
+    <div aria-live="polite" className={cn("flex items-center gap-1.5", className)}>
+      <span className="sr-only">{label ?? t("chat.typing")}</span>
+      <span aria-hidden className="flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce [animation-delay:-0.3s]" />
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce [animation-delay:-0.15s]" />
+        <span className="size-1.5 rounded-full bg-fg-muted motion-safe:animate-bounce" />
+      </span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Composer
 // ---------------------------------------------------------------------------
@@ -143,16 +315,21 @@ export function ChatBubbleActions({
 export interface ChatComposerProps extends HTMLAttributes<HTMLDivElement> {
   input?: ReactNode;
   actions?: ReactNode;
+  /** An attachment row above the input — chips for pending images / the current-view record
+   *  (`ChatAttachmentChip`). Renders only when present. */
+  attachments?: ReactNode;
   /** Keyboard-shortcut hint in the footer row, left of the actions (`<ChatComposerHint/>`).
    *  When set, the footer row renders even without actions. */
   hint?: ReactNode;
 }
 
-/** Composer frame: an input slot (a textarea, or an assistant-ui `ComposerPrimitive.Input`)
- *  above a footer row carrying the hint and the send/cancel actions. */
+/** Composer frame: an optional attachment chip row, then an input slot (a textarea, or an
+ *  assistant-ui `ComposerPrimitive.Input`), above a footer row carrying the hint and the
+ *  send/cancel actions. */
 export function ChatComposer({
   input,
   actions,
+  attachments,
   hint,
   className,
   children,
@@ -160,6 +337,9 @@ export function ChatComposer({
 }: ChatComposerProps): ReactElement {
   return (
     <div className={cn("space-y-2", className)} {...props}>
+      {attachments ? (
+        <div className="flex flex-wrap items-center gap-1.5">{attachments}</div>
+      ) : null}
       {input ?? children ?? <Textarea rows={3} resize="none" />}
       {hint || actions ? (
         <div className="flex items-center justify-between gap-2">
@@ -200,6 +380,107 @@ export function ChatComposerHint({ children, className }: ChatComposerHintProps)
 /** The shared textarea class for a chat composer input — lets a consumer style an
  *  assistant-ui `ComposerPrimitive.Input` like the default `<Textarea>`. */
 export const chatComposerInputClassName = textareaVariants({ size: "md", resize: "none" });
+
+export interface ChatAttachmentChipProps {
+  /** A leading glyph slot (e.g. paperclip / file). */
+  icon?: ReactNode;
+  /** The chip label (a filename, "Current view", …). */
+  children: ReactNode;
+  /** A trailing remove control slot — the consumer passes the binding's remove button. */
+  remove?: ReactNode;
+  /** When set, the label becomes a button (e.g. to inspect the attachment). */
+  onClick?: () => void;
+  tone?: ChipTone;
+  className?: string;
+}
+
+/** A composer attachment chip: a leading icon, a truncated label, and an optional remove
+ *  control. Presentation only — the consumer (the agents addon) supplies the icon glyph and
+ *  wires the assistant-ui remove binding (or a plain button) into the `remove` slot; an
+ *  `onClick` makes the label a button (the view-record chip uses it to open an inspector). */
+export function ChatAttachmentChip({
+  icon,
+  children,
+  remove,
+  onClick,
+  tone = "neutral",
+  className,
+}: ChatAttachmentChipProps): ReactElement {
+  const body = (
+    <>
+      {icon ? <span className="flex shrink-0 items-center">{icon}</span> : null}
+      <span className="truncate">{children}</span>
+    </>
+  );
+  return (
+    <Chip tone={tone} size="sm" className={cn("gap-1", className)}>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="flex min-w-0 items-center gap-1">
+          {body}
+        </button>
+      ) : (
+        body
+      )}
+      {remove}
+    </Chip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slash-command palette (presentational slots)
+// ---------------------------------------------------------------------------
+// Styled, assistant-ui-free slots a consumer composes into a trigger/slash popover.
+// The popover binding (e.g. assistant-ui's `Unstable_TriggerPopover`) supplies the
+// listbox `role`/`id`/`aria-*` and the per-item `role`/`data-highlighted` via a Slot
+// merge, so each slot must SPREAD the merged props + ref and never hard-set those.
+
+export type ChatCommandListProps = HTMLAttributes<HTMLDivElement>;
+
+/** The floating command-palette panel: a popover-surfaced, scrollable list. The binding
+ *  merges `role="listbox"`/`id`/`aria-*` onto it, so it only spreads props + ref. */
+export const ChatCommandList = forwardRef<HTMLDivElement, ChatCommandListProps>(
+  function ChatCommandList({ className, ...props }, ref) {
+    return <div ref={ref} className={cn(POPUP_BASE, POPUP_LIST, className)} {...props} />;
+  },
+);
+
+export interface ChatCommandItemProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+  label: ReactNode;
+  description?: ReactNode;
+}
+
+/** One command row: a left-aligned label over an optional muted description. The binding
+ *  merges `role="option"`/`data-highlighted`/handlers onto the button, so it spreads the
+ *  rest + ref and only owns the visual. */
+export const ChatCommandItem = forwardRef<HTMLButtonElement, ChatCommandItemProps>(
+  function ChatCommandItem({ label, description, className, ...props }, ref) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={cn(
+          "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left outline-none data-[highlighted]:bg-inset",
+          className,
+        )}
+        {...props}
+      >
+        <span className="text-13 text-fg">{label}</span>
+        {description ? <span className="truncate text-2xs text-fg-muted">{description}</span> : null}
+      </button>
+    );
+  },
+);
+
+export interface ChatCommandEmptyProps {
+  children: ReactNode;
+  className?: string;
+}
+
+/** The "no matching commands" row shown when the query filters every command out. */
+export function ChatCommandEmpty({ children, className }: ChatCommandEmptyProps): ReactElement {
+  return <div className={cn("px-2 py-1.5 text-2xs text-fg-muted", className)}>{children}</div>;
+}
 
 // ---------------------------------------------------------------------------
 // Tool call + reasoning + context

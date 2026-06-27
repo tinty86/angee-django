@@ -7,14 +7,17 @@
 
 import * as React from "react";
 import {
+  SimpleImageAttachmentAdapter,
   useExternalStoreRuntime,
   type AppendMessage,
+  type CompleteAttachment,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import {
   ClientSideConnection,
   PROTOCOL_VERSION,
   type Agent,
+  type AvailableCommand,
   type Client,
   type ContentBlock,
   type McpServer,
@@ -22,14 +25,17 @@ import {
   type PromptCapabilities,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type SessionConfigSelectGroup,
+  type SessionConfigSelectOption,
   type SessionNotification,
-} from "@zed-industries/agent-client-protocol";
+} from "@agentclientprotocol/sdk";
 import * as v from "valibot";
 import { useAuthoredMutation } from "@angee/ui";
 import type { DocumentVariables } from "@angee/refine";
 
 import { messageOf } from "./acp-error";
-import { foldIntoLog, type ChatMessage } from "./acp-log";
+import { foldIntoLog, type ChatMessage, type ChatPart } from "./acp-log";
+import { emptySession, foldIntoSession, type AcpSession } from "./acp-session";
 import { openAcpTransport, type AcpTransport } from "./acp-transport";
 import { type DocumentType } from "@angee/gql/console";
 import {
@@ -60,6 +66,19 @@ export interface AcpRuntime {
   mcpServers: Record<string, McpServerConfig>;
   /** The model handle selected on the Agent row and applied to the ACP session. */
   modelHandle: string;
+  /** The agent's advertised slash commands (from `available_commands_update`), for the
+   *  composer's `/` palette; empty until the agent advertises any. */
+  availableCommands: readonly AvailableCommand[];
+  /** Whether the agent advertises `promptCapabilities.image` — gates the composer's image
+   *  attachment controls (the paperclip + the attachment adapter). */
+  imageSupported: boolean;
+  /** Whether the user's current view rides along as the leading context block on each send.
+   *  Default true; clearing the view-record chip suppresses the context block. */
+  recordAttached: boolean;
+  /** Re-attach the current view as the send-time context (sets `recordAttached`). */
+  attachRecord: () => void;
+  /** Drop the current view from the send (clears `recordAttached`, suppressing context). */
+  clearRecord: () => void;
   /** Render the `<system_context>` for the current view, for the session info panel. */
   renderContext: () => Promise<string>;
 }
@@ -79,6 +98,20 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
   const [isRunning, setIsRunning] = React.useState(false);
   const [mcpServers, setMcpServers] = React.useState<Record<string, McpServerConfig>>({});
   const [modelHandle, setModelHandle] = React.useState("");
+  // Whether the agent advertises `promptCapabilities.image` — STATE (not a ref) because it
+  // arrives async after `initialize`, and the attachment-adapter memo + the composer's
+  // paperclip must re-render when it flips on. `promptCapabilitiesRef` below carries the same
+  // facts to `onNew` for send-time correctness.
+  const [imageSupported, setImageSupported] = React.useState(false);
+  // Whether the user's current view rides along as the leading context block. Default true so
+  // context is on by default; clearing the view-record chip flips it off. A ref mirror lets the
+  // send-time `onNew` read the latest value without re-subscribing the callback.
+  const [recordAttached, setRecordAttached] = React.useState(true);
+  const recordAttachedRef = React.useRef(recordAttached);
+  recordAttachedRef.current = recordAttached;
+  // Latent session state (the agent's advertised slash commands today) folded from `session/update`
+  // alongside the transcript; held outside the message log because it is not a transcript part.
+  const [session, setSession] = React.useState<AcpSession>(emptySession);
   // Bumping this re-runs the connect effect — the `reconnect()` control.
   const [reconnectNonce, setReconnectNonce] = React.useState(0);
 
@@ -99,6 +132,7 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
   // re-render (an in-place mutation keeps the identity and is dropped).
   const onUpdate = React.useCallback((note: SessionNotification): void => {
     setMessages((log) => foldIntoLog(log, note));
+    setSession((s) => foldIntoSession(s, note));
   }, []);
   // The connect effect builds the ACP client once; it reads `onUpdate` through a ref so a
   // callback-identity change never tears down and reconnects the socket (which tracks
@@ -120,6 +154,8 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
     setIsRunning(false);
     setMcpServers({});
     setModelHandle("");
+    setImageSupported(false);
+    setRecordAttached(true);
     promptCapabilitiesRef.current = null;
 
     const tearDown = (): void => {
@@ -134,6 +170,11 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
       // composer isn't disabled mid-conversation; only a genuine failure surfaces.
       if (!silent) setStatus("connecting");
       setError(null);
+      // Reset commands on EVERY (re)connect — both the hard reconnect AND the silent
+      // token-refresh connect(true), which does not re-run the effect (so the effect-top resets
+      // don't cover it) — so a stale palette never outlives its session. Race-safe at connect-start:
+      // no available_commands_update can arrive before the session handshake below.
+      setSession(emptySession);
       try {
         const endpoint = await mintEndpoint({ id: agentId });
         if (!active) return;
@@ -151,7 +192,9 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
           clientCapabilities: {},
         });
         if (!active) return;
-        promptCapabilitiesRef.current = init.agentCapabilities?.promptCapabilities ?? null;
+        const caps = init.agentCapabilities?.promptCapabilities ?? null;
+        promptCapabilitiesRef.current = caps;
+        setImageSupported(caps?.image === true);
         // Straight to a session: Claude Code authenticates from its env token
         // (CLAUDE_CODE_OAUTH_TOKEN, synced at provision), and its ACP `authenticate`
         // method is not implemented — it advertises `claude-login` only as a terminal
@@ -199,24 +242,50 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
     };
   }, [agentId, mintEndpoint, reconnectNonce]);
 
+  // The attachment adapter, wired onto the runtime only when the agent advertises `image`.
+  // `SimpleImageAttachmentAdapter` reads pasted/picked images into data-URL parts; `onNew`
+  // maps those to ACP `image` ContentBlocks. Memoized on `imageSupported` so the runtime sees
+  // a stable adapter that appears/disappears with capability.
+  const attachmentAdapter = React.useMemo(
+    () => (imageSupported ? new SimpleImageAttachmentAdapter() : undefined),
+    [imageSupported],
+  );
+
   const onNew = React.useCallback(
     async (message: AppendMessage): Promise<void> => {
       const connection = connectionRef.current;
       const sessionId = sessionIdRef.current;
       const userText = textOf(message);
-      if (connection === null || sessionId === null || userText === "") return;
+      // Map the composer's image attachments to ACP blocks once; the send is valid with text OR
+      // attachments, so an image-only paste must not be dropped by the early return.
+      const blocks = attachmentBlocks(message.attachments, promptCapabilitiesRef.current);
+      if (connection === null || sessionId === null) return;
+      if (userText === "" && blocks.length === 0) return;
 
+      const echoParts: ChatPart[] = [];
+      if (userText !== "") echoParts.push({ kind: "text", text: userText });
+      // Echo the user's image in the transcript from the same attachments, keeping the data-URL
+      // verbatim for an `<img src>` (the ACP block above carries the raw base64 instead).
+      for (const attachment of message.attachments ?? []) {
+        for (const part of attachment.content) {
+          if (part.type === "image") {
+            echoParts.push({ kind: "image", image: part.image, filename: part.filename });
+          }
+        }
+      }
       setMessages((log) => [
         ...log,
-        { id: `user-${log.length}`, role: "user", parts: [{ kind: "text", text: userText }] },
+        { id: `user-${log.length}`, role: "user", parts: echoParts },
       ]);
       setIsRunning(true);
       try {
-        const context = await fetchSystemContext(renderPrompt, agentId, viewRef.current);
-        await connection.prompt({
-          sessionId,
-          prompt: buildPromptBlocks(context, userText, promptCapabilitiesRef.current),
-        });
+        // The view-record chip's presence gates the leading context block: cleared ⇒ no context.
+        // `buildPromptBlocks` omits an empty-string context, so this needs no extra branch there.
+        const context = recordAttachedRef.current
+          ? await fetchSystemContext(renderPrompt, agentId, viewRef.current)
+          : "";
+        const prompt = buildPromptBlocks(context, userText, promptCapabilitiesRef.current, blocks);
+        await connection.prompt({ sessionId, prompt });
       } catch (caught) {
         setError(messageOf(caught, "The agent did not respond."));
       } finally {
@@ -235,6 +304,8 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
 
   const reconnect = React.useCallback((): void => setReconnectNonce((nonce) => nonce + 1), []);
   const clear = React.useCallback((): void => setMessages([]), []);
+  const attachRecord = React.useCallback((): void => setRecordAttached(true), []);
+  const clearRecord = React.useCallback((): void => setRecordAttached(false), []);
   const renderContext = React.useCallback(
     (): Promise<string> => fetchSystemContext(renderPrompt, agentId, viewRef.current),
     [agentId, renderPrompt],
@@ -246,9 +317,24 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
     onNew,
     onCancel,
     convertMessage,
+    adapters: { attachments: attachmentAdapter },
   });
 
-  return { runtime, status, error, reconnect, clear, mcpServers, modelHandle, renderContext };
+  return {
+    runtime,
+    status,
+    error,
+    reconnect,
+    clear,
+    mcpServers,
+    modelHandle,
+    availableCommands: session.availableCommands,
+    imageSupported,
+    recordAttached,
+    attachRecord,
+    clearRecord,
+    renderContext,
+  };
 }
 
 /** Convert a stored chat message to the assistant-ui thread shape: each part maps to the
@@ -256,20 +342,32 @@ export function useAcpRuntime(agentId: string, view: AgentChatView): AcpRuntime 
  *  part's `args` bag (its typed JSON input slot), which the view's `ToolPart` reads. */
 function convertMessage(message: ChatMessage): ThreadMessageLike {
   const content = message.parts.map((part) => {
-    if (part.kind === "text") return { type: "text" as const, text: part.text };
-    if (part.kind === "reasoning") return { type: "reasoning" as const, text: part.text };
-    return {
-      type: "tool-call" as const,
-      toolCallId: part.id,
-      toolName: part.toolName,
-      args: {
-        status: part.status,
-        input: part.input ?? null,
-        result: part.result ?? null,
-        isError: part.isError ?? false,
-      },
-      argsText: "",
-    };
+    switch (part.kind) {
+      case "text":
+        return { type: "text" as const, text: part.text };
+      case "reasoning":
+        return { type: "reasoning" as const, text: part.text };
+      case "image":
+        return { type: "image" as const, image: part.image, filename: part.filename };
+      case "tool":
+        return {
+          type: "tool-call" as const,
+          toolCallId: part.id,
+          toolName: part.toolName,
+          args: {
+            status: part.status,
+            input: part.input ?? null,
+            result: part.result ?? null,
+            isError: part.isError ?? false,
+          },
+          argsText: "",
+        };
+      default: {
+        // Exhaustive: a new ChatPart kind must add a case above, or this fails to compile.
+        const exhaustive: never = part;
+        return exhaustive;
+      }
+    }
   });
   // The parts map cleanly onto assistant-ui text/reasoning/tool-call content; cast at this
   // boundary because the tool `args` bag carries `unknown` input/result that the JSON-typed
@@ -339,56 +437,101 @@ function toMcpServers(servers: Record<string, McpServerConfig>): McpServer[] {
   }));
 }
 
-/** Select the Agent row's model for the ACP session before the first prompt. */
+/** Select the Agent row's model for the ACP session before the first prompt. In sdk 1.0.0 the
+ *  model is a session config option (`category: "model"`), applied via `setSessionConfigOption`. */
 export async function selectSessionModel(
   connection: Agent,
   session: NewSessionResponse,
   modelHandle: string,
 ): Promise<void> {
   if (modelHandle === "") return;
-  const models = session.models;
-  // No standard ACP model state means the agent owns its own model (e.g. opencode selects
-  // from its config / OPENCODE_MODEL and advertises models through a non-standard
-  // `configOptions` field this client can't drive). Defer to its configured model rather
-  // than failing the whole session — the handle is pinned in the agent's container. A
-  // claude-code-style agent does advertise `models`, so its selection below still runs.
-  if (models == null) return;
-  if (models.currentModelId === modelHandle) return;
-  if (!models.availableModels.some((model) => model.modelId === modelHandle)) {
-    const available = models.availableModels.map((model) => model.modelId).join(", ") || "none";
+  const option = session.configOptions?.find((opt) => opt.category === "model");
+  // No model config option means the agent owns its own model (env/config-pinned in its
+  // container, e.g. opencode) — defer rather than failing the whole session.
+  if (option === undefined || option.type !== "select") return;
+  // The select's values are either flat or grouped; flatten to the selectable options.
+  const values = (
+    option.options as ReadonlyArray<SessionConfigSelectOption | SessionConfigSelectGroup>
+  ).flatMap((entry) => ("options" in entry ? entry.options : [entry]));
+  const match = values.find((value) => value.value === modelHandle || value.name === modelHandle);
+  if (match === undefined) {
+    const available = values.map((value) => value.value).join(", ") || "none";
     throw new Error(`The selected model ${modelHandle} is not available in this agent session (${available}).`);
   }
-  if (connection.setSessionModel === undefined) {
+  if (option.currentValue === match.value) return;
+  if (connection.setSessionConfigOption === undefined) {
     throw new Error(`The agent does not support selecting ${modelHandle} for this session.`);
   }
-  await connection.setSessionModel({ sessionId: session.sessionId, modelId: modelHandle });
+  await connection.setSessionConfigOption({
+    sessionId: session.sessionId,
+    configId: option.id,
+    value: match.value,
+  });
 }
 
 /** Opaque identifier for the embedded view-context resource (its content is inline). */
 const CONTEXT_RESOURCE_URI = "angee:///agent/system-context";
 
 /**
- * Build the ACP prompt for one send: the rendered view context (when present) as its OWN
- * leading `ContentBlock` — an embedded `resource` when the agent advertises `embeddedContext`,
- * else a plain `text` block — followed by the user's text as a separate block. Context is
- * never string-merged into the user's message, so the user's text (e.g. a leading `/command`)
- * stays intact, using ACP's native resource-context mechanism when available.
+ * Build the ACP prompt for one send. Context and the user's text are each their OWN `ContentBlock`
+ * (context as an embedded `resource` when the agent advertises `embeddedContext`, else a plain
+ * `text` block) — never string-merged. A `/command` send carries NO context block: claude-agent-acp
+ * runs a slash command only when the message is a clean "/command" — any extra block (an embedded
+ * resource becomes a URI-link text block in the SDK message) makes the SDK treat it as prose and
+ * invoke the model instead. A normal send leads with context. Attachments always trail; the empty
+ * user-text block is omitted so an image-only send carries only its image.
  */
 export function buildPromptBlocks(
   context: string,
   userText: string,
   capabilities: PromptCapabilities | null,
+  attachments: ContentBlock[] = [],
 ): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  if (context !== "") {
-    blocks.push(
-      capabilities?.embeddedContext === true
+  // A slash command must reach the agent as a clean "/command" message, so it carries no context.
+  const contextBlock: ContentBlock | null =
+    userText.startsWith("/") || context === ""
+      ? null
+      : capabilities?.embeddedContext === true
         ? { type: "resource", resource: { uri: CONTEXT_RESOURCE_URI, text: context, mimeType: "text/markdown" } }
-        : { type: "text", text: context },
-    );
-  }
-  blocks.push({ type: "text", text: userText });
+        : { type: "text", text: context };
+  const blocks: ContentBlock[] = [];
+  if (contextBlock !== null) blocks.push(contextBlock);
+  if (userText !== "") blocks.push({ type: "text", text: userText });
+  blocks.push(...attachments);
   return blocks;
+}
+
+/**
+ * Map the composer's attachments to ACP `image` ContentBlocks for the prompt, gated on the
+ * agent advertising `image`. Only image parts are mapped; non-image (file) parts are skipped —
+ * the storage `resource_link` path (an agent-reachable URI minted by the storage addon) is a
+ * deferred follow-up, not re-uploaded from the chat addon.
+ */
+export function attachmentBlocks(
+  attachments: readonly CompleteAttachment[] | undefined,
+  capabilities: PromptCapabilities | null,
+): ContentBlock[] {
+  if (attachments === undefined || capabilities?.image !== true) return [];
+  const blocks: ContentBlock[] = [];
+  for (const attachment of attachments) {
+    for (const part of attachment.content) {
+      if (part.type !== "image") continue;
+      const block = dataUrlToImageBlock(part.image);
+      if (block !== null) blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+/** Split a `data:<mime>;base64,<data>` URL (what `SimpleImageAttachmentAdapter` yields) into an
+ *  ACP `image` block, whose `data` is RAW base64 — not a data: URL — paired with its mime type.
+ *  Returns null for anything that is not a base64 data URL. */
+export function dataUrlToImageBlock(dataUrl: string): ContentBlock | null {
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+  if (match === null) return null;
+  const [, mimeType, data] = match;
+  if (mimeType === undefined || data === undefined) return null;
+  return { type: "image", data, mimeType };
 }
 
 /** Extract the plain text of a composer message. */

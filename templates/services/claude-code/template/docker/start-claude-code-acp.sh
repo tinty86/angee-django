@@ -66,4 +66,4 @@ fs.writeFileSync(
 NODE
 fi
 
-exec stdio-to-ws claude-code-acp --port "${PORT:-3007}"
+exec stdio-to-ws claude-agent-acp --port "${PORT:-3007}"

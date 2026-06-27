@@ -1,13 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Button,
+  ChatAttachmentChip,
+  ChatBar,
   ChatBubble,
+  ChatCommandEmpty,
+  ChatCommandItem,
+  ChatCommandList,
   ChatComposer,
   ChatComposerHint,
   ChatHeader,
   ChatHeaderAction,
+  ChatTypingIndicator,
   ContextBlock,
+  Glyph,
   MessageReasoningFrame,
+  SessionRail,
+  SessionRailItem,
+  StatusDot,
   ToolFallback,
   chatComposerInputClassName,
 } from "@angee/ui";
@@ -48,6 +58,65 @@ export const Header: Story = {
   ),
 };
 
+export const Bar: Story = {
+  render: () => (
+    <Surface>
+      {/* The dense single-row chat header: a leading status + agent/model label (the agents
+          addon swaps a status dot + label for the live `AgentChooser`), and a trailing overflow
+          (⋯) menu. Pure presentation — the consumer composes the chooser/menu. */}
+      <ChatBar
+        start={
+          <span className="flex min-w-0 items-center gap-2">
+            <StatusDot tone="success" label="Ready" />
+            <span className="truncate text-13 font-medium text-fg">
+              Demo Agent
+              <span className="font-normal text-fg-muted"> · claude-sonnet-4-6</span>
+            </span>
+          </span>
+        }
+        end={
+          <Button size="sm" variant="ghost" aria-label="Conversation options" className="size-7 px-0">
+            <Glyph name="more-horizontal" className="h-4 w-4" />
+          </Button>
+        }
+      />
+    </Surface>
+  ),
+};
+
+export const Sessions: Story = {
+  render: () => (
+    // The left rail of the full-page sessions view: a labelled `nav` with a "+ New" header
+    // action over a `ul` of `SessionRailItem` rows. The active row carries `aria-current="page"`;
+    // the consumer (the agents addon) renders each row through its router `Link` via `render`.
+    <div className="flex h-80 overflow-hidden rounded-md border border-border-subtle bg-sheet">
+      <SessionRail
+        label="Running agents"
+        action={
+          <Button size="sm" variant="ghost">
+            <Glyph name="plus" className="h-4 w-4" />
+            New agent
+          </Button>
+        }
+      >
+        <SessionRailItem
+          active
+          status={<StatusDot tone="success" label="Running" />}
+          handle="claude-opus"
+        >
+          Scout
+        </SessionRailItem>
+        <SessionRailItem
+          status={<StatusDot tone="success" label="Running" />}
+          handle="claude-haiku"
+        >
+          Ranger
+        </SessionRailItem>
+      </SessionRail>
+    </div>
+  ),
+};
+
 export const Bubbles: Story = {
   render: () => (
     <div className="max-w-md space-y-3 p-3">
@@ -56,6 +125,18 @@ export const Bubbles: Story = {
         This note captures the Q3 planning decisions and three open follow-ups.
       </ChatBubble>
       <ChatBubble role="system">Context: viewing notes/note nt_8Hd2.</ChatBubble>
+    </div>
+  ),
+};
+
+export const TypingIndicator: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon gates this on assistant-ui's running state for the
+          last started-but-empty assistant turn; here it renders standalone. */}
+      <ChatBubble role="assistant">
+        <ChatTypingIndicator />
+      </ChatBubble>
     </div>
   ),
 };
@@ -72,6 +153,71 @@ export const Composer: Story = {
           </Button>
         }
       />
+    </div>
+  ),
+};
+
+export const ComposerWithAttachments: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon wires the image chip to assistant-ui's attachment
+          adapter and the "Current view" chip to runtime presence state; here both are static. */}
+      <ChatComposer
+        input={<textarea className={chatComposerInputClassName} rows={3} placeholder="Message the agent…" />}
+        attachments={
+          <>
+            <ChatAttachmentChip
+              icon={<Glyph name="file" className="h-3 w-3" />}
+              onClick={() => undefined}
+              remove={
+                <button type="button" aria-label="Remove attachment" className="flex items-center text-fg-muted hover:text-fg">
+                  <Glyph name="x" className="h-3 w-3" />
+                </button>
+              }
+            >
+              Current view
+            </ChatAttachmentChip>
+            <ChatAttachmentChip
+              icon={<Glyph name="attachment" className="h-3 w-3" />}
+              remove={
+                <button type="button" aria-label="Remove attachment" className="flex items-center text-fg-muted hover:text-fg">
+                  <Glyph name="x" className="h-3 w-3" />
+                </button>
+              }
+            >
+              screenshot.png
+            </ChatAttachmentChip>
+          </>
+        }
+        hint={<ChatComposerHint />}
+        actions={
+          <>
+            <Button size="sm" variant="ghost" aria-label="Attach image">
+              <Glyph name="attachment" className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="primary">
+              Send
+            </Button>
+          </>
+        }
+      />
+    </div>
+  ),
+};
+
+export const CommandPalette: Story = {
+  render: () => (
+    <div className="max-w-md p-3">
+      {/* Presentation only: the agents addon binds these slots to assistant-ui's `/` trigger
+          popover, which supplies role/highlight; here the highlighted row is shown statically. */}
+      <ChatCommandList role="listbox" aria-label="Slash commands" className="relative">
+        <ChatCommandItem label="/summarize" description="Summarize the note" data-highlighted="" />
+        <ChatCommandItem label="/translate" description="Translate the note" />
+        <ChatCommandItem label="/clear" description="Clear the conversation" />
+      </ChatCommandList>
+      <ChatCommandList role="listbox" aria-label="Slash commands" className="relative mt-3">
+        <ChatCommandEmpty>No matching commands</ChatCommandEmpty>
+      </ChatCommandList>
     </div>
   ),
 };

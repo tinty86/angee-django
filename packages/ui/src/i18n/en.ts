@@ -127,6 +127,7 @@ export const enBaseMessages: Record<string, string> = {
   // Chat surface primitives (communication/chat).
   "chat.composer.send": "send",
   "chat.composer.newline": "newline",
+  "chat.typing": "Agent is thinking…",
   "chat.reasoning.label": "Thinking",
   "chat.tool.input": "Input",
   "chat.tool.result": "Result",
