@@ -11,6 +11,7 @@ check that the knowledge MCP specs stay in sync with the schema.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from typing import Any
 
@@ -59,7 +60,9 @@ def _registered_tools() -> dict[str, Any]:
 
     server = FastMCP(name="test-knowledge")
     knowledge_mcp_tools.register(server)
-    return dict(server._tool_manager._tools)
+    # fastmcp 3.x dropped the private _tool_manager; list_tools() (async) returns
+    # the registered _CompiledTool objects, which still carry .document/.parameters.
+    return {tool.name: tool for tool in asyncio.run(server.list_tools())}
 
 
 def test_all_knowledge_tools_compile_and_register(knowledge_discovery: None) -> None:

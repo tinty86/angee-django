@@ -19,6 +19,7 @@ base). The merged schema is built standalone (no DB needed), like
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from typing import Any, cast
 
@@ -148,7 +149,9 @@ def _registered_tools() -> dict[str, Any]:
 
     server = FastMCP(name="test-knowledge-pgvector")
     plugin_mcp_tools.register(server)
-    return dict(server._tool_manager._tools)
+    # fastmcp 3.x dropped the private _tool_manager; list_tools() (async) returns
+    # the registered _CompiledTool objects, which still carry .document/.parameters.
+    return {tool.name: tool for tool in asyncio.run(server.list_tools())}
 
 
 def test_semantic_search_tool_compiles(plugin_discovery: None) -> None:
