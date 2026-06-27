@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 export const HoverPanels: Story = {
   render: () => (
-    <div className="rounded-md bg-rail p-2">
+    <div className="rounded-6 bg-rail p-2">
       <NavigationMenu.Root defaultValue="workspace">
         <NavigationMenu.List>
           <NavigationMenu.Item>
@@ -69,7 +69,7 @@ export const HoverPanels: Story = {
               <div className="grid w-80 gap-1">
                 <NavigationMenu.Link
                   href="#"
-                  className="flex h-auto flex-col items-start gap-1 rounded-md px-3 py-2 text-fg hover:bg-inset hover:text-fg"
+                  className="flex h-auto flex-col items-start gap-1 rounded-6 px-3 py-2 text-fg hover:bg-inset hover:text-fg"
                 >
                   <span className="text-13 font-semibold">Identity</span>
                   <span className="text-xs text-fg-muted">
@@ -78,7 +78,7 @@ export const HoverPanels: Story = {
                 </NavigationMenu.Link>
                 <NavigationMenu.Link
                   href="#"
-                  className="flex h-auto flex-col items-start gap-1 rounded-md px-3 py-2 text-fg hover:bg-inset hover:text-fg"
+                  className="flex h-auto flex-col items-start gap-1 rounded-6 px-3 py-2 text-fg hover:bg-inset hover:text-fg"
                 >
                   <span className="text-13 font-semibold">Resources</span>
                   <span className="text-xs text-fg-muted">
@@ -116,9 +116,9 @@ function NavigationCard({
   return (
     <NavigationMenu.Link
       href={href}
-      className="flex h-auto items-start gap-3 rounded-md px-3 py-2 text-fg hover:bg-inset hover:text-fg"
+      className="flex h-auto items-start gap-3 rounded-6 px-3 py-2 text-fg hover:bg-inset hover:text-fg"
     >
-      <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded bg-brand-soft text-brand-soft-text">
+      <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-6 bg-brand-soft text-brand-soft-text">
         <Glyph name={icon} />
       </span>
       <span className="min-w-0">

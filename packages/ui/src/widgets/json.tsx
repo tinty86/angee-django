@@ -31,7 +31,7 @@ type JsonParseResult =
 const JSON_EXTENSIONS = [jsonLanguage(), EditorView.lineWrapping];
 
 const EDITOR_SHELL =
-  "overflow-hidden rounded-md border border-border bg-sheet focus-within:focus-ring";
+  "overflow-hidden rounded-6 border border-border bg-sheet focus-within:focus-ring";
 
 function JsonEdit({
   value,

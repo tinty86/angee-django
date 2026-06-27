@@ -18,7 +18,7 @@ type Story = StoryObj<typeof meta>;
 export const ConsoleChrome: Story = {
   render: () => (
     <ChatterProvider>
-      <div className="w-[58rem] overflow-hidden rounded-lg border border-border-on-rail">
+      <div className="w-[58rem] overflow-hidden rounded-8 border border-border-on-rail">
         <TopBar
           menuItems={chromeMenuItems}
           showChatterToggle

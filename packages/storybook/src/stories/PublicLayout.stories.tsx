@@ -19,7 +19,7 @@ export const SignIn: Story = {
       <PublicLayout
         brand={
           <div className="flex items-center gap-3 text-n-0">
-            <span className="grid size-9 place-content-center rounded-md bg-n-0/10">
+            <span className="grid size-9 place-content-center rounded-6 bg-n-0/10">
               <Glyph name="angee" />
             </span>
             <span className="text-2xl font-bold">Angee</span>

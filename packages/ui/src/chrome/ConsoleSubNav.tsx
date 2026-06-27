@@ -43,7 +43,9 @@ export function ConsoleSubNav({
     <nav
       aria-label={t("chrome.sectionNav")}
       className={cn(
-        "area-sidebar z-topbar flex min-h-0 w-rail-sub flex-col gap-0.5 overflow-y-auto border-r border-border-subtle bg-sheet px-2 py-3",
+        // A pane filler — the Workbench primary SplitPane supplies width,
+        // separator, border, and background.
+        "flex h-full min-h-0 w-full flex-col gap-0.5 overflow-y-auto px-2 py-3",
         className,
       )}
     >
@@ -92,7 +94,7 @@ function SubNavLink({
       to={target}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-8 items-center rounded-md px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
+        "flex h-8 items-center rounded-6 px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
         active && "bg-brand-soft font-medium text-brand-soft-text hover:bg-brand-soft",
       )}
     >

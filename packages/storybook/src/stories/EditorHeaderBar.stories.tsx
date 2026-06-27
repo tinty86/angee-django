@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Header: Story = {
   render: () => (
-    <div className="overflow-hidden rounded-md border border-border-subtle">
+    <div className="overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader>
         <EditorHeaderBar
           actions={
@@ -35,7 +35,7 @@ export const Header: Story = {
 
 export const Saving: Story = {
   render: () => (
-    <div className="overflow-hidden rounded-md border border-border-subtle">
+    <div className="overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader>
         <EditorHeaderBar
           onCancel={() => undefined}

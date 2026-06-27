@@ -1,10 +1,17 @@
 import type * as React from "react";
 
+import { barVariants } from "./bar";
 import { createLayoutBand } from "./layout-band";
 
 const band = createLayoutBand(
   "div",
-  "flex h-control-h items-center gap-3 border-b border-border-subtle bg-sheet px-4",
+  barVariants({
+    height: "control",
+    edge: "bottom",
+    tone: "sheet",
+    pad: "flush",
+    gap: 3,
+  }),
 );
 
 export const controlBandItemClassName =

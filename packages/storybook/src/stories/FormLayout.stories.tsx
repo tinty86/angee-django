@@ -21,7 +21,7 @@ type Story = StoryObj<typeof meta>;
 
 export const TwoColumnGrid: Story = {
   render: () => (
-    <div className="mx-auto max-w-3xl space-y-5 rounded-md border border-border-subtle bg-sheet p-6">
+    <div className="mx-auto max-w-3xl space-y-5 rounded-6 border border-border-subtle bg-sheet p-6">
       <FormGrid columns="two">
         <FieldRow label="First name" required>
           <Input defaultValue="Sofia" />
@@ -50,7 +50,7 @@ export const TwoColumnGrid: Story = {
 
 export const GridAreas: Story = {
   render: () => (
-    <div className="mx-auto max-w-3xl rounded-md border border-border-subtle bg-sheet p-6">
+    <div className="mx-auto max-w-3xl rounded-6 border border-border-subtle bg-sheet p-6">
       <FormGrid
         columns="two"
         areas={["title title", "owner status", "summary summary"]}
@@ -74,7 +74,7 @@ export const GridAreas: Story = {
 
 export const FooterWithNote: Story = {
   render: () => (
-    <div className="mx-auto max-w-3xl rounded-md border border-border-subtle bg-sheet">
+    <div className="mx-auto max-w-3xl rounded-6 border border-border-subtle bg-sheet">
       <div className="p-6">
         <FormGrid columns="one">
           <FieldRow label="Title">

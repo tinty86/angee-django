@@ -6,66 +6,42 @@ import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 import {
   WIDGET_CONTROL_DATA_READONLY_CLASS,
-  WIDGET_CONTROL_READONLY_CLASS,
+  widgetControlSurface,
   widgetControlSurfaceVariants,
 } from "./widget-control";
 
-export const inputSurfaceVariants = widgetControlSurfaceVariants;
-
-export const inputTriggerVariants = tv({
-  base: "flex h-input-h w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-border bg-sheet px-2 text-left text-13 text-fg outline-none transition-colors hover:border-border-strong focus-visible:border-border-focus focus-visible:focus-ring data-[popup-open]:border-border-focus",
-  variants: {
-    readOnly: {
-      true: WIDGET_CONTROL_READONLY_CLASS,
-      false: "",
-    },
-  },
-  defaultVariants: {
-    readOnly: false,
-  },
-});
-
-export const INPUT_SHELL = inputSurfaceVariants({ focus: "self" });
-export const INPUT_SHELL_WITHIN = inputSurfaceVariants({ focus: "within" });
-export const INPUT_BASE =
-  `w-full h-input-h px-2 text-13 text-fg ${INPUT_SHELL}`;
-export const INPUT_READONLY = WIDGET_CONTROL_READONLY_CLASS;
-export const INPUT_NUMERIC = "tabular-nums text-right";
-export const TRIGGER_BASE = inputTriggerVariants();
-
 export const inputVariants = tv({
-  base: `w-full text-fg transition-colors placeholder:text-fg-subtle disabled:cursor-not-allowed disabled:bg-inset disabled:opacity-60 ${INPUT_SHELL}`,
+  extend: widgetControlSurfaceVariants,
+  base: "w-full text-fg placeholder:text-fg-subtle",
   variants: {
     size: {
       sm: "h-btn-sm px-2 text-xs",
       md: "h-input-h px-2 text-13",
       lg: "h-input-h-lg px-3 text-sm",
     },
-    invalid: {
-      true: "border-danger focus:border-danger focus:focus-ring-danger",
-      false: "",
-    },
-    readOnly: {
-      true: WIDGET_CONTROL_READONLY_CLASS,
-      false: "",
-    },
   },
   defaultVariants: {
     size: "md",
-    invalid: false,
-    readOnly: false,
   },
 });
 
+// `surface` (sheet/inset/plain) here is a search-input-local vocabulary that
+// diverges from the widget-control owner surface (sheet adds a hover border,
+// inset reveals a sheet fill on focus). The shared chrome — border, focus ring,
+// disabled dimming, invalid danger, read-only treatment — is composed onto the
+// root from `widgetControlSurface` in the component; the recipe keeps only the
+// search-specific surface, the data-attribute read-only path, and the read-only
+// input cursor. `invalid` stays as an inert pass-through so the prop type still
+// resolves (its class payload comes from the composed owner call).
 export const searchInputVariants = tv({
   slots: {
     root:
-      `inline-flex w-full min-w-0 items-center overflow-hidden rounded-md border text-fg outline-none transition-colors focus-within:border-border-focus focus-within:focus-ring data-[disabled]:cursor-not-allowed data-[disabled]:bg-inset data-[disabled]:opacity-60 ${WIDGET_CONTROL_DATA_READONLY_CLASS}`,
+      `inline-flex w-full min-w-0 items-center overflow-hidden rounded-6 border text-fg ${WIDGET_CONTROL_DATA_READONLY_CLASS}`,
     icon: "pointer-events-none shrink-0 text-fg-muted",
     input:
       "min-w-0 flex-1 border-0 bg-transparent text-fg outline-none placeholder:text-fg-muted disabled:cursor-not-allowed",
     clear:
-      "grid shrink-0 place-content-center rounded text-fg-muted outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50",
+      "grid shrink-0 place-content-center rounded-6 text-fg-muted outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50",
     clearIcon: "shrink-0",
   },
   variants: {
@@ -98,13 +74,11 @@ export const searchInputVariants = tv({
       plain: { root: "border-transparent bg-transparent" },
     },
     invalid: {
-      true: {
-        root: "border-danger focus-within:border-danger focus-within:focus-ring-danger",
-      },
+      true: {},
       false: {},
     },
     readOnly: {
-      true: { root: WIDGET_CONTROL_READONLY_CLASS, input: "cursor-default" },
+      true: { input: "cursor-default" },
       false: {},
     },
   },
@@ -127,7 +101,7 @@ export type InputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "className" | "color" | "size"
 > &
-  InputRecipeProps & {
+  Pick<InputRecipeProps, "size" | "invalid" | "readOnly"> & {
     className?: string;
   };
 
@@ -193,6 +167,13 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
   ) {
     const t = useBaseT();
     const styles = searchInputVariants({ size, surface, invalid, readOnly });
+    const rootClass = widgetControlSurface({
+      focus: "within",
+      surface: "none",
+      invalid,
+      readOnly,
+      disabled: "data",
+    });
     const hasValue =
       typeof value === "string"
         ? value.length > 0
@@ -200,7 +181,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
 
     return (
       <div
-        className={styles.root({ className })}
+        className={styles.root({ className: cn(rootClass, className) })}
         data-disabled={disabled ? "" : undefined}
         data-readonly={readOnly ? "" : undefined}
       >

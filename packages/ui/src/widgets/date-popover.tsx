@@ -48,7 +48,7 @@ export function DatePopover({
   return (
     <PopoverRoot open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
-        className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded border border-border bg-inset px-2 text-left text-13 text-fg outline-none transition-colors hover:border-border-strong focus-visible:border-border-focus focus-visible:focus-ring"
+        className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-6 border border-border bg-inset px-2 text-left text-13 text-fg outline-none transition-colors hover:border-border-strong focus-visible:border-border-focus focus-visible:focus-ring"
         aria-label={ariaLabel}
       >
         <span className="min-w-0 truncate">{label}</span>

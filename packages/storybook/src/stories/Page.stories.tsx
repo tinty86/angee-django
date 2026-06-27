@@ -51,7 +51,7 @@ type Story = StoryObj<typeof meta>;
 export const Frame: Story = {
   render: () => (
     <div className="h-screen bg-canvas p-6 text-fg">
-      <Page className="h-full overflow-hidden rounded-md border border-border-subtle">
+      <Page className="h-full overflow-hidden rounded-6 border border-border-subtle">
         <PageHeader
           crumbs="Notes / All notes"
           title="Notes"

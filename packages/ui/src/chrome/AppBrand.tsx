@@ -23,7 +23,7 @@ export function AppBrand({
       to={to}
       aria-label={label}
       className={cn(
-        "flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-semibold text-on-rail outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring",
+        "flex h-7 min-w-0 items-center gap-2 rounded-6 px-2 text-sm font-semibold text-on-rail outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring",
         className,
       )}
     >

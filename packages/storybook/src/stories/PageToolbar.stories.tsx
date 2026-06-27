@@ -23,7 +23,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Controls: Story = {
   render: () => (
-    <Page height="auto" className="w-[58rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page height="auto" className="w-[58rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageToolbar
         start={
           <>

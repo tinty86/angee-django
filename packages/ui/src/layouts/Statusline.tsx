@@ -2,11 +2,24 @@ import * as React from "react";
 
 import { Glyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
+import { toneText } from "../lib/tones";
+import { barVariants } from "./bar";
 import { createLayoutBand } from "./layout-band";
 
 const band = createLayoutBand(
   "footer",
-  "flex h-7 items-center gap-4 border-t border-border-subtle bg-sheet px-3.5 text-2xs text-fg-muted",
+  // `px-3.5` is off the bar pad scale (the statusline's intentional snug edge),
+  // so it rides on top of the bar recipe rather than through a `pad` variant.
+  cn(
+    barVariants({
+      height: "status",
+      edge: "top",
+      tone: "sheet",
+      gap: 4,
+      text: "2xs-muted",
+    }),
+    "px-3.5",
+  ),
 );
 
 export interface StatuslineProviderProps {
@@ -62,8 +75,8 @@ export function StatusSegment({
   );
   const tones = {
     default: "text-fg-muted",
-    success: "text-success-text",
-    danger: "text-danger-text",
+    success: toneText("success"),
+    danger: toneText("danger"),
   } as const;
   const base = cn("flex items-center gap-1.5", tones[tone], className);
   return onClick ? (

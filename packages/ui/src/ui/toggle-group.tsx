@@ -18,16 +18,16 @@ export const toggleGroupVariants = tv({
   variants: {
     variant: {
       segmented: {
-        root: "gap-0.5 rounded-md border border-border-subtle bg-inset p-0.5",
-        item: "rounded border border-transparent data-[pressed]:bg-sheet data-[pressed]:shadow-xs",
+        root: "gap-0.5 rounded-6 border border-border-subtle bg-inset p-0.5",
+        item: "rounded-6 border border-transparent data-[pressed]:bg-sheet data-[pressed]:shadow-xs",
       },
       toolbar: {
-        root: "gap-0.5 rounded bg-sheet/80 p-0.5",
-        item: "rounded data-[pressed]:bg-brand data-[pressed]:text-on-brand data-[pressed]:hover:bg-brand data-[pressed]:hover:text-on-brand",
+        root: "gap-0.5 rounded-6 bg-sheet/80 p-0.5",
+        item: "rounded-6 data-[pressed]:bg-brand data-[pressed]:text-on-brand data-[pressed]:hover:bg-brand data-[pressed]:hover:text-on-brand",
       },
       card: {
         root: "gap-3",
-        item: "rounded-md text-fg hover:text-fg data-[pressed]:text-fg",
+        item: "rounded-6 text-fg hover:text-fg data-[pressed]:text-fg",
       },
     },
     size: {

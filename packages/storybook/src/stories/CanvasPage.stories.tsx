@@ -14,7 +14,7 @@ type Story = StoryObj<typeof meta>;
 export const WithInspector: Story = {
   render: () => (
     <div className="h-screen bg-inset p-6">
-      <CanvasPage className="overflow-hidden rounded-md border border-border-subtle">
+      <CanvasPage className="overflow-hidden rounded-6 border border-border-subtle">
         <CanvasPage.Toolbar
           start={
             <Button variant="secondary" size="sm">

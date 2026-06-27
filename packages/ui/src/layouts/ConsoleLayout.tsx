@@ -5,10 +5,11 @@ import { Breadcrumb, BreadcrumbLabelProvider } from "../chrome/Breadcrumb";
 import { ConsoleSubNav, useConsoleSubNav } from "../chrome/ConsoleSubNav";
 import { TopBar, type TopBarProps } from "../chrome/TopBar";
 import { Chatter } from "../communication/Chatter";
-import { ChatterProvider } from "../communication/chatter-context";
+import { ChatterProvider, useChatter } from "../communication/chatter-context";
 import { cn } from "../lib/cn";
 import { ControlBandProvider } from "./ControlBand";
 import { StatuslineProvider } from "./Statusline";
+import { Workbench } from "./Workbench";
 
 export interface ConsoleLayoutProps {
   children: React.ReactNode;
@@ -29,7 +30,8 @@ export function ConsoleLayout({
     React.useState<HTMLDivElement | null>(null);
   // Apps that opt into the sidebar (`sidebar: true` on their root menu) render
   // their sections in a left settings-style sub-nav *in addition to* the top bar.
-  // The grid grows a `sidebar` column; the top bar is unchanged either way.
+  // It now rides the Workbench primary pane (collapsible + resizable), so the
+  // grid stays a fixed rail + content frame whether or not the sub-nav shows.
   const { show: showSubNav } = useConsoleSubNav();
 
   return (
@@ -39,13 +41,11 @@ export function ConsoleLayout({
           <BreadcrumbLabelProvider>
             <div
               className={cn(
-                showSubNav ? "console-grid-sidebar" : "console-grid",
-                "h-screen w-screen bg-canvas text-fg",
+                "console-grid h-screen w-screen bg-canvas text-fg",
                 className,
               )}
             >
               <AppRail className="area-rail" />
-              {showSubNav ? <ConsoleSubNav /> : null}
               <TopBar
                 className="area-topbar"
                 topMenu={topMenu}
@@ -54,10 +54,9 @@ export function ConsoleLayout({
               />
               <Breadcrumb className="area-crumbs" />
               <div ref={setControlHost} className="area-control" />
-              <main className="area-content min-h-0 min-w-0 overflow-auto bg-canvas">
+              <ConsoleWorkbench showSubNav={showSubNav} showChatter={showChatter}>
                 {children}
-              </main>
-              {showChatter ? <Chatter className="area-chatter" /> : null}
+              </ConsoleWorkbench>
               {/* Optional statusline; the row collapses while this host is empty. */}
               <div ref={setStatusHost} className="area-status" />
             </div>
@@ -65,5 +64,38 @@ export function ConsoleLayout({
         </StatuslineProvider>
       </ControlBandProvider>
     </ChatterProvider>
+  );
+}
+
+/**
+ * The console content region: the single `Workbench` every console page flows
+ * through — the settings sub-nav as the (collapsible) primary pane, the page as
+ * the content, and the Chatter as the (collapsible) secondary pane. Lives inside
+ * `ChatterProvider` so it can register the secondary pane's collapse controller
+ * with the chatter bridge, letting the chrome `TopBar` toggle drive it (and stay
+ * in sync with drag-to-collapse).
+ */
+function ConsoleWorkbench({
+  showSubNav,
+  showChatter,
+  children,
+}: {
+  showSubNav: boolean;
+  showChatter: boolean;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const { registerSecondaryController } = useChatter();
+  return (
+    <Workbench
+      className="area-content"
+      autoSave="console.workbench"
+      primary={showSubNav ? <ConsoleSubNav /> : undefined}
+      secondary={showChatter ? <Chatter /> : undefined}
+      onSecondaryController={registerSecondaryController}
+    >
+      {/* The shell owns the content scroll boundary, as the old `main` did; a
+          full-height page (e.g. a nested Workbench) fills it without scrolling. */}
+      <div className="h-full min-h-0 overflow-auto">{children}</div>
+    </Workbench>
   );
 }

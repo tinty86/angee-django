@@ -1,16 +1,14 @@
 import * as React from "react";
 
-import { renderGlyph } from "../chrome/Glyph";
 import { tv } from "../lib/variants";
 import { PageHeader, type PageHeaderProps } from "../page";
 import { Tag } from "../ui/badge";
+import { IconTile } from "../ui/icon-tile";
 
 export const surfaceHeaderVariants = tv({
   slots: {
     main: "min-w-0 flex-1",
     titleRow: "flex min-w-0 flex-wrap items-center gap-2",
-    icon:
-      "grid size-8 shrink-0 place-content-center rounded-md bg-brand-soft text-brand-soft-text [&_.glyph]:size-4 [&>svg]:size-4",
     title: "min-w-0 truncate font-semibold leading-tight text-fg",
     subtitle: "text-fg-muted",
     actions: "flex shrink-0 flex-wrap items-center justify-end gap-2",
@@ -81,9 +79,7 @@ export const SurfaceHeader = React.forwardRef<HTMLElement, SurfaceHeaderProps>(
       >
         <div className={styles.main()}>
           <div className={styles.titleRow()}>
-            {icon ? (
-              <span className={styles.icon()}>{renderGlyph(icon)}</span>
-            ) : null}
+            {icon ? <IconTile icon={icon} size="lg" tone="brand" /> : null}
             <Heading className={styles.title()}>{title}</Heading>
             {fetching ? <Tag tone="info">Refreshing</Tag> : null}
           </div>

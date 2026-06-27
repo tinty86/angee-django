@@ -39,7 +39,7 @@ export const Fill: Story = {
   render: () => (
     // `fill` grows the panel to fill — and center within — its parent, replacing
     // the `grid place-content-center` wrapper hosts used to hand-roll.
-    <div className="grid h-96 rounded-md border border-border-subtle">
+    <div className="grid h-96 rounded-6 border border-border-subtle">
       <EmptyState
         fill
         icon="note"

@@ -45,7 +45,7 @@ export const Tones: Story = {
     <div className="flex items-center gap-2">
       <Kbd tone="default">⌘K</Kbd>
       <Kbd tone="subtle">Shift</Kbd>
-      <div className="rounded-md bg-rail p-3">
+      <div className="rounded-6 bg-rail p-3">
         <Kbd tone="rail">/</Kbd>
       </div>
     </div>

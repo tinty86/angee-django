@@ -74,7 +74,7 @@ function ImagePreview({ file }: PreviewProviderProps): ReactElement {
       <img
         src={file.url}
         alt={file.name}
-        className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+        className="max-h-full max-w-full rounded-6 object-contain shadow-sm"
       />
     </div>
   );
@@ -100,7 +100,7 @@ function MarkdownPreview({ file }: PreviewProviderProps): ReactElement {
           className={cn(
             "prose-angee h-full overflow-auto bg-sheet p-6 text-fg-2",
             "[&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold",
-            "[&_p]:my-2 [&_code]:rounded [&_code]:bg-inset [&_code]:px-1 [&_a]:text-link [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6",
+            "[&_p]:my-2 [&_code]:rounded-6 [&_code]:bg-inset [&_code]:px-1 [&_a]:text-link [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6",
           )}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>

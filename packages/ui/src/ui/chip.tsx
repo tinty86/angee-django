@@ -8,7 +8,7 @@ export const chipVariants = tv({
   base: "inline-flex max-w-full shrink-0 items-center gap-1 truncate whitespace-nowrap border font-medium leading-none",
   variants: {
     shape: {
-      rounded: "rounded",
+      rounded: "rounded-6",
       pill: "rounded-full",
     },
     size: {

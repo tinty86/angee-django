@@ -49,7 +49,7 @@ export const UploadDropTarget = React.forwardRef<
       {isOver && overlay ? (
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 grid place-content-center bg-brand-soft/50 text-15 font-medium text-brand-text",
+            "pointer-events-none absolute inset-0 grid place-content-center bg-brand-soft/50 text-15 font-medium text-brand-soft-text",
             overlayClassName,
           )}
         >

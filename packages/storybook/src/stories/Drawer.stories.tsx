@@ -26,7 +26,7 @@ export const Playground: Story = {
   render: ({ side }) => (
     <div className="min-h-80">
       <Drawer.Root defaultOpen>
-        <Drawer.Trigger className="inline-flex h-btn-md items-center justify-center rounded-md border border-border-strong bg-inset px-3 text-13 font-medium text-fg outline-none transition-colors hover:bg-sheet focus-visible:focus-ring">
+        <Drawer.Trigger className="inline-flex h-btn-md items-center justify-center rounded-6 border border-border-strong bg-inset px-3 text-13 font-medium text-fg outline-none transition-colors hover:bg-sheet focus-visible:focus-ring">
           Open drawer
         </Drawer.Trigger>
         <Drawer.Portal>

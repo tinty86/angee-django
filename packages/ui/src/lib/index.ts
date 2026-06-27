@@ -12,6 +12,7 @@ export {
   toneFill,
   toneClass,
   INTENT_GLYPHS,
+  FEEDBACK_INTENTS,
   stateToneFromValue,
   type Tone,
   type Fill,

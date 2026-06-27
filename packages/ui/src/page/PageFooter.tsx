@@ -1,10 +1,18 @@
 import * as React from "react";
 
+import { barVariants } from "../layouts/bar";
 import { tv, type VariantProps } from "../lib/variants";
 
 export const pageFooterVariants = tv({
-  base:
-    "flex shrink-0 items-center justify-end gap-2 border-t border-border-subtle bg-sheet text-13 text-fg-muted",
+  // The bar recipe owns the footer's chrome shell; only the per-density padding
+  // and the sticky knob below stay footer-specific.
+  base: barVariants({
+    edge: "top",
+    tone: "sheet",
+    gap: 2,
+    justify: "end",
+    text: "13-muted",
+  }),
   variants: {
     sticky: {
       true: "sticky bottom-0 z-sticky-cell",

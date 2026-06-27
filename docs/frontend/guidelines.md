@@ -401,6 +401,38 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   `storySchema(fetch)` + `jsonResponse`), not a hand-rolled provider stack; global
   providers (`ToastProvider`, router, runtime, client) come from the preview
   decorator — don't nest a second one.
+- **`Workbench` (`layouts/Workbench.tsx`) is the collapsible inner-shell owner;
+  `Explorer` is removed.** Every multi-pane content region (console body, storage,
+  knowledge, iam schema, agents sessions) composes `Workbench` over `page/SplitPanes`
+  (v4) — `primary` is the navigator pane, `children` the content, `secondary` the
+  aside, with size/collapse persistence via `autoSave`. Do not
+  hand-roll a fixed `grid`/`w-60` multi-pane shell or a pointer/arrow resize handle;
+  the library owns sizing/collapse/persistence and Workbench owns the composition.
+- **`barVariants` (`layouts/bar.ts`) owns bar chrome.** Bar height/edge/pad/tone/
+  justify/text live once; `TopBar`/`Breadcrumb`/`ControlBand`/`PageToolbar`/
+  `PageHeader`/`PageFooter`/`Statusline`/`ChatBar` compose it. Never hand-spell a
+  bar's `h-*`/`px-*`/`py-*`/`border-b|t`/`bg-sheet*` again — route it through the
+  recipe so the bars stay in lockstep.
+- **Form controls `extend` `widget-control`; never re-hand-roll
+  invalid/readOnly/disabled.** `widgetControlSurfaceVariants` (over the
+  `interactiveSurfaceVariants` base) owns the control surface — focus ring,
+  invalid, readOnly, disabled. Inputs/textarea/number-field/select/checkbox `extend`
+  it (tv `extend`); a control that re-spells those states drifts from the owner.
+- **`toneText(tone)` (`lib/tones.ts`) owns per-tone text color.** It is wired into
+  `toneFill` so each tone's `text-*-text` literal lives once; never re-spell a
+  `text-<tone>-text` map or a phantom `text-brand-text` (use `text-brand` /
+  `text-brand-soft-text`). A `*-text` token is a foreground color, never a
+  background — use `toneSolidBg`/`bg-<tone>` for fills.
+- **One radius scale: `rounded-N`** (the pixel-token scale `2/4/6/8/10/12`). Do not
+  introduce the legacy `rounded`/`rounded-sm|md|lg|xl` aliases in new or rewritten
+  markup.
+- **Pane / Aside / primary-secondary / Panel — one name per concept.** A *Pane* is a
+  `SplitPanes` split region; an *Aside* is page side content (`PageAside`); *primary*/
+  *secondary* are the Workbench sidebars; a *Panel* is a content `Card`. Don't reuse
+  one term for another's concept across components, props, or slots.
+- **Layout slot ids use the `@angee/ui.*` symbol namespace.** Register new slots as
+  `Symbol.for("@angee/ui.<name>-slot")` (see `layouts/slots.ts`); the legacy
+  `@angee/base.*` prefix is retired.
 
 ## Checks
 

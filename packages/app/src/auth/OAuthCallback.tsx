@@ -144,7 +144,7 @@ export function OAuthCallback({
 function CallbackFrame({ children }: { children: ReactNode }): ReactNode {
   return (
     <main className="grid min-h-screen place-items-center bg-canvas px-4 py-10 text-fg">
-      <section className="w-full max-w-md rounded-lg border border-border bg-sheet p-6 shadow-sm">
+      <section className="w-full max-w-md rounded-8 border border-border bg-sheet p-6 shadow-sm">
         {children}
       </section>
     </main>

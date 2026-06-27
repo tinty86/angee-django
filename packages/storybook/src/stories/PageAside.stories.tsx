@@ -30,18 +30,18 @@ type Story = StoryObj<typeof meta>;
 
 export const Inspector: Story = {
   render: () => (
-    <Page className="h-[30rem] w-[58rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page className="h-[30rem] w-[58rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader density="compact" title="Patient record" />
       <div className="flex min-h-0 flex-1">
         <PageBody>
           <div className="max-w-2xl space-y-4">
-            <section className="rounded-md border border-border-subtle bg-sheet p-4">
+            <section className="rounded-6 border border-border-subtle bg-sheet p-4">
               <h2 className="text-sm font-semibold text-fg">Clinical summary</h2>
               <p className="mt-2 text-13 leading-5 text-fg-2">
                 Follow-up visit with open medication review and two pending orders.
               </p>
             </section>
-            <section className="rounded-md border border-border-subtle bg-sheet p-4">
+            <section className="rounded-6 border border-border-subtle bg-sheet p-4">
               <h2 className="text-sm font-semibold text-fg">Latest vitals</h2>
               <p className="mt-2 text-13 leading-5 text-fg-2">
                 BP 144/92, pulse 76, HbA1c pending.

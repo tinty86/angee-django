@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="rounded-md bg-rail p-2 text-on-rail">
+    <div className="rounded-6 bg-rail p-2 text-on-rail">
       <AppBrand />
     </div>
   ),

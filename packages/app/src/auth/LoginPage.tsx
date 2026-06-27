@@ -123,7 +123,7 @@ export function LoginPage({
             ? "min-h-[calc(100vh-4rem)] lg:justify-end"
             : showHero
               ? "min-h-screen border-l border-border-subtle bg-sheet px-5 py-8 sm:px-8"
-              : "min-h-0 w-full max-w-[30rem] rounded-lg border border-border bg-sheet px-5 py-8 shadow-lg sm:px-8",
+              : "min-h-0 w-full max-w-[30rem] rounded-8 border border-border bg-sheet px-5 py-8 shadow-lg sm:px-8",
         )}
       >
         <div
@@ -131,7 +131,7 @@ export function LoginPage({
             "w-full max-w-[26rem]",
             showHero
               ? defaultHero
-                ? "rounded-lg border border-n-0/20 bg-sheet/94 p-6 shadow-2xl shadow-n-950/35 backdrop-blur-xl ring-1 ring-n-0/15 sm:p-8"
+                ? "rounded-8 border border-n-0/20 bg-sheet/94 p-6 shadow-2xl shadow-n-950/35 backdrop-blur-xl ring-1 ring-n-0/15 sm:p-8"
                 : null
               : null,
           )}
@@ -161,7 +161,7 @@ export function LoginPage({
             passwordHelp={formPasswordHelp}
           />
           {cardFooter ? (
-            <div className="mt-6 rounded-md border border-border-subtle bg-inset/70 px-4 py-3">
+            <div className="mt-6 rounded-6 border border-border-subtle bg-inset/70 px-4 py-3">
               {cardFooter}
             </div>
           ) : null}
@@ -399,7 +399,7 @@ function AngeeIdentity({
     >
       <span
         className={cn(
-          "grid size-9 place-content-center rounded-md border",
+          "grid size-9 place-content-center rounded-6 border",
           tone === "inverse"
             ? "border-n-0/15 bg-n-0/8"
             : "border-border-subtle bg-sheet",

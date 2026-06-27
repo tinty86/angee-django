@@ -26,11 +26,11 @@ export const navigationMenuVariants = tv({
     list: "flex min-w-0 items-center gap-0.5",
     item: "relative min-w-0",
     link:
-      "inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md pl-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring data-[active]:bg-rail-hi data-[active]:text-on-rail-hi [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80 hover:[&>.glyph]:opacity-100",
+      "inline-flex h-7 min-w-0 items-center gap-1.5 rounded-6 pl-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring data-[active]:bg-rail-hi data-[active]:text-on-rail-hi [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80 hover:[&>.glyph]:opacity-100",
     trigger:
-      "inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md pl-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring data-[popup-open]:bg-rail-hi data-[popup-open]:text-on-rail-hi [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80 hover:[&>.glyph]:opacity-100",
+      "inline-flex h-7 min-w-0 items-center gap-1.5 rounded-6 pl-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring data-[popup-open]:bg-rail-hi data-[popup-open]:text-on-rail-hi [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80 hover:[&>.glyph]:opacity-100",
     text:
-      "inline-flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-md pl-3 text-13 font-medium text-on-rail-mut [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80",
+      "inline-flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-6 pl-3 text-13 font-medium text-on-rail-mut [&>.glyph]:size-3 [&>.glyph]:shrink-0 [&>.glyph]:opacity-80",
     content: "p-2",
     popup: POPUP_BASE,
     viewport: "overflow-hidden",

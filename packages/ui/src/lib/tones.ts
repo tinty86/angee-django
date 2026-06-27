@@ -82,6 +82,32 @@ export function toneSolidBg(tone: Tone): string {
   return SOLID_BG[tone];
 }
 
+// The tone-colored text utility per tone — the one place each on-surface
+// `text-*` literal is written. `toneFill`'s soft/surface/outline/ghost columns
+// interpolate this (mirroring how the solid column reads `SOLID_BG`), so a tone's
+// text color lives once. The brand-family palettes (brand/accent/purple/pink)
+// use the `-soft-text` token; the feedback palettes use plain `text-<tone>-text`;
+// neutral is the body foreground, not a colored token.
+const TONE_TEXT: Record<Tone, string> = {
+  neutral: "text-fg-2",
+  brand: "text-brand-soft-text",
+  accent: "text-accent-soft-text",
+  info: "text-info-text",
+  success: "text-success-text",
+  warning: "text-warning-text",
+  danger: "text-danger-text",
+  purple: "text-purple-soft-text",
+  pink: "text-pink-soft-text",
+};
+
+/** The tone-colored text utility for a tone (just the `text-*`, no bg/border) —
+ *  the sibling of `toneSolidBg`/`toneGlyph`. Tone-colored text on a plain surface;
+ *  for info/success/warning/danger it equals `text-<tone>-text`, and for the
+ *  brand-family palettes it is the `-soft-text` token. */
+export function toneText(tone: Tone): string {
+  return TONE_TEXT[tone];
+}
+
 // The glyph-scoped tint per tone — the on-surface `text-*-text` colour raised to
 // `!important` and targeted at a descendant `.glyph`, so a per-node tone wins over
 // a container's own `[&_.glyph]:text-*` rule (which otherwise outranks a plain
@@ -110,66 +136,66 @@ export function toneGlyph(tone: Tone): string {
 export const toneFill: Record<Tone, Record<Fill, string>> = {
   neutral: {
     solid: `${SOLID_BG.neutral} text-fg-inverse border-fg`,
-    soft: "bg-inset text-fg-2 border-border-subtle",
-    surface: "bg-sheet text-fg-2 border-border",
-    outline: "bg-transparent text-fg-2 border-border",
-    ghost: "bg-transparent text-fg-2 border-transparent",
+    soft: `bg-inset ${TONE_TEXT.neutral} border-border-subtle`,
+    surface: `bg-sheet ${TONE_TEXT.neutral} border-border`,
+    outline: `bg-transparent ${TONE_TEXT.neutral} border-border`,
+    ghost: `bg-transparent ${TONE_TEXT.neutral} border-transparent`,
   },
   brand: {
     solid: `${SOLID_BG.brand} text-on-brand border-brand`,
-    soft: "bg-brand-soft text-brand-soft-text border-brand-soft",
-    surface: "bg-brand-tint text-brand-soft-text border-brand-line",
-    outline: "bg-transparent text-brand-soft-text border-brand-line",
-    ghost: "bg-transparent text-brand-soft-text border-transparent",
+    soft: `bg-brand-soft ${TONE_TEXT.brand} border-brand-soft`,
+    surface: `bg-brand-tint ${TONE_TEXT.brand} border-brand-line`,
+    outline: `bg-transparent ${TONE_TEXT.brand} border-brand-line`,
+    ghost: `bg-transparent ${TONE_TEXT.brand} border-transparent`,
   },
   accent: {
     solid: `${SOLID_BG.accent} text-on-accent border-accent`,
-    soft: "bg-accent-soft text-accent-soft-text border-accent-soft",
-    surface: "bg-accent-tint text-accent-soft-text border-accent-line",
-    outline: "bg-transparent text-accent-soft-text border-accent-line",
-    ghost: "bg-transparent text-accent-soft-text border-transparent",
+    soft: `bg-accent-soft ${TONE_TEXT.accent} border-accent-soft`,
+    surface: `bg-accent-tint ${TONE_TEXT.accent} border-accent-line`,
+    outline: `bg-transparent ${TONE_TEXT.accent} border-accent-line`,
+    ghost: `bg-transparent ${TONE_TEXT.accent} border-transparent`,
   },
   info: {
     solid: `${SOLID_BG.info} text-on-info border-info`,
-    soft: "bg-info-soft text-info-text border-info-soft",
-    surface: "bg-info-tint text-info-text border-info-line",
-    outline: "bg-transparent text-info-text border-info-line",
-    ghost: "bg-transparent text-info-text border-transparent",
+    soft: `bg-info-soft ${TONE_TEXT.info} border-info-soft`,
+    surface: `bg-info-tint ${TONE_TEXT.info} border-info-line`,
+    outline: `bg-transparent ${TONE_TEXT.info} border-info-line`,
+    ghost: `bg-transparent ${TONE_TEXT.info} border-transparent`,
   },
   success: {
     solid: `${SOLID_BG.success} text-on-success border-success`,
-    soft: "bg-success-soft text-success-text border-success-soft",
-    surface: "bg-success-tint text-success-text border-success-line",
-    outline: "bg-transparent text-success-text border-success-line",
-    ghost: "bg-transparent text-success-text border-transparent",
+    soft: `bg-success-soft ${TONE_TEXT.success} border-success-soft`,
+    surface: `bg-success-tint ${TONE_TEXT.success} border-success-line`,
+    outline: `bg-transparent ${TONE_TEXT.success} border-success-line`,
+    ghost: `bg-transparent ${TONE_TEXT.success} border-transparent`,
   },
   warning: {
     solid: `${SOLID_BG.warning} text-on-warning border-warning`,
-    soft: "bg-warning-soft text-warning-text border-warning-soft",
-    surface: "bg-warning-tint text-warning-text border-warning-line",
-    outline: "bg-transparent text-warning-text border-warning-line",
-    ghost: "bg-transparent text-warning-text border-transparent",
+    soft: `bg-warning-soft ${TONE_TEXT.warning} border-warning-soft`,
+    surface: `bg-warning-tint ${TONE_TEXT.warning} border-warning-line`,
+    outline: `bg-transparent ${TONE_TEXT.warning} border-warning-line`,
+    ghost: `bg-transparent ${TONE_TEXT.warning} border-transparent`,
   },
   danger: {
     solid: `${SOLID_BG.danger} text-on-danger border-danger`,
-    soft: "bg-danger-soft text-danger-text border-danger-soft",
-    surface: "bg-danger-tint text-danger-text border-danger-line",
-    outline: "bg-transparent text-danger-text border-danger-line",
-    ghost: "bg-transparent text-danger-text border-transparent",
+    soft: `bg-danger-soft ${TONE_TEXT.danger} border-danger-soft`,
+    surface: `bg-danger-tint ${TONE_TEXT.danger} border-danger-line`,
+    outline: `bg-transparent ${TONE_TEXT.danger} border-danger-line`,
+    ghost: `bg-transparent ${TONE_TEXT.danger} border-transparent`,
   },
   purple: {
     solid: `${SOLID_BG.purple} text-on-purple border-purple`,
-    soft: "bg-purple-soft text-purple-soft-text border-purple-soft",
-    surface: "bg-purple-tint text-purple-soft-text border-purple-line",
-    outline: "bg-transparent text-purple-soft-text border-purple-line",
-    ghost: "bg-transparent text-purple-soft-text border-transparent",
+    soft: `bg-purple-soft ${TONE_TEXT.purple} border-purple-soft`,
+    surface: `bg-purple-tint ${TONE_TEXT.purple} border-purple-line`,
+    outline: `bg-transparent ${TONE_TEXT.purple} border-purple-line`,
+    ghost: `bg-transparent ${TONE_TEXT.purple} border-transparent`,
   },
   pink: {
     solid: `${SOLID_BG.pink} text-on-pink border-pink`,
-    soft: "bg-pink-soft text-pink-soft-text border-pink-soft",
-    surface: "bg-pink-tint text-pink-soft-text border-pink-line",
-    outline: "bg-transparent text-pink-soft-text border-pink-line",
-    ghost: "bg-transparent text-pink-soft-text border-transparent",
+    soft: `bg-pink-soft ${TONE_TEXT.pink} border-pink-soft`,
+    surface: `bg-pink-tint ${TONE_TEXT.pink} border-pink-line`,
+    outline: `bg-transparent ${TONE_TEXT.pink} border-pink-line`,
+    ghost: `bg-transparent ${TONE_TEXT.pink} border-transparent`,
   },
 };
 
@@ -178,8 +204,16 @@ export function toneClass(tone: Tone, fill: Fill = "soft"): string {
   return toneFill[tone][fill];
 }
 
-/** The feedback intents that carry a status glyph (a subset of the tones). */
-export type FeedbackIntent = "info" | "success" | "warning" | "danger";
+/** The feedback intents that carry a status glyph (a curated subset of the tones). */
+export const FEEDBACK_INTENTS = [
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const satisfies readonly Tone[];
+
+/** A feedback intent — a tone that carries a status glyph. */
+export type FeedbackIntent = (typeof FEEDBACK_INTENTS)[number];
 
 /**
  * The canonical icon-registry glyph name for each feedback intent. One owner for

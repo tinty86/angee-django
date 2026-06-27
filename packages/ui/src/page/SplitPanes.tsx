@@ -4,9 +4,12 @@ import {
   Panel as ResizablePanel,
   Separator as ResizableSeparator,
   useDefaultLayout,
+  usePanelCallbackRef,
   type GroupProps as ResizableGroupProps,
   type LayoutStorage,
+  type OnPanelResize,
   type Orientation as ResizableOrientation,
+  type PanelImperativeHandle,
   type PanelProps as ResizablePanelProps,
   type SeparatorProps as ResizableSeparatorProps,
 } from "react-resizable-panels";
@@ -56,6 +59,13 @@ export type SplitPanesProps = Omit<
      * to each `SplitPane`'s `defaultSize`.
      */
     autoSave?: string;
+    /**
+     * The ids of the panes actually rendered. For a group with
+     * conditionally-rendered panes, this lets the library save/restore a
+     * separate layout per panel set, so a set never restores sizes saved for a
+     * different one (react-resizable-panels `useDefaultLayout` `panelIds`).
+     */
+    panelIds?: string[];
   };
 
 // react-resizable-panels persists through a `Storage` (localStorage by
@@ -77,10 +87,12 @@ function layoutStorage(): Storage | null {
 function PersistentGroup({
   storageId,
   storage,
+  panelIds,
   ...groupProps
 }: {
   storageId: string;
   storage: LayoutStorage;
+  panelIds?: string[];
 } & Omit<
   ResizableGroupProps,
   "defaultLayout" | "onLayoutChange" | "onLayoutChanged"
@@ -88,6 +100,7 @@ function PersistentGroup({
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: storageId,
     storage,
+    ...(panelIds != null ? { panelIds } : {}),
   });
   return (
     <ResizableGroup
@@ -100,7 +113,7 @@ function PersistentGroup({
 
 export const SplitPanes = React.forwardRef<HTMLDivElement, SplitPanesProps>(
   function SplitPanes(
-    { autoSave, className, direction = "horizontal", ...props },
+    { autoSave, panelIds, className, direction = "horizontal", ...props },
     ref,
   ) {
     const styles = splitPanesVariants({ direction });
@@ -115,6 +128,7 @@ export const SplitPanes = React.forwardRef<HTMLDivElement, SplitPanesProps>(
             key={autoSave}
             storageId={autoSave}
             storage={storage}
+            panelIds={panelIds}
             elementRef={ref}
             orientation={direction}
             className={styles.group({ className })}
@@ -199,3 +213,70 @@ export const SplitPaneHandle = React.forwardRef<
   );
 });
 SplitPaneHandle.displayName = "SplitPaneHandle";
+
+export type UseCollapsiblePaneOptions = {
+  /**
+   * Percentage (0..100) at or below which the pane reads as collapsed. The v4
+   * `isCollapsed()` handle drives the authoritative value; this only widens the
+   * threshold for panes given a non-zero `collapsedSize`. Defaults to 0.
+   */
+  collapsedSize?: number;
+  /** Collapsed state assumed before the first resize fires. Defaults to false. */
+  defaultCollapsed?: boolean;
+};
+
+export type CollapsiblePane = {
+  /** Spread onto a `<SplitPane collapsible>` to capture its imperative handle. */
+  panelRef: (handle: PanelImperativeHandle | null) => void;
+  /** Spread onto the same `<SplitPane>` so `collapsed` tracks drag-to-collapse. */
+  onResize: NonNullable<OnPanelResize>;
+  /** Reactive — recomputed in `onResize`, since v4 `isCollapsed()` is not. */
+  collapsed: boolean;
+  /** Collapse if expanded, expand if collapsed. */
+  toggle: () => void;
+  collapse: () => void;
+  expand: () => void;
+};
+
+/**
+ * The in-stack handle that lets a chrome toggle drive a collapsible `SplitPane`.
+ *
+ * Wraps v4's `PanelImperativeHandle` (collapse/expand/isCollapsed/getSize/
+ * resize) — reached through `usePanelCallbackRef` so the handle becomes
+ * available reactively once the panel mounts — and adds the one thing v4 lacks:
+ * a reactive `collapsed` flag, since `isCollapsed()` is non-reactive. Spread
+ * `panelRef` and `onResize` onto a `<SplitPane collapsible>`; read `collapsed`
+ * and call `toggle()`/`collapse()`/`expand()` from a sibling control.
+ */
+export function useCollapsiblePane(
+  opts?: UseCollapsiblePaneOptions,
+): CollapsiblePane {
+  const { collapsedSize = 0, defaultCollapsed = false } = opts ?? {};
+  const [handle, panelRef] = usePanelCallbackRef();
+  const [collapsed, setCollapsed] = React.useState(defaultCollapsed);
+
+  const onResize = React.useCallback<NonNullable<OnPanelResize>>(
+    (panelSize) => {
+      setCollapsed(
+        panelSize.asPercentage <= collapsedSize ||
+          (handle?.isCollapsed() ?? false),
+      );
+    },
+    [collapsedSize, handle],
+  );
+
+  const collapse = React.useCallback(() => handle?.collapse(), [handle]);
+  const expand = React.useCallback(() => handle?.expand(), [handle]);
+  const toggle = React.useCallback(() => {
+    if (!handle) return;
+    if (handle.isCollapsed()) handle.expand();
+    else handle.collapse();
+  }, [handle]);
+
+  // Stable object identity (changes only when `collapsed` flips) so a consumer
+  // that publishes the controller through an effect does not re-fire every render.
+  return React.useMemo(
+    () => ({ panelRef, onResize, collapsed, toggle, collapse, expand }),
+    [panelRef, onResize, collapsed, toggle, collapse, expand],
+  );
+}

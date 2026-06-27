@@ -16,8 +16,8 @@ import {
   type LayoutSlotComponent,
 } from "./slots";
 
-const TOOLBAR_SLOT = Symbol.for("@angee/base.canvas-toolbar-slot");
-const ASIDE_SLOT = Symbol.for("@angee/base.canvas-aside-slot");
+const TOOLBAR_SLOT = Symbol.for("@angee/ui.canvas-toolbar-slot");
+const ASIDE_SLOT = Symbol.for("@angee/ui.canvas-aside-slot");
 
 export interface CanvasPageProps {
   asideSide?: "left" | "right";

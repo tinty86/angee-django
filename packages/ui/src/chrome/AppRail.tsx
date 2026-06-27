@@ -457,7 +457,7 @@ function RailItem({
         {defaultApp ? (
           <span
             aria-hidden
-            className="absolute bottom-1 right-1 size-1.5 rounded-full border border-rail bg-success-text"
+            className="absolute bottom-1 right-1 size-1.5 rounded-full border border-rail bg-success"
           />
         ) : null}
       </Link>

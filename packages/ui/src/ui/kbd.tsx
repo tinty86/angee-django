@@ -6,9 +6,9 @@ export const kbdVariants = tv({
   base: "inline-flex items-center justify-center border border-b-2 font-mono font-medium leading-none",
   variants: {
     size: {
-      sm: "h-4 min-w-4 rounded-sm px-1 text-2xs",
-      md: "h-kbd-h min-w-kbd-h rounded px-1.5 text-2xs",
-      lg: "h-btn-sm min-w-btn-sm rounded-md px-2 text-xs",
+      sm: "h-4 min-w-4 rounded-4 px-1 text-2xs",
+      md: "h-kbd-h min-w-kbd-h rounded-6 px-1.5 text-2xs",
+      lg: "h-btn-sm min-w-btn-sm rounded-6 px-2 text-xs",
     },
     tone: {
       default: "border-border-subtle bg-inset text-fg-muted",

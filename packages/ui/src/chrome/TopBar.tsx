@@ -4,6 +4,7 @@ import { useBaseT } from "../i18n";
 import { cn } from "../lib/cn";
 import { useThemePreference, type ThemePreference } from "../lib/theme";
 import { useChatter } from "../communication/chatter-context";
+import { barVariants } from "../layouts/bar";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { CommandPalette } from "./CommandPalette";
@@ -53,7 +54,9 @@ export function TopBar({
     <header
       aria-label={t("chrome.topBar")}
       className={cn(
-        "area-topbar z-topbar flex h-topbar-h min-w-0 items-center gap-3 border-b border-border-on-rail bg-rail px-3 pl-4 text-on-rail",
+        barVariants({ height: "topbar", edge: "bottom", tone: "rail", gap: 3 }),
+        // Grid placement + stacking, plus TopBar's asymmetric leading pad.
+        "area-topbar z-topbar px-3 pl-4",
         className,
       )}
     >
@@ -74,7 +77,7 @@ export function TopBar({
       {hideThemeToggle ? null : <ThemeToggleButton />}
       {showUserMenu ? (
         <UserMenu
-          className="size-icon-btn-md rounded-md border-0"
+          className="size-icon-btn-md rounded-6 border-0"
           side="bottom"
           align="end"
           sideOffset={6}

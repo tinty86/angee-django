@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Grid: Story = {
   render: () => (
-    <div className="max-w-xl rounded-md border border-border-subtle bg-sheet p-5">
+    <div className="max-w-xl rounded-6 border border-border-subtle bg-sheet p-5">
       <MetaSection title="Record metadata">
         <MetaGrid
           rows={[

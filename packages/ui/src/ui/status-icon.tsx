@@ -2,17 +2,17 @@ import * as React from "react";
 
 import { Glyph } from "../chrome/Glyph";
 import type { IconComponent } from "../chrome/icon-registry";
-import { INTENT_GLYPHS, TONES, toneSolidBg, type FeedbackIntent, type Tone } from "../lib/tones";
+import { INTENT_GLYPHS, TONES, toneSolidBg, toneText, type FeedbackIntent, type Tone } from "../lib/tones";
 import { tv, type VariantProps } from "../lib/variants";
 
 /** A tinted status glyph speaks in feedback tones (+ a `muted` quiet state). */
 export type StatusIconTone = FeedbackIntent | "muted";
 
 const STATUS_ICON_TONES: Record<StatusIconTone, string> = {
-  info: "text-info-text",
-  success: "text-success-text",
-  warning: "text-warning-text",
-  danger: "text-danger-text",
+  info: toneText("info"),
+  success: toneText("success"),
+  warning: toneText("warning"),
+  danger: toneText("danger"),
   muted: "text-fg-muted",
 };
 

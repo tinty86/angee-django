@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 
 import { cn } from "../lib/cn";
+import { toneSolidBg, type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
 import { NumberField } from "../ui/number-field";
 import { Slider } from "../ui/slider";
@@ -13,7 +14,7 @@ const progressBarVariants = tv({
   slots: {
     root: "inline-flex w-full min-w-[8rem] items-center gap-2",
     track: "h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-inset",
-    fill: "h-full rounded-full bg-brand-soft-text transition-[width]",
+    fill: "h-full rounded-full bg-brand transition-[width]",
     value: "w-10 shrink-0 text-right text-13 tabular-nums text-fg-muted",
   },
   variants: {
@@ -108,7 +109,7 @@ function ProgressBarValue({
         aria-valuenow={progress}
       >
         <span
-          className={cn(styles.fill(), toneClass(progress))}
+          className={cn(styles.fill(), toneSolidBg(progressTone(progress)))}
           style={{ width: `${progress}%` }}
         />
       </span>
@@ -126,8 +127,11 @@ function normaliseSliderProgress(value: number | readonly number[]): number {
   return normaliseProgress(Array.isArray(value) ? value[0] : value);
 }
 
-function toneClass(value: number): string {
-  if (value >= 80) return "bg-success-text";
-  if (value >= 40) return "bg-brand-soft-text";
-  return "bg-warning-text";
+// The progress→tone scale: a full bar reads success, a partial bar brand, a low
+// bar warning. Returns a `Tone` so the solid fill routes through `toneSolidBg`
+// rather than re-spelling palette `bg-*` literals.
+function progressTone(value: number): Tone {
+  if (value >= 80) return "success";
+  if (value >= 40) return "brand";
+  return "warning";
 }

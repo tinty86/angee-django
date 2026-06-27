@@ -204,7 +204,7 @@ function ChartProjection({
     <div className="space-y-2">
       {nodes.map((node) => (
         <button
-          className="grid w-full gap-1 rounded-md px-2 py-1.5 text-left hover:bg-inset focus-visible:focus-ring"
+          className="grid w-full gap-1 rounded-6 px-2 py-1.5 text-left hover:bg-inset focus-visible:focus-ring"
           key={node.id}
           onClick={() => onSelect(node)}
           type="button"
@@ -239,7 +239,7 @@ function TreeProjection({
     <div className="space-y-1">
       {nodes.map((node) => (
         <button
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 hover:bg-inset focus-visible:focus-ring"
+          className="flex w-full items-center gap-2 rounded-6 px-2 py-1.5 text-left text-13 hover:bg-inset focus-visible:focus-ring"
           key={node.id}
           onClick={() => onSelect(node)}
           type="button"

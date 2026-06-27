@@ -43,7 +43,7 @@ function TagInputEdit({
   return (
     <div
       className={cn(
-        "flex min-h-input-h w-full flex-wrap items-center gap-1 rounded-md border border-border bg-sheet px-1.5 py-1 text-13 text-fg focus-within:border-border-focus focus-within:focus-ring",
+        "flex min-h-input-h w-full flex-wrap items-center gap-1 rounded-6 border border-border bg-sheet px-1.5 py-1 text-13 text-fg focus-within:border-border-focus focus-within:focus-ring",
       )}
     >
       {tags.map((tag, index) => (

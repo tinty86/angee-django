@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Collection: Story = {
   render: () => (
-    <div className="max-w-4xl overflow-hidden rounded-md border border-border-subtle">
+    <div className="max-w-4xl overflow-hidden rounded-6 border border-border-subtle">
       <CollectionHeader
         count="245"
         description="Operational notes, release briefs, and system references."

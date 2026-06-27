@@ -10,9 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-export const CHATTER_DEFAULT_WIDTH = 332;
-export const CHATTER_MIN_WIDTH = 260;
-export const CHATTER_MAX_WIDTH = 720;
+import type { CollapsiblePane } from "../page";
 
 export type ChatterTabId = "angee" | "comments" | "activity" | (string & {});
 
@@ -34,18 +32,23 @@ export interface ChatterContextValue {
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
   toggleCollapsed: () => void;
-  width: number;
-  setWidth: (width: number) => void;
   activeTab: ChatterTabId;
   setActiveTab: (tab: ChatterTabId) => void;
   content: ChatterContent | null;
   setContent: (owner: symbol, content: ChatterContent | null) => void;
+  /**
+   * Cross-tree collapse bridge. When a `Workbench` is mounted it registers its
+   * secondary (chatter) pane's collapse controller here, so the chrome `TopBar`
+   * toggle drives — and reflects — that pane (which owns size + collapse +
+   * persistence). With no Workbench (standalone/tests) the context falls back to
+   * a local `collapsed` flag. Pass `null` to unregister on unmount.
+   */
+  registerSecondaryController: (controller: CollapsiblePane | null) => void;
 }
 
 export interface ChatterProviderProps {
   children: ReactNode;
   defaultCollapsed?: boolean;
-  defaultWidth?: number;
   defaultTab?: ChatterTabId;
 }
 
@@ -53,28 +56,55 @@ const ChatterContext = createContext<ChatterContextValue>({
   collapsed: false,
   setCollapsed: () => undefined,
   toggleCollapsed: () => undefined,
-  width: CHATTER_DEFAULT_WIDTH,
-  setWidth: () => undefined,
   activeTab: "angee",
   setActiveTab: () => undefined,
   content: null,
   setContent: () => undefined,
+  registerSecondaryController: () => undefined,
 });
 
 export function ChatterProvider({
   children,
   defaultCollapsed = false,
-  defaultWidth = CHATTER_DEFAULT_WIDTH,
   defaultTab = "angee",
 }: ChatterProviderProps): ReactElement {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const [width, setRawWidth] = useState(() => clampWidth(defaultWidth));
+  const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
+  // The registered secondary pane controller (the imperative handle to toggle),
+  // plus its reactive collapsed flag mirrored into state so the chrome re-renders
+  // when the pane collapses (including via drag). `null` collapsed means no
+  // controller is registered, so the chrome falls back to `localCollapsed`.
+  const controllerRef = useRef<CollapsiblePane | null>(null);
+  const [controllerCollapsed, setControllerCollapsed] = useState<
+    boolean | null
+  >(null);
   const [activeTab, setActiveTab] = useState<ChatterTabId>(defaultTab);
   const [contentState, setContentState] = useState<
     (ChatterContent & { owner: symbol }) | null
   >(null);
-  const setWidth = useCallback((nextWidth: number) => {
-    setRawWidth(clampWidth(nextWidth));
+
+  const registerSecondaryController = useCallback(
+    (controller: CollapsiblePane | null) => {
+      controllerRef.current = controller;
+      // Same-value state updates bail out, so the Workbench may republish its
+      // controller every render (its identity changes each tick) without looping.
+      setControllerCollapsed(controller ? controller.collapsed : null);
+    },
+    [],
+  );
+
+  const setCollapsed = useCallback((next: boolean) => {
+    const controller = controllerRef.current;
+    if (controller) {
+      if (next) controller.collapse();
+      else controller.expand();
+    } else {
+      setLocalCollapsed(next);
+    }
+  }, []);
+  const toggleCollapsed = useCallback(() => {
+    const controller = controllerRef.current;
+    if (controller) controller.toggle();
+    else setLocalCollapsed((current) => !current);
   }, []);
   const setContent = useCallback(
     (owner: symbol, content: ChatterContent | null) => {
@@ -85,9 +115,6 @@ export function ChatterProvider({
     },
     [],
   );
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((current) => !current);
-  }, []);
   const content = useMemo<ChatterContent | null>(() => {
     if (!contentState) return null;
     return {
@@ -97,19 +124,28 @@ export function ChatterProvider({
         : {}),
     };
   }, [contentState]);
+
+  const collapsed = controllerCollapsed ?? localCollapsed;
   const value = useMemo<ChatterContextValue>(
     () => ({
       activeTab,
       collapsed,
       content,
+      registerSecondaryController,
       setActiveTab,
       setCollapsed,
       setContent,
-      setWidth,
       toggleCollapsed,
-      width,
     }),
-    [activeTab, collapsed, content, setContent, setWidth, toggleCollapsed, width],
+    [
+      activeTab,
+      collapsed,
+      content,
+      registerSecondaryController,
+      setCollapsed,
+      setContent,
+      toggleCollapsed,
+    ],
   );
   return (
     <ChatterContext.Provider value={value}>
@@ -131,9 +167,4 @@ export function useChatterContent(content: ChatterContent | null): void {
     setContent(owner, content);
     return () => setContent(owner, null);
   }, [content, owner, setContent]);
-}
-
-function clampWidth(width: number): number {
-  if (!Number.isFinite(width)) return CHATTER_DEFAULT_WIDTH;
-  return Math.min(CHATTER_MAX_WIDTH, Math.max(CHATTER_MIN_WIDTH, Math.round(width)));
 }

@@ -17,7 +17,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Open: Story = {
   render: () => (
-    <div className="h-[32rem] w-[48rem] rounded-lg border border-border-subtle bg-rail p-3 text-on-rail">
+    <div className="h-[32rem] w-[48rem] rounded-8 border border-border-subtle bg-rail p-3 text-on-rail">
       <AppChooser
         items={appChooserItems}
         activeId="notes"

@@ -37,8 +37,8 @@ export const tabsVariants = tv({
         panel: "pt-4",
       },
       pill: {
-        list: "gap-1 rounded-md bg-inset p-1",
-        tab: "h-7 rounded border border-transparent px-2.5 data-[active]:bg-sheet data-[active]:shadow-xs",
+        list: "gap-1 rounded-6 bg-inset p-1",
+        tab: "h-7 rounded-6 border border-transparent px-2.5 data-[active]:bg-sheet data-[active]:shadow-xs",
         indicator: "hidden",
         panel: "pt-3",
       },

@@ -13,7 +13,7 @@ export const brandButtonVariants = tv({
     content: "min-w-0 text-left",
     label: "block truncate",
     description: "mt-0.5 block truncate text-2xs font-normal opacity-80",
-    error: "rounded-md border-x border-t px-3 py-2 text-left text-xs",
+    error: "rounded-6 border-x border-t px-3 py-2 text-left text-xs",
   },
   variants: {
     size: {

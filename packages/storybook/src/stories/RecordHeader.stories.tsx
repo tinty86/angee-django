@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const DetailRecord: Story = {
   render: () => (
-    <div className="max-w-4xl overflow-hidden rounded-md border border-border-subtle">
+    <div className="max-w-4xl overflow-hidden rounded-6 border border-border-subtle">
       <RecordHeader
         crumbs="Notes / Operational brief"
         description="Quarterly review of operational notes, release briefs, and owner follow-ups."

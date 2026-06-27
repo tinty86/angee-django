@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { toneText } from "../lib/tones";
 import { tv, type VariantProps } from "../lib/variants";
 
 export const sectionEyebrowVariants = tv({
@@ -13,7 +14,7 @@ export const sectionEyebrowVariants = tv({
       muted: "text-fg-muted",
       fg: "text-fg",
       brand: "text-brand",
-      danger: "text-danger-text",
+      danger: toneText("danger"),
     },
     weight: {
       medium: "font-medium",

@@ -22,7 +22,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Dense: Story = {
   render: () => (
-    <Page height="auto" className="w-[52rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page height="auto" className="w-[52rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader
         density="compact"
         crumbs="Health / Patients / PT-1842"

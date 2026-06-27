@@ -380,9 +380,12 @@ visual-parity spot-check across both themes still recommended before release.
       callers pass `className="ml-1"` where there's no parent gap). Behavior-
       preserving. LEFT: `FieldRow` does NOT compose `Field` — their labels have
       different treatments (eyebrow kicker vs `Field.Label`), so composing would
-      change rendering (different intent). `widget-control` surface is ALREADY
-      shared — textarea/number-field/select all consume `widgetControlSurface`
-      (nothing to extend).
+      change rendering (different intent). Widget-control surface is now the real
+      owner (D6 stream): `widget-control.ts` exposes an L0 `interactiveSurface`
+      (focus ring + disabled) and an L1 `widgetControlSurface`; input/textarea
+      `extend` L1, number-field/select/field/searchInput COMPOSE it onto their
+      chrome slot, and button/toggle/collapsible/toolbar/checkbox reuse L0. The
+      earlier "only the readOnly constant was shared" state is resolved.
 - [~] One tag primitive (`tones`-driven) — RESOLVED by T1 / LEAVE SEPARATE: the
       audit's core complaint (chip hard-coding soft tones) is fixed — `Badge` and
       `Chip` both route color through `toneClass(tone, variant)` now. Merging them

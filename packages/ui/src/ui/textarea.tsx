@@ -2,10 +2,11 @@ import * as React from "react";
 
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
-import { WIDGET_CONTROL_READONLY_CLASS } from "./widget-control";
+import { widgetControlSurfaceVariants } from "./widget-control";
 
 export const textareaVariants = tv({
-  base: "w-full rounded-md border border-border bg-sheet text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:focus-ring disabled:cursor-not-allowed disabled:bg-inset disabled:opacity-60",
+  extend: widgetControlSurfaceVariants,
+  base: "w-full text-fg placeholder:text-fg-subtle",
   variants: {
     size: {
       sm: "px-2 py-1 text-xs leading-snug",
@@ -17,20 +18,10 @@ export const textareaVariants = tv({
       vertical: "resize-y",
       both: "resize",
     },
-    invalid: {
-      true: "border-danger focus:border-danger focus:focus-ring-danger",
-      false: "",
-    },
-    readOnly: {
-      true: WIDGET_CONTROL_READONLY_CLASS,
-      false: "",
-    },
   },
   defaultVariants: {
     size: "md",
     resize: "vertical",
-    invalid: false,
-    readOnly: false,
   },
 });
 
@@ -43,7 +34,7 @@ export type TextareaProps = Omit<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>,
   "className" | "color"
 > &
-  TextareaRecipeProps & {
+  Pick<TextareaRecipeProps, "size" | "resize" | "invalid" | "readOnly"> & {
     className?: string;
   };
 

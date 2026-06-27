@@ -66,7 +66,7 @@ export default function HeicPreview({ file }: PreviewProviderProps): ReactElemen
       <img
         src={state.url}
         alt={file.name}
-        className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+        className="max-h-full max-w-full rounded-6 object-contain shadow-sm"
       />
     </div>
   );

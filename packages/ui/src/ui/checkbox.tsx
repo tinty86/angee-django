@@ -5,17 +5,23 @@ import {
 } from "@base-ui/react/checkbox";
 import { Glyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
+import { interactiveSurface } from "./widget-control";
 
 export const checkboxVariants = tv({
   slots: {
-    root: "inline-flex shrink-0 cursor-pointer items-center justify-center rounded border border-border-strong bg-sheet text-on-brand outline-none transition-colors hover:border-brand focus-visible:focus-ring data-[checked]:border-brand data-[checked]:bg-brand data-[indeterminate]:border-brand data-[indeterminate]:bg-brand data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",
+    // Checkbox is a check square (not a box-surface widget control), so it
+    // composes only the L0 interactive fragment (focus ring + disabled dimming)
+    // and keeps its own border/fill and invalid treatment.
+    root: `inline-flex shrink-0 cursor-pointer items-center justify-center rounded-6 border border-border-strong bg-sheet text-on-brand hover:border-brand data-[checked]:border-brand data-[checked]:bg-brand data-[indeterminate]:border-brand data-[indeterminate]:bg-brand ${interactiveSurface(
+      { focus: "visible", disabled: "data" },
+    )}`,
     indicator: "flex size-full items-center justify-center text-on-brand [&_svg]:size-3",
   },
   variants: {
     size: {
       sm: { root: "size-3.5" },
       md: { root: "size-4" },
-      lg: { root: "size-5 rounded-md", indicator: "[&_svg]:size-3.5" },
+      lg: { root: "size-5 rounded-6", indicator: "[&_svg]:size-3.5" },
     },
     invalid: {
       true: {

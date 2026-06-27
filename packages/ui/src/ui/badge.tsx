@@ -8,7 +8,7 @@ export const badgeVariants = tv({
   base: "inline-flex min-w-0 items-center gap-1 whitespace-nowrap border font-medium leading-none",
   variants: {
     shape: {
-      rounded: "rounded",
+      rounded: "rounded-6",
       pill: "rounded-full",
     },
     density: {

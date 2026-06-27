@@ -27,7 +27,7 @@ import { POPUP_BASE } from "./popover";
 const MENU_SLOTS = {
   content: `${POPUP_BASE} min-w-44 p-1`,
   item:
-    "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded px-2 text-13 text-fg outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset [&_.glyph]:size-3.5 [&_.glyph]:shrink-0 [&_.glyph]:text-fg-muted",
+    "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded-6 px-2 text-13 text-fg outline-none transition-colors data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset [&_.glyph]:size-3.5 [&_.glyph]:shrink-0 [&_.glyph]:text-fg-muted",
   indicator:
     "absolute left-2 flex size-3.5 items-center justify-center text-brand [&_.glyph]:size-3.5",
   radioIndicator:

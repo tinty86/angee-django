@@ -16,7 +16,7 @@ export type PageElementKind =
   | "metric"
   | "tab";
 
-export const PAGE_ELEMENT_SLOT = Symbol.for("@angee/base.page.element");
+export const PAGE_ELEMENT_SLOT = Symbol.for("@angee/ui.page.element");
 
 export type PageElementType = {
   readonly [PAGE_ELEMENT_SLOT]?: PageElementKind;

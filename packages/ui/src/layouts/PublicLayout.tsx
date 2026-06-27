@@ -53,7 +53,7 @@ export function PublicLayout({
                   {resolvedLead}
                 </div>
               ) : null}
-              <div className="rounded-lg border border-n-0/30 bg-n-0/94 p-6 shadow-2xl shadow-n-950/30 backdrop-blur-sm sm:p-8">
+              <div className="rounded-8 border border-n-0/30 bg-n-0/94 p-6 shadow-2xl shadow-n-950/30 backdrop-blur-sm sm:p-8">
                 {children}
               </div>
             </div>

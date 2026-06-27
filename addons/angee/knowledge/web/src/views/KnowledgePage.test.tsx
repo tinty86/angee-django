@@ -44,18 +44,18 @@ vi.mock("@angee/ui", async (importOriginal) => {
     EmptyState: ({ title }: { title: string }) => (
       <section data-testid="empty-state">{title}</section>
     ),
-    Explorer: ({
-      navigator,
-      aside,
+    Workbench: ({
+      primary,
+      secondary,
       children,
     }: {
-      navigator: React.ReactNode;
-      aside: React.ReactNode;
+      primary: React.ReactNode;
+      secondary: React.ReactNode;
       children: React.ReactNode;
     }) => (
       <div>
-        <nav data-testid="navigator">{navigator}</nav>
-        <aside data-testid="aside">{aside}</aside>
+        <nav data-testid="navigator">{primary}</nav>
+        <aside data-testid="aside">{secondary}</aside>
         <main>{children}</main>
       </div>
     ),

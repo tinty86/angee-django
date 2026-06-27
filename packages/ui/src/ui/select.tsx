@@ -19,21 +19,26 @@ import type {
   SelectValueProps as BaseSelectValueProps,
 } from "@base-ui/react/select";
 import { Glyph } from "../chrome/Glyph";
+import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 import { POPUP_BASE } from "./popover";
-import { WIDGET_CONTROL_READONLY_CLASS } from "./widget-control";
+import { widgetControlSurface } from "./widget-control";
 
 export const selectVariants = tv({
   slots: {
+    // Box chrome (border / surface / focus / disabled / invalid / read-only) is
+    // composed from `widgetControlSurface` in SelectTrigger; the trigger slot
+    // keeps only layout. `invalid` and `readOnly` stay as inert pass-through
+    // variants so the prop types resolve.
     trigger:
-      "inline-flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded border border-border bg-inset px-2 text-left text-13 text-fg outline-none transition-colors hover:border-border-strong focus-visible:border-border-focus focus-visible:focus-ring data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",
+      "inline-flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-6 px-2 text-left text-13 text-fg",
     value: "min-w-0 flex-1 truncate text-left",
     icon:
       "ml-auto flex size-4 shrink-0 items-center justify-center text-fg-muted transition-transform data-[open]:rotate-180 [&_svg]:size-3.5",
     content: `${POPUP_BASE} min-w-[var(--anchor-width)]`,
     list: "max-h-72 overflow-y-auto p-1",
     item:
-      "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded px-2 pr-8 text-13 text-fg outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset",
+      "relative flex h-8 cursor-pointer select-none items-center gap-2 rounded-6 px-2 pr-8 text-13 text-fg outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-inset",
     itemText: "min-w-0 flex-1 truncate",
     indicator:
       "absolute right-2 flex size-3.5 items-center justify-center text-brand [&_svg]:size-3.5",
@@ -54,14 +59,12 @@ export const selectVariants = tv({
       },
     },
     invalid: {
-      true: {
-        trigger: "border-danger focus-visible:focus-ring-danger",
-      },
-      false: "",
+      true: {},
+      false: {},
     },
     readOnly: {
-      true: { trigger: WIDGET_CONTROL_READONLY_CLASS },
-      false: "",
+      true: {},
+      false: {},
     },
     inset: {
       true: { item: "pl-8" },
@@ -116,10 +119,22 @@ export const SelectTrigger = React.forwardRef<
   ref,
 ) {
   const styles = selectVariants({ size, invalid, readOnly });
+  // Re-assert the trigger's bare `rounded-6` after the owner chrome (whose base is
+  // `rounded-6`); the radius-unification stage converges both to one token.
+  const triggerClass = cn(
+    widgetControlSurface({
+      focus: "visible",
+      surface: "inset",
+      invalid,
+      readOnly,
+      disabled: "data",
+    }),
+    "rounded-6",
+  );
   return (
     <BaseSelect.Trigger
       ref={ref}
-      className={styles.trigger({ className })}
+      className={styles.trigger({ className: cn(triggerClass, className) })}
       {...props}
     />
   );

@@ -23,7 +23,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Resizable: Story = {
   render: () => (
-    <Page className="h-[30rem] w-[58rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page className="h-[30rem] w-[58rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader density="compact" title="File preview" />
       <SplitPanes>
         <SplitPane defaultSize="64%" minSize="35%">

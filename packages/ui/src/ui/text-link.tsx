@@ -11,7 +11,7 @@ export const textLinkVariants = tv({
         "font-medium text-link underline-offset-4 hover:text-brand hover:underline",
       muted: "text-fg-muted underline-offset-4 hover:text-fg hover:no-underline",
       "block-card":
-        "block rounded-md border border-border-subtle bg-sheet p-3 text-fg shadow-xs hover:border-border hover:bg-inset hover:no-underline",
+        "block rounded-6 border border-border-subtle bg-sheet p-3 text-fg shadow-xs hover:border-border hover:bg-inset hover:no-underline",
     },
     disabled: {
       true: "pointer-events-none cursor-not-allowed opacity-60",

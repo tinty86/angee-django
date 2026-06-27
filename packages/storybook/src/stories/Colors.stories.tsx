@@ -20,7 +20,7 @@ type Story = StoryObj<typeof meta>;
 
 const Swatch = ({ tone, fill }: { tone: (typeof TONES)[number]; fill: (typeof FILLS)[number] }) => (
   <span
-    className={`inline-flex h-9 w-full items-center justify-center rounded-md border px-3 text-13 font-medium ${toneClass(
+    className={`inline-flex h-9 w-full items-center justify-center rounded-6 border px-3 text-13 font-medium ${toneClass(
       tone,
       fill,
     )}`}
@@ -103,7 +103,7 @@ export const Fills: Story = {
           {FILLS.map((fill) => (
             <span
               key={fill}
-              className={`inline-flex h-9 items-center rounded-md border px-4 text-13 font-medium ${toneClass(
+              className={`inline-flex h-9 items-center rounded-6 border px-4 text-13 font-medium ${toneClass(
                 tone,
                 fill,
               )}`}

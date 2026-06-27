@@ -105,7 +105,7 @@ export const MetadataPanel = React.forwardRef<HTMLElement, MetadataPanelProps>(
                 {tabs.map((tab) => (
                   <InfoRow
                     key={tab.id}
-                    className="rounded-md bg-inset px-3 py-2"
+                    className="rounded-6 bg-inset px-3 py-2"
                     label={tab.label}
                     value={tab.content}
                   />

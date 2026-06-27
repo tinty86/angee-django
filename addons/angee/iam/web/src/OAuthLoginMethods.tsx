@@ -54,7 +54,7 @@ export function OAuthLoginMethods(): ReactNode {
     return (
       <div
         aria-live="polite"
-        className="flex items-center gap-3 rounded-md border border-border-subtle bg-inset px-4 py-3 text-sm text-fg-muted"
+        className="flex items-center gap-3 rounded-6 border border-border-subtle bg-inset px-4 py-3 text-sm text-fg-muted"
         role="status"
       >
         <Spinner size="sm" tone="brand" />
@@ -111,7 +111,7 @@ function ProviderMark({ label }: { label: string }): ReactNode {
   return (
     <span
       aria-hidden="true"
-      className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-accent-soft text-xs font-semibold text-accent-soft-text"
+      className="flex size-7 shrink-0 items-center justify-center rounded-6 border border-border-subtle bg-accent-soft text-xs font-semibold text-accent-soft-text"
     >
       {initial || <Glyph name="auth" className="size-4" />}
     </span>

@@ -34,7 +34,7 @@ type Story = StoryObj<typeof meta>;
 export const ListDetail: Story = {
   render: () => (
     <div className="h-screen bg-inset p-6">
-      <div className="h-full overflow-hidden rounded-md border border-border-subtle bg-canvas">
+      <div className="h-full overflow-hidden rounded-6 border border-border-subtle bg-canvas">
         <SplitView primarySize={36}>
           <SplitView.Primary>
             <div className="h-full overflow-auto">

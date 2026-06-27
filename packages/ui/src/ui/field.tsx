@@ -8,8 +8,11 @@ import type {
   FieldRootProps as BaseFieldRootProps,
 } from "@base-ui/react/field";
 
+import { cn } from "../lib/cn";
+import { toneText } from "../lib/tones";
 import { tv, type VariantProps } from "../lib/variants";
 import { OptionalHint, RequiredMark } from "./label";
+import { widgetControlSurface } from "./widget-control";
 
 export const fieldVariants = tv({
   slots: {
@@ -17,10 +20,13 @@ export const fieldVariants = tv({
     label: "text-13 font-medium text-fg data-[disabled]:opacity-60",
     description: "text-xs leading-5 text-fg-muted",
     error: "text-xs leading-5 text-danger-text",
+    // The box chrome on `control`/`controlFrame` is composed from
+    // `widgetControlSurface` in their components; the slots keep layout plus the
+    // control's data-attribute-driven invalid tail (a different mechanism from
+    // the prop-driven `invalid` variant, which only tints the label here).
     control:
-      "w-full rounded-md border border-border bg-sheet text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:focus-ring disabled:cursor-not-allowed disabled:bg-inset disabled:opacity-60 data-[invalid]:border-danger data-[invalid]:focus:border-danger data-[invalid]:focus:focus-ring-danger",
-    controlFrame:
-      "flex min-w-0 items-center rounded-md border border-border bg-sheet transition-colors focus-within:border-border-focus focus-within:focus-ring",
+      "w-full text-fg placeholder:text-fg-subtle data-[invalid]:border-danger data-[invalid]:focus:border-danger data-[invalid]:focus:focus-ring-danger",
+    controlFrame: "flex min-w-0 items-center rounded-6",
     item: "flex min-w-0 items-start gap-2",
   },
   variants: {
@@ -62,9 +68,7 @@ export const fieldVariants = tv({
     },
     invalid: {
       true: {
-        label: "text-danger-text",
-        controlFrame:
-          "border-danger focus-within:border-danger focus-within:focus-ring-danger",
+        label: toneText("danger"),
       },
       false: "",
     },
@@ -200,10 +204,15 @@ export const FieldControl = React.forwardRef<
   FieldControlProps
 >(function FieldControl({ className, size = "md", ...props }, ref) {
   const styles = fieldVariants({ size });
+  const controlClass = widgetControlSurface({
+    focus: "self",
+    surface: "sheet",
+    disabled: "pseudo",
+  });
   return (
     <BaseField.Control
       ref={ref}
-      className={styles.control({ className })}
+      className={styles.control({ className: cn(controlClass, className) })}
       {...props}
     />
   );
@@ -223,10 +232,16 @@ export const FieldControlFrame = React.forwardRef<
   ref,
 ) {
   const styles = fieldVariants({ invalid, size });
+  const frameClass = widgetControlSurface({
+    focus: "within",
+    surface: "sheet",
+    invalid,
+    disabled: "none",
+  });
   return (
     <div
       ref={ref}
-      className={styles.controlFrame({ className })}
+      className={styles.controlFrame({ className: cn(frameClass, className) })}
       data-invalid={invalid ? "" : undefined}
       {...props}
     />

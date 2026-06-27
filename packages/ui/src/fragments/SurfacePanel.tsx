@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "../lib/cn";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { textRoleVariants } from "../ui/text";
 
 export interface SurfacePanelProps {
   title: string;
@@ -115,11 +116,11 @@ export function SettingsSection({
     <section className={cn("grid gap-3", className)}>
       {description ? (
         <header className="grid gap-0.5">
-          <h2 className="text-15 font-semibold text-fg">{title}</h2>
+          <h2 className={textRoleVariants({ role: "title" })}>{title}</h2>
           <p className="text-13 text-fg-muted">{description}</p>
         </header>
       ) : (
-        <h2 className="text-15 font-semibold text-fg">{title}</h2>
+        <h2 className={textRoleVariants({ role: "title" })}>{title}</h2>
       )}
       {children}
     </section>

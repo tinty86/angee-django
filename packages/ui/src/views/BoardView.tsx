@@ -31,7 +31,7 @@ const BOARD_SCROLL_STYLE: React.CSSProperties = {
   maxHeight: LIST_VIEW_SCROLL_BUDGET,
 };
 const BOARD_CARD_SHELL_CLASS =
-  "block w-full rounded-lg text-left text-inherit outline-none focus-visible:focus-ring";
+  "block w-full rounded-8 text-left text-inherit outline-none focus-visible:focus-ring";
 
 export interface BoardViewProps<TRow extends Row = Row> {
   columns: readonly ColumnDescriptor<TRow>[];
@@ -171,7 +171,7 @@ function BoardSkeleton({
             {Array.from({ length: 3 }, (_, cardIndex) => (
               <article
                 key={cardIndex}
-                className="grid gap-2 rounded-lg border border-border-subtle bg-sheet p-3 shadow-xs"
+                className="grid gap-2 rounded-8 border border-border-subtle bg-sheet p-3 shadow-xs"
               >
                 <Skeleton
                   shape="text"
@@ -275,7 +275,7 @@ function BoardRowCard<TRow extends Row>({
     .slice(0, 4);
   const [titleColumn, ...detailColumns] = cardColumns;
   return (
-    <article className="grid gap-2 rounded-lg border border-border-subtle bg-sheet p-3 shadow-xs transition hover:-translate-y-0.5 hover:border-border hover:shadow-md">
+    <article className="grid gap-2 rounded-8 border border-border-subtle bg-sheet p-3 shadow-xs transition hover:-translate-y-0.5 hover:border-border hover:shadow-md">
       <BoardCardFrame
         href={href}
         onClick={onRowClick ? () => onRowClick(row.original) : undefined}

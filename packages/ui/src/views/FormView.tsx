@@ -242,7 +242,7 @@ const TITLE_INPUT_CLASS =
   "focus:bg-transparent focus-visible:border-transparent placeholder:text-fg-subtle";
 // Interim: wrapper styling strips current widget chrome; widget recipes should own an appearance variant later.
 const EDITABLE_FIELD_CONTROL_CLASS = cn(
-  "-mx-2 min-h-8 rounded-md border border-transparent bg-transparent px-2",
+  "-mx-2 min-h-8 rounded-6 border border-transparent bg-transparent px-2",
   "transition-colors hover:border-border-subtle hover:bg-inset",
   "focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring",
   "[&>button]:h-8 [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-0 [&>button]:shadow-none",

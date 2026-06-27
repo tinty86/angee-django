@@ -18,7 +18,7 @@ type Story = StoryObj<typeof meta>;
 // commands — and the router that each command navigates through.
 export const Trigger: Story = {
   render: () => (
-    <div className="rounded-md bg-rail p-3 text-on-rail">
+    <div className="rounded-6 bg-rail p-3 text-on-rail">
       <CommandPalette />
     </div>
   ),

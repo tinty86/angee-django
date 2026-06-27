@@ -12,6 +12,7 @@ import type {
 } from "react";
 
 import { useBaseT } from "../../i18n";
+import { barVariants } from "../../layouts/bar";
 import { cn } from "../../lib/cn";
 import { useRender, type UseRenderRenderProp } from "../../lib/slot";
 import type { Tone } from "../../lib/tones";
@@ -86,7 +87,15 @@ export function ChatBar({ start, end, className, ...props }: ChatBarProps): Reac
   return (
     <header
       className={cn(
-        "flex min-w-0 items-center justify-between gap-2 border-b border-border-subtle bg-sheet-2 px-3 py-2",
+        barVariants({
+          edge: "bottom",
+          tone: "sheet2",
+          gap: 2,
+          justify: "between",
+        }),
+        // `px-3 py-2` is the chat bar's intentional snug rhythm (off the bar pad
+        // scale), so it rides on top of the recipe.
+        "px-3 py-2",
         className,
       )}
       {...props}
@@ -145,10 +154,9 @@ export function SessionRail({
   return (
     <nav
       aria-label={label}
-      className={cn(
-        "flex h-full min-h-0 w-60 shrink-0 flex-col border-r border-border-subtle bg-sheet-2",
-        className,
-      )}
+      // Fills its host (a collapsible Workbench primary pane owns width, border,
+      // and bg); keeps only the inner nav > ul scaffold.
+      className={cn("flex h-full min-h-0 w-full flex-col", className)}
       {...props}
     >
       {action ? <div className="border-b border-border-subtle p-2">{action}</div> : null}
@@ -167,7 +175,7 @@ export function SessionRail({
 // any router `Link` via `render`. Extracting one recipe would couple two unrelated
 // layers (chrome navigation ↔ the communication surface) for a few utility classes.
 export const sessionRailItemVariants = tv({
-  base: "flex h-8 items-center gap-2 rounded-md px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
+  base: "flex h-8 items-center gap-2 rounded-6 px-2 text-13 text-fg-2 no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
   variants: {
     active: {
       true: "bg-brand-soft font-medium text-brand-soft-text hover:bg-brand-soft",
@@ -244,7 +252,7 @@ export function ChatBubble({ role, className, children, ...props }: ChatBubblePr
     >
       <div
         className={cn(
-          "max-w-[88%] rounded-md px-3 py-2 text-13 leading-relaxed shadow-xs",
+          "max-w-[88%] rounded-6 px-3 py-2 text-13 leading-relaxed shadow-xs",
           role === "user"
             ? "bg-brand text-on-brand"
             : "border border-border-subtle bg-sheet-2 text-fg",
@@ -460,7 +468,7 @@ export const ChatCommandItem = forwardRef<HTMLButtonElement, ChatCommandItemProp
         ref={ref}
         type="button"
         className={cn(
-          "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left outline-none data-[highlighted]:bg-inset",
+          "flex w-full flex-col items-start gap-0.5 rounded-6 px-2 py-1.5 text-left outline-none data-[highlighted]:bg-inset",
           className,
         )}
         {...props}
@@ -511,7 +519,7 @@ export function ToolFallback({
   const label = status ?? (!hasResult ? t("chat.tool.status.running") : isError ? t("chat.tool.status.error") : t("chat.tool.status.complete"));
   return (
     <details
-      className="mb-2 rounded-md border border-border-subtle bg-inset px-2 py-1 text-2xs"
+      className="mb-2 rounded-6 border border-border-subtle bg-inset px-2 py-1 text-2xs"
       open={!hasResult}
     >
       <summary className="cursor-pointer font-medium">
@@ -541,7 +549,7 @@ export interface MessageReasoningFrameProps {
 export function MessageReasoningFrame({ children, className }: MessageReasoningFrameProps): ReactElement {
   const t = useBaseT();
   return (
-    <details className={cn("my-1 rounded-md border border-border-subtle bg-inset px-2 py-1 text-2xs", className)}>
+    <details className={cn("my-1 rounded-6 border border-border-subtle bg-inset px-2 py-1 text-2xs", className)}>
       <summary className="cursor-pointer font-medium text-fg-muted">{t("chat.reasoning.label")}</summary>
       <CodeBlock wrap tone="muted" className="mt-1 max-h-48 overflow-auto">
         {children}
@@ -560,7 +568,7 @@ export interface ContextBlockProps {
  *  header's settings popover to show the rendered `<system_context>`. */
 export function ContextBlock({ label, children, className }: ContextBlockProps): ReactElement {
   return (
-    <details className={cn("rounded-md border border-border-subtle bg-inset px-3 py-2", className)}>
+    <details className={cn("rounded-6 border border-border-subtle bg-inset px-3 py-2", className)}>
       <summary className="cursor-pointer text-2xs font-medium text-fg-muted">{label}</summary>
       <CodeBlock wrap tone="muted" className="mt-2 max-h-48 overflow-auto text-2xs">
         {children}

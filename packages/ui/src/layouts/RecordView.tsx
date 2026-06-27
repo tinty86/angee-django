@@ -21,11 +21,11 @@ import {
   type LayoutSlotComponent,
 } from "./slots";
 
-const HEADER_SLOT = Symbol.for("@angee/base.record-header-slot");
-const TOOLBAR_SLOT = Symbol.for("@angee/base.record-toolbar-slot");
-const BODY_SLOT = Symbol.for("@angee/base.record-body-slot");
-const ASIDE_SLOT = Symbol.for("@angee/base.record-aside-slot");
-const FOOTER_SLOT = Symbol.for("@angee/base.record-footer-slot");
+const HEADER_SLOT = Symbol.for("@angee/ui.record-header-slot");
+const TOOLBAR_SLOT = Symbol.for("@angee/ui.record-toolbar-slot");
+const BODY_SLOT = Symbol.for("@angee/ui.record-body-slot");
+const ASIDE_SLOT = Symbol.for("@angee/ui.record-aside-slot");
+const FOOTER_SLOT = Symbol.for("@angee/ui.record-footer-slot");
 
 export interface RecordViewProps {
   asideSide?: "left" | "right";

@@ -17,7 +17,7 @@ type Story = StoryObj<typeof meta>;
 
 export const RuntimeMenu: Story = {
   render: () => (
-    <div className="rounded-md bg-rail p-2 text-on-rail">
+    <div className="rounded-6 bg-rail p-2 text-on-rail">
       <TopMenu items={chromeMenuItems} />
     </div>
   ),
@@ -25,7 +25,7 @@ export const RuntimeMenu: Story = {
 
 export const DataTabs: Story = {
   render: () => (
-    <div className="rounded-md bg-rail p-2 text-on-rail">
+    <div className="rounded-6 bg-rail p-2 text-on-rail">
       <TopMenu tabs={topMenuTabs} />
     </div>
   ),

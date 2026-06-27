@@ -14,8 +14,8 @@ import {
   type LayoutSlotComponent,
 } from "./slots";
 
-const PRIMARY_SLOT = Symbol.for("@angee/base.split-primary-slot");
-const DETAIL_SLOT = Symbol.for("@angee/base.split-detail-slot");
+const PRIMARY_SLOT = Symbol.for("@angee/ui.split-primary-slot");
+const DETAIL_SLOT = Symbol.for("@angee/ui.split-detail-slot");
 
 export interface SplitViewProps {
   autoSave?: string;

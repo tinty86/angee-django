@@ -7,9 +7,11 @@ import {
 import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 import { Spinner, type SpinnerSize } from "./spinner";
+import { interactiveSurfaceVariants } from "./widget-control";
 
 export const buttonVariants = tv({
-  base: "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border font-medium leading-none outline-none transition-colors focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60 [&_.glyph]:size-3.5",
+  extend: interactiveSurfaceVariants,
+  base: "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-6 border font-medium leading-none [&_.glyph]:size-3.5",
   variants: {
     variant: {
       primary:
@@ -27,9 +29,9 @@ export const buttonVariants = tv({
       sm: "h-btn-sm px-2 text-xs",
       md: "h-btn-md px-3 text-13",
       lg: "h-btn-lg px-4 text-sm",
-      iconSm: "size-icon-btn-sm rounded px-0 text-xs [&_.glyph]:size-3.5",
+      iconSm: "size-icon-btn-sm px-0 text-xs [&_.glyph]:size-3.5",
       iconMd: "size-icon-btn-md px-0 text-13 [&_.glyph]:size-4",
-      iconLg: "size-icon-btn-lg rounded-lg px-0 text-sm [&_.glyph]:size-4",
+      iconLg: "size-icon-btn-lg px-0 text-sm [&_.glyph]:size-4",
     },
     active: {
       true:
@@ -46,6 +48,8 @@ export const buttonVariants = tv({
     size: "md",
     active: false,
     loading: false,
+    focus: "visible",
+    disabled: "pseudo",
   },
 });
 
@@ -67,7 +71,7 @@ export type ButtonProps = Omit<
   "className" | "color"
 > &
   BaseButtonInteropProps &
-  ButtonRecipeProps & {
+  Pick<ButtonRecipeProps, "variant" | "size" | "active" | "loading"> & {
     asChild?: boolean;
     className?: string;
     loading?: boolean;

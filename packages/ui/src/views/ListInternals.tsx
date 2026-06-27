@@ -550,7 +550,7 @@ function SortHeader<TRow extends Row>({
   return (
     <button
       type="button"
-      className="inline-flex min-w-0 items-center gap-1 rounded text-left outline-none hover:text-fg focus-visible:focus-ring"
+      className="inline-flex min-w-0 items-center gap-1 rounded-6 text-left outline-none hover:text-fg focus-visible:focus-ring"
       aria-label={t(sortKey, { label })}
       onClick={() => resourceView.setSort(nextSort(sort, column.field))}
     >
@@ -731,7 +731,7 @@ function PlainRecordRow<TRow extends Row>({
           {interactive && index === 0 && onRowClick ? (
             <button
               type="button"
-              className="block w-full min-w-0 rounded-sm text-left text-inherit outline-none focus-visible:focus-ring"
+              className="block w-full min-w-0 rounded-4 text-left text-inherit outline-none focus-visible:focus-ring"
               aria-label={`Open ${rowActionLabelForTableColumn(cell.column, row.original)}`}
               onClick={(event) => {
                 event.stopPropagation();

@@ -114,7 +114,6 @@ export const enBaseMessages: Record<string, string> = {
   "revisions.emptyDescription": "Field changes will appear here.",
   "revisions.recordUpdated": "Record updated",
   "chatter.label": "Chatter",
-  "chatter.resize": "Resize chatter",
   "chatter.tabComments": "Comments",
   "chatter.tabActivity": "Activity",
   "chatter.noComments": "No comments yet",
