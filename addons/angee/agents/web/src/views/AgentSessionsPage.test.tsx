@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import * as React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -37,13 +38,16 @@ vi.mock("@tanstack/react-router", async () => {
 // data hook and the namespace translator are overridden.
 vi.mock("@angee/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/ui")>();
+  const React = await import("react");
   return {
     ...actual,
     useAuthoredQuery: sdkMocks.useAuthoredQuery,
-    useNamespaceT:
-      (_namespace: string, messages: Record<string, string>) =>
-      (key: string) =>
-        messages[key] ?? key,
+    // Mirror the real `useNamespaceT` contract: a STABLE translator identity (memoized
+    // on its inputs). AgentSessionsPage publishes a `t`-derived node into the shell
+    // primary pane via `usePrimaryPane`, so an unstable `t` would churn that node and
+    // republish on every render — an infinite publish/re-render loop.
+    useNamespaceT: (_namespace: string, messages: Record<string, string>) =>
+      React.useCallback((key: string) => messages[key] ?? key, [messages]),
   };
 });
 
@@ -55,7 +59,32 @@ vi.mock("./AgentChat", () => ({
   ),
 }));
 
+import { PrimaryPaneProvider, usePrimaryPaneContent } from "@angee/ui";
+
 import { AgentSessionsPage } from "./AgentSessionsPage";
+
+// The session rail now lives in the shell PRIMARY pane: the page publishes it via
+// `usePrimaryPane`, so the test renders the published node into a thin host and asserts
+// against that. The conversation content (chat / empty state) stays in the page's own DOM.
+function PrimaryHost(): React.ReactElement {
+  const { node } = usePrimaryPaneContent();
+  return <div data-testid="shell-primary">{node}</div>;
+}
+
+// A fresh element each call: React bails out of re-rendering a referentially-identical
+// element, so `rerender` must get a NEW tree to pick up the changed router params.
+function harness() {
+  return (
+    <PrimaryPaneProvider>
+      <AgentSessionsPage />
+      <PrimaryHost />
+    </PrimaryPaneProvider>
+  );
+}
+
+function renderPage() {
+  return render(harness());
+}
 
 function agent(
   id: string,
@@ -91,7 +120,7 @@ describe("AgentSessionsPage", () => {
   test("loading renders skeleton rail rows and no chat", () => {
     sdkMocks.useAuthoredQuery.mockReturnValue(queryResult(undefined, true));
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(screen.getByRole("navigation", { name: "Running agents" })).toBeTruthy();
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
@@ -108,7 +137,7 @@ describe("AgentSessionsPage", () => {
       }),
     );
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(screen.getByText("No agent yet")).toBeTruthy();
     const cta = screen.getByRole("link", { name: "Set up your assistant" });
@@ -128,7 +157,7 @@ describe("AgentSessionsPage", () => {
     );
     routerMocks.params = { id: "a1" };
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(screen.getByText("Scout")).toBeTruthy();
     expect(screen.queryByText("Template")).toBeNull();
@@ -147,7 +176,7 @@ describe("AgentSessionsPage", () => {
     );
     routerMocks.params = { id: "a2" };
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(screen.getByText("Scout")).toBeTruthy();
     expect(screen.getByText("claude-haiku")).toBeTruthy();
@@ -167,7 +196,7 @@ describe("AgentSessionsPage", () => {
       queryResult({ agents: [agent("a1", "Scout"), agent("a2", "Ranger")] }),
     );
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(routerMocks.navigate).toHaveBeenCalledWith({
       to: "/agents/sessions/a1",
@@ -181,7 +210,7 @@ describe("AgentSessionsPage", () => {
     );
     routerMocks.params = { id: "gone" };
 
-    render(<AgentSessionsPage />);
+    renderPage();
 
     expect(routerMocks.navigate).toHaveBeenCalledWith({
       to: "/agents/sessions/a1",
@@ -197,11 +226,11 @@ describe("AgentSessionsPage", () => {
     );
     routerMocks.params = { id: "a1" };
 
-    const view = render(<AgentSessionsPage />);
+    const view = renderPage();
     expect(screen.getByTestId("agent-chat").getAttribute("data-agent-id")).toBe("a1");
 
     routerMocks.params = { id: "a2" };
-    view.rerender(<AgentSessionsPage />);
+    view.rerender(harness());
 
     const chats = screen.getAllByTestId("agent-chat");
     expect(chats.map((c) => c.getAttribute("data-agent-id")).sort()).toEqual(["a1", "a2"]);

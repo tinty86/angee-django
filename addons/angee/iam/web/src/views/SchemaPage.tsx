@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -20,7 +21,9 @@ import {
   SearchInput,
   Spinner,
   textRoleVariants,
-  Workbench,
+  useChatterContent,
+  usePrimaryPane,
+  type ChatterTab,
   type GraphViewEdge,
   type GraphViewEdgeStyle,
   type GraphViewNode,
@@ -117,6 +120,109 @@ export function SchemaPage(): ReactElement {
     }
   }, [selectedResourceType, visibleResources]);
 
+  const selectedResource =
+    visibleResources.find(
+      (resource) => resource.resource_type === selectedResourceType,
+    )
+    ?? visibleResources[0]
+    ?? null;
+  const selectedIndex = selectedResource
+    ? visibleResources.findIndex(
+        (resource) => resource.resource_type === selectedResource.resource_type,
+      )
+    : -1;
+  const handleResourceListboxKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (visibleResources.length === 0) return;
+      const selectVisibleResource = (index: number, focus = false) => {
+        const resource = visibleResources[index];
+        if (!resource) return;
+        setSelectedResourceType(resource.resource_type);
+        if (focus) optionRefs.current.get(resource.resource_type)?.focus();
+      };
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        selectVisibleResource(
+          selectedIndex < 0
+            ? 0
+            : Math.min(visibleResources.length - 1, selectedIndex + 1),
+          true,
+        );
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        selectVisibleResource(
+          selectedIndex < 0 ? 0 : Math.max(0, selectedIndex - 1),
+          true,
+        );
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        selectVisibleResource(0, true);
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        selectVisibleResource(visibleResources.length - 1, true);
+      }
+    },
+    [visibleResources, selectedIndex],
+  );
+
+  // The query has no data yet (error or first load): the page renders only its
+  // own state surface and publishes nothing, so the shell falls back to its own
+  // primary/secondary content — mirroring the pre-shell Workbench, which the
+  // early returns replaced wholesale.
+  const ready = !query.error && !(query.fetching && resources.length === 0);
+
+  // Primary (left explorer) pane: the resource-type navigator.
+  const explorer = useMemo(
+    () =>
+      ready ? (
+        <ResourceTypeList
+          listboxId={resourceListboxId}
+          optionRefs={optionRefs}
+          resources={visibleResources}
+          search={search}
+          selectedResource={selectedResource}
+          onKeyDown={handleResourceListboxKeyDown}
+          onSearchChange={setSearch}
+          onSelect={setSelectedResourceType}
+        />
+      ) : null,
+    [
+      ready,
+      resourceListboxId,
+      optionRefs,
+      visibleResources,
+      search,
+      selectedResource,
+      handleResourceListboxKeyDown,
+    ],
+  );
+  usePrimaryPane(explorer);
+
+  // Secondary (Chatter) pane: an additive "inspector" tab alongside the shell
+  // defaults (agent/comments/activity).
+  const inspectorTab = useMemo<readonly ChatterTab[]>(
+    () => [
+      {
+        id: "inspector",
+        label: t("iam.schema.inspector"),
+        icon: "info",
+        children: <SchemaInspector resource={selectedResource} />,
+      },
+    ],
+    [t, selectedResource],
+  );
+  const chatter = useMemo(
+    () => (ready ? { tabs: inspectorTab } : null),
+    [ready, inspectorTab],
+  );
+  useChatterContent(chatter);
+
   if (query.error) {
     return (
       <Alert tone="danger" title={t("iam.schema.unavailable")}>
@@ -134,81 +240,12 @@ export function SchemaPage(): ReactElement {
     );
   }
 
-  const selectedResource =
-    visibleResources.find(
-      (resource) => resource.resource_type === selectedResourceType,
-    )
-    ?? visibleResources[0]
-    ?? null;
-  const selectedIndex = selectedResource
-    ? visibleResources.findIndex(
-        (resource) => resource.resource_type === selectedResource.resource_type,
-      )
-    : -1;
-  const selectVisibleResource = (index: number, focus = false) => {
-    const resource = visibleResources[index];
-    if (!resource) return;
-    setSelectedResourceType(resource.resource_type);
-    if (focus) optionRefs.current.get(resource.resource_type)?.focus();
-  };
-  const handleResourceListboxKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-  ) => {
-    if (visibleResources.length === 0) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      selectVisibleResource(
-        selectedIndex < 0
-          ? 0
-          : Math.min(visibleResources.length - 1, selectedIndex + 1),
-        true,
-      );
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      selectVisibleResource(
-        selectedIndex < 0 ? 0 : Math.max(0, selectedIndex - 1),
-        true,
-      );
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      selectVisibleResource(0, true);
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      selectVisibleResource(visibleResources.length - 1, true);
-    }
-  };
-
   return (
-    <Workbench
-      autoSave="iam.schema"
-      primarySize={22}
-      secondarySize={26}
-      primary={
-        <ResourceTypeList
-          listboxId={resourceListboxId}
-          optionRefs={optionRefs}
-          resources={visibleResources}
-          search={search}
-          selectedResource={selectedResource}
-          onKeyDown={handleResourceListboxKeyDown}
-          onSearchChange={setSearch}
-          onSelect={setSelectedResourceType}
-        />
-      }
-      secondary={<SchemaInspector resource={selectedResource} />}
-    >
-      <SchemaGraphCanvas
-        resources={visibleResources}
-        selectedResource={selectedResource}
-        onSelect={setSelectedResourceType}
-      />
-    </Workbench>
+    <SchemaGraphCanvas
+      resources={visibleResources}
+      selectedResource={selectedResource}
+      onSelect={setSelectedResourceType}
+    />
   );
 }
 
@@ -233,7 +270,11 @@ function ResourceTypeList({
 }): ReactElement {
   const t = useIamT();
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col">
+    <section
+      role="navigation"
+      aria-label={t("iam.schema.resourceTypesLabel")}
+      className="flex h-full min-h-0 min-w-0 flex-col"
+    >
       <div className="border-b border-border-subtle p-3">
         <SearchInput
           value={search}

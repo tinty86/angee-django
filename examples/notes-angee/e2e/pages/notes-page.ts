@@ -179,7 +179,7 @@ export class NotesPage extends PageObject {
   get tagInput(): Locator {
     return this.page.getByRole("textbox", { name: "Tags" });
   }
-  /** A chatter-rail tab by name (Angee / Comments / Activity). */
+  /** A chatter-rail tab by name (Agents / Comments / Activity). */
   chatterTab(name: string): Locator {
     return this.page.getByRole("tab", { name: new RegExp(name, "i") });
   }

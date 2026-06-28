@@ -76,4 +76,12 @@ static-text occurrences outside the recipe + the LEAVE set. Adversarial review: 
 2 strays change pixels, no layout class dropped, `truncate` preserved.
 
 ## Deferred (flag, not now)
-Eyebrow inline→`SectionEyebrow` consolidation; mono/numeric muted modifiers on the recipe.
+~~Eyebrow inline→`SectionEyebrow` consolidation; mono/numeric muted modifiers on the recipe.~~
+DONE (2026-06-28): `textRoleVariants` gained `numeric` (tabular-nums) + `mono`
+(font-mono) boolean modifiers; the operator data cells route through them. The 5
+inline eyebrow copies (storage `FileBrowserContent`, knowledge `BacklinksPanel`,
+chrome `AppChooser`/`ConsoleSubNav`, `TimelineView`) now compose `<SectionEyebrow>`
+(tracking/spacing preserved per-site). LEFT as-is (different intent / already
+centralized): recipe-internal eyebrow slots (`PageHeader`/`select`/`menu-parts`/
+`separator`/`command` cmdk-heading), `userRef` avatar initials, `number-field`
+stepper, and `progressBar`'s own value slot.

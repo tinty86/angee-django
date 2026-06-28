@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const routerMocks = vi.hoisted(() => ({
@@ -17,6 +23,17 @@ const sdkMocks = vi.hoisted(() => ({
   },
 }));
 
+// The page now publishes a memoized navigator into the shell's primary pane via
+// an effect, so its hooks must hand back stable references (matching production,
+// where `usePageActions` memoizes). A fresh object per render would republish
+// every render and spin the publish effect. Hoist one stable actions object.
+const pageActionMocks = vi.hoisted(() => ({
+  busy: false,
+  createPage: vi.fn(async () => "created-page"),
+  deletePage: vi.fn(async () => undefined),
+  movePage: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => routerMocks.navigate,
   useParams: () => routerMocks.params,
@@ -28,36 +45,34 @@ vi.mock("@tanstack/react-router", () => ({
 // overrides, atop the real module.
 vi.mock("@angee/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/ui")>();
+  // Production `useNamespaceT` returns a `useCallback`-stable translator; mirror
+  // that here (cache by the `messages` object) so a memoized published node keeps
+  // a stable identity instead of republishing every render.
+  const translators = new WeakMap<
+    Record<string, string>,
+    (key: string, vars?: Record<string, string>) => string
+  >();
+  const makeT = (messages: Record<string, string>) => {
+    let t = translators.get(messages);
+    if (!t) {
+      t = (key: string, vars?: Record<string, string>) => {
+        let message = messages[key] ?? key;
+        for (const [name, value] of Object.entries(vars ?? {})) {
+          message = message.replace(`{${name}}`, value);
+        }
+        return message;
+      };
+      translators.set(messages, t);
+    }
+    return t;
+  };
   return {
     ...actual,
     useAuthoredQuery: sdkMocks.useAuthoredQuery,
-    useNamespaceT: (
-      _namespace: string,
-      messages: Record<string, string>,
-    ) => (key: string, vars?: Record<string, string>) => {
-      let message = messages[key] ?? key;
-      for (const [name, value] of Object.entries(vars ?? {})) {
-        message = message.replace(`{${name}}`, value);
-      }
-      return message;
-    },
+    useNamespaceT: (_namespace: string, messages: Record<string, string>) =>
+      makeT(messages),
     EmptyState: ({ title }: { title: string }) => (
       <section data-testid="empty-state">{title}</section>
-    ),
-    Workbench: ({
-      primary,
-      secondary,
-      children,
-    }: {
-      primary: React.ReactNode;
-      secondary: React.ReactNode;
-      children: React.ReactNode;
-    }) => (
-      <div>
-        <nav data-testid="navigator">{primary}</nav>
-        <aside data-testid="aside">{secondary}</aside>
-        <main>{children}</main>
-      </div>
     ),
     LoadingPanel: ({ message }: { message: string }) => (
       <section data-testid="loading">{message}</section>
@@ -138,12 +153,7 @@ vi.mock("@angee/ui", async (importOriginal) => {
 });
 
 vi.mock("../data/use-page-actions", () => ({
-  usePageActions: () => ({
-    busy: false,
-    createPage: vi.fn(async () => "created-page"),
-    deletePage: vi.fn(async () => undefined),
-    movePage: vi.fn(),
-  }),
+  usePageActions: () => pageActionMocks,
 }));
 
 vi.mock("./BacklinksPanel", () => ({
@@ -161,11 +171,53 @@ vi.mock("./PageEditor", () => ({
 }));
 
 import {
+  ChatterProvider,
+  PrimaryPaneProvider,
+  useChatter,
+  usePrimaryPaneContent,
+} from "@angee/ui";
+
+import {
   KnowledgePage as KnowledgePageQuery,
   KnowledgePages,
   KnowledgeVaults,
 } from "../data/documents";
 import { KnowledgePage } from "./KnowledgePage";
+
+// The navigator now publishes into the shell's primary pane and the backlinks
+// rail into the secondary (chatter); a thin host renders each published surface
+// so the assertions see what the page publishes, not the page's own DOM.
+function PrimaryHost() {
+  const { node } = usePrimaryPaneContent();
+  return <div data-testid="shell-primary">{node}</div>;
+}
+
+function ChatterHost() {
+  const { content } = useChatter();
+  const tabs = content?.tabs ?? [];
+  return (
+    <div data-testid="shell-chatter" data-tab-ids={tabs.map((t) => t.id).join(",")}>
+      {tabs.map((tab) => (
+        <div key={tab.id} data-testid={`chatter-tab-${tab.id}`}>
+          {tab.label}
+          {tab.children}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderPage() {
+  return render(
+    <PrimaryPaneProvider>
+      <ChatterProvider>
+        <KnowledgePage />
+        <PrimaryHost />
+        <ChatterHost />
+      </ChatterProvider>
+    </PrimaryPaneProvider>,
+  );
+}
 
 let knowledgeData = makeKnowledgeData();
 
@@ -203,7 +255,7 @@ describe("KnowledgePage explorer wiring", () => {
   test("uses the open page vault for a direct link", () => {
     routerMocks.params = { id: "page-b" };
 
-    render(<KnowledgePage />);
+    renderPage();
 
     expect(rootPickerValue()).toBe("vault-b");
     expect(treeAttribute("data-row-ids")).toBe("page-b");
@@ -213,8 +265,26 @@ describe("KnowledgePage explorer wiring", () => {
     );
   });
 
+  test("publishes the navigator into the primary pane and a backlinks tab", () => {
+    renderPage();
+
+    // The vault switcher + tree live in the shell's primary pane host.
+    const primary = within(screen.getByTestId("shell-primary"));
+    expect(primary.getByTestId("tree")).toBeTruthy();
+    expect(primary.getByLabelText("Vault")).toBeTruthy();
+    // The backlinks rail rides along as an additive secondary (chatter) tab.
+    expect(screen.getByTestId("shell-chatter").getAttribute("data-tab-ids")).toBe(
+      "backlinks",
+    );
+    expect(
+      within(screen.getByTestId("chatter-tab-backlinks")).getByTestId(
+        "backlinks",
+      ),
+    ).toBeTruthy();
+  });
+
   test("selecting a page navigates to its detail route", () => {
-    render(<KnowledgePage />);
+    renderPage();
 
     fireEvent.click(screen.getByTestId("tree-row-page-a"));
 
@@ -224,7 +294,7 @@ describe("KnowledgePage explorer wiring", () => {
   });
 
   test("selects an inline-created vault after the refetched options include it", () => {
-    const view = render(<KnowledgePage />);
+    const view = renderPage();
 
     fireEvent.click(screen.getByTestId("create-root"));
 
@@ -249,7 +319,15 @@ describe("KnowledgePage explorer wiring", () => {
         page("created-page", "Created Page", "note", "vault-created"),
       ],
     };
-    view.rerender(<KnowledgePage />);
+    view.rerender(
+      <PrimaryPaneProvider>
+        <ChatterProvider>
+          <KnowledgePage />
+          <PrimaryHost />
+          <ChatterHost />
+        </ChatterProvider>
+      </PrimaryPaneProvider>,
+    );
 
     expect(rootPickerValue()).toBe("vault-created");
     expect(treeAttribute("data-row-ids")).toBe("created-page");

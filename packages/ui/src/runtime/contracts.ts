@@ -4,6 +4,8 @@
 // addon-composition functions (`defineAddon` / `composeAddons`) in
 // `@angee/sdk` build manifests against them.
 
+import type { ReactNode } from "react";
+
 /** A navigation entry; many menu items may target one route. */
 export interface MenuItem {
   /** Stable menu id. Defaults to `route` when omitted. */
@@ -37,10 +39,40 @@ export type WidgetMap = Record<string, unknown>;
  */
 export type FormOverrideMap = Record<string, unknown>;
 
+/** The generic view envelope passed to cross-page chatter surfaces. */
+export interface ChatterView {
+  kind: "dashboard" | "list" | "record";
+  type: string;
+  sqid?: string;
+  sqids?: string[];
+  params?: Record<string, unknown>;
+}
+
+/** A composed route's contribution to the active chatter view. */
+export interface ChatterRoute {
+  name: string;
+  path: string;
+  viewType: string;
+  recordParam?: string;
+}
+
+/** Runtime context for rendering a chatter tab on the active page. */
+export interface ChatterViewContext {
+  pathname: string;
+  params: Readonly<Record<string, string>>;
+  route?: ChatterRoute;
+  view: ChatterView;
+}
+
 /** A chatter aside tab; merges by `id` (last wins) and orders by `sequence`. */
 export interface ChatterContribution {
   id: string;
   sequence?: number;
+  label?: ReactNode;
+  icon?: string;
+  count?: number;
+  panelClassName?: string;
+  render?: (context: ChatterViewContext) => ReactNode;
 }
 
 /** A contribution into a UI slot another addon owns; merges by `(slot, id)`. */
@@ -59,4 +91,24 @@ export interface SlotContribution {
  */
 export interface PreviewContribution {
   id: string;
+}
+
+/** A drawer edge the console shell anchors a non-modal overlay to. */
+export type DrawerEdge = "right" | "bottom";
+
+/**
+ * A non-modal overlay drawer contributed at build time. Pulled out by the shell's
+ * edge stripe-tabs, sticky across navigation (mounted once above the router
+ * outlet), and tabbed (multiple drawers on one edge become sibling tabs). Merges
+ * by `(edge, id)` (fail-fast on collision, like widgets/previews) and orders by
+ * `sequence`. The shell renders `render()` into a plain edge-anchored panel —
+ * no scrim, no focus trap (JetBrains "Undock").
+ */
+export interface DrawerContribution {
+  id: string;
+  edge: DrawerEdge;
+  title: string;
+  icon?: string;
+  sequence?: number;
+  render: () => ReactNode;
 }

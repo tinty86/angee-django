@@ -118,3 +118,8 @@ export type StorageFile = NonNullable<
 export type StorageFolder = NonNullable<
   DocumentType<typeof StorageFolders>["folders"]
 >[number];
+
+/** A drive (tree root), as projected by `StorageDrives`. */
+export type StorageDrive = NonNullable<
+  DocumentType<typeof StorageDrives>["drives"]
+>[number];

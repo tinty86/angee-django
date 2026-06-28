@@ -117,7 +117,7 @@ export interface AgentChatView extends Record<string, unknown> {
 // agent identity only — the client then mints its chat endpoint with `agent_chat_endpoint`;
 // `null` means the user has no running agent (the chatter shows a call-to-action).
 export const ResolveSessionForView = graphql(`
-  mutation ResolveSessionForView($view: JSON!) {
+  query ResolveSessionForView($view: JSON!) {
     resolve_session_for_view(view: $view) {
       agent_id
       agent_name

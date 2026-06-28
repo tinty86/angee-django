@@ -18,12 +18,9 @@ import {
   type RecordSmartButtonDescriptor,
   useChatterContent,
 } from "@angee/ui";
-import { AgentChatterPane } from "@angee/agents";
 import { useParams } from "@tanstack/react-router";
 
 const MODEL = "notes.Note";
-// The rebac resource type the agent's view envelope + notes MCP tools key on.
-const NOTE_RESOURCE_TYPE = "notes/note";
 
 const NOTE_DEFAULT_GROUPS = {
   list: { field: "updated_at", granularity: "month" },
@@ -91,17 +88,6 @@ export function NotePage(): React.ReactElement {
   });
   const tabs = React.useMemo(
     () => [
-      {
-        id: "angee",
-        label: "Angee",
-        icon: "agent",
-        children: (
-          <AgentChatterPane
-            resource={NOTE_RESOURCE_TYPE}
-            recordId={activeRecordId ?? undefined}
-          />
-        ),
-      },
       {
         id: "comments",
         label: "Comments",

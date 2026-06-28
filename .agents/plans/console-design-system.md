@@ -18,8 +18,8 @@ layer picks a framework component and fills its slots with the layer below.
   `PublicShell` (login/oauth/marketing), `UserShell` (reserved).
 - **Page presets** (own chrome, expose slots): `DataPage` (model chrome:
   toolbar·breadcrumb·pager·view-switcher·collection⇄record routing, +
-  `navigator` ⇒ Explorer, + `aside`), `HeroPage` (centred single column),
-  `CanvasPage` (full-bleed + optional toolbar/aside).
+  `navigator` ⇒ Explorer, + `aside`), `HeroPage` (centred single column). A
+  full-bleed canvas preset is TBD / no preset yet.
 - **Views** (fill the page body, switchable): `ListView · FormView · BoardView
   · GalleryView · CalendarView · GanttView · TimelineView · TreeView ·
   GraphView · DashboardView`.
@@ -38,7 +38,7 @@ of one record = a `FormView` `<Notebook>`.
 | Layer | Shipped | Notes |
 |---|---|---|
 | Shells | ConsoleShell (+AppShell-ish via createApp), PublicShell | menu↔route chrome, breadcrumb-from-matches |
-| Presets | DataPage (routed), HeroPage, CanvasPage, RecordView, SplitView | DataPage owns List/Form + routing |
+| Presets | DataPage (routed), HeroPage | DataPage owns List/Form + routing |
 | Views | ListView, GroupListView, BoardView, GraphView, RowsListView, FormView, AggregatePanel | AggregatePanel ≈ partial Dashboard |
 | Elements | Column, Field, Group, Action (List/Form DSL); SmartButton (descriptor only) | reusable List/Form from D2 |
 | Widgets | full set incl. booleanBadge, statusBadge, userRef, markdown | SDL-derived metadata (D4) |
@@ -57,7 +57,7 @@ of one record = a `FormView` `<Notebook>`.
 | **CalendarView** | scheduling, agents, calendar-base | M |
 | **GanttView** | workflows (v1.1) | L — defer |
 | **Form Elements** Header/Title/StatusBar/Relation | record chrome polish | S each |
-| **CanvasPage editor wiring** (graph/chat) | knowledge canvas, agents chat, workflows editor | M per surface |
+| **Canvas editor** (graph/chat) — TBD / no preset yet | knowledge canvas, agents chat, workflows editor | M per surface |
 
 ## Page-archetype catalog (addon × page → preset+View)
 
@@ -66,7 +66,7 @@ of one record = a `FormView` `<Notebook>`.
 | iam | Overview | DataPage · **DashboardView** + ListView | hand-rolled → adopt |
 | iam | Users/Roles/Grants/Relationships | DataPage · ListView | partly hand-rolled (authored queries) → adopt¹ |
 | iam | Connections | DataPage · ListView + FormView/DialogForm | ✓ D5 |
-| iam | Schema (REBAC) | CanvasPage · **GraphView** + inspector | bespoke (keep; adopt GraphView shell) |
+| iam | Schema (REBAC) | TBD / no preset yet · **GraphView** + inspector | bespoke (keep; adopt GraphView shell) |
 | iam | Login / OAuth callback | HeroPage | ✓ (PublicShell) |
 | operator | Overview | DataPage · **DashboardView** | hand-rolled → adopt (daemon rows) |
 | operator | Services/Workspaces/Sources/Jobs/Secrets/Templates | DataPage · **RowsListView** + actions | hand-rolled tables → adopt² |
@@ -74,15 +74,15 @@ of one record = a `FormView` `<Notebook>`.
 | notes | Notes | DataPage · List/Board/Form + Chatter | ✓ D1–D6 |
 | knowledge | Vault explorer | DataPage · **Explorer**(TreeView+List/Gallery) | View missing |
 | knowledge | Note editor | DataPage · FormView(markdown) + **PreviewPane** | PreviewPane missing |
-| knowledge | Graph | CanvasPage · **GraphView** | shell ok, wiring missing |
-| knowledge | Canvas (JSON Canvas) | **CanvasPage** editor | wiring missing |
+| knowledge | Graph | TBD / no preset yet · **GraphView** | shell ok, wiring missing |
+| knowledge | Canvas (JSON Canvas) | TBD / no preset yet | wiring missing |
 | storage | Files | DataPage · **Explorer** + **GalleryView** + **PreviewPane** | Views missing |
 | storage | Upload | DialogForm | ✓ primitive exists |
 | agents | Catalog (models/skills) | DataPage · ListView/**DashboardView** | adopt |
 | agents | Instantiate wizard | DataPage · FormView **Notebook/Tab** | Notebook missing |
-| agents | Chat | **CanvasPage** + chatter (ACP-WS) | wiring missing |
+| agents | Chat | TBD / no preset yet + chatter (ACP-WS) | wiring missing |
 | agents | Activity/transcript | **TimelineView** | View missing |
-| workflows | Editor | CanvasPage · GraphView | v1.1 |
+| workflows | Editor | TBD / no preset yet · GraphView | v1.1 |
 | workflows | Runs | DataPage · BoardView/**GanttView/TimelineView** | v1.1 |
 
 ¹ iam adopt is gated by **schema availability**: only models the iam console
@@ -152,7 +152,7 @@ sdk→base→consumer ([[layering-sdk-ui-consumer]]).
   aside. Adopters: storage files, knowledge attachments, notes "Cards".
 - **P7 — FormView Notebook/Tab + record-chrome Elements** (Header/Title/
   StatusBar/Relation). Adopters: agents wizard, multi-section records.
-- **P8 — CanvasPage editor wiring** (graph/chat surfaces) and **CalendarView**;
+- **P8 — Canvas editor wiring** (graph/chat surfaces; preset TBD / no preset yet) and **CalendarView**;
   **GanttView** deferred to workflows v1.1.
 
 P1–P4 harden the design system against the *shipped* addons (iam/operator/

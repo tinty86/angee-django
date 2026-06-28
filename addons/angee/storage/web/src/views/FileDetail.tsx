@@ -1,19 +1,9 @@
 import { type ReactElement } from "react";
 
-import {
-  Button,
-  Field,
-  FormView,
-  Glyph,
-  Group,
-  RecordPager,
-  buttonVariants,
-  type RecordNavigation,
-} from "@angee/ui";
+import { Field, FormView, Group } from "@angee/ui";
 
 import { useStorageT } from "../i18n";
 import type { StorageFile } from "../data/documents";
-import { useFileActions } from "../data/use-file-actions";
 
 /** The Django model label backing the file record form. */
 const FILE_MODEL = "storage.File";
@@ -23,32 +13,25 @@ const SUBTITLE_FIELDS = ["created_at", "updated_at"] as const;
 
 export interface FileDetailProps {
   file: StorageFile;
-  /** Leave the detail for the file list (the record route closed). */
-  onClose: () => void;
   /** A write landed — refetch the browser's shared file set. */
   onChanged: () => void;
-  /** Navigation through the current file browser result set. */
-  navigation?: RecordNavigation | null;
   /** Render the detail fields for a narrow side pane. */
   compact?: boolean;
 }
 
 /**
- * One file as an editable record: the title input renames it, the toolbar
- * carries the download and trash/restore actions, and a read-only detail group
- * surfaces the stored filename, owner, and stage. The page decides whether this
- * renders as the primary content or as a compact side-panel detail.
+ * One file as an editable metadata record: the title input renames it, and a
+ * read-only detail group surfaces the stored filename, owner, and stage. The
+ * file's lifecycle verbs (download, trash/restore) and the record pager live in
+ * the page's control band, beside the content they act on; this is just the
+ * metadata form the page publishes into the chatter's details tab.
  */
 export function FileDetail({
   file,
-  onClose,
   onChanged,
-  navigation,
   compact = false,
 }: FileDetailProps): ReactElement {
   const t = useStorageT();
-  const actions = useFileActions({ onChanged });
-  const canDownload = !file.is_trashed && file.url !== "";
 
   return (
     <FormView
@@ -57,46 +40,6 @@ export function FileDetail({
       returning={[...SUBTITLE_FIELDS]}
       submitLabel={t("storage.file.rename")}
       onSaved={onChanged}
-      toolbarStart={
-        <>
-          {canDownload ? (
-            // A real download anchor (the token URL is same-origin), styled as a
-            // button — `Button asChild` would force a button role onto the link.
-            <a
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-              href={file.url}
-              download={file.filename}
-            >
-              <Glyph name="download" />
-              {t("storage.file.download")}
-            </a>
-          ) : null}
-          {file.is_trashed ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              loading={actions.busy}
-              onClick={() => void actions.restore(file.id)}
-            >
-              <Glyph name="restore" />
-              {t("storage.file.restore")}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              loading={actions.busy}
-              onClick={() => void actions.trash(file.id).then(onClose)}
-            >
-              <Glyph name="trash" />
-              {t("storage.file.trash")}
-            </Button>
-          )}
-        </>
-      }
-      toolbar={navigation ? <RecordPager navigation={navigation} /> : undefined}
     >
       <Field name="title" widget="text" title placeholder={file.filename} />
       <Group label={t("storage.file.details")} columns={compact ? 1 : 2}>
