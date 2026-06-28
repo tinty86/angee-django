@@ -117,6 +117,7 @@ export const enIamMessages: Record<string, string> = {
   "iam.schema.noMatches": "No matching resource types.",
   "iam.schema.permissionGraph": "Permission Graph",
   "iam.schema.nodeCount": "{count} nodes",
+  "iam.schema.inspector": "Inspector",
   "iam.schema.noneSelected": "No resource type selected.",
   "iam.schema.relations": "Relations",
   "iam.schema.permissions": "Permissions",

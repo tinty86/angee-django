@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from "react";
+
 import {
   resourceOperationTarget,
   type Row,
@@ -78,17 +80,28 @@ export function usePageActions(
   const invalidate = useInvalidate();
   const { busy, run } = useBusyRun(onChanged);
 
-  return {
-    busy,
-    createPage: ({ vault, title, kind, parent }) =>
+  // `mutateAsync` is referentially stable (react-query); the wrapping mutation
+  // result objects are not, so the verbs key on the stable functions. Stable
+  // verbs let effect-driven consumers (the navigator published into the shell's
+  // primary pane) memoize without republishing every render.
+  const { mutateAsync: createMutate } = createPageMutation;
+  const { mutateAsync: updateMutate } = updatePageMutation;
+  const { mutateAsync: deleteMutate } = deletePageMutation;
+
+  const createPage = useCallback<PageActions["createPage"]>(
+    ({ vault, title, kind, parent }) =>
       run(async () => {
         requirePageResource(resource);
-        const response = await createPageMutation.mutateAsync({
+        const response = await createMutate({
           values: { vault, title, kind, parent },
         });
         return rowPublicId(response.data ?? null);
       }),
-    deletePage: (id) =>
+    [run, resource, createMutate],
+  );
+
+  const deletePage = useCallback<PageActions["deletePage"]>(
+    (id) =>
       run(async () => {
         requirePageResource(resource);
         const request = deletePreviewRequest(
@@ -102,7 +115,7 @@ export function usePageActions(
             ),
           },
         );
-        const response = await deletePageMutation.mutateAsync({
+        const response = await deleteMutate({
           url: "",
           method: "post",
           values: { id, confirm: true },
@@ -117,15 +130,22 @@ export function usePageActions(
           invalidates: ["list", "many", "detail"],
         });
       }),
-    movePage: (id, parent) =>
+    [run, resource, deleteMutate, operationDocuments, invalidate],
+  );
+
+  const movePage = useCallback<PageActions["movePage"]>(
+    (id, parent) =>
       run(async () => {
         requirePageResource(resource);
-        await updatePageMutation.mutateAsync({
-          id,
-          values: { parent },
-        });
+        await updateMutate({ id, values: { parent } });
       }),
-  };
+    [run, resource, updateMutate],
+  );
+
+  return useMemo(
+    () => ({ busy, createPage, deletePage, movePage }),
+    [busy, createPage, deletePage, movePage],
+  );
 }
 
 const PAGE_MODEL = "knowledge.Page";

@@ -31,36 +31,28 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@angee/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@angee/ui")>();
+  const { useCallback } = await import("react");
+  // A stable confirm, like the real (memoized) `useConfirm` — an unstable one
+  // would churn the published navigator's identity and loop the publish effect.
+  const confirmAlways = async () => true;
   return {
     ...actual,
     useAuthoredQuery: sdkMocks.useAuthoredQuery,
-    useNamespaceT: (
-      _namespace: string,
-      messages: Record<string, string>,
-    ) => (key: string, vars?: Record<string, string>) => {
-      let message = messages[key] ?? key;
-      for (const [name, value] of Object.entries(vars ?? {})) {
-        message = message.replace(`{${name}}`, value);
-      }
-      return message;
-    },
+    // Mirror the real (memoized) translator so a published node keeps a stable
+    // identity across renders — an unstable `t` would republish every commit.
+    useNamespaceT: (_namespace: string, messages: Record<string, string>) =>
+      useCallback(
+        (key: string, vars?: Record<string, string>) => {
+          let message = messages[key] ?? key;
+          for (const [name, value] of Object.entries(vars ?? {})) {
+            message = message.replace(`{${name}}`, value);
+          }
+          return message;
+        },
+        [messages],
+      ),
     EmptyState: ({ title }: { title: string }) => (
       <section data-testid="empty-state">{title}</section>
-    ),
-    Workbench: ({
-      primary,
-      secondary,
-      children,
-    }: {
-      primary: React.ReactNode;
-      secondary: React.ReactNode;
-      children: React.ReactNode;
-    }) => (
-      <div>
-        <nav data-testid="navigator">{primary}</nav>
-        <aside data-testid="aside">{secondary}</aside>
-        <main>{children}</main>
-      </div>
     ),
     Glyph: () => <span />,
     LoadingPanel: ({ message }: { message: string }) => (
@@ -110,24 +102,6 @@ vi.mock("@angee/ui", async (importOriginal) => {
     SelectionBarAction: ({ children }: { children: React.ReactNode }) => (
       <button type="button">{children}</button>
     ),
-    Tabs: Object.assign(
-      ({
-        children,
-      }: {
-        children: React.ReactNode;
-      }) => <div data-testid="tabs">{children}</div>,
-      {
-        List: ({ children }: { children: React.ReactNode }) => (
-          <div data-testid="tabs-list">{children}</div>
-        ),
-        Tab: ({ children }: { children: React.ReactNode }) => (
-          <button type="button">{children}</button>
-        ),
-        Panel: ({ children }: { children: React.ReactNode }) => (
-          <section data-testid="tabs-panel">{children}</section>
-        ),
-      },
-    ),
     TreeView: ({
       rows,
       rowKey,
@@ -159,7 +133,7 @@ vi.mock("@angee/ui", async (importOriginal) => {
       </div>
     ),
     useBreadcrumbLeafLabel: sdkMocks.useBreadcrumbLeafLabel,
-    useConfirm: () => async () => true,
+    useConfirm: () => confirmAlways,
   };
 });
 
@@ -167,8 +141,9 @@ vi.mock("../data/use-file-actions", () => ({
   useFileActions: () => ({
     busy: false,
     move: vi.fn(),
+    restore: vi.fn(async () => undefined),
     restoreMany: vi.fn(async () => undefined),
-    trash: vi.fn(),
+    trash: vi.fn(async () => undefined),
     trashMany: vi.fn(async () => undefined),
   }),
 }));
@@ -211,37 +186,10 @@ vi.mock("./FileBrowserContent", () => ({
 }));
 
 vi.mock("./FileDetail", () => ({
-  FileDetail: ({
-    file,
-    navigation,
-  }: {
-    file: { id: string };
-    navigation?: {
-      current?: number;
-      total: number;
-      onPrev?: () => void;
-      onNext?: () => void;
-    } | null;
-  }) => (
-    <section
-      data-testid="file-detail"
-      data-file-id={file.id}
-      data-current={navigation?.current ?? ""}
-      data-total={navigation?.total ?? ""}
-    >
-      <button
-        type="button"
-        data-testid="prev-file"
-        disabled={!navigation?.onPrev}
-        onClick={navigation?.onPrev}
-      />
-      <button
-        type="button"
-        data-testid="next-file"
-        disabled={!navigation?.onNext}
-        onClick={navigation?.onNext}
-      />
-    </section>
+  // The detail is now the file's metadata form only — published into the
+  // chatter's `details` tab. The pager + lifecycle verbs moved to the control band.
+  FileDetail: ({ file }: { file: { id: string } }) => (
+    <section data-testid="file-detail" data-file-id={file.id} />
   ),
 }));
 
@@ -256,12 +204,45 @@ vi.mock("./SelectedFolderControl", () => ({
 }));
 
 import {
+  ChatterProvider,
+  PrimaryPaneProvider,
+  useChatter,
+  usePrimaryPaneContent,
+} from "@angee/ui";
+
+import {
   StorageBackends,
   StorageDrives,
   StorageFiles,
   StorageFolders,
 } from "../data/documents";
 import { StoragePage } from "./StoragePage";
+
+// The page publishes its navigator into the shell primary pane and the file's
+// metadata into the chatter; thin hosts render what the page published so the
+// tests can assert against the shell seams the same way the real shell does.
+function PrimaryHost() {
+  const { node } = usePrimaryPaneContent();
+  return <div data-testid="shell-primary">{node}</div>;
+}
+
+function ChatterHost() {
+  const { content } = useChatter();
+  const details = content?.tabs?.find((tab) => tab.id === "details");
+  return <div data-testid="shell-chatter">{details?.children ?? null}</div>;
+}
+
+function pageTree() {
+  return (
+    <PrimaryPaneProvider>
+      <ChatterProvider>
+        <StoragePage />
+        <PrimaryHost />
+        <ChatterHost />
+      </ChatterProvider>
+    </PrimaryPaneProvider>
+  );
+}
 
 let storageData = makeStorageData();
 
@@ -298,7 +279,7 @@ describe("StoragePage explorer wiring", () => {
   test("uses the open file drive for a direct link", () => {
     routerMocks.params = { id: "file-b" };
 
-    render(<StoragePage />);
+    render(pageTree());
 
     expect(rootPickerValue()).toBe("drive-b");
     expect(treeAttribute("data-row-ids")).toBe(
@@ -310,23 +291,18 @@ describe("StoragePage explorer wiring", () => {
     );
     expect(screen.getByTestId("preview-pane").textContent).toBe("beta.txt");
     expect(sdkMocks.useBreadcrumbLeafLabel).toHaveBeenLastCalledWith("beta.txt");
-    expect(screen.queryByRole("button", { name: "Back to files" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull();
   });
 
   test("detail navigation follows the active file scope", () => {
     routerMocks.params = { id: "file-a" };
 
-    render(<StoragePage />);
+    render(pageTree());
 
-    expect(screen.getByTestId("file-detail").getAttribute("data-current")).toBe(
-      "1",
-    );
-    expect(screen.getByTestId("file-detail").getAttribute("data-total")).toBe(
-      "2",
-    );
+    expect(pagerText()).toBe("1 / 2");
+    expect(pagerPrev().disabled).toBe(true);
+    expect(pagerNext().disabled).toBe(false);
 
-    fireEvent.click(screen.getByTestId("next-file"));
+    fireEvent.click(pagerNext());
 
     expect(routerMocks.navigate).toHaveBeenLastCalledWith({
       to: "/storage/file-a-folder",
@@ -336,17 +312,13 @@ describe("StoragePage explorer wiring", () => {
   test("detail navigation steps back and stops at the last file", () => {
     routerMocks.params = { id: "file-a-folder" };
 
-    render(<StoragePage />);
+    render(pageTree());
 
-    const detail = screen.getByTestId("file-detail");
-    expect(detail.getAttribute("data-current")).toBe("2");
-    expect(detail.getAttribute("data-total")).toBe("2");
+    expect(pagerText()).toBe("2 / 2");
     // The last file in the scope has no next step.
-    expect((screen.getByTestId("next-file") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(pagerNext().disabled).toBe(true);
 
-    fireEvent.click(screen.getByTestId("prev-file"));
+    fireEvent.click(pagerPrev());
 
     expect(routerMocks.navigate).toHaveBeenLastCalledWith({
       to: "/storage/file-a",
@@ -368,21 +340,15 @@ describe("StoragePage explorer wiring", () => {
     };
     routerMocks.params = { id: "file-b-trashed" };
 
-    render(<StoragePage />);
+    render(pageTree());
 
-    const detail = screen.getByTestId("file-detail");
-    expect(detail.getAttribute("data-current")).toBe("");
-    expect(detail.getAttribute("data-total")).toBe("1");
-    expect((screen.getByTestId("prev-file") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    expect((screen.getByTestId("next-file") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(pagerText()).toBe("/ 1");
+    expect(pagerPrev().disabled).toBe(true);
+    expect(pagerNext().disabled).toBe(true);
   });
 
   test("switching drives resets the folder scope and closes the detail route", () => {
-    render(<StoragePage />);
+    render(pageTree());
 
     expect(screen.queryByTestId("preview-pane")).toBeNull();
 
@@ -402,7 +368,7 @@ describe("StoragePage explorer wiring", () => {
   });
 
   test("selects an inline-created drive after the refetched options include it", () => {
-    const view = render(<StoragePage />);
+    const view = render(pageTree());
 
     fireEvent.click(screen.getByTestId("create-root"));
 
@@ -420,7 +386,7 @@ describe("StoragePage explorer wiring", () => {
         folder("folder-created", "Created Folder", "drive-created"),
       ],
     };
-    view.rerender(<StoragePage />);
+    view.rerender(pageTree());
 
     expect(rootPickerValue()).toBe("drive-created");
     expect(treeAttribute("data-row-ids")).toBe(
@@ -440,6 +406,28 @@ function treeAttribute(name: string): string | null {
 
 function fileListAttribute(name: string): string | null {
   return screen.getByTestId("file-list").getAttribute(name);
+}
+
+// The record pager rides the shell control band beside the open file's preview.
+function pagerText(): string {
+  return (
+    screen
+      .getByRole("navigation", { name: "Record navigation" })
+      .textContent?.replace(/\s+/g, " ")
+      .trim() ?? ""
+  );
+}
+
+function pagerPrev(): HTMLButtonElement {
+  return screen.getByRole("button", {
+    name: "Previous record",
+  }) as HTMLButtonElement;
+}
+
+function pagerNext(): HTMLButtonElement {
+  return screen.getByRole("button", {
+    name: "Next record",
+  }) as HTMLButtonElement;
 }
 
 function queryResult(

@@ -1,24 +1,28 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
+  Button,
   buttonVariants,
+  ControlBand,
   EmptyState,
   formatSize,
   Glyph,
   LoadingPanel,
   PreviewPane,
+  RecordPager,
   RelationPicker,
   recordPath,
   SelectionBarAction,
   SurfaceHeader,
-  Tabs,
   TreeView,
-  Workbench,
   useBreadcrumbLeafLabel,
+  useChatterContent,
   useConfirm,
+  usePrimaryPane,
   useScopedTreeExplorer,
   useAuthoredQuery,
+  type ChatterTab,
   type FieldDescriptor,
   type PreviewFile,
   type RecordNavigation,
@@ -29,6 +33,7 @@ import {
   StorageDrives,
   StorageFiles,
   StorageFolders,
+  type StorageDrive,
   type StorageFile,
 } from "../data/documents";
 import {
@@ -55,11 +60,19 @@ import { useStorageT } from "../i18n";
 // set client-side so the navigator, list, and preview share one fetch.
 const STORAGE_LIST_LIMIT = 500;
 
+// Stable field projections for the drive tree roots: module-scope so the
+// explorer's option list keeps a stable identity (the navigator is published
+// into the shell primary pane and must not churn on every render).
+const driveRootId = (drive: StorageDrive): string => drive.id;
+const driveRootLabel = (drive: StorageDrive): string => drive.name || drive.slug;
+
 /**
- * The file browser: a `Workbench` of a folder navigator, the scoped file list
- * or open-file preview, and a detail aside. Drives/folders/files load once; the
- * drive switcher and folder tree drive client-side scoping, and a row click
- * opens the file preview route.
+ * The file browser: it publishes a folder navigator into the console shell's
+ * primary pane and an open file's metadata into the chatter's details tab, and
+ * renders the scoped file list or the open-file preview as its content (the
+ * file's download/trash/restore verbs and the record pager ride the shell's
+ * control band). Drives/folders/files load once; the drive switcher and folder
+ * tree drive client-side scoping, and a row click opens the file preview route.
  */
 export function StoragePage(): ReactElement {
   const t = useStorageT();
@@ -95,8 +108,8 @@ export function StoragePage(): ReactElement {
   useBreadcrumbLeafLabel(openFile ? openFile.title || openFile.filename : null);
   const explorer = useScopedTreeExplorer({
     roots: drives,
-    getRootId: (drive) => drive.id,
-    getRootLabel: (drive) => drive.name || drive.slug,
+    getRootId: driveRootId,
+    getRootLabel: driveRootLabel,
     getTreeRows: useCallback(
       (rootId: string) => folderTreeRows(folders, rootId, openFile),
       [folders, openFile],
@@ -171,15 +184,23 @@ export function StoragePage(): ReactElement {
     },
   });
   const confirm = useConfirm();
+  // The action hooks return a fresh object each render; the navigator is
+  // published into the shell primary pane, so its callbacks read the live
+  // actions through a ref and stay referentially stable across renders.
+  const fileActionsRef = useRef(fileActions);
+  fileActionsRef.current = fileActions;
+  const folderActionsRef = useRef(folderActions);
+  folderActionsRef.current = folderActions;
   // Dropping a file on a navigator node moves it: the Trash node trashes, All
   // files moves to the drive root, any folder node moves into that folder.
   const handleFileDrop = useCallback(
     (nodeId: string, file: FileDragData) => {
-      if (nodeId === TRASH_SCOPE) void fileActions.trash(file.id);
-      else if (nodeId === ALL_SCOPE) void fileActions.move(file.id, null);
-      else void fileActions.move(file.id, nodeId);
+      const actions = fileActionsRef.current;
+      if (nodeId === TRASH_SCOPE) void actions.trash(file.id);
+      else if (nodeId === ALL_SCOPE) void actions.move(file.id, null);
+      else void actions.move(file.id, nodeId);
     },
-    [fileActions],
+    [],
   );
   // New folders land under the active folder scope (or the drive root).
   const handleNewFolder = useCallback(
@@ -189,9 +210,9 @@ export function StoragePage(): ReactElement {
         effectiveScope === ALL_SCOPE || effectiveScope === TRASH_SCOPE
           ? null
           : effectiveScope;
-      void folderActions.create({ drive: driveId, name, parent });
+      void folderActionsRef.current.create({ drive: driveId, name, parent });
     },
-    [driveId, effectiveScope, folderActions],
+    [driveId, effectiveScope],
   );
   // The active folder scope (a real folder, not the All/Trash pseudo-nodes); its
   // navigator footer offers rename + delete.
@@ -199,10 +220,14 @@ export function StoragePage(): ReactElement {
     effectiveScope !== ALL_SCOPE && effectiveScope !== TRASH_SCOPE
       ? explorer.selectedRow
       : undefined;
-  const handleRenameFolder = (name: string): void => {
-    void folderActions.rename(effectiveScope, name);
-  };
-  const handleDeleteFolder = async (): Promise<void> => {
+  const setSelectedId = explorer.setSelectedId;
+  const handleRenameFolder = useCallback(
+    (name: string): void => {
+      void folderActionsRef.current.rename(effectiveScope, name);
+    },
+    [effectiveScope],
+  );
+  const handleDeleteFolder = useCallback(async (): Promise<void> => {
     if (!selectedFolder) return;
     const ok = await confirm({
       title: t("storage.folder.deleteTitle", { name: selectedFolder.name }),
@@ -211,10 +236,10 @@ export function StoragePage(): ReactElement {
       danger: true,
     });
     if (!ok) return;
-    void folderActions
+    void folderActionsRef.current
       .remove(effectiveScope)
-      .then(() => explorer.setSelectedId(ALL_SCOPE));
-  };
+      .then(() => setSelectedId(ALL_SCOPE));
+  }, [selectedFolder, confirm, t, effectiveScope, setSelectedId]);
   // The selection bar's bulk verbs: Restore in the Trash scope, else Trash.
   const renderBulkActions = (ids: ReadonlySet<string>, clear: () => void) =>
     effectiveScope === TRASH_SCOPE ? (
@@ -250,6 +275,109 @@ export function StoragePage(): ReactElement {
     [driveId, effectiveScope],
   );
 
+  // The folder navigator, published into the console shell's primary pane. Memoized
+  // so the published node only changes when its inputs do (an inline node would
+  // republish — and re-render — on every commit).
+  const setRootId = explorer.setRootId;
+  const navigator = useMemo(
+    () => (
+      <div className="flex h-full flex-col gap-2 p-2">
+        <RelationPicker
+          aria-label={t("storage.drive.label")}
+          value={driveId}
+          options={driveOptions}
+          placeholder={t("storage.drive.placeholder")}
+          searchPlaceholder={t("storage.drive.searchPlaceholder")}
+          onChange={(value) => {
+            setRootId(value);
+            closeDetail();
+          }}
+          create={{ resource: "Drive", fields: driveCreateFields }}
+          onCreated={() => drivesQuery.refetch()}
+        />
+        <TreeView<StorageTreeRow>
+          rows={treeRows}
+          parent="parent"
+          label="name"
+          rowKey="id"
+          icon="icon"
+          selectedId={openFile?.id ?? effectiveScope}
+          onSelect={(row) => {
+            if (row.kind === "file") {
+              void navigate({ to: recordPath("/storage", row.id) });
+              return;
+            }
+            setSelectedId(row.id);
+            closeDetail();
+          }}
+          dropAccept={STORAGE_FILE_DND}
+          canDropOnNode={(_nodeId, row) => row.kind !== "file"}
+          onNodeDrop={(nodeId, payload) =>
+            handleFileDrop(nodeId, payload.data as FileDragData)
+          }
+          className="min-h-0 flex-1 overflow-auto"
+        />
+        {selectedFolder ? (
+          <SelectedFolderControl
+            key={selectedFolder.id}
+            name={selectedFolder.name}
+            busy={folderActions.busy}
+            onRename={handleRenameFolder}
+            onDelete={handleDeleteFolder}
+          />
+        ) : null}
+        <NewFolderControl busy={folderActions.busy} onCreate={handleNewFolder} />
+      </div>
+    ),
+    [
+      t,
+      driveId,
+      driveOptions,
+      setRootId,
+      setSelectedId,
+      closeDetail,
+      driveCreateFields,
+      drivesQuery.refetch,
+      treeRows,
+      openFile,
+      effectiveScope,
+      navigate,
+      handleFileDrop,
+      selectedFolder,
+      folderActions.busy,
+      handleRenameFolder,
+      handleDeleteFolder,
+      handleNewFolder,
+    ],
+  );
+  // No navigator until drives exist (loading/empty states own the whole surface).
+  usePrimaryPane(drives.length === 0 ? null : navigator);
+
+  // The open file's metadata, published as an additive `details` tab into the
+  // chatter; nothing published renders the default chatter tabs.
+  const detailsTab = useMemo<readonly ChatterTab[]>(
+    () =>
+      openFile
+        ? [
+            {
+              id: "details",
+              label: t("storage.file.detailsTab"),
+              icon: "info",
+              children: (
+                <FileDetail
+                  file={openFile}
+                  onChanged={() => filesQuery.refetch()}
+                  compact
+                />
+              ),
+            },
+          ]
+        : [],
+    [openFile, t, filesQuery.refetch],
+  );
+  const chatter = useMemo(() => ({ tabs: detailsTab }), [detailsTab]);
+  useChatterContent(chatter);
+
   if (drivesQuery.fetching && drives.length === 0) {
     return <LoadingPanel message={t("storage.loading")} />;
   }
@@ -270,73 +398,52 @@ export function StoragePage(): ReactElement {
     );
   }
 
-  const navigator = (
-    <div className="flex h-full flex-col gap-2 p-2">
-      <RelationPicker
-        aria-label={t("storage.drive.label")}
-        value={driveId}
-        options={driveOptions}
-        placeholder={t("storage.drive.placeholder")}
-        searchPlaceholder={t("storage.drive.searchPlaceholder")}
-        onChange={(value) => {
-          explorer.setRootId(value);
-          closeDetail();
-        }}
-        create={{ resource: "Drive", fields: driveCreateFields }}
-        onCreated={() => drivesQuery.refetch()}
-      />
-      <TreeView<StorageTreeRow>
-        rows={treeRows}
-        parent="parent"
-        label="name"
-        rowKey="id"
-        icon="icon"
-        selectedId={openFile?.id ?? effectiveScope}
-        onSelect={(row) => {
-          if (row.kind === "file") {
-            void navigate({ to: recordPath("/storage", row.id) });
-            return;
-          }
-          explorer.setSelectedId(row.id);
-          closeDetail();
-        }}
-        dropAccept={STORAGE_FILE_DND}
-        canDropOnNode={(_nodeId, row) => row.kind !== "file"}
-        onNodeDrop={(nodeId, payload) =>
-          handleFileDrop(nodeId, payload.data as FileDragData)
-        }
-        className="min-h-0 flex-1 overflow-auto"
-      />
-      {selectedFolder ? (
-        <SelectedFolderControl
-          key={selectedFolder.id}
-          name={selectedFolder.name}
-          busy={folderActions.busy}
-          onRename={handleRenameFolder}
-          onDelete={handleDeleteFolder}
-        />
-      ) : null}
-      <NewFolderControl busy={folderActions.busy} onCreate={handleNewFolder} />
-    </div>
-  );
-
   return (
-    <Workbench
-      autoSave={openFile ? "storage.file.preview" : "storage.browser"}
-      primary={navigator}
-      primarySize={openFile ? 28 : 18}
-      secondarySize={openFile ? 28 : 26}
-      secondary={
-        openFile ? (
-          <FileAside
-            file={openFile}
-            navigation={fileNavigation}
-            onClose={closeDetail}
-            onChanged={() => filesQuery.refetch()}
-          />
-        ) : undefined
-      }
-    >
+    <>
+      {openFile ? (
+        <ControlBand>
+          {!openFile.is_trashed && openFile.url !== "" ? (
+            <a
+              className={buttonVariants({ variant: "secondary", size: "sm" })}
+              href={openFile.url}
+              download={openFile.filename}
+            >
+              <Glyph name="download" />
+              {t("storage.file.download")}
+            </a>
+          ) : null}
+          {openFile.is_trashed ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              loading={fileActions.busy}
+              onClick={() => void fileActions.restore(openFile.id)}
+            >
+              <Glyph name="restore" />
+              {t("storage.file.restore")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              loading={fileActions.busy}
+              onClick={() =>
+                void fileActions.trash(openFile.id).then(closeDetail)
+              }
+            >
+              <Glyph name="trash" />
+              {t("storage.file.trash")}
+            </Button>
+          )}
+          {fileNavigation ? (
+            <div className="ml-auto">
+              <RecordPager navigation={fileNavigation} />
+            </div>
+          ) : null}
+        </ControlBand>
+      ) : null}
       {openFileId ? (
         openFile ? (
           <FilePreviewFrame file={openFile} />
@@ -362,17 +469,14 @@ export function StoragePage(): ReactElement {
           canUpload={canUpload}
         />
       )}
-    </Workbench>
+    </>
   );
 }
 
 function FilePreviewFrame({ file }: { file: StorageFile }): ReactElement {
   const t = useStorageT();
-  // Download rides the preview content's own toolbar (the SurfaceHeader actions),
-  // beside the file it acts on — not the metadata aside. The token URL is
-  // same-origin, so a real download anchor styled as a button (`Button asChild`
-  // would force a button role onto the link).
-  const canDownload = !file.is_trashed && file.url !== "";
+  // The file's verbs (download, trash/restore) live in the shell control band,
+  // beside the preview; this frame just titles and renders the content.
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <SurfaceHeader
@@ -387,60 +491,11 @@ function FilePreviewFrame({ file }: { file: StorageFile }): ReactElement {
             t("storage.file.unknownType"),
           size: formatSize(file.size_bytes),
         })}
-        actions={
-          canDownload ? (
-            <a
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-              href={file.url}
-              download={file.filename}
-            >
-              <Glyph name="download" />
-              {t("storage.file.download")}
-            </a>
-          ) : undefined
-        }
       />
       <div className="min-h-0 flex-1 overflow-hidden p-3">
         <FilePreview file={file} />
       </div>
     </div>
-  );
-}
-
-function FileAside({
-  file,
-  navigation,
-  onClose,
-  onChanged,
-}: {
-  file: StorageFile;
-  navigation: RecordNavigation | null;
-  onClose: () => void;
-  onChanged: () => void;
-}): ReactElement {
-  const t = useStorageT();
-  return (
-    <Tabs
-      defaultValue="details"
-      variant="page"
-      className="flex h-full min-h-0 flex-col"
-    >
-      <Tabs.List className="shrink-0 px-2">
-        <Tabs.Tab value="details">{t("storage.file.detailsTab")}</Tabs.Tab>
-      </Tabs.List>
-      <Tabs.Panel
-        value="details"
-        className="min-h-0 flex-1 overflow-auto p-3 pt-3"
-      >
-        <FileDetail
-          file={file}
-          navigation={navigation}
-          onClose={onClose}
-          onChanged={onChanged}
-          compact
-        />
-      </Tabs.Panel>
-    </Tabs>
   );
 }
 
