@@ -1,10 +1,22 @@
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
+import {
+  Link,
+  useMatches,
+  useRouterState,
+  type AnyRouteMatch,
+} from "@tanstack/react-router";
 
 import { Glyph } from "../chrome/Glyph";
 import { EmptyState } from "../fragments/EmptyState";
 import { useBaseT, type BaseMessageVars } from "../i18n";
 import { cn } from "../lib/cn";
+import {
+  useAppRuntime,
+  type ChatterContribution,
+  type ChatterRoute,
+  type ChatterView,
+  type ChatterViewContext,
+} from "../runtime";
 import { buttonVariants } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tabs } from "../ui/tabs";
@@ -25,13 +37,22 @@ export function Chatter({
 }: ChatterProps): React.ReactElement | null {
   const t = useBaseT();
   const { activeTab, content, setActiveTab } = useChatter();
-  // The `tabs` prop is a full override (the composer/explicit path); otherwise the
-  // default agent/comments/activity tabs are the base and a page's published tabs
-  // merge into them by id — a same-id tab replaces its default, a new id appends.
-  // So a page contributing a `details`/`backlinks` tab keeps the defaults it does
-  // not override.
-  const resolvedTabs =
-    tabs ?? mergeTabs(defaultTabs(children, t), content?.tabs);
+  const runtime = useAppRuntime();
+  // Tabs merge by id (last wins): the default agent/comments/activity tabs are the
+  // base, runtime chatter contributions render for the active view on top, and a
+  // page's published tabs (explicit prop or context) win last. A same-id tab
+  // replaces its predecessor in place; a new id appends. So a page contributing a
+  // `details`/`backlinks` tab keeps the defaults it does not override.
+  const viewContext = useActiveChatterView(runtime.chatterRoutes ?? []);
+  const contributedTabs = React.useMemo(
+    () => tabsFromContributions(runtime.chatter ?? [], viewContext),
+    [runtime.chatter, viewContext],
+  );
+  const resolvedTabs = mergeChatterTabs(
+    defaultTabs(children, t),
+    contributedTabs,
+    tabs ?? content?.tabs ?? [],
+  );
   const resolvedComposer = composer ?? content?.composer;
   const active = resolvedTabs.some((tab) => tab.id === activeTab)
     ? activeTab
@@ -92,21 +113,89 @@ export function Chatter({
   );
 }
 
-// Merge published tabs into the base by id: a same-id tab replaces its base
-// counterpart in place; a new id appends. Returns the base unchanged when nothing
-// is published, so pages that publish no tabs render the defaults verbatim.
-function mergeTabs(
-  base: readonly ChatterTab[],
-  published: readonly ChatterTab[] | undefined,
-): readonly ChatterTab[] {
-  if (!published || published.length === 0) return base;
-  const merged = [...base];
-  for (const tab of published) {
-    const index = merged.findIndex((existing) => existing.id === tab.id);
-    if (index >= 0) merged[index] = tab;
-    else merged.push(tab);
+function useActiveChatterView(
+  routes: readonly ChatterRoute[],
+): ChatterViewContext {
+  const match = useMatches({ select: leafMatch });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  return React.useMemo(() => {
+    const route = routes.find((candidate) => candidate.path === match.fullPath);
+    const params = normalizeRouteParams(match.params);
+    const selectedId =
+      route?.recordParam && params[route.recordParam]
+        ? params[route.recordParam]
+        : undefined;
+    const view: ChatterView = {
+      kind: selectedId ? "record" : "dashboard",
+      type: route?.viewType ?? viewTypeFromPath(pathname),
+      ...(selectedId ? { sqid: selectedId } : {}),
+      ...(Object.keys(params).length > 0 ? { params } : {}),
+    };
+    return {
+      pathname,
+      params,
+      ...(route ? { route } : {}),
+      view,
+    };
+  }, [match.fullPath, match.params, pathname, routes]);
+}
+
+function leafMatch(matches: readonly AnyRouteMatch[]): {
+  fullPath: string;
+  params: Record<string, unknown>;
+} {
+  const match = matches.at(-1);
+  return {
+    fullPath: match?.fullPath ?? "/",
+    params: match?.params ?? {},
+  };
+}
+
+function normalizeRouteParams(
+  params: Readonly<Record<string, unknown>>,
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null) continue;
+    normalized[key] = String(value);
   }
-  return merged;
+  return normalized;
+}
+
+function viewTypeFromPath(pathname: string): string {
+  const segments = pathname.split("/").filter(Boolean);
+  return segments.length > 0 ? segments.join("/") : "home";
+}
+
+function tabsFromContributions(
+  contributions: readonly ChatterContribution[],
+  context: ChatterViewContext,
+): readonly ChatterTab[] {
+  return contributions.flatMap((contribution) => {
+    if (!contribution.render) return [];
+    return [{
+      id: contribution.id,
+      label: contribution.label ?? contribution.id,
+      ...(contribution.icon ? { icon: contribution.icon } : {}),
+      ...(typeof contribution.count === "number" ? { count: contribution.count } : {}),
+      ...(contribution.panelClassName ? { panelClassName: contribution.panelClassName } : {}),
+      children: contribution.render(context),
+    }];
+  });
+}
+
+// Merge tab groups by id (last wins): a same-id tab replaces its predecessor in
+// place; a new id appends. Earlier groups are the base, later groups override.
+function mergeChatterTabs(
+  ...groups: readonly (readonly ChatterTab[])[]
+): readonly ChatterTab[] {
+  const byId = new Map<string, ChatterTab>();
+  for (const group of groups) {
+    for (const tab of group) byId.set(tab.id, tab);
+  }
+  return [...byId.values()];
 }
 
 function defaultTabs(
@@ -115,8 +204,8 @@ function defaultTabs(
 ): readonly ChatterTab[] {
   return [
     {
-      id: "angee",
-      label: "Angee",
+      id: "agents",
+      label: "Agents",
       icon: "agent",
       children: children ?? (
         <EmptyState

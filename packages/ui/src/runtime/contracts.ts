@@ -39,10 +39,40 @@ export type WidgetMap = Record<string, unknown>;
  */
 export type FormOverrideMap = Record<string, unknown>;
 
+/** The generic view envelope passed to cross-page chatter surfaces. */
+export interface ChatterView {
+  kind: "dashboard" | "list" | "record";
+  type: string;
+  sqid?: string;
+  sqids?: string[];
+  params?: Record<string, unknown>;
+}
+
+/** A composed route's contribution to the active chatter view. */
+export interface ChatterRoute {
+  name: string;
+  path: string;
+  viewType: string;
+  recordParam?: string;
+}
+
+/** Runtime context for rendering a chatter tab on the active page. */
+export interface ChatterViewContext {
+  pathname: string;
+  params: Readonly<Record<string, string>>;
+  route?: ChatterRoute;
+  view: ChatterView;
+}
+
 /** A chatter aside tab; merges by `id` (last wins) and orders by `sequence`. */
 export interface ChatterContribution {
   id: string;
   sequence?: number;
+  label?: ReactNode;
+  icon?: string;
+  count?: number;
+  panelClassName?: string;
+  render?: (context: ChatterViewContext) => ReactNode;
 }
 
 /** A contribution into a UI slot another addon owns; merges by `(slot, id)`. */

@@ -10,6 +10,7 @@ import {
 
 import type {
   ChatterContribution,
+  ChatterRoute,
   DrawerContribution,
   DrawerEdge,
   FormOverrideMap,
@@ -30,6 +31,7 @@ export interface AppRuntime {
   icons: Readonly<Record<string, unknown>>;
   forms: FormOverrideMap;
   chatter: readonly ChatterContribution[];
+  chatterRoutes: readonly ChatterRoute[];
   slots: readonly SlotContribution[];
   previews: readonly PreviewContribution[];
   drawers: readonly DrawerContribution[];
@@ -43,6 +45,7 @@ const EMPTY_RUNTIME: AppRuntime = {
   icons: {},
   forms: {},
   chatter: [],
+  chatterRoutes: [],
   slots: [],
   previews: [],
   drawers: [],
@@ -99,6 +102,11 @@ export function useSlot(slot: string): readonly SlotContribution[] {
 /** The addon-contributed file-preview renderers, in composed order. */
 export function usePreviews(): readonly PreviewContribution[] {
   return useAppRuntime().previews;
+}
+
+/** The route metadata Chatter uses to build the active view envelope. */
+export function useChatterRoutes(): readonly ChatterRoute[] {
+  return useAppRuntime().chatterRoutes ?? [];
 }
 
 /**

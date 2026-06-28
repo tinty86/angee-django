@@ -58,6 +58,7 @@ import {
 import {
   AppRuntimeProvider,
   type AppRuntime,
+  type ChatterRoute,
   type ComposedMenuItem,
   type SlotContribution,
   } from "@angee/ui/runtime";
@@ -210,6 +211,11 @@ export function createApp(input: CreateAppInput): AngeeApp {
     menuTree,
   );
 
+  const defaultSchema = input.defaultSchema ?? "public";
+  const subscriptionSchema = input.subscriptionSchema ?? "console";
+  const schemas = normalizeSchemaConfigs(input.schemas);
+  const resourceTypesByModel = resourceTypesByModelLabel(schemas);
+
   const runtime: AppRuntime = {
     widgets: { ...defaultWidgets, ...composed.widgets },
     // Seed the base namespace under the merged addon bundles; an addon key wins.
@@ -217,6 +223,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
     icons: composed.icons,
     forms: composed.forms,
     chatter: composed.chatter,
+    chatterRoutes: chatterRouteIndex(routes, resourceTypesByModel),
     slots: mergeSlotContributions(composed.slots, input.slots ?? []),
     // Built-in renderers are universal (PreviewPane always includes them); the
     // runtime carries only addon-contributed providers.
@@ -224,9 +231,6 @@ export function createApp(input: CreateAppInput): AngeeApp {
     drawers: composed.drawers,
     routesByResource: resourceRouteIndex(routes),
   };
-  const defaultSchema = input.defaultSchema ?? "public";
-  const subscriptionSchema = input.subscriptionSchema ?? "console";
-  const schemas = normalizeSchemaConfigs(input.schemas);
   const operationDocuments = operationDocumentsForSchemas(schemas);
   const refineResources = refineResourcesForSchemas(
     schemas,
@@ -507,13 +511,100 @@ function menuRouteShowPath(
   return child ? fullRoutePath(child, route) : undefined;
 }
 
+function chatterRouteIndex(
+  routes: readonly BaseAddonRoute[],
+  resourceTypesByModel: Readonly<Record<string, string>>,
+): readonly ChatterRoute[] {
+  const routesByName = new Map(routes.map((route) => [route.name, route]));
+  const childrenByParentName = childRoutesByParentName(routes);
+  return routes.map((route) => {
+    const parent = route.parent ? routesByName.get(route.parent) : undefined;
+    const path = fullRoutePath(route, parent);
+    const recordParam = trailingRouteParamName(path);
+    return {
+      name: route.name,
+      path,
+      viewType: routeChatterViewType(
+        route,
+        routesByName,
+        childrenByParentName,
+        resourceTypesByModel,
+      ),
+      ...(recordParam ? { recordParam } : {}),
+    };
+  });
+}
+
+function routeChatterViewType(
+  route: BaseAddonRoute,
+  routesByName: ReadonlyMap<string, BaseAddonRoute>,
+  childrenByParentName: ReadonlyMap<string, readonly BaseAddonRoute[]>,
+  resourceTypesByModel: Readonly<Record<string, string>>,
+): string {
+  const resource = inheritedRouteResource(route, routesByName);
+  if (resource) {
+    return resourceTypesByModel[resource] ?? resourceTypeFromModelLabel(resource);
+  }
+  if (!trailingRouteParamName(route.path)) {
+    const recordChild = childrenByParentName
+      .get(route.name)
+      ?.find((child) => trailingRouteParamName(child.path));
+    if (recordChild) return routeNameViewType(recordChild.name);
+  }
+  return routeNameViewType(route.name);
+}
+
+function inheritedRouteResource(
+  route: BaseAddonRoute,
+  routesByName: ReadonlyMap<string, BaseAddonRoute>,
+): string | undefined {
+  if (route.resource) return route.resource;
+  if (!route.parent) return undefined;
+  const parent = routesByName.get(route.parent);
+  return parent ? inheritedRouteResource(parent, routesByName) : undefined;
+}
+
+function resourceTypesByModelLabel(
+  schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>,
+): Record<string, string> {
+  const byModel: Record<string, string> = {};
+  for (const schema of Object.values(schemas)) {
+    for (const resource of schema.metadata?.angee?.resources ?? []) {
+      const resourceType = resource.resourceType;
+      if (!resourceType) continue;
+      byModel[resource.modelLabel] = resourceType;
+      byModel[resource.modelName] = resourceType;
+    }
+  }
+  return byModel;
+}
+
+function resourceTypeFromModelLabel(modelLabel: string): string {
+  const parts = modelLabel.split(".");
+  const modelName = parts.pop();
+  const appLabel = parts.join(".");
+  if (!appLabel || !modelName) return routeNameViewType(modelLabel);
+  return `${appLabel}/${snakeCase(modelName)}`;
+}
+
+function routeNameViewType(routeName: string): string {
+  return routeName.split(".").map(snakeCase).join("/");
+}
+
+function snakeCase(value: string): string {
+  return value
+    .replace(/-/g, "_")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-z\d])([A-Z])/g, "$1_$2")
+    .toLowerCase();
+}
+
 function routeChildHasTrailingParam(
   route: BaseAddonRoute,
   parent: BaseAddonRoute,
 ): boolean {
   const path = routePathUnderParent(route, parent);
-  const segment = normalizeRoutePath(path).split("/").at(-1);
-  return Boolean(segment?.startsWith("$"));
+  return Boolean(trailingRouteParamName(path));
 }
 
 function fullRoutePath(
@@ -1001,6 +1092,11 @@ function normalizeRoutePath(path: string): string {
   if (path === "/") return "/";
   const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
   return withLeadingSlash.replace(/\/+$/, "");
+}
+
+function trailingRouteParamName(path: string): string | undefined {
+  const segment = normalizeRoutePath(path).split("/").at(-1);
+  return segment?.startsWith("$") ? segment.slice(1) || undefined : undefined;
 }
 
 function resolvePath(

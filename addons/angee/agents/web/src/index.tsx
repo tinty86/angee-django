@@ -6,6 +6,7 @@ import { Box, Cpu, GitBranch, LayoutTemplate, Server, Sparkles, Wrench } from "l
 import { enAgentsMessages } from "./i18n";
 import { AgentsPage, TemplatesPage } from "./views/AgentsPage";
 import { AgentSessionsPage } from "./views/AgentSessionsPage";
+import { AgentChatterPane } from "./views/AgentChatterPane";
 import { InferenceModelsPage, InferenceProvidersPage } from "./views/InferencePage";
 import { McpServersPage, McpToolsPage } from "./views/McpPage";
 import { SkillsPage } from "./views/SkillsPage";
@@ -93,9 +94,9 @@ const agentsMenu: readonly BaseMenuItem[] = [
   },
 ];
 
-// The side-chatter entry a host (e.g. the notes app) mounts in its chatter "agent" tab,
-// bound to the open record, to chat with the user's agent about what they're viewing.
-export { AgentChatterPane } from "./views/AgentChatterPane";
+// The side-chatter entry the addon contributes as the global chatter "agents" tab (below),
+// bound to the active page's view, to chat with the user's agent about what they're viewing.
+export { AgentChatterPane };
 
 const agents = defineBaseAddon({
   id: AGENTS_ID,
@@ -113,6 +114,15 @@ const agents = defineBaseAddon({
     "inference-provider": Cpu,
     "inference-model": Box,
   },
+  chatter: [
+    {
+      id: "agents",
+      sequence: 0,
+      label: "Agents",
+      icon: "agent",
+      render: ({ view }) => <AgentChatterPane view={view} />,
+    },
+  ],
 });
 
 export default agents;

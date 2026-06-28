@@ -1,13 +1,13 @@
 import * as React from "react";
 import { Card, CardContent, EmptyState, buttonVariants, cn, textRoleVariants } from "@angee/ui";
-import { useAuthoredMutation } from "@angee/ui";
+import { useAuthoredQuery } from "@angee/ui";
+import type { ChatterView } from "@angee/ui/runtime";
 import { Link } from "@tanstack/react-router";
 
 import { useAgentsT } from "../i18n";
 import {
   ResolveSessionForView,
   type AgentChatView,
-  type AgentSession,
 } from "../documents";
 import { AgentChat } from "./AgentChat";
 import { KeptAliveAgents, useOpenedAgents } from "./useOpenedAgents";
@@ -17,7 +17,8 @@ import { useRunningAgents } from "./useRunningAgents";
  * The side-chatter entry: resolves the agent that serves the user (their running agent) and
  * renders the live ACP chat bound to the open record, so the agent sees what the user is
  * looking at and can read/edit it through its MCP tools. Shows a call-to-action when the user
- * has no running agent. Mount it in a host's chatter "agent" tab with the current
+ * has no running agent. The agents addon contributes it as the global chatter "agents"
+ * tab, driven by the active page's `view`; back-compat callers may still pass an explicit
  * `{ resource, recordId }`.
  *
  * The chooser in the chat bar switches between the user's running agents: the effective
@@ -30,41 +31,43 @@ import { useRunningAgents } from "./useRunningAgents";
 export function AgentChatterPane({
   resource,
   recordId,
+  view,
 }: {
-  resource: string;
+  resource?: string;
   recordId?: string;
+  view?: ChatterView | AgentChatView;
 }): React.ReactElement {
   const t = useAgentsT();
-  const [resolveSession] = useAuthoredMutation(ResolveSessionForView);
   // The shared running-agents owner (same hook the sessions page uses) — live-refreshing,
   // already filtered to the running, non-template agents.
   const { running: agents } = useRunningAgents();
 
-  // Resolved per resource only — the agent doesn't depend on the open record in v1.
-  const resolveView = React.useMemo<AgentChatView>(
-    () => ({ kind: "dashboard", type: resource }),
-    [resource],
-  );
-  // The live view that tracks the open record, passed to the chat for context.
+  // The live view that tracks the open record, passed to the chat for context. A
+  // global chatter contribution drives this through `view`; the back-compat
+  // `{ resource, recordId }` callers fall through to the derived envelope.
   const liveView = React.useMemo<AgentChatView>(
     () =>
-      recordId !== undefined
-        ? { kind: "record", type: resource, sqid: recordId }
-        : { kind: "dashboard", type: resource },
-    [resource, recordId],
+      normalizeAgentChatView(
+        view ??
+          (recordId !== undefined
+            ? { kind: "record", type: requiredResource(resource), sqid: recordId }
+            : { kind: "dashboard", type: requiredResource(resource) }),
+      ),
+    [recordId, resource, view],
+  );
+  // Resolved per resource only — the agent doesn't depend on the open record in v1.
+  const resolveView = React.useMemo<AgentChatView>(
+    () => ({ kind: "dashboard", type: liveView.type }),
+    [liveView.type],
   );
 
-  const [session, setSession] = React.useState<AgentSession | null | "loading">("loading");
-  React.useEffect(() => {
-    let active = true;
-    setSession("loading");
-    void resolveSession({ view: resolveView }).then((data) => {
-      if (active) setSession(data?.resolve_session_for_view ?? null);
-    });
-    return () => {
-      active = false;
-    };
-  }, [resolveSession, resolveView]);
+  const sessionQuery = useAuthoredQuery(
+    ResolveSessionForView,
+    { view: resolveView },
+    { models: ["agents.Agent"] },
+  );
+  const session = sessionQuery.data?.resolve_session_for_view ?? null;
+  const loading = sessionQuery.fetching && sessionQuery.data === undefined;
 
   // The effective selection is DERIVED, not effect-mirrored: only the user's explicit pick is
   // state, and until they pick one the selection follows the server-resolved DEFAULT agent.
@@ -72,13 +75,12 @@ export function AgentChatterPane({
   // renders a one-frame empty selection the moment the session resolves. Drive this (not a
   // child's `agentId`) so keep-alive never re-runs `useAcpRuntime`'s lossy reset.
   const [pickedId, setPickedId] = React.useState<string | null>(null);
-  const sessionAgentId =
-    session !== "loading" && session !== null ? session.agent_id : null;
+  const sessionAgentId = session?.agent_id ?? null;
   const selectedId = pickedId ?? sessionAgentId;
   const handleSelect = React.useCallback((id: string) => setPickedId(id), []);
   const { openedIds } = useOpenedAgents({ selectedId });
 
-  if (session === "loading") {
+  if (loading) {
     return <PaneMessage>{t("agents.chat.resolving")}</PaneMessage>;
   }
   if (session === null) {
@@ -114,6 +116,23 @@ export function AgentChatterPane({
       )}
     />
   );
+}
+
+function requiredResource(resource: string | undefined): string {
+  if (!resource) {
+    throw new Error("AgentChatterPane requires either view or resource.");
+  }
+  return resource;
+}
+
+function normalizeAgentChatView(view: ChatterView | AgentChatView): AgentChatView {
+  return {
+    kind: view.kind,
+    type: view.type,
+    ...(view.sqid ? { sqid: view.sqid } : {}),
+    ...(view.sqids ? { sqids: [...view.sqids] } : {}),
+    ...(view.params ? { params: { ...view.params } } : {}),
+  };
 }
 
 function PaneMessage({ children }: { children: React.ReactNode }): React.ReactElement {

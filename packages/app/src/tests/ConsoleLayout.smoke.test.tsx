@@ -233,7 +233,7 @@ describe("ConsoleLayout", () => {
       .toBe("page");
 
     expect(screen.getByRole("main").textContent).toContain("Body content");
-    expect(screen.getByRole("tab", { name: "Angee" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Agents" })).toBeTruthy();
     expect(screen.getByText("No agent yet")).toBeTruthy();
     expect(screen.getByText("Set up your assistant")).toBeTruthy();
   });
@@ -333,8 +333,8 @@ function ChatterPublisher(): null {
   const tabs = useMemo(
     () => [
       {
-        id: "angee",
-        label: "Angee",
+        id: "agents",
+        label: "Agents",
         children: <p>No agent yet</p>,
       },
       {

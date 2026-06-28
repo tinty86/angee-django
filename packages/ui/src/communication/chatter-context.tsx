@@ -12,7 +12,7 @@ import {
 
 import type { CollapsiblePane } from "../page";
 
-export type ChatterTabId = "angee" | "comments" | "activity" | (string & {});
+export type ChatterTabId = "agents" | "comments" | "activity" | (string & {});
 
 export interface ChatterTab {
   id: ChatterTabId;
@@ -56,7 +56,7 @@ const ChatterContext = createContext<ChatterContextValue>({
   collapsed: false,
   setCollapsed: () => undefined,
   toggleCollapsed: () => undefined,
-  activeTab: "angee",
+  activeTab: "agents",
   setActiveTab: () => undefined,
   content: null,
   setContent: () => undefined,
@@ -66,7 +66,7 @@ const ChatterContext = createContext<ChatterContextValue>({
 export function ChatterProvider({
   children,
   defaultCollapsed = false,
-  defaultTab = "angee",
+  defaultTab = "agents",
 }: ChatterProviderProps): ReactElement {
   const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
   // The registered secondary pane controller (the imperative handle to toggle),

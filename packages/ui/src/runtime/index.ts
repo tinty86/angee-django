@@ -15,12 +15,16 @@ export {
   useSlot,
   usePreviews,
   useDrawers,
+  useChatterRoutes,
   useT,
   useNamespaceT,
   type AppRuntime,
 } from "./runtime";
 export type {
   ChatterContribution,
+  ChatterRoute,
+  ChatterView,
+  ChatterViewContext,
   ComposedMenuItem,
   DrawerContribution,
   DrawerEdge,
