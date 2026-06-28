@@ -7,7 +7,6 @@ import {
   Glyph,
   Group,
   RecordPager,
-  buttonVariants,
   type RecordNavigation,
 } from "@angee/ui";
 
@@ -35,9 +34,10 @@ export interface FileDetailProps {
 
 /**
  * One file as an editable record: the title input renames it, the toolbar
- * carries the download and trash/restore actions, and a read-only detail group
- * surfaces the stored filename, owner, and stage. The page decides whether this
- * renders as the primary content or as a compact side-panel detail.
+ * carries the trash/restore action (download lives on the file preview's own
+ * toolbar, beside the content it acts on), and a read-only detail group surfaces
+ * the stored filename, owner, and stage. The page decides whether this renders
+ * as the primary content or as a compact side-panel detail.
  */
 export function FileDetail({
   file,
@@ -48,7 +48,6 @@ export function FileDetail({
 }: FileDetailProps): ReactElement {
   const t = useStorageT();
   const actions = useFileActions({ onChanged });
-  const canDownload = !file.is_trashed && file.url !== "";
 
   return (
     <FormView
@@ -58,43 +57,29 @@ export function FileDetail({
       submitLabel={t("storage.file.rename")}
       onSaved={onChanged}
       toolbarStart={
-        <>
-          {canDownload ? (
-            // A real download anchor (the token URL is same-origin), styled as a
-            // button — `Button asChild` would force a button role onto the link.
-            <a
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-              href={file.url}
-              download={file.filename}
-            >
-              <Glyph name="download" />
-              {t("storage.file.download")}
-            </a>
-          ) : null}
-          {file.is_trashed ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              loading={actions.busy}
-              onClick={() => void actions.restore(file.id)}
-            >
-              <Glyph name="restore" />
-              {t("storage.file.restore")}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              loading={actions.busy}
-              onClick={() => void actions.trash(file.id).then(onClose)}
-            >
-              <Glyph name="trash" />
-              {t("storage.file.trash")}
-            </Button>
-          )}
-        </>
+        file.is_trashed ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            loading={actions.busy}
+            onClick={() => void actions.restore(file.id)}
+          >
+            <Glyph name="restore" />
+            {t("storage.file.restore")}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            loading={actions.busy}
+            onClick={() => void actions.trash(file.id).then(onClose)}
+          >
+            <Glyph name="trash" />
+            {t("storage.file.trash")}
+          </Button>
+        )
       }
       toolbar={navigation ? <RecordPager navigation={navigation} /> : undefined}
     >

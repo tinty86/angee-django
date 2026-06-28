@@ -2,6 +2,7 @@ import { useCallback, useMemo, type ReactElement } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
+  buttonVariants,
   EmptyState,
   formatSize,
   Glyph,
@@ -367,6 +368,11 @@ export function StoragePage(): ReactElement {
 
 function FilePreviewFrame({ file }: { file: StorageFile }): ReactElement {
   const t = useStorageT();
+  // Download rides the preview content's own toolbar (the SurfaceHeader actions),
+  // beside the file it acts on — not the metadata aside. The token URL is
+  // same-origin, so a real download anchor styled as a button (`Button asChild`
+  // would force a button role onto the link).
+  const canDownload = !file.is_trashed && file.url !== "";
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <SurfaceHeader
@@ -381,6 +387,18 @@ function FilePreviewFrame({ file }: { file: StorageFile }): ReactElement {
             t("storage.file.unknownType"),
           size: formatSize(file.size_bytes),
         })}
+        actions={
+          canDownload ? (
+            <a
+              className={buttonVariants({ variant: "secondary", size: "sm" })}
+              href={file.url}
+              download={file.filename}
+            >
+              <Glyph name="download" />
+              {t("storage.file.download")}
+            </a>
+          ) : undefined
+        }
       />
       <div className="min-h-0 flex-1 overflow-hidden p-3">
         <FilePreview file={file} />
