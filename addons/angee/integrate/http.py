@@ -1,40 +1,49 @@
-"""Shared SSRF-pinned outbound HTTP client for integration backends.
+"""Shared SSRF-pinned outbound HTTP for integration backends.
 
-The single owner of "make one outbound HTTP request from a backend." It resolves
-the host once and dials the validated IP — closing the resolve-then-connect SSRF
-gap — while verifying the original TLS hostname, over ``net.py``'s address
-judgement. A backend composes :class:`HttpClientMixin` to reach it as
-``self.http``; the webhook delivery layer composes it and adds only its
-signature, and the github backend composes it for read GETs — so the pinning
-lives in exactly one place.
+The single owner of "make one outbound HTTP request." The transport is httpx over
+a custom httpcore network backend (:class:`_PinnedBackend`) that resolves the host
+once and dials a validated IP — closing the resolve-then-connect (DNS-rebind) gap
+— while httpcore's ``start_tls(server_hostname=…)`` keeps TLS verification on the
+original hostname. The address judgement is owned by ``net.is_unsafe_address``;
+this module only pins and dials.
 
-By default only public addresses are dialled. A backend whose connection URL is
-an operator-configured server — e.g. a self-hosted CardDAV host on a private
-network — passes ``allow_private=True``: that permits RFC-1918 / loopback hosts so
-self-hosted connections work, but still rejects cloud-metadata (the well-known
-IPs, link-local ``169.254/16``, and the RFC 6598 shared range that front metadata
-services), multicast, and unspecified addresses. The address judgement itself is
-owned by ``net.is_unsafe_address``; this module only pins and dials.
+One outbound-network policy lives here and everything composes it: integration
+backends reach it as ``self.http`` (:class:`HttpClientMixin`), and the OAuth client
+hands the same :class:`PinnedTransport` to Authlib. TLS trusts the system store
+(``ssl.create_default_context``) per docs/backend/guidelines.md, not httpx's bundled
+certifi default.
+
+By default only public addresses are dialled. ``allow_private=True`` is the
+operator-configured-connection policy — a self-hosted host on a private network:
+it permits RFC-1918 / loopback so those connections work, but still rejects the
+SSRF escapes that have no legitimate target either way — cloud metadata (the
+well-known IPs, link-local ``169.254/16``, and the RFC 6598 shared range that
+front metadata services), multicast, and unspecified. Redirects are not followed
+unless ``follow_redirects=True``; each hop re-enters the pinned backend, so
+following stays safe.
 """
 
 from __future__ import annotations
 
-import http.client
-import ipaddress
 import json
-import socket
 import ssl
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any
-from urllib.parse import SplitResult, urlunsplit
 
+import httpcore
+import httpx
 from django.core.exceptions import ValidationError
 
-from .net import is_unsafe_address, parse_http_url
+from .net import canonical_address, is_unsafe_address, parse_http_url, resolved_addresses
 
 HTTP_TIMEOUT_SECONDS = 10
 """Default timeout (seconds) for one outbound request."""
+
+_SSL_CONTEXT = ssl.create_default_context()
+"""One shared system-trust-store TLS context reused by every pinned transport, so the
+CA bundle is parsed once rather than on every outbound request."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,83 +71,91 @@ class HttpResponse:
         return self.headers.get(name.lower(), "")
 
 
-@dataclass(frozen=True)
-class _PinnedAddress:
-    """One resolver answer validated for an outbound call."""
+class _PinnedBackend(httpcore.SyncBackend):
+    """httpcore backend that resolves once, rejects SSRF-unsafe addresses, and dials
+    a validated IP — so a DNS rebind between check and connect cannot move the
+    request. ``net.is_unsafe_address`` owns the judgement; this only pins and dials.
+    """
 
-    family: socket.AddressFamily
-    socktype: socket.SocketKind
-    proto: int
-    address: str
-    sockaddr: Any
+    def __init__(self, *, allow_private: bool) -> None:
+        """Bind the address policy for every connection this backend dials."""
 
-    def open_socket(self, *, timeout: int) -> socket.socket:
-        """Open one socket to this previously validated resolver answer."""
+        super().__init__()
+        self._allow_private = allow_private
 
-        sock = socket.socket(self.family, self.socktype, self.proto)
-        try:
-            sock.settimeout(timeout)
-            sock.connect(self.sockaddr)
-        except OSError:
-            sock.close()
-            raise
-        return sock
-
-
-class _PinnedHTTPConnection(http.client.HTTPConnection):
-    """HTTP connection that dials the validated IP instead of resolving host again."""
-
-    def __init__(self, host: str, *, port: int, timeout: int, pinned_address: _PinnedAddress) -> None:
-        """Store the pinned resolver answer while preserving the original host."""
-
-        super().__init__(host, port=port, timeout=timeout)
-        self._pinned_address = pinned_address
-        self._dial_timeout = timeout
-
-    def connect(self) -> None:
-        """Open the TCP connection to the pinned resolver answer."""
-
-        self.sock = self._pinned_address.open_socket(timeout=self._dial_timeout)
-
-
-class _PinnedHTTPSConnection(http.client.HTTPSConnection):
-    """HTTPS connection that dials the validated IP but verifies the original host."""
-
-    def __init__(
+    def connect_tcp(
         self,
         host: str,
-        *,
         port: int,
-        timeout: int,
-        pinned_address: _PinnedAddress,
-        tls_hostname: str,
-        context: ssl.SSLContext,
-    ) -> None:
-        """Store the pinned address and TLS hostname for certificate validation."""
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.NetworkStream:
+        """Resolve ``host``, reject unsafe addresses, and dial a validated IP.
 
-        super().__init__(host, port=port, timeout=timeout, context=context)
-        self._pinned_address = pinned_address
-        self._dial_timeout = timeout
-        self._tls_hostname = tls_hostname
-        self._tls_context = context
+        ``host`` is the origin hostname; httpcore later calls
+        ``start_tls(server_hostname=host)``, so dialing a validated IP here leaves
+        SNI and certificate verification on the real hostname.
+        """
 
-    def connect(self) -> None:
-        """Open TLS to the pinned IP while checking the original hostname."""
+        last_error: OSError | None = None
+        for address in self._validated_addresses(host, port):
+            try:
+                return super().connect_tcp(
+                    str(address),
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout, OSError) as exc:
+                last_error = _as_os_error(exc)
+        # Every validated address failed to connect: surface a transport ``OSError``
+        # (distinct from the gate's ``ValidationError``) so callers — e.g. webhook
+        # telemetry — record it as a transport failure, not an SSRF rejection.
+        raise last_error if last_error is not None else ConnectionError(f"{host!r} could not be reached")
 
-        sock = self._pinned_address.open_socket(timeout=self._dial_timeout)
-        try:
-            self.sock = self._tls_context.wrap_socket(sock, server_hostname=self._tls_hostname)
-        except OSError:
-            sock.close()
-            raise
+    def _validated_addresses(self, host: str, port: int) -> tuple[Any, ...]:
+        """Return every resolved address for ``host``, or raise if any is unsafe."""
+
+        addresses = tuple(canonical_address(address) for address in resolved_addresses(host, port))
+        for address in addresses:
+            if is_unsafe_address(address, allow_private=self._allow_private):
+                raise ValidationError("URL host resolves to an address that is not allowed.")
+        return addresses
+
+
+class PinnedTransport(httpx.HTTPTransport):
+    """An httpx transport whose connections are SSRF-pinned and whose TLS trusts the
+    system store. The shared pinned-httpx primitive: :class:`HttpClient` issues
+    requests over it, and the OAuth client hands it to Authlib's ``OAuth2Client``.
+    """
+
+    def __init__(self, *, allow_private: bool = False) -> None:
+        """Build a pinned transport; ``allow_private`` permits self-hosted RFC-1918 hosts."""
+
+        super().__init__(verify=_SSL_CONTEXT, retries=0)
+        # httpx.HTTPTransport builds the connection pool but exposes no public seam to
+        # inject a network backend, so swap httpcore's private ``_network_backend``
+        # before any request. Fail loudly if a future httpx/httpcore renames it: a
+        # silent fallback to the default backend would disable SSRF pinning (fail-open).
+        pool = self._pool
+        if not hasattr(pool, "_network_backend"):
+            raise RuntimeError(
+                "httpx/httpcore changed: ConnectionPool exposes no '_network_backend'; SSRF "
+                "pinning would be disabled — re-verify PinnedTransport against the new version."
+            )
+        pool._network_backend = _PinnedBackend(allow_private=allow_private)
 
 
 class HttpClient:
-    """A reusable SSRF-pinned outbound HTTP client.
+    """A reusable SSRF-pinned outbound HTTP client over httpx.
 
-    Stateless — one instance per backend is fine. Each call gates the URL, resolves
-    once, pins the validated IP, and dials it; a DNS rebind between check and
-    connect cannot redirect the request.
+    Stateless to the caller — one instance per backend is fine. Each call gates the
+    URL, pins via :class:`PinnedTransport`, and dials the validated IP; a DNS rebind
+    between check and connect cannot redirect it. A caller-supplied ``Host`` header
+    cannot displace the URL's real host. Redirects are followed only when
+    ``follow_redirects=True`` (each hop re-validates).
     """
 
     def get(
@@ -147,11 +164,14 @@ class HttpClient:
         *,
         headers: dict[str, str] | None = None,
         allow_private: bool = False,
+        follow_redirects: bool = False,
         timeout: int = HTTP_TIMEOUT_SECONDS,
     ) -> HttpResponse:
         """GET ``url`` and return the response."""
 
-        return self.request("GET", url, headers=headers, allow_private=allow_private, timeout=timeout)
+        return self.request(
+            "GET", url, headers=headers, allow_private=allow_private, follow_redirects=follow_redirects, timeout=timeout
+        )
 
     def post(
         self,
@@ -160,11 +180,20 @@ class HttpClient:
         headers: dict[str, str] | None = None,
         body: bytes | None = None,
         allow_private: bool = False,
+        follow_redirects: bool = False,
         timeout: int = HTTP_TIMEOUT_SECONDS,
     ) -> HttpResponse:
         """POST ``body`` to ``url`` and return the response."""
 
-        return self.request("POST", url, headers=headers, body=body, allow_private=allow_private, timeout=timeout)
+        return self.request(
+            "POST",
+            url,
+            headers=headers,
+            body=body,
+            allow_private=allow_private,
+            follow_redirects=follow_redirects,
+            timeout=timeout,
+        )
 
     def request(
         self,
@@ -174,142 +203,25 @@ class HttpClient:
         headers: dict[str, str] | None = None,
         body: bytes | None = None,
         allow_private: bool = False,
+        follow_redirects: bool = False,
         timeout: int = HTTP_TIMEOUT_SECONDS,
     ) -> HttpResponse:
-        """Send one request to ``url`` over a pinned connection and return the response."""
+        """Send one pinned request to ``url`` and return the response.
 
-        parsed = parse_http_url(url)
-        pinned_addresses = self._resolve(parsed, allow_private=allow_private)
-        # Host goes last so caller headers cannot override the pinned host: the TLS
-        # check and the origin server must both see the URL's real hostname.
-        request_headers = {**(headers or {}), "Host": _host_header(parsed)}
-        target = _request_target(parsed)
-        last_error: OSError | None = None
-        for pinned in pinned_addresses:
-            connection = self._connection_for(parsed, pinned, timeout=timeout)
-            try:
-                connection.request(method, target, body=body, headers=request_headers)
-                response = connection.getresponse()
-                return HttpResponse(
-                    status=_response_status(response),
-                    body=response.read(),
-                    headers=_response_headers(response),
-                )
-            except OSError as error:
-                # This validated address is unreachable; fall back to the next one.
-                last_error = error
-            finally:
-                connection.close()
-        # Every validated address failed to connect: surface the transport error
-        # (an OSError, distinct from the gate's ValidationError) for the caller.
-        if last_error is not None:
-            raise last_error
-        raise ValidationError("URL host could not be reached.")
+        Raises ``ValidationError`` when the URL or a resolved address is rejected by
+        the SSRF gate, and ``OSError`` when every validated address is unreachable.
+        """
 
-    def _resolve(self, parsed: SplitResult, *, allow_private: bool) -> tuple[_PinnedAddress, ...]:
-        """Resolve the host once and return the validated resolver answers."""
-
-        host = str(parsed.hostname)
-        port = _port(parsed)
-        try:
-            results = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-        except OSError as error:
-            raise ValidationError("URL host could not be resolved.") from error
-
-        addresses: list[_PinnedAddress] = []
-        seen: set[tuple[int, str, int]] = set()
-        for family, socktype, proto, _canonname, sockaddr in results:
-            address = ipaddress.ip_address(sockaddr[0])
-            if is_unsafe_address(address, allow_private=allow_private):
-                raise ValidationError("URL host resolves to an address that is not allowed.")
-            key = (int(family), str(address), int(proto))
-            if key in seen:
-                continue
-            seen.add(key)
-            addresses.append(
-                _PinnedAddress(
-                    family=socket.AddressFamily(family),
-                    socktype=socket.SocketKind(socktype),
-                    proto=proto,
-                    address=str(address),
-                    sockaddr=sockaddr,
-                )
+        parse_http_url(url)  # scheme/host gate; the pinned backend judges the address
+        with httpx.Client(transport=PinnedTransport(allow_private=allow_private), timeout=timeout) as client:
+            response = client.request(
+                method, url, headers=_without_host(headers), content=body, follow_redirects=follow_redirects
             )
-        if not addresses:
-            raise ValidationError("URL host could not be resolved.")
-        return tuple(addresses)
-
-    def _connection_for(
-        self, parsed: SplitResult, pinned_address: _PinnedAddress, *, timeout: int
-    ) -> http.client.HTTPConnection:
-        """Return a connection that dials ``pinned_address`` and preserves URL host semantics."""
-
-        host = str(parsed.hostname)
-        if parsed.scheme == "https":
-            return _PinnedHTTPSConnection(
-                host,
-                port=_port(parsed),
-                timeout=timeout,
-                pinned_address=pinned_address,
-                tls_hostname=host,
-                context=ssl.create_default_context(),
-            )
-        return _PinnedHTTPConnection(
-            host,
-            port=_port(parsed),
-            timeout=timeout,
-            pinned_address=pinned_address,
+        return HttpResponse(
+            status=_response_status(response),
+            body=response.content,
+            headers={name.lower(): value for name, value in response.headers.items()},
         )
-
-
-def _port(parsed: SplitResult) -> int:
-    """Return the effective port for a parsed URL."""
-
-    if parsed.port is not None:
-        return parsed.port
-    return http.client.HTTPS_PORT if parsed.scheme == "https" else http.client.HTTP_PORT
-
-
-def _request_target(parsed: SplitResult) -> str:
-    """Return the origin-form request target (path + query) for a parsed URL."""
-
-    return urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
-
-
-def _host_header(parsed: SplitResult) -> str:
-    """Return the Host header value for a parsed URL, bracketing IPv6 and adding a non-default port."""
-
-    hostname = str(parsed.hostname)
-    if ":" in hostname and not hostname.startswith("["):
-        hostname = f"[{hostname}]"
-    if parsed.port is None or parsed.port == _port(parsed):
-        return hostname
-    return f"{hostname}:{parsed.port}"
-
-
-def _response_status(response: Any) -> int:
-    """Return the integer HTTP status from a stdlib response or test double.
-
-    A response that carries no status at all is anomalous; raise rather than
-    defaulting to 200, which would mask a failure as success.
-    """
-
-    status = getattr(response, "status", None)
-    if status is not None:
-        return int(status)
-    getcode = getattr(response, "getcode", None)
-    if callable(getcode):
-        return int(getcode())
-    raise ValueError("HTTP response carries no status code.")
-
-
-def _response_headers(response: Any) -> dict[str, str]:
-    """Return response headers as a lowercased-key dict (empty for a test double without them)."""
-
-    getheaders = getattr(response, "getheaders", None)
-    if not callable(getheaders):
-        return {}
-    return {str(name).lower(): str(value) for name, value in getheaders()}
 
 
 class HttpClientMixin:
@@ -326,3 +238,33 @@ class HttpClientMixin:
         """Return this backend's shared outbound HTTP client."""
 
         return HttpClient()
+
+
+def _without_host(headers: dict[str, str] | None) -> dict[str, str]:
+    """Return ``headers`` without any ``Host`` entry so it cannot displace the URL host."""
+
+    return {name: value for name, value in (headers or {}).items() if name.lower() != "host"}
+
+
+def _as_os_error(exc: Exception) -> OSError:
+    """Return the underlying ``OSError`` for a connect failure (httpcore wraps it)."""
+
+    if isinstance(exc, OSError):
+        return exc
+    cause = exc.__cause__
+    if isinstance(cause, OSError):
+        return cause
+    return OSError(str(exc))
+
+
+def _response_status(response: Any) -> int:
+    """Return the integer HTTP status from a response.
+
+    A response that carries no status is anomalous; raise rather than defaulting to
+    200, which would mask a failure as success.
+    """
+
+    status = getattr(response, "status_code", None)
+    if isinstance(status, int):
+        return status
+    raise ValueError("HTTP response carries no status code.")

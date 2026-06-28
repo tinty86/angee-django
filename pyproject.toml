@@ -41,7 +41,11 @@ dependencies = [
   "vobject>=0.9.9",
   "markdown-it-py>=4.2",
   "authlib>=1.7.2",
-  "httpx>=0.28.1",
+  # httpcore is bounded and named directly: integrate.http subclasses its SyncBackend
+  # and swaps the ConnectionPool's network backend for the SSRF pin, so the pin owns
+  # httpcore's API. httpx is bounded to the verified range for the same reason.
+  "httpcore>=1.0,<2",
+  "httpx>=0.28.1,<0.29",
 ]
 
 [dependency-groups]

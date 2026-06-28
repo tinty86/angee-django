@@ -20,7 +20,6 @@ login extends this in ``iam_integrate_oidc`` for ID-token/userinfo verification.
 from __future__ import annotations
 
 import logging
-import ssl
 from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib import parse
@@ -29,6 +28,7 @@ import httpx
 from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import OAuth2Client
 
+from angee.integrate.http import PinnedTransport
 from angee.integrate.oauth.errors import (
     MISSING_ENDPOINT,
     TOKEN_EXCHANGE_FAILED,
@@ -321,21 +321,19 @@ class OAuthClientProtocol:
 
 
 def _outbound_kwargs(transport: httpx.BaseTransport | None) -> dict[str, Any]:
-    """Shared outbound httpx policy: request timeout, the optional injected test
-    transport, and — for real connections — system-store TLS trust.
+    """Shared outbound httpx policy: a request timeout and the transport.
 
-    httpx would otherwise verify against the bundled ``certifi`` store; the stdlib
-    default context resolves against the system trust store and honours
-    ``SSL_CERT_FILE``/``SSL_CERT_DIR``, the one outbound-TLS policy the rest of the stack
-    uses (see docs/backend/guidelines.md Pitfalls and ``http.py``). ``verify`` is only
-    meaningful when httpx builds its own transport, so it is omitted when a test
-    transport is injected.
+    A test injects an ``httpx.MockTransport``; a real call rides the integrate
+    addon's SSRF-pinned ``PinnedTransport``, so OAuth, discovery, and userinfo get
+    the same address pinning and system-store TLS as every other outbound call.
+    ``allow_private=True`` permits operator-configured self-hosted IDPs on private
+    networks while still rejecting cloud metadata and the other SSRF escapes.
     """
 
-    kwargs: dict[str, Any] = {"timeout": HTTP_TIMEOUT_SECONDS, "transport": transport}
-    if transport is None:
-        kwargs["verify"] = ssl.create_default_context()
-    return kwargs
+    return {
+        "timeout": HTTP_TIMEOUT_SECONDS,
+        "transport": transport if transport is not None else PinnedTransport(allow_private=True),
+    }
 
 
 def _param_values(oauth_client: object, property_name: str) -> dict[str, str]:

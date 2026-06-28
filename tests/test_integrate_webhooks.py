@@ -16,7 +16,7 @@ from rebac import system_context, to_object_ref, to_subject_ref
 from rebac.models import active_relationship_model
 
 from angee.integrate.events import EventKind
-from angee.integrate.http import HTTP_TIMEOUT_SECONDS
+from angee.integrate.http import HttpResponse
 from angee.integrate.models import Bridge
 from angee.integrate.net import validate_public_url
 from angee.integrate.webhooks import SIGNATURE_HEADER
@@ -62,20 +62,6 @@ class DispatchBridge(Bridge):
 
     def stop_live(self) -> None:
         """No-op live subscription stop for the fixture."""
-
-
-class FakeResponse:
-    """Response double for pinned HTTP connection calls."""
-
-    def __init__(self, status: int) -> None:
-        """Store the HTTP status exposed by http.client responses."""
-
-        self.status = status
-
-    def read(self) -> bytes:
-        """Return an empty body — webhook delivery inspects only the status."""
-
-        return b""
 
 
 @pytest.fixture()
@@ -182,8 +168,7 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
 
     del webhook_tables
     call_command("rebac", "sync", verbosity=0)
-    _resolve_to(monkeypatch, "93.184.216.34")
-    connections = _record_connections(monkeypatch, status=202)
+    posts = _record_posts(monkeypatch, status=202)
 
     user = get_user_model().objects.create_user(username="webhook-delivery", email="delivery@example.com")
     conn = make_integration("delivery-account")
@@ -243,29 +228,15 @@ def test_deliver_event_signs_and_posts_only_matching_subscriptions(
     )
 
     assert result == {"delivered": 2, "errors": 0}
-    assert [connection.host for connection in connections] == [
-        "hooks-a.example.test",
-        "hooks-all.example.test",
+    assert [post["url"] for post in posts] == [
+        "https://hooks-a.example.test/events",
+        "https://hooks-all.example.test/events",
     ]
-    assert [connection.port for connection in connections] == [443, 443]
-    assert [connection.timeout for connection in connections] == [HTTP_TIMEOUT_SECONDS, HTTP_TIMEOUT_SECONDS]
-    assert [connection.pinned_address.address for connection in connections] == [
-        "93.184.216.34",
-        "93.184.216.34",
-    ]
-    requests = [connection.requests[0] for connection in connections]
-    assert [request["url"] for request in requests] == ["/events", "/events"]
-    assert {request["method"] for request in requests} == {"POST"}
-    assert {request["body"] for request in requests} == {body}
-    assert [request["headers"]["Host"] for request in requests] == [
-        "hooks-a.example.test",
-        "hooks-all.example.test",
-    ]
-    assert {request["headers"][SIGNATURE_HEADER] for request in requests} == {
+    assert {post["body"] for post in posts} == {body}
+    assert {post["headers"][SIGNATURE_HEADER] for post in posts} == {
         _signature("first-secret", body),
         _signature("all-secret", body),
     }
-    assert {connection.closed for connection in connections} == {True}
 
     first.refresh_from_db()
     match_all.refresh_from_db()
@@ -289,8 +260,7 @@ def test_deliver_event_failure_increments_consecutive_failures(
 
     del webhook_tables
     call_command("rebac", "sync", verbosity=0)
-    _resolve_to(monkeypatch, "93.184.216.34")
-    connections = _record_connections(monkeypatch, request_error=ConnectionRefusedError("connection refused"))
+    posts = _record_posts(monkeypatch, post_error=ConnectionRefusedError("connection refused"))
 
     user = get_user_model().objects.create_user(username="webhook-failure", email="failure@example.com")
     with system_context(reason="test webhook failure setup"):
@@ -309,8 +279,7 @@ def test_deliver_event_failure_increments_consecutive_failures(
 
     subscription.refresh_from_db()
     assert result == {"delivered": 0, "errors": 1}
-    assert len(connections) == 1
-    assert connections[0].closed is True
+    assert len(posts) == 1
     assert subscription.consecutive_failures == 5
     assert subscription.last_delivery_at is not None
     assert subscription.last_delivery_status == ""
@@ -336,7 +305,6 @@ def test_deliver_event_rejects_unsafe_resolved_target_without_connecting(
     del webhook_tables
     call_command("rebac", "sync", verbosity=0)
     _resolve_to(monkeypatch, address)
-    connections = _record_connections(monkeypatch, status=202)
 
     user = get_user_model().objects.create_user(
         username=f"webhook-ssrf-{address.replace('.', '-')}",
@@ -357,7 +325,6 @@ def test_deliver_event_rejects_unsafe_resolved_target_without_connecting(
 
     subscription.refresh_from_db()
     assert result == {"delivered": 0, "errors": 1}
-    assert connections == []
     assert subscription.consecutive_failures == 1
     assert subscription.last_delivery_status == ""
     assert "URL host resolves to an address that is not allowed." in subscription.last_error
@@ -372,8 +339,7 @@ def test_deliver_event_redirect_response_fails_without_following(
 
     del webhook_tables
     call_command("rebac", "sync", verbosity=0)
-    _resolve_to(monkeypatch, "93.184.216.34")
-    connections = _record_connections(monkeypatch, status=302)
+    posts = _record_posts(monkeypatch, status=302)
 
     user = get_user_model().objects.create_user(username="webhook-redirect", email="redirect@example.com")
     with system_context(reason="test webhook redirect setup"):
@@ -392,9 +358,8 @@ def test_deliver_event_redirect_response_fails_without_following(
 
     subscription.refresh_from_db()
     assert result == {"delivered": 0, "errors": 1}
-    assert len(connections) == 1
-    assert len(connections[0].requests) == 1
-    assert connections[0].host == "hooks-redirect.example.test"
+    assert len(posts) == 1
+    assert posts[0]["url"] == "https://hooks-redirect.example.test/events"
     assert subscription.consecutive_failures == 3
     assert subscription.last_delivery_status == "302"
     assert "HTTP 302" in subscription.last_error
@@ -446,66 +411,37 @@ def test_dispatch_inbound_does_not_handle_when_verify_raises() -> None:
     assert bridge.calls == [("verify", payload)]
 
 
-def _record_connections(
+def _record_posts(
     monkeypatch: pytest.MonkeyPatch,
     *,
     status: int = 202,
-    request_error: Exception | None = None,
-) -> list[Any]:
-    """Record pinned HTTP(S) connection calls without opening sockets."""
+    post_error: Exception | None = None,
+) -> list[dict[str, Any]]:
+    """Record posts through the shared ``HttpClient`` (the seam webhook delivery uses).
 
-    connections: list[Any] = []
+    Pinning itself is covered by ``tests/test_integrate_http.py``; here we only need
+    to observe the URL, body, and signature delivery sends, and replay a status or a
+    transport error.
+    """
 
-    class RecordingConnection:
-        """Connection double that records request details."""
+    posts: list[dict[str, Any]] = []
 
-        def __init__(
-            self,
-            host: str,
-            *,
-            port: int,
-            timeout: int,
-            pinned_address: Any,
-            **kwargs: Any,
-        ) -> None:
-            """Record construction arguments from the pinned connection factory."""
+    def fake_post(
+        self: Any,
+        url: str,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> HttpResponse:
+        del kwargs
+        posts.append({"url": url, "body": body, "headers": headers or {}})
+        if post_error is not None:
+            raise post_error
+        return HttpResponse(status=status, body=b"", headers={})
 
-            del kwargs
-            self.host = host
-            self.port = port
-            self.timeout = timeout
-            self.pinned_address = pinned_address
-            self.requests: list[dict[str, Any]] = []
-            self.closed = False
-            connections.append(self)
-
-        def request(self, method: str, url: str, *, body: bytes, headers: dict[str, str]) -> None:
-            """Record one outbound request or raise the configured transport error."""
-
-            if request_error is not None:
-                raise request_error
-            self.requests.append(
-                {
-                    "method": method,
-                    "url": url,
-                    "body": body,
-                    "headers": headers,
-                }
-            )
-
-        def getresponse(self) -> FakeResponse:
-            """Return the configured response status."""
-
-            return FakeResponse(status)
-
-        def close(self) -> None:
-            """Record that delivery closed the connection."""
-
-            self.closed = True
-
-    monkeypatch.setattr("angee.integrate.http._PinnedHTTPConnection", RecordingConnection)
-    monkeypatch.setattr("angee.integrate.http._PinnedHTTPSConnection", RecordingConnection)
-    return connections
+    monkeypatch.setattr("angee.integrate.http.HttpClient.post", fake_post)
+    return posts
 
 
 def _resolve_to(monkeypatch: pytest.MonkeyPatch, address: str) -> None:
