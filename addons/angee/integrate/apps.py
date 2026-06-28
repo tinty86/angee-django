@@ -13,7 +13,7 @@ class IntegrateConfig(AppConfig):
     angee_web_package = "@angee/integrate"
     name = "angee.integrate"
     label = "integrate"
-    depends_on = ("angee.iam",)
+    depends_on = ("angee.iam", "angee.resources")
     schemas = "schema.schemas"
     permissions = "permissions.zed"
 
@@ -29,6 +29,9 @@ class IntegrateConfig(AppConfig):
         """Wire integration-owned denormalization maintenance after app population."""
 
         super().ready()
-        from angee.integrate import signals
+        from angee.integrate import resource_source, signals
 
         signals.connect()
+        # Contribute the networked `url` resource source up into the resources addon
+        # (the legal integrate -> resources direction), so resources stays local-only.
+        resource_source.register()

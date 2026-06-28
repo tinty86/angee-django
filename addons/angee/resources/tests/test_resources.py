@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import socket
-import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,7 +16,6 @@ from rebac import system_context
 from angee.base.models import AngeeModel
 from angee.resources.entries import EntryGraph, LoadResult, ResourceEntry
 from angee.resources.exceptions import ResourceLoadError
-from angee.resources.fetch import _PublicUrlRedirectHandler, fetch_url
 from angee.resources.models import Resource
 from angee.resources.tiers import ResourceTier
 from angee.resources.widgets import resolve_xref
@@ -249,103 +246,31 @@ def test_entry_graph_detects_cycles(tmp_path: Path) -> None:
         EntryGraph.from_entries([first, second]).ordered()
 
 
-def test_fetch_url_rejects_non_http_urls() -> None:
-    """Remote resources are limited to http and https URLs."""
+def test_path_source_materializes_to_the_addon_file(tmp_path: Path) -> None:
+    """The built-in ``path`` source materializes to the addon-relative local file."""
 
-    with pytest.raises(ResourceLoadError, match="http or https"):
-        fetch_url("file:///private/resource.csv")
+    owner = addon(tmp_path)
+    resource_entry = ResourceEntry.from_declaration(owner, "master", {"path": "data/users.csv"})
 
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://127.0.0.1/data.csv",
-        "http://169.254.169.254/latest/meta-data/",
-        "http://[fd00:ec2::254]/data.csv",
-        "http://10.0.0.5/data.csv",
-    ],
-)
-def test_fetch_url_rejects_ssrf_unsafe_targets(url: str) -> None:
-    """Fetch refuses hosts that resolve to loopback, private, link-local, or metadata IPs."""
-
-    with pytest.raises(ResourceLoadError, match="public IP"):
-        fetch_url(url)
+    assert resource_entry.source_key == "path"
+    assert resource_entry.source == "data/users.csv"
+    assert resource_entry.materialize() == Path(owner.path) / "data/users.csv"
 
 
-def test_fetch_url_rejects_redirect_to_non_http_url() -> None:
-    """Redirected resource URLs are limited to http and https targets."""
+def test_entry_requires_exactly_one_registered_source(tmp_path: Path) -> None:
+    """A declaration must name exactly one registered source key."""
 
-    request = urllib.request.Request("https://example.test/data.csv")
-    handler = _PublicUrlRedirectHandler()
-
-    with pytest.raises(ResourceLoadError, match="http or https"):
-        handler.redirect_request(
-            request,
-            None,
-            302,
-            "Found",
-            {},
-            "file:///private/resource.csv",
-        )
+    owner = addon(tmp_path)
+    with pytest.raises(ImproperlyConfigured, match="exactly one source"):
+        ResourceEntry.from_declaration(owner, "master", {"model": "base.ImportNote"})
 
 
-def test_fetch_url_caches_by_full_url(
-    tmp_path: Path,
-    settings: Any,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A fetched URL is read from cache on the second request."""
+def test_unregistered_source_key_raises_with_install_hint(tmp_path: Path) -> None:
+    """Materializing an entry whose source kind is not registered fails with a hint."""
 
-    settings.ANGEE_DATA_DIR = tmp_path
-    calls: list[str] = []
-
-    class Response:
-        """Tiny context manager matching urllib response use."""
-
-        def read(self) -> bytes:
-            """Return CSV payload bytes."""
-
-            return b"_xref,username\nu1,alice\n"
-
-        def __enter__(self) -> Response:
-            """Return the response object for context-manager use."""
-
-            return self
-
-        def __exit__(self, *exc: object) -> None:
-            """Close the fake response."""
-
-            return None
-
-    class Opener:
-        """Tiny opener matching urllib's opener surface."""
-
-        def open(self, request: Any) -> Response:
-            """Record the requested URL and return a fake response."""
-
-            calls.append(request.full_url)
-            return Response()
-
-    def build_opener(*handlers: object) -> Opener:
-        """Return an opener with redirect scheme checks installed."""
-
-        assert any(isinstance(handler, _PublicUrlRedirectHandler) for handler in handlers)
-        return Opener()
-
-    monkeypatch.setattr("urllib.request.build_opener", build_opener)
-    # The pre-flight SSRF guard resolves the host; pin it to a public address.
-    monkeypatch.setattr(
-        "angee.integrate.net.socket.getaddrinfo",
-        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
-    )
-
-    first = fetch_url("https://example.test/data.csv")
-    second = fetch_url("https://example.test/data.csv")
-
-    assert first == second
-    assert first.suffix == ".csv"
-    assert first.read_bytes() == b"_xref,username\nu1,alice\n"
-    assert calls == ["https://example.test/data.csv"]
+    unknown = ResourceEntry(addon=addon(tmp_path), tier="master", source_key="ipfs", source_value="x")
+    with pytest.raises(ImproperlyConfigured, match="not registered"):
+        unknown.materialize()
 
 
 def test_resource_unique_constraint_is_addon_xref_pair() -> None:

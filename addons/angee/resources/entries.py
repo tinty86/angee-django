@@ -18,8 +18,8 @@ from django.db.models.utils import make_model_tuple
 from django.utils._os import safe_join
 from import_export.results import Result, RowResult
 
+from angee.resources import sources
 from angee.resources.exceptions import ResourceLoadError
-from angee.resources.fetch import fetch_url
 from angee.resources.tiers import ResourceTier
 
 
@@ -105,22 +105,21 @@ def _resource_entries(
 
 
 def _resource_entry(app_config: AppConfig, declaration: object) -> dict[str, Any]:
-    """Return one normalized resource entry dictionary."""
+    """Return one normalized resource entry dictionary.
+
+    The source key (``path``, or ``url`` once an addon like ``integrate`` registers
+    it) selects a registered :class:`~angee.resources.sources.ResourceSource` that
+    normalizes the value; the rest of the mapping is carried through as entry fields.
+    """
 
     if isinstance(declaration, str | Path):
         return {"path": _relative_app_path(app_config, declaration)}
     if not isinstance(declaration, Mapping):
         raise ImproperlyConfigured(f"{declaration!r} is not a resource path or mapping")
 
-    entry: dict[str, Any] = {str(key): declaration[key] for key in declaration if key not in {"path", "url"}}
-    path = declaration.get("path")
-    url = declaration.get("url")
-    if (path is None) == (url is None):
-        raise ImproperlyConfigured(f"resource entry {dict(declaration)!r} must set exactly one of 'path' or 'url'")
-    if path is None:
-        entry["url"] = str(url)
-    else:
-        entry["path"] = _relative_app_path(app_config, path)
+    source_key = _source_key(declaration)
+    entry: dict[str, Any] = {str(key): declaration[key] for key in declaration if key not in sources.source_keys()}
+    entry[source_key] = sources.get_source(source_key).normalize(app_config, declaration[source_key])
     if "depends_on" in entry:
         entry["depends_on"] = _normalize_depends_on(entry["depends_on"])
     if "adopt" in entry:
@@ -130,6 +129,17 @@ def _resource_entry(app_config: AppConfig, declaration: object) -> dict[str, Any
     if "encoding" in entry:
         entry["encoding"] = str(entry["encoding"] or "utf-8")
     return entry
+
+
+def _source_key(declaration: Mapping[str, Any]) -> str:
+    """Return the single registered source key named by ``declaration``, or raise."""
+
+    present = [key for key in sources.source_keys() if declaration.get(key) is not None]
+    if len(present) != 1:
+        raise ImproperlyConfigured(
+            f"resource entry {dict(declaration)!r} must set exactly one source of {sorted(sources.source_keys())}"
+        )
+    return present[0]
 
 
 def _resource_adopt_value(value: object) -> AdoptDeclaration:
@@ -178,11 +188,11 @@ class ResourceEntry:
     tier: str
     """Normalized resource tier value."""
 
-    path: str | None = None
-    """Addon-relative local file path, when the source is local."""
+    source_key: str = "path"
+    """Registered source key (``path`` for a local file; ``url`` once integrate adds it)."""
 
-    url: str | None = None
-    """Remote file URL, when the source is fetched into the cache."""
+    source_value: str = ""
+    """The source's stored value — an addon-relative path, a URL, etc."""
 
     model: str | None = None
     """Optional fallback model label for every row in the file."""
@@ -210,13 +220,14 @@ class ResourceEntry:
         tier: str,
         declaration: ResourceDeclaration,
     ) -> ResourceEntry:
-        """Return an entry from a normalized addon resource declaration."""
+        """Return an entry from a resource declaration, resolving its source type."""
 
+        source_key = _source_key(declaration)
         return cls(
             addon=addon,
             tier=tier,
-            path=declaration.get("path"),
-            url=declaration.get("url"),
+            source_key=source_key,
+            source_value=str(declaration[source_key]),
             model=declaration.get("model"),
             encoding=declaration.get("encoding", "utf-8"),
             depends_on=declaration.get("depends_on", ()),
@@ -225,9 +236,9 @@ class ResourceEntry:
 
     @property
     def source(self) -> str:
-        """Return this entry's stable URL or addon-relative path."""
+        """Return this entry's stable source value (path, URL, …)."""
 
-        return self.url or self.path or ""
+        return self.source_value
 
     @property
     def display(self) -> str:
@@ -236,14 +247,10 @@ class ResourceEntry:
         return f"{self.addon.name}:{self.source}"
 
     def materialize(self) -> Path:
-        """Return the local file path, fetching remote sources once."""
+        """Return the local file path, materializing the source once."""
 
-        if self._local_path is not None:
-            return self._local_path
-        if self.url is not None:
-            self._local_path = fetch_url(self.url)
-        else:
-            self._local_path = Path(self.addon.path) / (self.path or "")
+        if self._local_path is None:
+            self._local_path = sources.get_source(self.source_key).materialize(self)
         return self._local_path
 
     def read_resource_rows(self) -> tuple[ResourceRow, ...]:
@@ -618,3 +625,16 @@ class LoadResult:
         """Return the number of created or updated rows."""
 
         return self.created + self.updated
+
+
+def _materialize_path(entry: ResourceEntry) -> Path:
+    """Materialize a local ``path`` source to its addon-relative file."""
+
+    return Path(entry.addon.path) / entry.source_value
+
+
+# The built-in local-file source. Networked sources (``url``) are registered by the
+# addon that owns outbound HTTP (``angee.integrate``), so resources stays local-only.
+sources.register_source(
+    sources.ResourceSource(key="path", normalize=_relative_app_path, materialize=_materialize_path)
+)
