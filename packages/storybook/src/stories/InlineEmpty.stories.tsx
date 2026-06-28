@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Compact: Story = {
   render: () => (
-    <div className="max-w-xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <div className="max-w-xl overflow-hidden rounded-6 border border-border-subtle bg-sheet">
       <InlineEmpty icon="info" label="No activity for this record." />
     </div>
   ),

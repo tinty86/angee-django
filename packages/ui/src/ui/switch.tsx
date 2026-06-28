@@ -12,7 +12,7 @@ export const switchVariants = tv({
     root: "relative inline-flex shrink-0 cursor-pointer items-center rounded-full bg-border-strong outline-none transition-colors focus-visible:focus-ring data-[checked]:bg-brand data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",
     thumb:
       "pointer-events-none block translate-x-0.5 rounded-full bg-sheet shadow-sm transition-transform data-[checked]:translate-x-4",
-    row: "flex items-center justify-between gap-3 rounded-md border border-border-subtle bg-sheet px-3 py-2",
+    row: "flex items-center justify-between gap-3 rounded-6 border border-border-subtle bg-sheet px-3 py-2",
     rowText: "min-w-0 space-y-0.5",
     label: "text-13 font-medium text-fg",
     description: "text-2xs text-fg-muted",

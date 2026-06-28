@@ -28,7 +28,7 @@ export const PillTabs: Story = {
 
 export const PageTabs: Story = {
   render: () => (
-    <div className="max-w-3xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <div className="max-w-3xl overflow-hidden rounded-6 border border-border-subtle bg-sheet">
       <SectionTabs items={items} defaultValue="activity" variant="page" />
       <div className="p-4 text-13 text-fg-muted">Selected section content</div>
     </div>

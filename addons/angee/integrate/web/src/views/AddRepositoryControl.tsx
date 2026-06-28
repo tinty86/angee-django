@@ -229,7 +229,7 @@ function RepoCandidateList({
               type="button"
               disabled={isAdded || isAdding}
               onClick={() => onAdd(candidate)}
-              className="flex w-full items-center gap-3 rounded-md border border-border bg-sheet px-3 py-2 text-left outline-none transition-colors hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center gap-3 rounded-6 border border-border bg-sheet px-3 py-2 text-left outline-none transition-colors hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-13 text-fg">{candidate.name}</div>

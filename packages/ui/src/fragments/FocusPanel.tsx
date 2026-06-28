@@ -67,7 +67,7 @@ export function FocusPanel({
   return (
     <Collapsible.Root
       className={cn(
-        "rounded-md border border-border-subtle bg-sheet px-4 py-3 text-fg shadow-xs",
+        "rounded-6 border border-border-subtle bg-sheet px-4 py-3 text-fg shadow-xs",
         className,
       )}
       defaultOpen={defaultOpen}

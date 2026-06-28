@@ -374,9 +374,13 @@
    tuples. The named-area utilities (area-rail, area-topbar, ...) match the
    regions declared in console-grid's grid-template-areas.
    ============================================================================ */
+/* A fixed rail + a content column. The settings sub-nav and the Chatter are no
+   longer grid columns: they ride the content region's Workbench panes
+   (collapsible + resizable + size-persistent), so the shell grid is just the
+   rail and the chrome rows stacked above the content. */
 @utility console-grid {
   display: grid;
-  grid-template-columns: var(--spacing-rail-w) 1fr auto;
+  grid-template-columns: var(--spacing-rail-w) 1fr;
   /* The trailing `auto` status row collapses to zero height when its host is
      empty, so the optional statusline costs nothing for pages that omit it. */
   grid-template-rows:
@@ -386,65 +390,17 @@
     1fr
     auto;
   grid-template-areas:
-    "rail topbar  topbar"
-    "rail crumbs  chatter"
-    "rail control chatter"
-    "rail content chatter"
-    "rail status  status";
-}
-@utility console-grid-no-crumbs {
-  display: grid;
-  grid-template-columns: var(--spacing-rail-w) 1fr auto;
-  grid-template-rows:
-    var(--spacing-topbar-h)
-    auto
-    1fr;
-  grid-template-areas:
-    "rail topbar  topbar"
-    "rail control chatter"
-    "rail content chatter";
-}
-@utility console-grid-no-control {
-  display: grid;
-  grid-template-columns: var(--spacing-rail-w) 1fr auto;
-  grid-template-rows:
-    var(--spacing-topbar-h)
-    var(--spacing-crumbs-h)
-    1fr;
-  grid-template-areas:
-    "rail topbar  topbar"
-    "rail crumbs  chatter"
-    "rail content chatter";
-}
-/* Variant carrying a secondary vertical sub-nav column (`sidebar`) between the
-   app rail and content — used for platform consoles, whose sections render as a
-   settings-style left nav instead of top-bar links. The sidebar spans the
-   crumbs + control + content rows; the topbar and status row still stretch full
-   width, and the control row is preserved so a platform page can still publish a
-   ControlBand. */
-@utility console-grid-sidebar {
-  display: grid;
-  grid-template-columns: var(--spacing-rail-w) auto 1fr auto;
-  grid-template-rows:
-    var(--spacing-topbar-h)
-    var(--spacing-crumbs-h)
-    auto
-    1fr
-    auto;
-  grid-template-areas:
-    "rail topbar  topbar  topbar"
-    "rail sidebar crumbs  chatter"
-    "rail sidebar control chatter"
-    "rail sidebar content chatter"
-    "rail status  status  status";
+    "rail topbar"
+    "rail crumbs"
+    "rail control"
+    "rail content"
+    "rail status";
 }
 @utility area-rail    { grid-area: rail; }
 @utility area-topbar  { grid-area: topbar; }
-@utility area-sidebar { grid-area: sidebar; }
 @utility area-crumbs  { grid-area: crumbs; }
 @utility area-control { grid-area: control; }
 @utility area-content { grid-area: content; }
-@utility area-chatter { grid-area: chatter; }
 @utility area-status  { grid-area: status; }
 
 /* ============================================================================

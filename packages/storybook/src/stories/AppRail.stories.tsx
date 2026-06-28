@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="h-[34rem] overflow-hidden rounded-lg border border-border-subtle bg-canvas">
+    <div className="h-[34rem] overflow-hidden rounded-8 border border-border-subtle bg-canvas">
       <AppRail />
     </div>
   ),

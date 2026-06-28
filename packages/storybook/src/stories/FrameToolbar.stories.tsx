@@ -13,7 +13,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="overflow-hidden rounded-md border border-border-subtle">
+    <div className="overflow-hidden rounded-6 border border-border-subtle">
       <FrameToolbar
         end={
           <>

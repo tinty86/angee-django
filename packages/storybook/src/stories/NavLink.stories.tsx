@@ -39,19 +39,19 @@ export const Inline: Story = {
 
 export const Block: Story = {
   render: () => (
-    <nav className="w-56 rounded-md border border-border-subtle bg-sheet p-1 text-13">
+    <nav className="w-56 rounded-6 border border-border-subtle bg-sheet p-1 text-13">
       <NavLink
         href="#overview"
         variant="block"
         active
-        className="rounded-md bg-brand-soft px-2 py-1.5 text-brand-soft-text"
+        className="rounded-6 bg-brand-soft px-2 py-1.5 text-brand-soft-text"
       >
         Overview
       </NavLink>
       <NavLink
         href="#activity"
         variant="block"
-        className="rounded-md px-2 py-1.5 text-fg-muted hover:bg-inset hover:text-fg"
+        className="rounded-6 px-2 py-1.5 text-fg-muted hover:bg-inset hover:text-fg"
       >
         Activity
       </NavLink>
@@ -59,7 +59,7 @@ export const Block: Story = {
         href="#files"
         variant="block"
         disabled
-        className="rounded-md px-2 py-1.5 text-fg-muted"
+        className="rounded-6 px-2 py-1.5 text-fg-muted"
       >
         Files
       </NavLink>

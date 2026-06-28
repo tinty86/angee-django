@@ -10,7 +10,7 @@ export const collectionHeaderVariants = tv({
     main: "min-w-0 flex-1 space-y-1",
     titleRow: "flex min-w-0 flex-wrap items-center gap-2",
     icon:
-      "grid size-8 shrink-0 place-content-center rounded-md bg-inset text-fg-2 [&_.glyph]:size-4 [&>svg]:size-4",
+      "grid size-8 shrink-0 place-content-center rounded-6 bg-inset text-fg-2 [&_.glyph]:size-4 [&>svg]:size-4",
     title: "min-w-0 truncate text-lg font-semibold leading-tight text-fg",
     description: "max-w-prose text-13 leading-relaxed text-fg-2",
     actions: "flex shrink-0 flex-wrap items-center justify-end gap-2",

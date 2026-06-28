@@ -51,10 +51,10 @@ export const Tones: Story = {
 
 export const Spacing: Story = {
   render: () => (
-    <div className="w-56 rounded-md border border-border-subtle bg-sheet p-2">
+    <div className="w-56 rounded-6 border border-border-subtle bg-sheet p-2">
       <SectionEyebrow spacing="menu">Menu</SectionEyebrow>
-      <div className="rounded-md px-2 py-1.5 text-13 text-fg">Overview</div>
-      <div className="rounded-md px-2 py-1.5 text-13 text-fg-muted">Activity</div>
+      <div className="rounded-6 px-2 py-1.5 text-13 text-fg">Overview</div>
+      <div className="rounded-6 px-2 py-1.5 text-13 text-fg-muted">Activity</div>
     </div>
   ),
 };

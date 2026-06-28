@@ -18,6 +18,7 @@ import {
   GraphView,
   SearchInput,
   Spinner,
+  Workbench,
   type GraphViewEdge,
   type GraphViewEdgeStyle,
   type GraphViewNode,
@@ -124,7 +125,7 @@ export function SchemaPage(): ReactElement {
 
   if (query.fetching && resources.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-sheet px-4 py-3 text-13 text-fg-muted">
+      <div className="flex items-center gap-2 rounded-6 border border-border-subtle bg-sheet px-4 py-3 text-13 text-fg-muted">
         <Spinner size="sm" />
         {t("iam.schema.loading")}
       </div>
@@ -182,24 +183,30 @@ export function SchemaPage(): ReactElement {
   };
 
   return (
-    <div className="grid min-h-[38rem] gap-4 xl:grid-cols-[19rem_minmax(0,1fr)_22rem]">
-      <ResourceTypeList
-        listboxId={resourceListboxId}
-        optionRefs={optionRefs}
-        resources={visibleResources}
-        search={search}
-        selectedResource={selectedResource}
-        onKeyDown={handleResourceListboxKeyDown}
-        onSearchChange={setSearch}
-        onSelect={setSelectedResourceType}
-      />
+    <Workbench
+      autoSave="iam.schema"
+      primarySize={22}
+      secondarySize={26}
+      primary={
+        <ResourceTypeList
+          listboxId={resourceListboxId}
+          optionRefs={optionRefs}
+          resources={visibleResources}
+          search={search}
+          selectedResource={selectedResource}
+          onKeyDown={handleResourceListboxKeyDown}
+          onSearchChange={setSearch}
+          onSelect={setSelectedResourceType}
+        />
+      }
+      secondary={<SchemaInspector resource={selectedResource} />}
+    >
       <SchemaGraphCanvas
         resources={visibleResources}
         selectedResource={selectedResource}
         onSelect={setSelectedResourceType}
       />
-      <SchemaInspector resource={selectedResource} />
-    </div>
+    </Workbench>
   );
 }
 
@@ -224,7 +231,7 @@ function ResourceTypeList({
 }): ReactElement {
   const t = useIamT();
   return (
-    <section className="min-w-0 rounded-md border border-border-subtle bg-sheet">
+    <section className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="border-b border-border-subtle p-3">
         <SearchInput
           value={search}
@@ -235,7 +242,7 @@ function ResourceTypeList({
       </div>
       <div
         id={listboxId}
-        className="max-h-[34rem] overflow-auto p-2"
+        className="min-h-0 flex-1 overflow-auto p-2"
         role="listbox"
         aria-label={t("iam.schema.resourceTypesLabel")}
         onKeyDown={onKeyDown}
@@ -308,14 +315,14 @@ function SchemaGraphCanvas({
 
   if (resources.length === 0) {
     return (
-      <section className="min-h-[34rem] rounded-md border border-border-subtle bg-sheet p-6 text-13 text-fg-muted">
+      <section className="flex h-full min-h-0 p-6 text-13 text-fg-muted">
         {t("iam.schema.noMatches")}
       </section>
     );
   }
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-4 py-3">
         <div className="min-w-0">
           <h2 className="m-0 truncate text-sm font-semibold text-fg">
@@ -336,7 +343,7 @@ function SchemaGraphCanvas({
         edges={graph.edges}
         nodeStyles={SCHEMA_NODE_STYLES}
         edgeStyles={SCHEMA_EDGE_STYLES}
-        className="h-[34rem]"
+        className="min-h-0 flex-1"
         onNodeClick={(node) => {
           if (node.meta?.resource_type) onSelect(node.meta.resource_type);
         }}
@@ -353,14 +360,14 @@ function SchemaInspector({
   const t = useIamT();
   if (!resource) {
     return (
-      <section className="rounded-md border border-border-subtle bg-sheet p-6 text-13 text-fg-muted">
+      <section className="flex h-full min-h-0 p-6 text-13 text-fg-muted">
         {t("iam.schema.noneSelected")}
       </section>
     );
   }
 
   return (
-    <aside className="min-w-0 rounded-md border border-border-subtle bg-sheet">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col">
       <header className="border-b border-border-subtle px-4 py-3">
         <h2 className="m-0 truncate text-sm font-semibold text-fg">
           {resourceLabel(resource.resource_type)}
@@ -369,7 +376,7 @@ function SchemaInspector({
           {resource.resource_type}
         </Code>
       </header>
-      <div className="grid gap-5 p-4">
+      <div className="grid min-h-0 flex-1 content-start gap-5 overflow-auto p-4">
         <RelationList relations={resource.relations} />
         <PermissionList permissions={resource.permissions} />
       </div>
@@ -463,7 +470,7 @@ function InspectorRow({
   title: string;
 }): ReactElement {
   return (
-    <div className="min-w-0 rounded-md border border-border-subtle bg-sheet-2 p-3">
+    <div className="min-w-0 rounded-6 border border-border-subtle bg-sheet-2 p-3">
       <div className="mb-2 min-w-0">
         <div className="truncate text-13 font-medium text-fg">{title}</div>
         <Code truncate tone="muted">
@@ -481,7 +488,7 @@ function EmptyInspectorRow({
   children: ReactNode;
 }): ReactElement {
   return (
-    <div className="rounded-md border border-dashed border-border-subtle bg-inset px-3 py-4 text-center text-13 text-fg-muted">
+    <div className="rounded-6 border border-dashed border-border-subtle bg-inset px-3 py-4 text-center text-13 text-fg-muted">
       {children}
     </div>
   );

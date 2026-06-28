@@ -95,7 +95,7 @@ export function UsernamePasswordForm({
         <p
           id={errorId}
           role="alert"
-          className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-13 text-danger-text"
+          className="rounded-6 border border-danger bg-danger-soft px-3 py-2 text-13 text-danger-text"
         >
           {error}
         </p>

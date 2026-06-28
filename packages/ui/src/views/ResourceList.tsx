@@ -655,7 +655,7 @@ function ResourceListBody<TRow extends Row = Row>({
       {open ? (
         <>
           {listStateOnly}
-          <div className="overflow-hidden rounded-md border border-border bg-sheet">
+          <div className="overflow-hidden rounded-6 border border-border bg-sheet">
             {recordForm}
           </div>
           {recordDeleteDialog}
@@ -1076,7 +1076,7 @@ function RecordSmartButtons({
 }): React.ReactElement | null {
   if (buttons.length === 0) return null;
   return (
-    <div className="inline-flex h-btn-md items-stretch gap-px overflow-hidden rounded-md border border-border-subtle bg-border-subtle">
+    <div className="inline-flex h-btn-md items-stretch gap-px overflow-hidden rounded-6 border border-border-subtle bg-border-subtle">
       {buttons.map((button) => (
         <button
           key={button.id}

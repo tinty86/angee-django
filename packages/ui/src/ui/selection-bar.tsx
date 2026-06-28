@@ -8,7 +8,7 @@ import { CountBadge } from "./badge";
 
 export const selectionBarVariants = tv({
   slots: {
-    root: "inline-flex h-10 max-w-full items-center gap-3 rounded-lg px-3 shadow-popover",
+    root: "inline-flex h-10 max-w-full items-center gap-3 rounded-8 px-3 shadow-popover",
     count:
       "inline-flex shrink-0 items-center gap-1.5 text-13 font-semibold tabular-nums",
     countBadge: "",

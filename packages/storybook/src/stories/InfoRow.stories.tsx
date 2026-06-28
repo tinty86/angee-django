@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Row: Story = {
   render: () => (
-    <dl className="max-w-xl overflow-hidden rounded-md border border-border-subtle bg-sheet py-2">
+    <dl className="max-w-xl overflow-hidden rounded-6 border border-border-subtle bg-sheet py-2">
       <InfoRow
         label="Slug"
         value="q3-review-brief"

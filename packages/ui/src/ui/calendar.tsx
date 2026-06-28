@@ -21,7 +21,7 @@ export const calendarVariants = tv({
     nav:
       "pointer-events-none absolute inset-x-2 top-2 flex items-center justify-between",
     navButton:
-      "pointer-events-auto inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-fg-muted outline-none hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-40",
+      "pointer-events-auto inline-flex size-6 cursor-pointer items-center justify-center rounded-6 text-fg-muted outline-none hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-40",
     chevron: "size-4",
     monthGrid: "w-full border-collapse",
     weekdays: "grid grid-cols-7 gap-0.5 text-2xs tabular-nums",
@@ -31,7 +31,7 @@ export const calendarVariants = tv({
     week: "grid grid-cols-7 gap-0.5",
     day: "grid size-8 place-content-center p-0 text-13 text-fg",
     dayButton:
-      "grid size-8 cursor-pointer place-content-center rounded-md outline-none hover:bg-inset focus-visible:focus-ring",
+      "grid size-8 cursor-pointer place-content-center rounded-6 outline-none hover:bg-inset focus-visible:focus-ring",
     selected:
       "[&_button]:bg-brand [&_button]:font-semibold [&_button]:text-on-brand [&_button]:hover:bg-brand-hover",
     today: "[&_button]:font-semibold [&_button]:text-brand-soft-text",
@@ -45,9 +45,9 @@ export const calendarVariants = tv({
   variants: {
     size: {
       sm: {
-        weekday: "h-[26px]",
-        day: "size-[26px] text-xs",
-        dayButton: "size-[26px]",
+        weekday: "h-btn-sm",
+        day: "size-btn-sm text-xs",
+        dayButton: "size-btn-sm",
       },
       md: "",
     },

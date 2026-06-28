@@ -81,7 +81,7 @@ export function TimelineView<TRow extends Row = Row>({
               {group.rows.map((row, index) => {
                 const id = String(row[rowKey] ?? `entry-${index}`);
                 return renderEntry ? (
-                  <li key={id} className="rounded-md border border-border-subtle bg-sheet-2 p-3">
+                  <li key={id} className="rounded-6 border border-border-subtle bg-sheet-2 p-3">
                     {renderEntry(row)}
                   </li>
                 ) : (

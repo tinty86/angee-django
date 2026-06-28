@@ -15,7 +15,7 @@ export const radioGroupVariants = tv({
   slots: {
     root: "min-w-0",
     item:
-      "flex min-w-0 cursor-pointer items-start gap-2 rounded-md outline-none transition-colors focus-within:focus-ring",
+      "flex min-w-0 cursor-pointer items-start gap-2 rounded-6 outline-none transition-colors focus-within:focus-ring",
     radio:
       "grid size-4 shrink-0 place-content-center rounded-full border border-border-strong bg-sheet text-brand outline-none transition-colors focus-visible:focus-ring data-[checked]:border-brand data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",
     indicator: "size-2 rounded-full bg-brand",
@@ -35,7 +35,7 @@ export const radioGroupVariants = tv({
       },
       card: {
         item:
-          "grid rounded-md border border-border-subtle bg-sheet p-2 hover:border-border-strong",
+          "grid rounded-6 border border-border-subtle bg-sheet p-2 hover:border-border-strong",
       },
     },
     size: {

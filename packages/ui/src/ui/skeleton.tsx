@@ -8,7 +8,7 @@ export const skeletonVariants = tv({
     "relative overflow-hidden bg-inset text-transparent before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-sheet before:to-transparent before:animate-skeleton-shimmer",
   variants: {
     shape: {
-      block: "w-full rounded-md",
+      block: "w-full rounded-6",
       text: "w-full rounded-full",
       avatar: "aspect-square rounded-full",
     },

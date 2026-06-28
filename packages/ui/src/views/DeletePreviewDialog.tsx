@@ -50,7 +50,7 @@ export function DeletePreviewDialog({
           <Dialog.Body className="space-y-4">
             <DeleteSummary preview={preview} overflowCount={overflowCount} />
             {preview.hasBlockers ? (
-              <div className="rounded-md border border-danger/35 bg-danger-soft px-3 py-2 text-13 text-danger-text">
+              <div className="rounded-6 border border-danger/35 bg-danger-soft px-3 py-2 text-13 text-danger-text">
                 {blockedRecordCount > 0
                   ? t("deletePreview.blockedCount", { count: blockedRecordCount })
                   : t("deletePreview.blockedGeneric")}
@@ -94,7 +94,7 @@ function DeleteSummary({
   const t = useBaseT();
   return (
     <div className="grid gap-2 text-13 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <div className="rounded-md border border-border-subtle bg-sheet px-3 py-2">
+      <div className="rounded-6 border border-border-subtle bg-sheet px-3 py-2">
         <div className="text-12 font-medium uppercase text-fg-muted">
           {t("deletePreview.rowsAffected")}
         </div>
@@ -125,7 +125,7 @@ function GroupSummary({
 }): React.ReactElement {
   const count = groups.reduce((total, group) => total + group.count, 0);
   return (
-    <div className="rounded-md border border-border-subtle bg-sheet px-3 py-2">
+    <div className="rounded-6 border border-border-subtle bg-sheet px-3 py-2">
       <div className="text-12 font-medium uppercase text-fg-muted">{title}</div>
       <div className="mt-1 font-semibold text-fg">{count}</div>
       {groups.length > 0 ? (

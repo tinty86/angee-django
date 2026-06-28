@@ -9,12 +9,14 @@ import type {
 import { Glyph } from "../chrome/Glyph";
 import { createVariantContext } from "../lib/variant-context";
 import { tv, type VariantProps } from "../lib/variants";
+import { interactiveSurface } from "./widget-control";
 
 export const collapsibleVariants = tv({
   slots: {
     root: "w-full min-w-0",
-    trigger:
-      "group inline-flex cursor-pointer items-center gap-2 text-left text-13 font-medium leading-5 text-fg outline-none transition-colors hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60",
+    trigger: `group inline-flex cursor-pointer items-center gap-2 text-left text-13 font-medium leading-5 text-fg hover:text-fg ${interactiveSurface(
+      { focus: "visible", disabled: "pseudo" },
+    )}`,
     icon:
       "flex size-4 shrink-0 -rotate-90 items-center justify-center text-fg-muted transition-transform group-data-[panel-open]:rotate-0 [&_.glyph]:size-3.5",
     panel: "overflow-hidden text-13 leading-relaxed text-fg-2",
@@ -33,7 +35,7 @@ export const collapsibleVariants = tv({
         panel: "contents",
       },
       section: {
-        trigger: "h-7 rounded px-2 text-fg-muted hover:bg-inset hover:text-fg",
+        trigger: "h-7 rounded-6 px-2 text-fg-muted hover:bg-inset hover:text-fg",
         panel: "pt-3",
       },
       flush: {

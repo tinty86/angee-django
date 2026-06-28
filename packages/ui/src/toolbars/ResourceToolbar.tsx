@@ -338,7 +338,7 @@ function FilterPicker({
 
   return (
     <PopoverRoot>
-      <div className="inline-flex h-8 min-w-0 max-w-xl flex-1 items-center gap-1 overflow-hidden rounded-md border border-transparent bg-inset pl-2 pr-1 text-13 text-fg focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring">
+      <div className="inline-flex h-8 min-w-0 max-w-xl flex-1 items-center gap-1 overflow-hidden rounded-6 border border-transparent bg-inset pl-2 pr-1 text-13 text-fg focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring">
         <Glyph name="search" className="size-3.5 shrink-0 text-fg-muted" />
         {groups.map((nextGroup, index) => (
           <FacetChip
@@ -394,7 +394,7 @@ function FilterPicker({
           }}
         />
         <PopoverTrigger
-          className="grid size-6 shrink-0 place-content-center rounded text-fg-muted outline-none transition-colors hover:bg-sheet hover:text-fg focus-visible:focus-ring"
+          className="grid size-6 shrink-0 place-content-center rounded-6 text-fg-muted outline-none transition-colors hover:bg-sheet hover:text-fg focus-visible:focus-ring"
           aria-label={
             groupControls
               ? t("dataToolbar.filterGroupFavorites")
@@ -513,7 +513,7 @@ function FilterPicker({
               </PickerButton>
               {favoriteOpen ? (
                 <form
-                  className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs"
+                  className="mt-2 grid gap-2 rounded-6 border border-border-subtle bg-sheet p-2 shadow-xs"
                   onSubmit={(event) => {
                     event.preventDefault();
                     saveFavorite();
@@ -618,7 +618,7 @@ function PickerButton({
     <button
       type="button"
       className={cn(
-        "flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-left text-13 outline-none transition-colors focus-visible:focus-ring",
+        "flex h-7 min-w-0 items-center gap-2 rounded-6 px-2 text-left text-13 outline-none transition-colors focus-visible:focus-ring",
         active
           ? "bg-brand-soft font-medium text-brand-soft-text"
           : muted
@@ -657,7 +657,7 @@ function CustomFilterEditor({
   const operators = operatorsForField(field);
   const needsValue = customFilterNeedsValue(operator);
   return (
-    <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
+    <div className="mt-2 grid gap-2 rounded-6 border border-border-subtle bg-sheet p-2 shadow-xs">
       {fields.length === 0 ? (
         <PickerMuted>{t("dataToolbar.noFilterFields")}</PickerMuted>
       ) : (
@@ -748,7 +748,7 @@ function CustomGroupEditor({
   const t = useBaseT();
   const granularities = option?.granularities ?? DEFAULT_GRANULARITIES;
   return (
-    <div className="mt-2 grid gap-2 rounded-md border border-border-subtle bg-sheet p-2 shadow-xs">
+    <div className="mt-2 grid gap-2 rounded-6 border border-border-subtle bg-sheet p-2 shadow-xs">
       {options.length === 0 ? (
         <PickerMuted>{t("dataToolbar.noGroupFields")}</PickerMuted>
       ) : (
@@ -809,7 +809,7 @@ function GroupOptionButton({
   );
 
   return (
-    <div className={cn("rounded-md", active && "bg-brand-soft")}>
+    <div className={cn("rounded-6", active && "bg-brand-soft")}>
       <PickerButton
         active={active}
         onClick={() => {
@@ -835,7 +835,7 @@ function GroupOptionButton({
               key={granularity}
               type="button"
               className={cn(
-                "h-5 rounded px-1.5 text-2xs font-medium outline-none focus-visible:focus-ring",
+                "h-5 rounded-6 px-1.5 text-2xs font-medium outline-none focus-visible:focus-ring",
                 selectedGranularities.has(granularity)
                   ? "bg-brand text-on-brand"
                   : "text-fg-muted hover:bg-sheet",

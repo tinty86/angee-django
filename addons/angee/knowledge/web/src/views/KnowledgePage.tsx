@@ -3,11 +3,11 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
   EmptyState,
-  Explorer,
   LoadingPanel,
   RelationPicker,
   recordPath,
   TreeView,
+  Workbench,
   WikilinkProvider,
   useConfirm,
   useScopedTreeExplorer,
@@ -41,7 +41,7 @@ import { useKnowledgeT } from "../i18n";
 const KNOWLEDGE_LIST_LIMIT = 500;
 
 /**
- * The knowledge wiki: an `Explorer` of a vault switcher + page-tree navigator,
+ * The knowledge wiki: a `Workbench` of a vault switcher + page-tree navigator,
  * the open page's reader, and a backlinks aside. Vaults/pages load once; the
  * switcher and tree drive client-side scoping, and selecting a page reads it.
  */
@@ -208,10 +208,10 @@ export function KnowledgePage(): ReactElement {
 
   return (
     <WikilinkProvider resolve={resolveWikilink}>
-      <Explorer
+      <Workbench
         autoSave="knowledge.browser"
-        navigator={navigator}
-        aside={<BacklinksPanel backlinks={detail?.backlinks ?? []} onOpen={openPage} />}
+        primary={navigator}
+        secondary={<BacklinksPanel backlinks={detail?.backlinks ?? []} onOpen={openPage} />}
       >
         {openPageId ? (
           detail && detail.id === openPageId ? (
@@ -239,7 +239,7 @@ export function KnowledgePage(): ReactElement {
             description={t("knowledge.page.selectDescription")}
           />
         )}
-      </Explorer>
+      </Workbench>
     </WikilinkProvider>
   );
 }

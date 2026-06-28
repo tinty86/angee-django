@@ -27,7 +27,7 @@ export const dialogVariants = tv({
     title: "text-base font-semibold leading-snug text-fg",
     description: "text-13 leading-relaxed text-fg-2",
     close:
-      "inline-flex size-icon-btn-sm items-center justify-center rounded text-fg-muted outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring [&_svg]:size-3.5",
+      "inline-flex size-icon-btn-sm items-center justify-center rounded-6 text-fg-muted outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring [&_svg]:size-3.5",
   },
   variants: {
     size: {

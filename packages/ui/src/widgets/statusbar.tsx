@@ -22,7 +22,7 @@ function Statusbar({
   const interactive = Boolean(onChange) && !readOnly;
   if (steps.length === 0) {
     return (
-      <span className="inline-flex h-6 items-center rounded bg-inset px-2 text-xs font-medium text-fg-muted">
+      <span className="inline-flex h-6 items-center rounded-6 bg-inset px-2 text-xs font-medium text-fg-muted">
         {normaliseStatus(value)}
       </span>
     );
@@ -108,7 +108,7 @@ function statusStepTone(
   }
   if (completed) {
     return {
-      border: "bg-success-text",
+      border: "bg-success",
       fill: "bg-success-soft text-success-text",
       hover: "group-hover:bg-success-soft",
     };

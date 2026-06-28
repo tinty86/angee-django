@@ -50,7 +50,7 @@ function ThemePickerEdit({
           disabled={readOnly}
           aria-pressed={theme === option.value}
           className={cn(
-            "inline-flex h-8 items-center gap-2 rounded-md border border-border bg-sheet px-2 text-13 text-fg outline-none transition-colors hover:bg-inset focus-visible:focus-ring disabled:cursor-default disabled:opacity-70",
+            "inline-flex h-8 items-center gap-2 rounded-6 border border-border bg-sheet px-2 text-13 text-fg outline-none transition-colors hover:bg-inset focus-visible:focus-ring disabled:cursor-default disabled:opacity-70",
             theme === option.value &&
               "border-brand bg-brand-soft text-brand-soft-text",
           )}

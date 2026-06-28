@@ -7,6 +7,7 @@ import {
   SessionRailItem,
   Skeleton,
   StatusDot,
+  Workbench,
   buttonVariants,
   recordPath,
   statusTone,
@@ -74,28 +75,33 @@ export function AgentSessionsPage(): React.ReactElement {
     return view;
   }, []);
 
-  // Loading: skeleton rail rows beside a skeleton conversation pane.
+  // Loading: skeleton rail rows (in the collapsible primary pane) beside a skeleton
+  // conversation pane.
   if (loading) {
     return (
-      <div className="flex h-full min-h-0">
-        <SessionRail label={t("agents.sessions.railLabel")} busy>
-          {Array.from({ length: 4 }, (_, index) => (
-            <li key={index} className="px-2 py-1.5">
-              <Skeleton className="h-5" />
-            </li>
-          ))}
-        </SessionRail>
+      <Workbench
+        autoSave="agents.sessions"
+        primary={
+          <SessionRail label={t("agents.sessions.railLabel")} busy>
+            {Array.from({ length: 4 }, (_, index) => (
+              <li key={index} className="px-2 py-1.5">
+                <Skeleton className="h-5" />
+              </li>
+            ))}
+          </SessionRail>
+        }
+      >
         <div className="min-w-0 flex-1 p-3">
           <Skeleton className="h-full" />
         </div>
-      </div>
+      </Workbench>
     );
   }
 
-  // Empty: no running agent → the provision call-to-action.
+  // Empty: no running agent → the provision call-to-action (no rail to switch).
   if (agents.length === 0) {
     return (
-      <div className="flex h-full min-h-0">
+      <Workbench>
         <EmptyState
           icon="agent"
           title={t("agents.agent.noRunningAgent")}
@@ -107,38 +113,42 @@ export function AgentSessionsPage(): React.ReactElement {
           }
           fill
         />
-      </div>
+      </Workbench>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <SessionRail
-        label={t("agents.sessions.railLabel")}
-        action={
-          <Link className={buttonVariants({ variant: "ghost", size: "sm" })} to="/agents">
-            <Glyph name="plus" />
-            {t("agents.sessions.new")}
-          </Link>
-        }
-      >
-        {agents.map((agent) => (
-          <SessionRailItem
-            key={agent.id}
-            active={agent.id === selectedId}
-            status={
-              <StatusDot
-                tone={statusTone(agent.runtime_status)}
-                label={t("agents.sessions.running")}
-              />
-            }
-            handle={agent.model?.name ?? undefined}
-            render={<Link to={recordPath(SESSIONS_BASE, agent.id)} />}
-          >
-            {agent.name}
-          </SessionRailItem>
-        ))}
-      </SessionRail>
+    <Workbench
+      autoSave="agents.sessions"
+      primary={
+        <SessionRail
+          label={t("agents.sessions.railLabel")}
+          action={
+            <Link className={buttonVariants({ variant: "ghost", size: "sm" })} to="/agents">
+              <Glyph name="plus" />
+              {t("agents.sessions.new")}
+            </Link>
+          }
+        >
+          {agents.map((agent) => (
+            <SessionRailItem
+              key={agent.id}
+              active={agent.id === selectedId}
+              status={
+                <StatusDot
+                  tone={statusTone(agent.runtime_status)}
+                  label={t("agents.sessions.running")}
+                />
+              }
+              handle={agent.model?.name ?? undefined}
+              render={<Link to={recordPath(SESSIONS_BASE, agent.id)} />}
+            >
+              {agent.name}
+            </SessionRailItem>
+          ))}
+        </SessionRail>
+      }
+    >
       {/* Keep-alive substrate, shared with the side-chatter via `useOpenedAgents` /
           `KeptAliveAgents`: one stable `<AgentChat>` per opened agent, only the selected
           shown (the rest hidden via the bare `hidden` attribute, so their `role="status"`
@@ -153,6 +163,6 @@ export function AgentSessionsPage(): React.ReactElement {
           renderAgent={(id) => <AgentChat agentId={id} view={viewForAgent(id)} />}
         />
       </div>
-    </div>
+    </Workbench>
   );
 }

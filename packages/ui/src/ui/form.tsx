@@ -26,7 +26,7 @@ export const formVariants = tv({
     layout: {
       stack: "grid",
       inline: "flex flex-wrap items-start",
-      panel: "grid rounded-md border border-border-subtle bg-sheet",
+      panel: "grid rounded-6 border border-border-subtle bg-sheet",
       plain: "",
     },
     density: {

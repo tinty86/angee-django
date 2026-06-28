@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 
 import {
   EmptyState,
-  Explorer,
   formatSize,
   Glyph,
   LoadingPanel,
@@ -14,6 +13,7 @@ import {
   SurfaceHeader,
   Tabs,
   TreeView,
+  Workbench,
   useBreadcrumbLeafLabel,
   useConfirm,
   useScopedTreeExplorer,
@@ -55,7 +55,7 @@ import { useStorageT } from "../i18n";
 const STORAGE_LIST_LIMIT = 500;
 
 /**
- * The file browser: an `Explorer` of a folder navigator, the scoped file list
+ * The file browser: a `Workbench` of a folder navigator, the scoped file list
  * or open-file preview, and a detail aside. Drives/folders/files load once; the
  * drive switcher and folder tree drive client-side scoping, and a row click
  * opens the file preview route.
@@ -320,12 +320,12 @@ export function StoragePage(): ReactElement {
   );
 
   return (
-    <Explorer
+    <Workbench
       autoSave={openFile ? "storage.file.preview" : "storage.browser"}
-      navigator={navigator}
-      navigatorSize={openFile ? 28 : 18}
-      asideSize={openFile ? 28 : 26}
-      aside={
+      primary={navigator}
+      primarySize={openFile ? 28 : 18}
+      secondarySize={openFile ? 28 : 26}
+      secondary={
         openFile ? (
           <FileAside
             file={openFile}
@@ -361,7 +361,7 @@ export function StoragePage(): ReactElement {
           canUpload={canUpload}
         />
       )}
-    </Explorer>
+    </Workbench>
   );
 }
 

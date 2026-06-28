@@ -22,7 +22,7 @@ type Story = StoryObj<typeof meta>;
 
 export const StatusBar: Story = {
   render: () => (
-    <Page height="auto" className="w-[48rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page height="auto" className="w-[48rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader density="compact" title="Draft note" />
       <PageBody>
         <p className="text-13 text-fg-muted">

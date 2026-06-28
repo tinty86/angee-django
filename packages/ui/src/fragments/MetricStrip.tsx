@@ -1,9 +1,9 @@
 import * as React from "react";
 
-import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { tv } from "../lib/variants";
 import { Card } from "../ui/card";
+import { IconTile } from "../ui/icon-tile";
 import { SectionEyebrow } from "../ui/section-eyebrow";
 
 export interface MetricTileValue {
@@ -46,8 +46,6 @@ export const metricStripVariants = tv({
     root: "grid gap-3 sm:grid-cols-2 xl:grid-cols-4",
     tile: "min-w-0 px-3 py-2.5 shadow-none",
     header: "flex min-w-0 items-center justify-between gap-2",
-    icon:
-      "grid size-7 shrink-0 place-content-center rounded-md bg-inset text-fg-2 [&_.glyph]:size-3.5 [&>svg]:size-3.5",
     value: "m-0 mt-1 truncate text-13 font-medium text-fg",
     detail: "m-0 mt-1 truncate text-2xs text-fg-muted",
   },
@@ -63,7 +61,7 @@ export const MetricTile = React.forwardRef<HTMLElement, MetricTileProps>(
       <>
         <div className={styles.header()}>
           <SectionEyebrow as="dt">{label}</SectionEyebrow>
-          {icon ? <span className={styles.icon()}>{renderGlyph(icon)}</span> : null}
+          {icon ? <IconTile icon={icon} size="md" /> : null}
         </div>
         <dd className={styles.value()}>{value}</dd>
         {detail ? <p className={styles.detail()}>{detail}</p> : null}

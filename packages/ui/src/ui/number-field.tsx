@@ -12,17 +12,22 @@ import type {
 
 import { Glyph } from "../chrome/Glyph";
 import { useBaseT } from "../i18n";
+import { cn } from "../lib/cn";
 import { tv, type VariantProps } from "../lib/variants";
 import {
   WIDGET_CONTROL_DATA_READONLY_CLASS,
-  WIDGET_CONTROL_READONLY_CLASS,
+  widgetControlSurface,
 } from "./widget-control";
 
 export const numberFieldVariants = tv({
   slots: {
     root: "inline-flex min-w-0 flex-col gap-1",
+    // Box chrome (border / surface / focus / disabled / invalid / read-only) is
+    // composed from `widgetControlSurface` in NumberFieldGroup; the group slot
+    // keeps only layout plus the data-attribute read-only path. `invalid` and
+    // `readOnly` stay as inert pass-through variants so the prop types resolve.
     group:
-      `inline-flex h-input-h w-full min-w-0 items-center overflow-hidden rounded-md border border-border bg-sheet text-fg outline-none transition-colors focus-within:border-border-focus focus-within:focus-ring data-[disabled]:cursor-not-allowed data-[disabled]:bg-inset data-[disabled]:opacity-60 ${WIDGET_CONTROL_DATA_READONLY_CLASS}`,
+      `inline-flex h-input-h w-full min-w-0 items-center overflow-hidden rounded-6 text-fg ${WIDGET_CONTROL_DATA_READONLY_CLASS}`,
     input:
       "min-w-0 flex-1 bg-transparent px-2 text-13 tabular-nums outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed disabled:opacity-60",
     stepper:
@@ -52,15 +57,12 @@ export const numberFieldVariants = tv({
       end: { input: "text-right" },
     },
     invalid: {
-      true: {
-        group:
-          "border-danger focus-within:border-danger focus-within:focus-ring-danger",
-      },
-      false: "",
+      true: {},
+      false: {},
     },
     readOnly: {
-      true: { group: WIDGET_CONTROL_READONLY_CLASS },
-      false: "",
+      true: {},
+      false: {},
     },
   },
   defaultVariants: {
@@ -115,10 +117,17 @@ export const NumberFieldGroup = React.forwardRef<
   ref,
 ) {
   const styles = numberFieldVariants({ invalid, readOnly, size });
+  const groupClass = widgetControlSurface({
+    focus: "within",
+    surface: "sheet",
+    invalid,
+    readOnly,
+    disabled: "data",
+  });
   return (
     <BaseNumberField.Group
       ref={ref}
-      className={styles.group({ className })}
+      className={styles.group({ className: cn(groupClass, className) })}
       {...props}
     />
   );

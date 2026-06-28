@@ -8,12 +8,7 @@ import { cn } from "../lib/cn";
 import { buttonVariants } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tabs } from "../ui/tabs";
-import {
-  CHATTER_MAX_WIDTH,
-  CHATTER_MIN_WIDTH,
-  useChatter,
-  type ChatterTab,
-} from "./chatter-context";
+import { useChatter, type ChatterTab } from "./chatter-context";
 
 export interface ChatterProps {
   tabs?: readonly ChatterTab[];
@@ -29,30 +24,27 @@ export function Chatter({
   className,
 }: ChatterProps): React.ReactElement | null {
   const t = useBaseT();
-  const { activeTab, collapsed, content, setActiveTab, setWidth, width } =
-    useChatter();
+  const { activeTab, content, setActiveTab } = useChatter();
   const resolvedTabs = tabs ?? content?.tabs ?? defaultTabs(children, t);
   const resolvedComposer = composer ?? content?.composer;
   const active = resolvedTabs.some((tab) => tab.id === activeTab)
     ? activeTab
     : resolvedTabs[0]?.id;
 
-  if (collapsed || !active) return null;
+  // Collapse is owned by the enclosing SplitPane (it collapses the pane to zero
+  // width); Chatter only bails when it has no tab to show.
+  if (!active) return null;
 
   return (
     <aside
       aria-label={t("chatter.label")}
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border-subtle bg-sheet",
+        // A pane filler — the SplitPane supplies width, separator, border, and
+        // background; Chatter just lays its tabs + composer out to fill it.
+        "flex h-full min-h-0 w-full flex-col overflow-hidden",
         className,
       )}
-      style={{ width }}
     >
-      <ChatterResizeHandle
-        width={width}
-        setWidth={setWidth}
-        label={t("chatter.resize")}
-      />
       <Tabs
         value={active}
         onValueChange={(value) => setActiveTab(value)}
@@ -91,81 +83,6 @@ export function Chatter({
         </div>
       ) : null}
     </aside>
-  );
-}
-
-/**
- * The chatter's left-edge resize grip. The chatter lives in the layout grid's
- * `auto` column, sized by the aside's `width`, so resizing is just driving that
- * width: a pointer drag (the aside is anchored right, so dragging left widens it)
- * or arrow keys (Shift for a coarser step). The context clamps to the min/max.
- */
-function ChatterResizeHandle({
-  width,
-  setWidth,
-  label,
-}: {
-  width: number;
-  setWidth: (width: number) => void;
-  label: string;
-}): React.ReactElement {
-  // Read the live width through a ref so the drag/keys always start from the
-  // current size without rebuilding the handlers on every resize tick.
-  const widthRef = React.useRef(width);
-  widthRef.current = width;
-
-  const handlePointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return; // primary button only
-      event.preventDefault();
-      const startX = event.clientX;
-      const startWidth = widthRef.current;
-      // Anchored from the drag origin (not the moving handle), so the grip tracks
-      // the cursor exactly even as the aside's left edge shifts under it.
-      const onMove = (move: PointerEvent): void =>
-        setWidth(startWidth + (startX - move.clientX));
-      const onUp = (): void => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-      };
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "col-resize";
-    },
-    [setWidth],
-  );
-
-  const handleKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>): void => {
-      const step = event.shiftKey ? 64 : 16;
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setWidth(widthRef.current + step);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setWidth(widthRef.current - step);
-      }
-    },
-    [setWidth],
-  );
-
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={label}
-      aria-valuenow={width}
-      aria-valuemin={CHATTER_MIN_WIDTH}
-      aria-valuemax={CHATTER_MAX_WIDTH}
-      tabIndex={0}
-      onPointerDown={handlePointerDown}
-      onKeyDown={handleKeyDown}
-      style={{ touchAction: "none" }}
-      className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize bg-transparent outline-none transition-colors hover:bg-brand focus-visible:bg-brand"
-    />
   );
 }
 

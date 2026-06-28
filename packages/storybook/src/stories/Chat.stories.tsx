@@ -33,7 +33,7 @@ export default meta;
 type Story = StoryObj;
 
 const Surface = ({ children }: { children: React.ReactNode }) => (
-  <div className="max-w-md overflow-hidden rounded-md border border-border-subtle bg-sheet">
+  <div className="max-w-md overflow-hidden rounded-6 border border-border-subtle bg-sheet">
     {children}
   </div>
 );
@@ -89,7 +89,7 @@ export const Sessions: Story = {
     // The left rail of the full-page sessions view: a labelled `nav` with a "+ New" header
     // action over a `ul` of `SessionRailItem` rows. The active row carries `aria-current="page"`;
     // the consumer (the agents addon) renders each row through its router `Link` via `render`.
-    <div className="flex h-80 overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <div className="flex h-80 w-60 overflow-hidden rounded-6 border border-border-subtle bg-sheet-2">
       <SessionRail
         label="Running agents"
         action={

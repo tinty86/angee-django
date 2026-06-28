@@ -9,15 +9,22 @@ import type {
 } from "@base-ui/react/toolbar";
 
 import { tv, type VariantProps } from "../lib/variants";
+import { interactiveSurface } from "./widget-control";
 
 export const toolbarVariants = tv({
   slots: {
     root: "flex min-w-0 items-center gap-2",
     group: "flex min-w-0 items-center gap-2",
-    button:
-      "inline-flex items-center justify-center gap-1.5 rounded text-13 font-medium text-fg-2 outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&_.glyph]:size-3.5",
-    input:
-      "h-8 min-w-0 rounded border border-border bg-sheet px-2 text-13 text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-border-focus focus:focus-ring disabled:cursor-not-allowed disabled:opacity-50",
+    // The toolbar button dims at opacity-50 in BOTH the native `:disabled` and
+    // base-ui `data-[disabled]` modes — a deliberate exception to the L0 owner's
+    // single-mode opacity-60 dimming, so those stay local; only the focus
+    // ring / outline / transition fragment is composed from L0.
+    button: `inline-flex items-center justify-center gap-1.5 rounded-6 text-13 font-medium text-fg-2 hover:bg-inset hover:text-fg disabled:cursor-not-allowed disabled:opacity-50 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&_.glyph]:size-3.5 ${interactiveSurface(
+      { focus: "visible" },
+    )}`,
+    input: `h-8 min-w-0 rounded-6 border border-border bg-sheet px-2 text-13 text-fg placeholder:text-fg-subtle focus:border-border-focus disabled:cursor-not-allowed disabled:opacity-50 ${interactiveSurface(
+      { focus: "self" },
+    )}`,
     separator: "shrink-0 bg-border-subtle data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-5 data-[orientation=vertical]:h-5 data-[orientation=vertical]:w-px",
     spacer: "min-w-0 flex-1",
   },
@@ -33,15 +40,15 @@ export const toolbarVariants = tv({
       },
       inline: {
         root:
-          "inline-flex gap-1 rounded-md border border-border-subtle bg-inset px-1 py-0.5",
+          "inline-flex gap-1 rounded-6 border border-border-subtle bg-inset px-1 py-0.5",
         group:
-          "inline-flex gap-1 rounded-md border border-border-subtle bg-inset px-1 py-0.5",
+          "inline-flex gap-1 rounded-6 border border-border-subtle bg-inset px-1 py-0.5",
       },
       floating: {
         root:
-          "inline-flex gap-1 rounded-md border border-border-subtle bg-sheet px-1 py-0.5 text-fg shadow-sm",
+          "inline-flex gap-1 rounded-6 border border-border-subtle bg-sheet px-1 py-0.5 text-fg shadow-sm",
         group:
-          "inline-flex gap-1 rounded-md border border-border-subtle bg-sheet px-1 py-0.5 text-fg shadow-sm",
+          "inline-flex gap-1 rounded-6 border border-border-subtle bg-sheet px-1 py-0.5 text-fg shadow-sm",
       },
       plain: "",
     },

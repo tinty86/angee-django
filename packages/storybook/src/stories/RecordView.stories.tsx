@@ -31,7 +31,7 @@ type Story = StoryObj<typeof meta>;
 export const Detail: Story = {
   render: () => (
     <div className="h-screen bg-inset p-6">
-      <RecordView className="overflow-hidden rounded-md border border-border-subtle">
+      <RecordView className="overflow-hidden rounded-6 border border-border-subtle">
         <RecordView.Header
           crumbs="Notes / Q3 review brief"
           title="Q3 review brief"

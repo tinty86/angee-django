@@ -84,7 +84,7 @@ export const EditAndRead: Story = {
   render: () => (
     <AppRuntimeProvider runtime={{ icons: baseIcons }}>
       <div className="max-w-6xl overflow-x-auto">
-        <div className="min-w-[960px] rounded-md border border-border bg-sheet">
+        <div className="min-w-[960px] rounded-6 border border-border bg-sheet">
           <div className="grid grid-cols-[10rem_minmax(14rem,1fr)_minmax(14rem,1fr)_minmax(14rem,1fr)] gap-3 border-b border-border-subtle px-4 py-2 text-2xs font-semibold uppercase text-fg-muted">
             <span>Kind</span>
             <span>Edit</span>

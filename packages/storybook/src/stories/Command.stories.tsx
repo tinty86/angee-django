@@ -22,7 +22,7 @@ function CommandPaletteDemo() {
   const [selected, setSelected] = React.useState("No command selected");
 
   return (
-    <div className="w-[30rem] overflow-hidden rounded-lg border border-border-subtle bg-popover shadow-popover">
+    <div className="w-[30rem] overflow-hidden rounded-8 border border-border-subtle bg-popover shadow-popover">
       <Command label="Command palette" loop>
         <Command.Search>
           <Command.Input placeholder="Search commands..." />

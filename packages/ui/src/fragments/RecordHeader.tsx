@@ -1,18 +1,16 @@
 import * as React from "react";
 
-import { renderGlyph } from "../chrome/Glyph";
 import { tv, type VariantProps } from "../lib/variants";
 import { type Tone } from "../lib/tones";
 import { PageHeader, type PageHeaderProps } from "../page";
 import { Badge } from "../ui/badge";
+import { IconTile } from "../ui/icon-tile";
 
 export const recordHeaderVariants = tv({
   slots: {
     main: "min-w-0 flex-1 space-y-1",
     crumbs: "text-2xs leading-4 text-fg-muted",
     titleRow: "flex min-w-0 flex-wrap items-center gap-2",
-    icon:
-      "grid size-8 shrink-0 place-content-center rounded-md bg-brand-soft text-brand-soft-text [&_.glyph]:size-4 [&>svg]:size-4",
     title: "min-w-0 truncate text-lg font-semibold leading-tight text-fg",
     meta: "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-13 text-fg-muted",
     description: "max-w-prose text-13 leading-relaxed text-fg-2",
@@ -77,9 +75,7 @@ export const RecordHeader = React.forwardRef<HTMLElement, RecordHeaderProps>(
         <div className={styles.main()}>
           {crumbs ? <div className={styles.crumbs()}>{crumbs}</div> : null}
           <div className={styles.titleRow()}>
-            {icon ? (
-              <span className={styles.icon()}>{renderGlyph(icon)}</span>
-            ) : null}
+            {icon ? <IconTile icon={icon} size="lg" tone="brand" /> : null}
             <Heading className={styles.title()}>{title}</Heading>
             {type ? <Badge>{type}</Badge> : null}
             {status ? (

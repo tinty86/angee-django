@@ -167,7 +167,7 @@ export const spotlightCommands: readonly SpotlightCommand[] = [
 export function LayoutStoryBody() {
   return (
     <div className="grid gap-4 p-6">
-      <section className="rounded-lg border border-border-subtle bg-sheet p-5">
+      <section className="rounded-8 border border-border-subtle bg-sheet p-5">
         <div className="text-15 font-semibold text-fg">Notes workspace</div>
         <p className="mt-1 max-w-2xl text-13 text-fg-muted">
           A dense layout body with enough surface area to verify rail, top bar,
@@ -178,7 +178,7 @@ export function LayoutStoryBody() {
         {["Backlog", "In review", "Published"].map((label) => (
           <div
             key={label}
-            className="min-h-32 rounded-lg border border-border-subtle bg-sheet p-4"
+            className="min-h-32 rounded-8 border border-border-subtle bg-sheet p-4"
           >
             <div className="text-13 font-semibold text-fg">{label}</div>
             <div className="mt-2 h-2 rounded-full bg-inset" />

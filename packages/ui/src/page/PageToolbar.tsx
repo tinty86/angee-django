@@ -1,12 +1,20 @@
 import * as React from "react";
 
+import { barVariants } from "../layouts/bar";
 import { tv, type VariantProps } from "../lib/variants";
 import { Toolbar } from "../ui/toolbar";
 
 export const pageToolbarVariants = tv({
   slots: {
-    root:
-      "flex min-h-control-h shrink-0 items-center gap-3 border-b border-border-subtle bg-sheet px-4 py-2",
+    // The bar recipe owns the toolbar's chrome shell; the start/end flex slots
+    // and the sticky/density knobs below stay toolbar-specific.
+    root: barVariants({
+      height: "controlMin",
+      edge: "bottom",
+      tone: "sheet",
+      pad: "comfortable",
+      gap: 3,
+    }),
     start: "flex min-w-0 flex-1 flex-wrap items-center gap-2",
     end: "flex shrink-0 flex-wrap items-center justify-end gap-2",
   },

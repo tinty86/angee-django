@@ -1,11 +1,11 @@
 import * as React from "react";
 
-import { renderGlyph } from "../chrome/Glyph";
 import { cn } from "../lib/cn";
 import { type Tone } from "../lib/tones";
 import { tv } from "../lib/variants";
 import { Tag } from "../ui/badge";
 import { Card } from "../ui/card";
+import { IconTile } from "../ui/icon-tile";
 
 export interface MetricGridTile {
   detail?: React.ReactNode;
@@ -28,8 +28,6 @@ export const metricGridVariants = tv({
     root: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
     tile: "px-4 py-3 shadow-none",
     header: "mb-3 flex min-w-0 items-center justify-between gap-2",
-    icon:
-      "grid size-7 shrink-0 place-content-center rounded-md bg-inset text-fg-2 [&_.glyph]:size-3.5 [&>svg]:size-3.5",
     value: "m-0 text-2xl font-semibold tabular-nums text-fg",
     detail: "m-0 mt-1 truncate text-2xs text-fg-muted",
   },
@@ -54,9 +52,7 @@ export const MetricGrid = React.forwardRef<HTMLDListElement, MetricGridProps>(
                   <Tag tone={metric.tone ?? "neutral"}>{metric.label}</Tag>
                 </dt>
                 {metric.icon ? (
-                  <span className={styles.icon()}>
-                    {renderGlyph(metric.icon)}
-                  </span>
+                  <IconTile icon={metric.icon} size="md" />
                 ) : null}
               </div>
               <dd className={styles.value()}>{metric.value}</dd>

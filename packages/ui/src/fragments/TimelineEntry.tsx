@@ -24,7 +24,7 @@ export function TimelineEntry({
   return (
     <li
       className={cn(
-        "rounded-md border border-border-subtle bg-sheet-2 p-3",
+        "rounded-6 border border-border-subtle bg-sheet-2 p-3",
         className,
       )}
       {...props}

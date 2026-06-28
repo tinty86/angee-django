@@ -25,7 +25,7 @@ type Story = StoryObj<typeof meta>;
 export const Playground: Story = {
   render: ({ variant }) => (
     <Accordion
-      className="mx-auto max-w-xl rounded-md border border-border-subtle bg-sheet px-4"
+      className="mx-auto max-w-xl rounded-6 border border-border-subtle bg-sheet px-4"
       defaultValue={["details"]}
       variant={variant}
     >
@@ -59,7 +59,7 @@ export const Playground: Story = {
 export const MultipleOpen: Story = {
   render: () => (
     <Accordion
-      className="mx-auto max-w-xl rounded-md border border-border-subtle bg-sheet px-4"
+      className="mx-auto max-w-xl rounded-6 border border-border-subtle bg-sheet px-4"
       defaultValue={["metadata", "permissions"]}
       multiple
     >

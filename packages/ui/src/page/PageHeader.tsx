@@ -1,15 +1,25 @@
 import * as React from "react";
 
+import { barVariants } from "../layouts/bar";
 import { tv, type VariantProps } from "../lib/variants";
+import { textRoleVariants } from "../ui/text";
 
 export const pageHeaderVariants = tv({
   slots: {
-    root:
-      "flex shrink-0 items-start justify-between gap-4 border-b border-border-subtle bg-sheet",
+    // The bar recipe owns the header's chrome shell; the per-density padding,
+    // the title/description text roles, and the structural slots stay header-
+    // specific.
+    root: barVariants({
+      edge: "bottom",
+      tone: "sheet",
+      gap: 4,
+      align: "start",
+      justify: "between",
+    }),
     main: "min-w-0 flex-1",
     crumbs: "mb-1 flex min-w-0 items-center gap-1 text-13 text-fg-muted",
     eyebrow: "mb-1 text-2xs font-semibold uppercase text-fg-muted",
-    title: "truncate text-15 font-semibold leading-6 text-fg",
+    title: `${textRoleVariants({ role: "title", truncate: true })} leading-6`,
     description: "mt-1 max-w-prose text-13 leading-5 text-fg-2",
     actions: "flex shrink-0 flex-wrap items-center justify-end gap-2",
   },

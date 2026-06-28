@@ -22,9 +22,12 @@ export {
   SplitPaneHandle,
   SplitPanes,
   splitPanesVariants,
+  useCollapsiblePane,
+  type CollapsiblePane,
   type SplitPaneHandleProps,
   type SplitPaneProps,
   type SplitPanesProps,
+  type UseCollapsiblePaneOptions,
 } from "./SplitPanes";
 export {
   SectionNav,

@@ -5,9 +5,11 @@ import {
 } from "@base-ui/react/toggle";
 
 import { tv, type VariantProps } from "../lib/variants";
+import { interactiveSurfaceVariants } from "./widget-control";
 
 export const toggleVariants = tv({
-  base: "inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded text-13 font-medium outline-none transition-colors focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60 data-[pressed]:text-fg [&_.glyph]:size-3.5",
+  extend: interactiveSurfaceVariants,
+  base: "inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-6 text-13 font-medium data-[pressed]:text-fg [&_.glyph]:size-3.5",
   variants: {
     variant: {
       default:
@@ -28,6 +30,8 @@ export const toggleVariants = tv({
   defaultVariants: {
     variant: "default",
     size: "md",
+    focus: "visible",
+    disabled: "pseudo",
   },
 });
 
@@ -37,7 +41,7 @@ export type ToggleVariant = NonNullable<ToggleRecipeProps["variant"]>;
 export type ToggleSize = NonNullable<ToggleRecipeProps["size"]>;
 
 export type ToggleProps = Omit<BaseToggleProps<string>, "className"> &
-  ToggleRecipeProps & {
+  Pick<ToggleRecipeProps, "variant" | "size"> & {
     className?: string;
   };
 

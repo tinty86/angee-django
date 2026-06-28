@@ -26,7 +26,7 @@ type Story = StoryObj<typeof meta>;
 export const Playground: Story = {
   render: ({ defaultOpen, variant }) => (
     <Collapsible
-      className="mx-auto max-w-xl rounded-md border border-border-subtle bg-sheet p-4"
+      className="mx-auto max-w-xl rounded-6 border border-border-subtle bg-sheet p-4"
       defaultOpen={defaultOpen}
       variant={variant}
     >
@@ -45,7 +45,7 @@ export const Playground: Story = {
 export const SectionHeader: Story = {
   render: () => (
     <Collapsible
-      className="mx-auto max-w-xl rounded-md border border-border-subtle bg-sheet p-3"
+      className="mx-auto max-w-xl rounded-6 border border-border-subtle bg-sheet p-3"
       defaultOpen
       variant="section"
     >

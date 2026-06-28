@@ -77,7 +77,7 @@ export function AggregatePanel({
   return (
     <div
       className={[
-        "flex flex-col gap-2 rounded-md border border-border bg-sheet p-3",
+        "flex flex-col gap-2 rounded-6 border border-border bg-sheet p-3",
         className,
       ]
         .filter(Boolean)

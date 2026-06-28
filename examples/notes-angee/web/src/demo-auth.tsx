@@ -24,7 +24,7 @@ export function DemoForgotPasswordHint(): ReactElement {
       <div
         id="notes-demo-logins"
         role="tooltip"
-        className="invisible pointer-events-none absolute left-1/2 top-full z-tooltip mt-2 -translate-x-1/2 rounded-md border border-border-subtle bg-sheet px-3 py-3 text-fg opacity-0 shadow-xl transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+        className="invisible pointer-events-none absolute left-1/2 top-full z-tooltip mt-2 -translate-x-1/2 rounded-6 border border-border-subtle bg-sheet px-3 py-3 text-fg opacity-0 shadow-xl transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
       >
         <DemoLoginTooltip />
       </div>
@@ -42,7 +42,7 @@ function DemoLoginTooltip(): ReactElement {
         {DEMO_LOGINS.map((login) => (
           <li
             key={login.username}
-            className="rounded-md bg-inset px-2.5 py-1.5 font-mono text-fg tabular-nums"
+            className="rounded-6 bg-inset px-2.5 py-1.5 font-mono text-fg tabular-nums"
           >
             {login.username}/{login.password}
           </li>

@@ -142,7 +142,7 @@ export function AgentChat({
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
                 aria-label={t("agents.chat.conversationOptions")}
-                className="inline-flex size-7 items-center justify-center rounded text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:focus-ring [&_.glyph]:size-4"
+                className="inline-flex size-7 items-center justify-center rounded-6 text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:focus-ring [&_.glyph]:size-4"
               >
                 <Glyph name="more-horizontal" />
               </DropdownMenu.Trigger>
@@ -227,7 +227,7 @@ export function AgentChat({
                     {imageSupported ? (
                       <ComposerPrimitive.AddAttachment
                         aria-label={t("agents.chat.attach")}
-                        className="inline-flex h-6 items-center rounded px-2 text-fg-muted hover:bg-inset disabled:text-fg-subtle"
+                        className="inline-flex h-6 items-center rounded-6 px-2 text-fg-muted hover:bg-inset disabled:text-fg-subtle"
                       >
                         <Glyph name="attachment" className="h-4 w-4" />
                       </ComposerPrimitive.AddAttachment>
@@ -268,7 +268,7 @@ function UserMessage(): React.ReactElement {
 }
 
 const UserImagePart: ImageMessagePartComponent = ({ image, filename }) => (
-  <img src={image} alt={filename ?? ""} className="max-h-40 rounded-md" />
+  <img src={image} alt={filename ?? ""} className="max-h-40 rounded-6" />
 );
 
 /** A pending composer image attachment. `SimpleImageAttachmentAdapter` only fills the data-URL
@@ -285,7 +285,7 @@ function ComposerImageAttachment(): React.ReactElement {
     <AttachmentPrimitive.Root className="contents">
       {previewUrl !== null ? (
         <div className="relative">
-          <img src={previewUrl} alt={name} title={name} className="h-12 w-12 rounded-md object-cover" />
+          <img src={previewUrl} alt={name} title={name} className="h-12 w-12 rounded-6 object-cover" />
           <AttachmentPrimitive.Remove
             aria-label={t("agents.chat.removeAttachment")}
             className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full border border-border-subtle bg-sheet-2 text-fg-muted shadow-xs hover:text-fg"
@@ -415,7 +415,7 @@ function AssistantMessage(): React.ReactElement {
         <ActionBarPrimitive.Root>
           <ActionBarPrimitive.Copy
             aria-label={t("agents.chat.copy")}
-            className="inline-flex h-6 items-center gap-1 rounded px-2 text-2xs text-fg-muted hover:bg-inset"
+            className="inline-flex h-6 items-center gap-1 rounded-6 px-2 text-2xs text-fg-muted hover:bg-inset"
           >
             <Glyph name="copy" className="h-3 w-3" />
           </ActionBarPrimitive.Copy>

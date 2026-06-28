@@ -30,7 +30,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Horizontal: Story = {
   render: () => (
-    <Page height="auto" className="w-[52rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page height="auto" className="w-[52rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader density="compact" title="Patient record" />
       <PageToolbar start={<SectionNav items={items} />} />
       <PageBody>
@@ -44,7 +44,7 @@ export const Horizontal: Story = {
 
 export const Vertical: Story = {
   render: () => (
-    <div className="w-64 rounded-md border border-border-subtle bg-sheet p-3">
+    <div className="w-64 rounded-6 border border-border-subtle bg-sheet p-3">
       <SectionNav
         orientation="vertical"
         items={[

@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "../lib/cn";
+import { toneText } from "../lib/tones";
 import { tv, type VariantProps } from "../lib/variants";
 
 export const labelVariants = tv({
@@ -18,7 +19,7 @@ export const labelVariants = tv({
     tone: {
       default: "text-fg",
       muted: "text-fg-muted",
-      danger: "text-danger-text",
+      danger: toneText("danger"),
     },
     weight: {
       regular: "font-normal",
@@ -115,7 +116,7 @@ export function RequiredMark({
 }: RequiredMarkProps): React.ReactElement | null {
   if (!required) return null;
   return (
-    <span className={cn("text-danger-text", className)} aria-hidden="true">
+    <span className={cn(toneText("danger"), className)} aria-hidden="true">
       {indicator}
     </span>
   );

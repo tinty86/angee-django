@@ -4,6 +4,7 @@ import { cn } from "../lib/cn";
 import { type Tone } from "../lib/tones";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
+import { textRoleVariants } from "../ui/text";
 
 export interface ListPanelProps {
   title: React.ReactNode;
@@ -43,7 +44,9 @@ export function ListPanel({
       <section>
         <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <div className="min-w-0">
-            <h2 className="truncate text-15 font-semibold text-fg">{title}</h2>
+            <h2 className={textRoleVariants({ role: "title", truncate: true })}>
+              {title}
+            </h2>
             {summary ? (
               <p className="mt-0.5 text-2xs text-fg-muted">{summary}</p>
             ) : null}

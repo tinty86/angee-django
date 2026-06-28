@@ -116,7 +116,7 @@ export function AppChooser({
             className="w-[min(45rem,calc(100vw-2rem))] p-5"
           >
             <div className="mb-4 flex items-center gap-3">
-              <span className="grid size-7 shrink-0 place-content-center rounded-md bg-brand-soft text-brand-soft-text">
+              <span className="grid size-7 shrink-0 place-content-center rounded-6 bg-brand-soft text-brand-soft-text">
                 <AngeeMark size={18} aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
@@ -141,7 +141,7 @@ export function AppChooser({
               />
             </div>
 
-            <label className="mb-4 flex h-10 items-center gap-2 rounded-lg border border-transparent bg-inset px-4 focus-within:border-border-focus focus-within:focus-ring">
+            <label className="mb-4 flex h-10 items-center gap-2 rounded-8 border border-transparent bg-inset px-4 focus-within:border-border-focus focus-within:focus-ring">
               <Glyph name="search" className="shrink-0 text-fg-muted" />
               <PopoverInput
                 type="search"
@@ -256,7 +256,7 @@ function AppChooserTile({
           <span className="text-base font-semibold">{item.label[0]}</span>
         )}
         {typeof item.badge === "number" && item.badge > 0 ? (
-          <span className="absolute right-0 top-0 grid min-w-4 place-content-center rounded-full border-2 border-sheet bg-danger-text px-1 text-2xs font-semibold text-on-brand">
+          <span className="absolute right-0 top-0 grid min-w-4 place-content-center rounded-full border-2 border-sheet bg-danger px-1 text-2xs font-semibold text-on-brand">
             {item.badge}
           </span>
         ) : null}
@@ -265,7 +265,7 @@ function AppChooserTile({
         {item.label}
       </span>
       {item.description ? (
-        <span className="line-clamp-2 text-center text-[11px] leading-[1.125rem] text-fg-muted">
+        <span className="line-clamp-2 text-center text-2xs leading-[1.125rem] text-fg-muted">
           {item.description}
         </span>
       ) : null}
@@ -273,7 +273,7 @@ function AppChooserTile({
   );
 
   const className = cn(
-    "flex min-h-32 flex-col items-center gap-2 rounded-lg px-3 py-4 text-fg no-underline outline-none transition-colors hover:bg-inset focus-visible:focus-ring",
+    "flex min-h-32 flex-col items-center gap-2 rounded-8 px-3 py-4 text-fg no-underline outline-none transition-colors hover:bg-inset focus-visible:focus-ring",
     disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
   );
 

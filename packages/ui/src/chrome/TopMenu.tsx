@@ -29,7 +29,7 @@ export interface TopMenuTab {
 }
 
 const tabClass =
-  "inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring aria-selected:bg-rail-hi aria-selected:text-on-rail-hi";
+  "inline-flex h-8 min-w-0 items-center gap-2 rounded-6 px-3 text-13 font-medium text-on-rail-mut outline-none transition-colors hover:bg-rail-hi hover:text-on-rail-hi focus-visible:focus-ring aria-selected:bg-rail-hi aria-selected:text-on-rail-hi";
 
 export interface TopMenuProps {
   className?: string;
@@ -204,11 +204,11 @@ function TopMenuPanelLink({
       to={target}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-auto items-start gap-3 rounded-md px-3 py-2 text-fg no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
+        "flex h-auto items-start gap-3 rounded-6 px-3 py-2 text-fg no-underline outline-none transition-colors hover:bg-inset hover:text-fg focus-visible:focus-ring",
         active && "bg-brand-soft text-brand-soft-text hover:bg-brand-soft",
       )}
     >
-      <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded bg-brand-soft text-brand-soft-text">
+      <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-6 bg-brand-soft text-brand-soft-text">
         <Glyph name={item.iconName} />
       </span>
       <span className="min-w-0">

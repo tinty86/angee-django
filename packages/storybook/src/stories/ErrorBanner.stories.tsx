@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const Banner: Story = {
   render: () => (
-    <div className="max-w-3xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <div className="max-w-3xl overflow-hidden rounded-6 border border-border-subtle bg-sheet">
       <ErrorBanner
         description="The import could not be completed because one row failed validation."
         onDismiss={() => undefined}

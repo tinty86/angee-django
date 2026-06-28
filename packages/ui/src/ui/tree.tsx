@@ -61,7 +61,7 @@ export type FolderTreeProps = TreeProps;
 
 /** The tree-row recipe: base row + the `active`/`dropTarget` highlight states. */
 export const treeVariants = tv({
-  base: "flex items-center gap-2 h-7 px-2 rounded-md text-13 text-fg-2 cursor-pointer transition-colors hover:bg-inset outline-none focus-visible:focus-ring [&_.glyph]:size-3.5 [&_.glyph]:text-fg-subtle",
+  base: "flex items-center gap-2 h-7 px-2 rounded-6 text-13 text-fg-2 cursor-pointer transition-colors hover:bg-inset outline-none focus-visible:focus-ring [&_.glyph]:size-3.5 [&_.glyph]:text-fg-subtle",
   variants: {
     active: {
       true: "bg-brand-soft text-brand-soft-text font-medium [&_.glyph]:text-brand-soft-text",

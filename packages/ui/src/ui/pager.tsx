@@ -43,7 +43,7 @@ export const pagerVariants = tv({
   variants: {
     label: {
       button:
-        "h-6 rounded px-1.5 text-13 text-fg outline-none hover:bg-inset focus-visible:focus-ring",
+        "h-6 rounded-6 px-1.5 text-13 text-fg outline-none hover:bg-inset focus-visible:focus-ring",
       span: "",
     },
   },
@@ -218,7 +218,7 @@ function PageSizePicker({
                   key={value}
                   type="button"
                   className={cn(
-                    "h-7 rounded-md px-2 text-13 tabular-nums outline-none transition-colors focus-visible:focus-ring",
+                    "h-7 rounded-6 px-2 text-13 tabular-nums outline-none transition-colors focus-visible:focus-ring",
                     value === pageSize
                       ? "bg-brand-soft font-medium text-brand-soft-text"
                       : "text-fg hover:bg-inset",

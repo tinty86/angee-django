@@ -6,7 +6,6 @@ export {
   type ControlBandProps,
   type ControlBandProviderProps,
 } from "./ControlBand";
-export { Explorer, type ExplorerProps } from "./Explorer";
 export { HeroPage, type HeroPageProps } from "./HeroPage";
 export { PublicLayout, type PublicLayoutProps } from "./PublicLayout";
 export {
@@ -19,6 +18,7 @@ export {
   type RecordViewToolbarProps,
 } from "./RecordView";
 export { SplitView, type SplitViewProps } from "./SplitView";
+export { Workbench, type WorkbenchProps } from "./Workbench";
 export {
   Statusline,
   StatuslineProvider,

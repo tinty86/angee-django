@@ -15,13 +15,13 @@ export const alertVariants = tv({
     description: "leading-snug",
     actions: "ml-auto flex shrink-0 items-center gap-2",
     dismiss:
-      "inline-flex size-icon-btn-sm items-center justify-center rounded text-current outline-none hover:bg-inset/50 focus-visible:focus-ring [&_.glyph]:size-3.5",
+      "inline-flex size-icon-btn-sm items-center justify-center rounded-6 text-current outline-none hover:bg-inset/50 focus-visible:focus-ring [&_.glyph]:size-3.5",
   },
   variants: {
     // `format` is the layout axis (full card vs edge-to-edge banner); the color
     // fill is the orthogonal `variant` applied via the tone matrix.
     format: {
-      alert: { root: "rounded-md px-4 py-3" },
+      alert: { root: "rounded-6 px-4 py-3" },
       banner: { root: "rounded-none border-x-0 border-t-0 px-6 py-2" },
     },
   },

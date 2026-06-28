@@ -223,7 +223,7 @@ function FollowRecordLink({ href }: { href: string }): ReactElement {
       onNavigate={(to) => void navigate({ to })}
       aria-label={t("relation.follow")}
       variant="muted"
-      className="inline-flex size-icon-btn-md shrink-0 items-center justify-center rounded-md transition-colors hover:bg-inset focus-visible:focus-ring [&_.glyph]:size-4"
+      className="inline-flex size-icon-btn-md shrink-0 items-center justify-center rounded-6 transition-colors hover:bg-inset focus-visible:focus-ring [&_.glyph]:size-4"
     >
       <Glyph decorative name="arrow-up-right" />
     </TextLink>

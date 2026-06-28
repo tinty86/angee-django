@@ -26,7 +26,7 @@ type Story = StoryObj<typeof meta>;
 
 export const ScrollRegion: Story = {
   render: () => (
-    <Page className="h-[28rem] w-[52rem] overflow-hidden rounded-md border border-border-subtle">
+    <Page className="h-[28rem] w-[52rem] overflow-hidden rounded-6 border border-border-subtle">
       <PageHeader density="compact" title="Activity" />
       <PageBody gutter="none">
         <Table>

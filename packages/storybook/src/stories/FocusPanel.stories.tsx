@@ -25,7 +25,7 @@ export const Centered: Story = {
         subtitle="Connect a resource source before importing records."
         title="Workspace setup"
       >
-        <div className="rounded-md bg-inset px-4 py-3 text-13 text-fg-2">
+        <div className="rounded-6 bg-inset px-4 py-3 text-13 text-fg-2">
           No sources are configured for this workspace.
         </div>
       </FocusPanel>

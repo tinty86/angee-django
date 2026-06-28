@@ -11,7 +11,7 @@ export function DeletePreviewTree({
   nodes,
 }: DeletePreviewTreeProps): React.ReactElement {
   return (
-    <div className="max-h-[22rem] overflow-auto rounded-md border border-border-subtle bg-sheet-2 p-2">
+    <div className="max-h-[22rem] overflow-auto rounded-6 border border-border-subtle bg-sheet-2 p-2">
       <ul className="space-y-1">
         {nodes.map((node, index) => (
           <DeletePreviewTreeItem
@@ -49,13 +49,13 @@ function DeletePreviewTreeItem({
   return (
     <li>
       <div
-        className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-13"
+        className="flex min-w-0 items-center gap-1 rounded-6 px-1 py-0.5 text-13"
         style={{ paddingLeft: `${depth * 1.125 + 0.25}rem` }}
       >
         {hasChildren ? (
           <button
             type="button"
-            className="grid size-5 shrink-0 place-content-center rounded text-fg-muted outline-none hover:bg-inset hover:text-fg focus-visible:focus-ring"
+            className="grid size-5 shrink-0 place-content-center rounded-6 text-fg-muted outline-none hover:bg-inset hover:text-fg focus-visible:focus-ring"
             aria-expanded={expanded}
             aria-labelledby={labelId}
             onClick={() => setExpanded((current) => !current)}

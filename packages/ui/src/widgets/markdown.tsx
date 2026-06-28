@@ -48,8 +48,8 @@ const PROSE_CLASS = cn(
   "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
   "[&_li]:my-1 [&_li>p]:my-0",
   "[&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border-subtle [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted",
-  "[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-inset [&_pre]:p-3",
-  "[&_code]:rounded [&_code]:bg-inset [&_code]:px-1 [&_code]:font-mono [&_code]:text-2xs",
+  "[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-6 [&_pre]:bg-inset [&_pre]:p-3",
+  "[&_code]:rounded-6 [&_code]:bg-inset [&_code]:px-1 [&_code]:font-mono [&_code]:text-2xs",
   "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
   "[&_a]:text-link [&_a]:underline",
   "[&_table]:my-3 [&_table]:w-full [&_table]:border-collapse",
@@ -103,6 +103,7 @@ function MarkdownEdit({
       className={widgetControlSurface({
         focus: "within",
         readOnly,
+        disabled: "none",
         className: "w-full overflow-hidden",
       })}
     >
@@ -351,7 +352,7 @@ function wikilinkComponents(resolve: WikilinkResolver): Components {
           disabled={!onActivate}
           onClick={onActivate}
           className={cn(
-            "rounded-sm font-medium underline decoration-dotted underline-offset-2 outline-none focus-visible:focus-ring",
+            "rounded-4 font-medium underline decoration-dotted underline-offset-2 outline-none focus-visible:focus-ring",
             broken
               ? "text-danger-text/80"
               : "text-link hover:bg-brand-soft",

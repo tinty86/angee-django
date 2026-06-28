@@ -35,7 +35,7 @@ export interface RelationFieldProps {
 }
 
 const TRIGGER_CLASS =
-  "flex h-9 w-full items-center gap-2 rounded-md border border-border bg-sheet px-3 " +
+  "flex h-9 w-full items-center gap-2 rounded-6 border border-border bg-sheet px-3 " +
   "text-left text-13 text-fg outline-none transition-colors hover:border-border-strong " +
   "focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -139,7 +139,7 @@ export function RelationField({
                       onCreate?.(query.trim());
                       dismiss();
                     }}
-                    className="text-brand-text"
+                    className="text-brand-soft-text"
                   >
                     <Glyph decorative name="plus" />
                     <span className="min-w-0 flex-1 truncate">

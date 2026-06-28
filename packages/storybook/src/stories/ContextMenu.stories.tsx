@@ -24,7 +24,7 @@ function ContextMenuDemo() {
 
   return (
     <ContextMenu.Root>
-      <ContextMenu.Trigger className="flex h-52 w-80 items-center justify-center rounded-lg border border-dashed border-border-subtle bg-sheet p-6 text-center text-13 text-fg-muted">
+      <ContextMenu.Trigger className="flex h-52 w-80 items-center justify-center rounded-8 border border-dashed border-border-subtle bg-sheet p-6 text-center text-13 text-fg-muted">
         Right-click this workspace card.
       </ContextMenu.Trigger>
       <ContextMenu.Portal>

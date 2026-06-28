@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { toneFill } from "../lib/tones";
+import { toneFill, toneText } from "../lib/tones";
 import { tv, type VariantProps } from "../lib/variants";
 
 // Inline code is text-only, so its `tone` is a small local text-color map (not
@@ -8,15 +8,15 @@ import { tv, type VariantProps } from "../lib/variants";
 // orthogonal surface axis (renamed from `surface` so the word stays reserved
 // for the `variant="surface"` fill elsewhere).
 export const codeVariants = tv({
-  base: "inline-flex max-w-full items-center rounded font-mono leading-none",
+  base: "inline-flex max-w-full items-center rounded-6 font-mono leading-none",
   variants: {
     tone: {
       neutral: "text-fg",
       muted: "text-fg-muted",
-      success: "text-success-text",
-      warning: "text-warning-text",
-      danger: "text-danger-text",
-      info: "text-info-text",
+      success: toneText("success"),
+      warning: toneText("warning"),
+      danger: toneText("danger"),
+      info: toneText("info"),
     },
     box: {
       none: "",
@@ -41,7 +41,7 @@ export const codeVariants = tv({
 });
 
 export const codeBlockVariants = tv({
-  base: "block max-w-full overflow-x-auto rounded-md border border-border-subtle bg-inset p-3 font-mono text-xs leading-5 text-fg",
+  base: "block max-w-full overflow-x-auto rounded-6 border border-border-subtle bg-inset p-3 font-mono text-xs leading-5 text-fg",
   variants: {
     wrap: {
       true: "whitespace-pre-wrap break-words",

@@ -5,7 +5,7 @@ import { useRender, type UseRenderRenderProp } from "../lib/slot";
 import { tv, type VariantProps } from "../lib/variants";
 
 export const cardVariants = tv({
-  base: "rounded-md border bg-sheet text-fg shadow-xs transition-colors",
+  base: "rounded-6 border bg-sheet text-fg shadow-xs transition-colors",
   variants: {
     variant: {
       default: "border-border-subtle",

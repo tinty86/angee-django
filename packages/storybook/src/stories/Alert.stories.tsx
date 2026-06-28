@@ -73,7 +73,7 @@ export const WithActions: Story = {
 
 export const BannerSurface: Story = {
   render: () => (
-    <div className="max-w-3xl overflow-hidden rounded-md border border-border-subtle bg-sheet">
+    <div className="max-w-3xl overflow-hidden rounded-6 border border-border-subtle bg-sheet">
       <Banner tone="success" title="Workspace synced" onDismiss={() => undefined}>
         All records are current.
       </Banner>
