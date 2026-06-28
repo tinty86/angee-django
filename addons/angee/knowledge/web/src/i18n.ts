@@ -10,6 +10,7 @@ export const enKnowledgeMessages: Record<string, string> = {
   "knowledge.vaults.unavailableTitle": "Knowledge unavailable",
   "knowledge.vaults.emptyTitle": "No vaults",
   "knowledge.vaults.emptyDescription": "No vaults are available to you.",
+  "knowledge.nav.label": "Pages",
   "knowledge.vault.label": "Vault",
   "knowledge.vault.placeholder": "Select a vault",
   "knowledge.vault.searchPlaceholder": "Search vaults…",

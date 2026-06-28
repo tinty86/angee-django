@@ -270,7 +270,11 @@ function ResourceTypeList({
 }): ReactElement {
   const t = useIamT();
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col">
+    <section
+      role="navigation"
+      aria-label={t("iam.schema.resourceTypesLabel")}
+      className="flex h-full min-h-0 min-w-0 flex-col"
+    >
       <div className="border-b border-border-subtle p-3">
         <SearchInput
           value={search}

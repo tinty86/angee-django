@@ -23,6 +23,9 @@ export const enStorageMessages: Record<string, string> = {
   "storage.preview.pdfPrev": "Previous page",
   "storage.preview.pdfNext": "Next page",
 
+  // Primary-pane folder navigator landmark.
+  "storage.nav.label": "Files",
+
   // Drive switcher.
   "storage.drive.label": "Drive",
   "storage.drive.placeholder": "Select a drive",

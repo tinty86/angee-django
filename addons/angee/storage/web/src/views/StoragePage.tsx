@@ -281,7 +281,11 @@ export function StoragePage(): ReactElement {
   const setRootId = explorer.setRootId;
   const navigator = useMemo(
     () => (
-      <div className="flex h-full flex-col gap-2 p-2">
+      <div
+        role="navigation"
+        aria-label={t("storage.nav.label")}
+        className="flex h-full flex-col gap-2 p-2"
+      >
         <RelationPicker
           aria-label={t("storage.drive.label")}
           value={driveId}

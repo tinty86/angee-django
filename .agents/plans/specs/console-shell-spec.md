@@ -216,11 +216,17 @@ risk — its own slice).
 `primary-pane-context`); chrome → `ConsoleLayout` + a new `chrome/DrawerRail` +
 `layouts/DrawerOverlay`; persistence → `layoutStorage()`; adopter → operator addon.
 
-## Open questions
+## Resolved (a11y + coexistence)
 
-- ARIA: confirm `primary` explorer = `navigation` vs `complementary` (it's a nav
-  tree → `navigation`); resize handles use `role="separator"` + `aria-valuenow`
-  (window-splitter pattern) — `SplitPanes` should already do this; verify.
-- Right-side coexistence: docked `secondary` (chatter, push) + a right **drawer**
-  (overlay) both anchor right. They coexist (push vs float), but confirm the visual
-  when both are open.
+- **Primary pane = `navigation` landmark** — the content owns it: `ConsoleSubNav`
+  and agents' `SessionRail` already render `<nav aria-label>`; the storage/knowledge
+  explorers and iam's `ResourceTypeList` now carry `role="navigation"` +
+  a distinct `aria-label`. The Workbench itself imposes no role (avoids a duplicate
+  landmark).
+- **Resize handles = WAI-ARIA window-splitter** — provided by
+  react-resizable-panels (`SplitPaneHandle` → `ResizableSeparator`):
+  `role="separator"` + `aria-valuenow/min/max` + keyboard. No Angee code needed.
+- **Right-side coexistence** — the right `DrawerOverlay` is a `fixed` overlay, so
+  it floats *over* a docked `secondary` (chatter) when both are open (non-modal,
+  no scrim). Push vs float is the intended model; no conflict. (No right-edge
+  drawer adopter ships yet — operator logs is bottom-edge.)

@@ -170,7 +170,11 @@ export function KnowledgePage(): ReactElement {
   // The vault switcher + page-tree navigator lives in the shell's primary pane.
   const navigator = useMemo(
     () => (
-      <div className="flex h-full flex-col gap-2 p-2">
+      <div
+        role="navigation"
+        aria-label={t("knowledge.nav.label")}
+        className="flex h-full flex-col gap-2 p-2"
+      >
         <RelationPicker
           aria-label={t("knowledge.vault.label")}
           value={vaultId}
