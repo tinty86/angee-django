@@ -6,6 +6,12 @@ export {
   type ControlBandProviderProps,
 } from "./ControlBand";
 export { HeroPage, type HeroPageProps } from "./HeroPage";
+export {
+  PrimaryPaneProvider,
+  usePrimaryPane,
+  usePrimaryPaneContent,
+  type PrimaryPaneContextValue,
+} from "./primary-pane-context";
 export { PublicLayout, type PublicLayoutProps } from "./PublicLayout";
 export { Workbench, type WorkbenchProps } from "./Workbench";
 export {

@@ -9,6 +9,7 @@ import { ChatterProvider, useChatter } from "../communication/chatter-context";
 import { cn } from "../lib/cn";
 import type { CollapsiblePane } from "../page";
 import { ControlBandProvider } from "./ControlBand";
+import { PrimaryPaneProvider, usePrimaryPaneContent } from "./primary-pane-context";
 import { StatuslineProvider } from "./Statusline";
 import { Workbench } from "./Workbench";
 
@@ -39,45 +40,50 @@ export function ConsoleLayout({
 
   return (
     <ChatterProvider>
-      <ControlBandProvider host={controlHost}>
-        <StatuslineProvider host={statusHost}>
-          <BreadcrumbLabelProvider>
-            <div
-              className={cn(
-                "console-grid h-screen w-screen bg-canvas text-fg",
-                className,
-              )}
-            >
-              <AppRail className="area-rail" />
-              <TopBar
-                className="area-topbar"
-                topMenu={topMenu}
-                primaryPane={
-                  showSubNav && primaryController
-                    ? {
-                        collapsed: primaryController.collapsed,
-                        toggle: primaryController.toggle,
-                      }
-                    : undefined
-                }
-                showChatterToggle={showChatter}
-                showUserMenu
-              />
-              <Breadcrumb className="area-crumbs" />
-              <div ref={setControlHost} className="area-control" />
-              <ConsoleWorkbench
-                showSubNav={showSubNav}
-                showChatter={showChatter}
-                onPrimaryController={setPrimaryController}
+      <PrimaryPaneProvider>
+        <ControlBandProvider host={controlHost}>
+          <StatuslineProvider host={statusHost}>
+            <BreadcrumbLabelProvider>
+              <div
+                className={cn(
+                  "console-grid h-screen w-screen bg-canvas text-fg",
+                  className,
+                )}
               >
-                {children}
-              </ConsoleWorkbench>
-              {/* Optional statusline; the row collapses while this host is empty. */}
-              <div ref={setStatusHost} className="area-status" />
-            </div>
-          </BreadcrumbLabelProvider>
-        </StatuslineProvider>
-      </ControlBandProvider>
+                <AppRail className="area-rail" />
+                <TopBar
+                  className="area-topbar"
+                  topMenu={topMenu}
+                  // The toggle shows whenever the primary pane has content —
+                  // a page-published explorer *or* the settings sub-nav — which
+                  // is exactly when the Workbench registers its controller.
+                  primaryPane={
+                    primaryController
+                      ? {
+                          collapsed: primaryController.collapsed,
+                          toggle: primaryController.toggle,
+                        }
+                      : undefined
+                  }
+                  showChatterToggle={showChatter}
+                  showUserMenu
+                />
+                <Breadcrumb className="area-crumbs" />
+                <div ref={setControlHost} className="area-control" />
+                <ConsoleWorkbench
+                  showSubNav={showSubNav}
+                  showChatter={showChatter}
+                  onPrimaryController={setPrimaryController}
+                >
+                  {children}
+                </ConsoleWorkbench>
+                {/* Optional statusline; the row collapses while this host is empty. */}
+                <div ref={setStatusHost} className="area-status" />
+              </div>
+            </BreadcrumbLabelProvider>
+          </StatuslineProvider>
+        </ControlBandProvider>
+      </PrimaryPaneProvider>
     </ChatterProvider>
   );
 }
@@ -89,7 +95,11 @@ export function ConsoleLayout({
  * `ChatterProvider` so it can register the secondary pane's collapse controller
  * with the chatter bridge, letting the chrome `TopBar` toggle drive it (and stay
  * in sync with drag-to-collapse). The primary pane's controller is surfaced up to
- * `ConsoleLayout` so the TopBar's left-panel toggle drives the sub-nav too.
+ * `ConsoleLayout` so the TopBar's left-panel toggle drives it too.
+ *
+ * The primary pane is whatever a page publishes through `usePrimaryPane` (an
+ * explorer/navigator tree); when no page publishes one, sidebar apps still get
+ * their settings sub-nav. A page-published explorer wins over the sub-nav.
  */
 function ConsoleWorkbench({
   showSubNav,
@@ -103,11 +113,14 @@ function ConsoleWorkbench({
   children: React.ReactNode;
 }): React.ReactElement {
   const { registerSecondaryController } = useChatter();
+  const { node: publishedPrimary } = usePrimaryPaneContent();
+  const primary =
+    publishedPrimary ?? (showSubNav ? <ConsoleSubNav /> : undefined);
   return (
     <Workbench
       className="area-content"
       autoSave="console.workbench"
-      primary={showSubNav ? <ConsoleSubNav /> : undefined}
+      primary={primary}
       secondary={showChatter ? <Chatter /> : undefined}
       onPrimaryController={onPrimaryController}
       onSecondaryController={registerSecondaryController}

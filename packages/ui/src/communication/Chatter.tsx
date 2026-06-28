@@ -25,7 +25,13 @@ export function Chatter({
 }: ChatterProps): React.ReactElement | null {
   const t = useBaseT();
   const { activeTab, content, setActiveTab } = useChatter();
-  const resolvedTabs = tabs ?? content?.tabs ?? defaultTabs(children, t);
+  // The `tabs` prop is a full override (the composer/explicit path); otherwise the
+  // default agent/comments/activity tabs are the base and a page's published tabs
+  // merge into them by id — a same-id tab replaces its default, a new id appends.
+  // So a page contributing a `details`/`backlinks` tab keeps the defaults it does
+  // not override.
+  const resolvedTabs =
+    tabs ?? mergeTabs(defaultTabs(children, t), content?.tabs);
   const resolvedComposer = composer ?? content?.composer;
   const active = resolvedTabs.some((tab) => tab.id === activeTab)
     ? activeTab
@@ -84,6 +90,23 @@ export function Chatter({
       ) : null}
     </aside>
   );
+}
+
+// Merge published tabs into the base by id: a same-id tab replaces its base
+// counterpart in place; a new id appends. Returns the base unchanged when nothing
+// is published, so pages that publish no tabs render the defaults verbatim.
+function mergeTabs(
+  base: readonly ChatterTab[],
+  published: readonly ChatterTab[] | undefined,
+): readonly ChatterTab[] {
+  if (!published || published.length === 0) return base;
+  const merged = [...base];
+  for (const tab of published) {
+    const index = merged.findIndex((existing) => existing.id === tab.id);
+    if (index >= 0) merged[index] = tab;
+    else merged.push(tab);
+  }
+  return merged;
 }
 
 function defaultTabs(
