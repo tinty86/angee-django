@@ -126,35 +126,55 @@ export function createAngeeHasuraLiveProvider(
   return createAngeeChangeLiveProvider(wsClient, options.resources ?? []);
 }
 
+type ChangeConsumer = (data: unknown) => void;
+
+interface ChangeSubscription {
+  dispose: () => void;
+  consumers: Set<ChangeConsumer>;
+}
+
 export function createAngeeChangeLiveProvider(
   client: GraphQLWsClient,
   resources: readonly AngeeLiveResource[],
 ): LiveProvider {
   const resourcesByName = resourcesByListRoot(resources);
+  // graphql-ws does not dedup identical documents, so fan one upstream
+  // subscription per changes root out to every mounted hook and tear the
+  // socket subscription down only when the last consumer leaves.
+  const subscriptions = new Map<string, ChangeSubscription>();
   return {
     subscribe({ channel, callback, params }) {
       const resourceName = typeof params?.resource === "string" ? params.resource : "";
       const resource = resourcesByName.get(resourceName);
       const changesRoot = resource?.roots.changes;
       if (!changesRoot) return noopSubscription;
-      return client.subscribe(
-        {
-          query: changeSubscriptionDocument(changesRoot),
-        },
-        {
-          next: (result) => {
-            const event = changeEventFromResult(
-              result.data,
-              changesRoot,
-              channel,
-              resource,
-            );
-            if (event) callback(event);
+      const consumer: ChangeConsumer = (data) => {
+        const event = changeEventFromResult(data, changesRoot, channel, resource);
+        if (event) callback(event);
+      };
+      const entry = subscriptions.get(changesRoot) ?? {
+        dispose: noopSubscription,
+        consumers: new Set<ChangeConsumer>(),
+      };
+      entry.consumers.add(consumer);
+      if (!subscriptions.has(changesRoot)) {
+        subscriptions.set(changesRoot, entry);
+        entry.dispose = client.subscribe(
+          { query: changeSubscriptionDocument(changesRoot) },
+          {
+            next: (result) => entry.consumers.forEach((c) => c(result.data)),
+            error: () => undefined,
+            complete: () => undefined,
           },
-          error: () => undefined,
-          complete: () => undefined,
-        },
-      );
+        );
+      }
+      return () => {
+        entry.consumers.delete(consumer);
+        if (entry.consumers.size === 0 && subscriptions.get(changesRoot) === entry) {
+          entry.dispose();
+          subscriptions.delete(changesRoot);
+        }
+      };
     },
     unsubscribe(subscription) {
       if (typeof subscription === "function") subscription();

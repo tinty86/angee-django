@@ -98,14 +98,142 @@ describe("Angee Hasura provider defaults", () => {
 
     expect(subscribe).not.toHaveBeenCalled();
   });
+
+  test("shares one upstream subscription across consumers for the same resource", () => {
+    const { subscribe, sinks } = recordingClient();
+    const provider = createAngeeChangeLiveProvider(
+      { subscribe } as never,
+      [resource({ changes: "noteChanged" })],
+    );
+    const first = vi.fn();
+    const second = vi.fn();
+
+    const subA = provider.subscribe({
+      channel: "resources/notes",
+      types: ["*"],
+      callback: first,
+      params: { resource: "notes" },
+    });
+    const subB = provider.subscribe({
+      channel: "resources/notes",
+      types: ["*"],
+      callback: second,
+      params: { resource: "notes" },
+    });
+
+    expect(subscribe).toHaveBeenCalledTimes(1);
+
+    nthSink(sinks, 0).next({
+      data: { noteChanged: { model: "notes.Note", id: "note_1", action: "update" } },
+    });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+
+    provider.unsubscribe(subA);
+    expect(nthSink(sinks, 0).dispose).not.toHaveBeenCalled();
+
+    provider.unsubscribe(subB);
+    expect(nthSink(sinks, 0).dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("reopens the upstream subscription after the last consumer leaves", () => {
+    const { subscribe } = recordingClient();
+    const provider = createAngeeChangeLiveProvider(
+      { subscribe } as never,
+      [resource({ changes: "noteChanged" })],
+    );
+
+    provider.unsubscribe(
+      provider.subscribe({
+        channel: "resources/notes",
+        types: ["*"],
+        callback: vi.fn(),
+        params: { resource: "notes" },
+      }),
+    );
+    expect(subscribe).toHaveBeenCalledTimes(1);
+
+    provider.subscribe({
+      channel: "resources/notes",
+      types: ["*"],
+      callback: vi.fn(),
+      params: { resource: "notes" },
+    });
+    expect(subscribe).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps a separate upstream subscription per change root", () => {
+    const { subscribe, sinks } = recordingClient();
+    const provider = createAngeeChangeLiveProvider(
+      { subscribe } as never,
+      [
+        resource({ changes: "noteChanged" }),
+        resource({ changes: "tagChanged", list: "tags", model: "notes.Tag" }),
+      ],
+    );
+
+    const subNotes = provider.subscribe({
+      channel: "resources/notes",
+      types: ["*"],
+      callback: vi.fn(),
+      params: { resource: "notes" },
+    });
+    const subTags = provider.subscribe({
+      channel: "resources/tags",
+      types: ["*"],
+      callback: vi.fn(),
+      params: { resource: "tags" },
+    });
+
+    expect(subscribe).toHaveBeenCalledTimes(2);
+
+    provider.unsubscribe(subNotes);
+    expect(nthSink(sinks, 0).dispose).toHaveBeenCalledTimes(1);
+    expect(nthSink(sinks, 1).dispose).not.toHaveBeenCalled();
+
+    provider.unsubscribe(subTags);
+    expect(nthSink(sinks, 1).dispose).toHaveBeenCalledTimes(1);
+  });
 });
 
-function resource({ changes }: { changes: string | null }): AngeeLiveResource {
+interface RecordedSink {
+  next: (result: { data: unknown }) => void;
+  dispose: ReturnType<typeof vi.fn>;
+}
+
+function recordingClient(): {
+  subscribe: ReturnType<typeof vi.fn>;
+  sinks: RecordedSink[];
+} {
+  const sinks: RecordedSink[] = [];
+  const subscribe = vi.fn((_payload, sink) => {
+    const dispose = vi.fn();
+    sinks.push({ next: sink.next, dispose });
+    return dispose;
+  });
+  return { subscribe, sinks };
+}
+
+function nthSink(sinks: readonly RecordedSink[], index: number): RecordedSink {
+  const sink = sinks[index];
+  if (!sink) throw new Error(`No upstream subscription at index ${index}`);
+  return sink;
+}
+
+function resource({
+  changes,
+  list = "notes",
+  model = "notes.Note",
+}: {
+  changes: string | null;
+  list?: string;
+  model?: string;
+}): AngeeLiveResource {
   return {
     schemaName: "console",
-    modelLabel: "notes.Note",
+    modelLabel: model,
     roots: {
-      list: "notes",
+      list,
       changes,
     },
   };
