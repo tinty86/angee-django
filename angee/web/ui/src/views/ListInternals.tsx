@@ -64,6 +64,7 @@ import type { ResourceViewContextValue } from "./resource-view-context";
 import type {
   ResourceViewFilter,
   ResourceViewGroup,
+  ResourceViewSort,
 } from "./resource-view-model";
 import type {
   ListEmptyAction,
@@ -476,12 +477,14 @@ export function VisibleFieldsMenu({
 
 export function buildColumns<TRow extends Row>(
   columns: readonly ColumnDescriptor<TRow>[],
-  resourceView: ResourceViewContextValue,
+  sortController: Pick<ResourceViewContextValue, "setSort"> & {
+    sort: ResourceViewSort | null;
+  },
 ): ColumnDef<TRow>[] {
   return columns.map((column) => ({
     id: column.field,
     header: () => (
-      <SortHeader column={column} resourceView={resourceView}>
+      <SortHeader column={column} sortController={sortController}>
         {column.header ?? column.field}
       </SortHeader>
     ),
@@ -526,16 +529,18 @@ export function ListCellContent<TRow extends Row>({
 
 function SortHeader<TRow extends Row>({
   column,
-  resourceView,
+  sortController,
   children,
 }: {
   column: ColumnDescriptor<TRow>;
-  resourceView: ResourceViewContextValue;
+  sortController: Pick<ResourceViewContextValue, "setSort"> & {
+    sort: ResourceViewSort | null;
+  };
   children: React.ReactNode;
 }): React.ReactElement {
   const t = useBaseT();
   if (column.sortable === false) return <>{children}</>;
-  const sort = resourceView.state.sort;
+  const sort = sortController.sort;
   const active = sort?.field === column.field;
   const iconName = !active
     ? "arrow-up-down"
@@ -553,7 +558,7 @@ function SortHeader<TRow extends Row>({
       type="button"
       className="inline-flex min-w-0 items-center gap-1 rounded-6 text-left outline-none hover:text-fg focus-visible:focus-ring"
       aria-label={t(sortKey, { label })}
-      onClick={() => resourceView.setSort(nextSort(sort, column.field))}
+      onClick={() => sortController.setSort(nextSort(sort, column.field))}
     >
       <span className="truncate">{children}</span>
       <Glyph name={iconName} className="size-3 text-fg-subtle" />

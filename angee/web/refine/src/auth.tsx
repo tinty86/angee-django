@@ -7,6 +7,7 @@ import {
 } from "react";
 import { parse, type DocumentNode } from "graphql";
 import {
+  keys,
   useCustomMutation,
   useGetIdentity,
   useInvalidateAuthStore,
@@ -238,9 +239,33 @@ export function createAngeeAuthProviderFromRequest(
   };
 }
 
+/**
+ * The identity-query contract, owned once. Refine's `useGetIdentity` reads the
+ * react-query entry keyed `keys().auth().action("identity")`; the route gate
+ * (`@angee/app` `beforeLoad`) reaches that SAME entry through
+ * `queryClient.ensureQueryData(identityQueryOptions(authProvider))`, so the gate
+ * and `useRuntimeAuthState` below share ONE `current_user` fetch instead of
+ * each issuing their own. `staleTime: Infinity` keeps warm navigations from
+ * re-issuing it — refine's `useInvalidateAuthStore` (login/logout) refreshes
+ * the entry, and a mid-session server expiry still surfaces at the data layer as
+ * a 401 → `onError` → logout (client gates are UX only; the server is the
+ * authorization boundary).
+ */
+export const IDENTITY_STALE_TIME = Number.POSITIVE_INFINITY;
+
+export function identityQueryOptions(authProvider: RefineAuthProvider) {
+  return {
+    queryKey: keys().auth().action("identity").get(),
+    queryFn: async (): Promise<AuthUser | null> =>
+      ((await authProvider.getIdentity?.()) ?? null) as AuthUser | null,
+    staleTime: IDENTITY_STALE_TIME,
+    retry: false,
+  };
+}
+
 export function useRuntimeAuthState(): UseRuntimeAuthStateResult {
   const identity = useGetIdentity<AuthUser | null>({
-    queryOptions: { retry: false },
+    queryOptions: { retry: false, staleTime: IDENTITY_STALE_TIME },
   });
   const auth = useMemo(
     () => authStateFromUser(identity.data ?? null),

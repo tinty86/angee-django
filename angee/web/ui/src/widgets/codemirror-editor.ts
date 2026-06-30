@@ -67,7 +67,7 @@ export function useCodeMirrorEditor(
     options;
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
-  const pendingRef = useRef<string | null>(null);
+  const pendingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncingRef = useRef(false);
   // Capture the create-time config so the editor is built exactly once; live
@@ -86,14 +86,15 @@ export function useCodeMirrorEditor(
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    const pending = pendingRef.current;
-    pendingRef.current = null;
-    if (pending !== null) onChangeRef.current?.(pending);
+    if (!pendingRef.current) return;
+    pendingRef.current = false;
+    const view = viewRef.current;
+    if (view) onChangeRef.current?.(view.state.doc.toString());
   }, []);
 
   const scheduleChange = useCallback(
-    (next: string) => {
-      pendingRef.current = next;
+    () => {
+      pendingRef.current = true;
       if (timerRef.current !== null) return;
       timerRef.current = setTimeout(flushPendingChange, 16);
     },
@@ -106,7 +107,7 @@ export function useCodeMirrorEditor(
     const init = initRef.current;
     const updateListener = EditorView.updateListener.of((update) => {
       if (!update.docChanged || syncingRef.current) return;
-      scheduleChange(update.state.doc.toString());
+      scheduleChange();
     });
     const blurHandler = EditorView.domEventHandlers({ blur: flushPendingChange });
     const state = EditorState.create({

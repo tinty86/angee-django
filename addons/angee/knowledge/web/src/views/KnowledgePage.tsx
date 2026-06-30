@@ -21,6 +21,7 @@ import {
   KnowledgePage as KnowledgePageQuery,
   KnowledgePages,
   KnowledgeVaults,
+  type Backlink,
 } from "../data/documents";
 import {
   KNOWLEDGE_PAGE_DND,
@@ -41,6 +42,7 @@ import { useKnowledgeT } from "../i18n";
 // One safety-capped read each of vaults/pages; the browser scopes the set
 // client-side so the navigator and reader share one fetch.
 const KNOWLEDGE_LIST_LIMIT = 500;
+const EMPTY_BACKLINKS: readonly Backlink[] = [];
 
 /**
  * The knowledge wiki reader. The vault switcher + page-tree navigator publishes
@@ -89,6 +91,15 @@ export function KnowledgePage(): ReactElement {
     enabled: openPageId !== null,
   });
   const detail = detailQuery.data?.pages_by_pk ?? null;
+  const detailBacklinks = detail?.backlinks ?? EMPTY_BACKLINKS;
+  const backlinkSignature = useMemo(
+    () => backlinksSignature(detailBacklinks),
+    [detailBacklinks],
+  );
+  const stableBacklinks = useMemo(
+    () => detailBacklinks,
+    [backlinkSignature],
+  );
 
   // A page write retitles its tree node; refetch the navigator set.
   const handleSaved = useCallback(() => {
@@ -240,14 +251,14 @@ export function KnowledgePage(): ReactElement {
               icon: "link",
               children: (
                 <BacklinksPanel
-                  backlinks={detail?.backlinks ?? []}
+                  backlinks={stableBacklinks}
                   onOpen={openPage}
                 />
               ),
             },
           ]
         : [],
-    [detail, openPage, t],
+    [detail?.id, openPage, stableBacklinks, t],
   );
   const chatter = useMemo(
     () => (backlinksTabs.length > 0 ? { tabs: backlinksTabs } : null),
@@ -305,4 +316,12 @@ export function KnowledgePage(): ReactElement {
       )}
     </WikilinkProvider>
   );
+}
+
+function backlinksSignature(backlinks: readonly Backlink[]): string {
+  return backlinks
+    .map((backlink) =>
+      [backlink.page, backlink.title, backlink.display_text ?? ""].join("\u0000"),
+    )
+    .join("\u0001");
 }

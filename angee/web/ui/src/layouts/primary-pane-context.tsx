@@ -46,7 +46,12 @@ export function PrimaryPaneProvider({
   );
   const setNode = useCallback((owner: symbol, node: ReactNode | null) => {
     setState((current) => {
-      if (node != null) return { owner, node };
+      if (node != null) {
+        if (current?.owner === owner && Object.is(current.node, node)) {
+          return current;
+        }
+        return { owner, node };
+      }
       // A clear only wins if this owner is the current publisher.
       return current?.owner === owner ? null : current;
     });

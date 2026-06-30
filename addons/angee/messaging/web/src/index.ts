@@ -3,10 +3,8 @@ import {
   type BaseAddonRoute,
 } from "@angee/app";
 import { type BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { Inbox, MessagesSquare } from "lucide-react";
-
-import { MessagesPage } from "./MessagesPage";
-import { ThreadsPage } from "./ThreadsPage";
 
 // Each page is a routed ResourceList: a list route + a `$id` detail child the list
 // swaps to inline. `resource` tags the collection route so relation fields targeting
@@ -36,8 +34,8 @@ const messagingMenu: readonly BaseMenuItem[] = [
 const messaging = defineBaseAddon({
   id: "messaging",
   routes: [
-    ...consolePage("messaging.inbox", "/messaging/inbox", MessagesPage, "messaging.Message"),
-    ...consolePage("messaging.threads", "/messaging/threads", ThreadsPage, "messaging.Thread"),
+    ...consolePage("messaging.inbox", "/messaging/inbox", lazyRouteComponent(() => import("./MessagesPage"), "MessagesPage"), "messaging.Message"),
+    ...consolePage("messaging.threads", "/messaging/threads", lazyRouteComponent(() => import("./ThreadsPage"), "ThreadsPage"), "messaging.Thread"),
   ],
   menus: messagingMenu,
   icons: { inbox: Inbox, threads: MessagesSquare },

@@ -11,7 +11,8 @@ import {
   } from "@refinedev/core";
 import { useForm as useRefineForm } from "@refinedev/react-hook-form";
 import { Controller,
-  useWatch } from "react-hook-form";
+  useWatch,
+  type Control } from "react-hook-form";
 import { useBlocker } from "@tanstack/react-router";
 import {
   refineFieldsFromPaths,
@@ -733,9 +734,6 @@ export function FormView({
     () => recordSubtitleParts(displayRecord, id),
     [displayRecord, id],
   );
-  const watchedValues = useWatch({ control: form.control }) as Values | undefined;
-  const currentValues = watchedValues ?? form.getValues();
-
   const renderField = (field: FieldDescriptor): React.ReactNode => (
     <Controller
       key={field.name}
@@ -859,9 +857,15 @@ export function FormView({
   const overviewBody = (
     <>
       <div className="grid gap-6">
-        {hasConditionalFields
-          ? renderSectionModels(visibleSections(sections, currentValues))
-          : renderSectionModels(sections)}
+        {hasConditionalFields ? (
+          <ConditionalSections
+            control={form.control}
+            sections={sections}
+            renderSections={renderSectionModels}
+          />
+        ) : (
+          renderSectionModels(sections)
+        )}
       </div>
 
       {bodyField ? (
@@ -1262,6 +1266,25 @@ function FormSectionTabs({
       ))}
     </Tabs>
   );
+}
+
+/**
+ * Subscribe to live form values only when `showWhen` fields exist, so the watch
+ * stays isolated in this child: a keystroke re-renders this subtree to re-filter
+ * `visibleSections`, not the whole FormView (title/body/markdown editor, header,
+ * toolbar). `useWatch({ control })` with no `name` returns the full values object.
+ */
+function ConditionalSections({
+  control,
+  sections,
+  renderSections,
+}: {
+  control: Control<Values>;
+  sections: readonly FormSectionModel[];
+  renderSections: (list: readonly FormSectionModel[]) => React.ReactNode;
+}): React.ReactNode {
+  const values = useWatch({ control }) as Values;
+  return renderSections(visibleSections(sections, values));
 }
 
 function BoundFieldRow({

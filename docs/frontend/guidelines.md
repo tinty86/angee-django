@@ -168,6 +168,19 @@ guarantee). Each is tracked as a separate follow-up, not entrenched:
   register or mutate a module-global at runtime. `usePreviews`/`useWidget`/
   `useSlot` read the composed `AppRuntime`; menu declarations project into refine
   resources and chrome renders refine `useMenu`.
+- **Routed page components are code-split.** In an addon manifest give each
+  routed page `component: lazyRouteComponent(() => import("./views/Page"),
+  "Page")` (the stack-native helper from `@tanstack/react-router`, already a
+  direct addon dep) — never an eager `import { Page }` + `component: Page`, which
+  pulls every page into the entry graph. The router owns the route-loading
+  fallback *once*: `createApp` sets `defaultPendingComponent` (a `LoadingPanel`),
+  which wraps every non-root match in Suspense inside its layout's `<Outlet/>`, so
+  the chrome stays mounted. Do not hand-roll `React.lazy` + a manual `<Suspense>`
+  around a route's `<Outlet/>`. Split only routed pages — lighter manifest content
+  (slot/section content, forms, glyphs) stays eager; where a route needs a
+  provider wrapper (e.g. operator's transport), wrap the `lazyRouteComponent`
+  result in the thin route component, and the dynamic `import()` still splits the
+  view.
 - One component tree. Extend or register; do not fork.
 - Slots are additive extension points. Use them before copying a component.
 - Tokens beat color props and one-off variants. Theme by overriding tokens.
@@ -345,6 +358,23 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   operator daemon quarantine. Django-backed app resources use refine data hooks,
   react-query invalidation, and the Hasura provider; do not reintroduce a
   second app cache/live engine.
+- **react-query freshness rides invalidation, not mount-refetch.** `createApp`
+  sets an app-wide `staleTime` (via refine's `reactQuery.clientConfig`, which
+  layers `refetchOnWindowFocus:false` + `placeholderData:keepPreviousData`
+  underneath — do not restate them), so cross-actor edits surface through the live
+  provider's `changes()` subscription and mutation invalidation, not every
+  remount. A model with **no** `changes()` subscription only reflects cross-actor
+  edits on explicit invalidation or once `staleTime` expires; a query that must be
+  always-fresh sets its own per-hook `queryOptions`, not a new app default.
+- **Route code-splitting touches three things.** (1) `defaultPendingComponent` is
+  the *app-wide* pending surface — it renders for every non-root match while its
+  chunk loads, and (after `defaultPendingMs`) for any future `loader`-bearing
+  route, not just lazy pages. (2) The addon-index imports in `runtime/web/app.ts`
+  stay eager — manifests compose synchronously; only each manifest's *page*
+  imports go through `lazyRouteComponent`. (3) A test that renders a routed page
+  *through the router* (`createApp`/`RouterProvider`) must await the lazy boundary
+  (`findBy*`); a test that imports the page component directly is unaffected, and a
+  manifest assertion (`component` is a function) still holds for a lazy component.
 - **Generate the operator console's types from the Go daemon's introspected SDL**
   (`operator_schema` → codegen), never by hand; daemon actions return
   `MutationResult{status}`, not `{ok}`.

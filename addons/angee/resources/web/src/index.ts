@@ -1,8 +1,8 @@
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import type { BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 
 import { enResourcesMessages } from "./i18n";
-import { ResourcesPage } from "./views/ResourcesPage";
 
 // Resources contributes a "Resources" section into the platform console — the
 // import ledger listing. `parentId: "platform"` nests it under the platform app's
@@ -23,7 +23,7 @@ const resourcesRoutes: readonly BaseAddonRoute[] = [
     path: "/platform/resources",
     layout: "console",
     resource: "resources.Resource",
-    component: ResourcesPage,
+    component: lazyRouteComponent(() => import("./views/ResourcesPage"), "ResourcesPage"),
   },
 ];
 

@@ -1,11 +1,7 @@
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import { type BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { AtSign, Building2, Contact, Users } from "lucide-react";
-
-import { DirectoriesPage } from "./DirectoriesPage";
-import { HandlesPage } from "./HandlesPage";
-import { OrganizationsPage } from "./OrganizationsPage";
-import { PeoplePage } from "./PeoplePage";
 
 // Each resource page is a routed ResourceList: a list route + a `$id` detail child the
 // list page swaps to inline. `resource` tags the collection route so relation fields
@@ -49,15 +45,15 @@ const partiesMenu: readonly BaseMenuItem[] = [
 const parties = defineBaseAddon({
   id: "parties",
   routes: [
-    ...consolePage("parties.people", "/parties/people", PeoplePage, "parties.Person"),
+    ...consolePage("parties.people", "/parties/people", lazyRouteComponent(() => import("./PeoplePage"), "PeoplePage"), "parties.Person"),
     ...consolePage(
       "parties.organizations",
       "/parties/organizations",
-      OrganizationsPage,
+      lazyRouteComponent(() => import("./OrganizationsPage"), "OrganizationsPage"),
       "parties.Organization",
     ),
-    ...consolePage("parties.handles", "/parties/handles", HandlesPage, "parties.Handle"),
-    ...consolePage("parties.directories", "/parties/directories", DirectoriesPage, "parties.Directory"),
+    ...consolePage("parties.handles", "/parties/handles", lazyRouteComponent(() => import("./HandlesPage"), "HandlesPage"), "parties.Handle"),
+    ...consolePage("parties.directories", "/parties/directories", lazyRouteComponent(() => import("./DirectoriesPage"), "DirectoriesPage"), "parties.Directory"),
   ],
   menus: partiesMenu,
   icons: { parties: Users, organization: Building2, "address-book": Contact, handle: AtSign },

@@ -18,10 +18,12 @@ import { Refine,
   type DataProvider as RefineDataProvider,
   type DataProviders,
   type ResourceProps } from "@refinedev/core";
+import { QueryClient, keepPreviousData, type QueryClientConfig } from "@tanstack/react-query";
 import {
   type AnyRoute,
   type AnyRouter,
   Outlet,
+  type RouteComponent,
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
@@ -36,6 +38,7 @@ import {
   UserPreferencesProvider,
   createAngeeAuthProvider,
   createAngeeI18nProvider,
+  identityQueryOptions,
   useRuntimeAuthState,
   useUserPreferences,
   type I18nResources,
@@ -75,6 +78,7 @@ import {
 } from "@angee/ui/feedback/index";
 import { readAppRailPreferences } from "@angee/ui/chrome/app-rail-preferences";
 import { baseIcons } from "@angee/ui/chrome/icon-registry";
+import { LoadingPanel } from "@angee/ui/fragments/index";
 import {
   MenuTree,
   type BaseMenuItem,
@@ -88,7 +92,12 @@ import { defaultWidgets } from "@angee/ui/widgets/index";
 
 /** A route that also carries the page component the chrome renders. */
 export interface BaseAddonRoute extends AddonRoute {
-  component?: ComponentType;
+  /**
+   * The page the chrome renders for this route — the router's own route-component
+   * type, so a `lazyRouteComponent(() => import(...))` (carrying `.preload`) drops
+   * straight in next to an eager function component.
+   */
+  component?: RouteComponent;
   /**
    * Menu item id whose trail seeds chrome for routes outside the menu, or
    * disambiguates chrome derivation when multiple menu items target this route.
@@ -183,6 +192,34 @@ export interface AngeeApp {
 }
 
 /**
+ * The app-owned react-query client config. createApp builds ONE `QueryClient`
+ * from this and shares it with both `<Refine reactQuery.clientConfig>` and the
+ * route gate's `beforeLoad`, so the auth gate and the in-app identity read hit
+ * the same cache (one `current_user` fetch). Refine layers its own defaults onto
+ * a config *object* but uses a supplied `QueryClient` *instance* as-is, so the
+ * two refine defaults are restated here: `refetchOnWindowFocus: false` and
+ * `placeholderData: keepPreviousData` (keeps list pagination smooth). A short
+ * `staleTime` retires the every-mount refetch churn (react-query refetches on
+ * mount over `staleTime: 0`) while freshness keeps riding refine's mutation
+ * invalidation and the live provider's `changes()` subscriptions; `gcTime` holds
+ * unmounted query data for fast back-navigation. A flat app-wide default is the
+ * right shape here — the per-resource "is this model live" fact is owned by the
+ * `@angee/resources` metadata, and any query needing different staleness (e.g.
+ * the identity query's `staleTime: Infinity`) overrides it through its own
+ * per-hook `queryOptions`.
+ */
+const APP_QUERY_CLIENT_CONFIG: QueryClientConfig = {
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      placeholderData: keepPreviousData,
+      staleTime: 30_000,
+      gcTime: 600_000,
+    },
+  },
+};
+
+/**
  * `createApp` — the single composition root. It merges the addon manifests into
  * one runtime (routes · route-resolved menus · widgets ·
  * i18n · slots), owns the provider stack (GraphQL clients · runtime · live
@@ -259,6 +296,9 @@ export function createApp(input: CreateAppInput): AngeeApp {
   const refineAccessControlProvider = createAngeeAccessControlProvider(
     refineResourceRegistry,
   );
+  // The one QueryClient instance createApp owns (per `@angee/app` `index.ts`):
+  // shared by `<Refine>` and the route gate so identity is fetched once.
+  const queryClient = new QueryClient(APP_QUERY_CLIENT_CONFIG);
 
   const home =
     resolvePath(input.home, pathByName) ??
@@ -296,6 +336,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
         options={{
           liveMode: refineLiveProvider ? "auto" : "off",
           syncWithLocation: false,
+          reactQuery: { clientConfig: queryClient },
         }}
       >
         <AppFrame
@@ -322,6 +363,7 @@ export function createApp(input: CreateAppInput): AngeeApp {
     schemas,
     defaultSchema,
     authProvider: refineAuthProvider,
+    queryClient,
   });
   createAddonRouteNodes({
     routes,
@@ -340,6 +382,10 @@ export function createApp(input: CreateAppInput): AngeeApp {
     parseSearch: parseFlatSearch,
     stringifySearch: stringifyFlatSearch,
     defaultPreload: false,
+    // The router owns the route-loading fallback once: every code-split match
+    // (and any future loader-bearing route, after `defaultPendingMs`) renders
+    // this inside its parent layout's <Outlet/>, so the chrome stays mounted.
+    defaultPendingComponent: () => <LoadingPanel />,
   });
 
   return {
@@ -834,6 +880,7 @@ function createLayoutRoutes({
   schemas,
   defaultSchema,
   authProvider,
+  queryClient,
 }: {
   rootRoute: AnyRoute;
   layoutNames: readonly string[];
@@ -841,6 +888,7 @@ function createLayoutRoutes({
   schemas: Readonly<Record<string, NormalizedAngeeAppSchemaConfig>>;
   defaultSchema: string;
   authProvider: RefineAuthProvider;
+  queryClient: QueryClient;
 }): Map<string, AnyRoute> {
   const layoutRoutes = new Map<string, AnyRoute>();
   for (const layoutName of layoutNames) {
@@ -851,7 +899,7 @@ function createLayoutRoutes({
         getParentRoute: () => rootRoute,
         id: refineLayoutRouteId(layoutName),
         ...(requireAuth
-          ? { beforeLoad: authBeforeLoad(authProvider) }
+          ? { beforeLoad: authBeforeLoad(authProvider, queryClient) }
           : {}),
         component: () => (
           <RefineLayoutRoute
@@ -874,12 +922,22 @@ function layoutRequiresAuth(
   return layouts[layoutName]?.requireAuth ?? layoutName !== "public";
 }
 
-function authBeforeLoad(authProvider: RefineAuthProvider) {
+function authBeforeLoad(
+  authProvider: RefineAuthProvider,
+  queryClient: QueryClient,
+) {
   return async ({ location }: { location: { href: string } }): Promise<void> => {
-    const result = await authProvider.check();
-    if (result.authenticated) return;
+    // Dispatch to the identity owner instead of a raw `check()` POST:
+    // `ensureQueryData` populates (or reuses) the same `["auth","identity"]`
+    // entry `useGetIdentity` reads, so the gate and the in-app identity read
+    // share one `current_user` fetch — instant on warm nav. A null/failed
+    // identity redirects to login, preserving `next`.
+    const identity = await queryClient
+      .ensureQueryData(identityQueryOptions(authProvider))
+      .catch(() => null);
+    if (identity) return;
     throw redirect({
-      to: result.redirectTo ?? "/login",
+      to: "/login",
       search: { next: location.href },
       replace: true,
     });
@@ -954,11 +1012,13 @@ function createAddonRouteNode(
   parentNode: AnyRoute,
   parentManifestRoute: BaseAddonRoute | undefined,
 ): AnyRoute {
-  const Page = route.component;
   return createRoute({
     getParentRoute: () => parentNode,
     path: routePathUnderParent(route, parentManifestRoute),
-    ...(Page ? { component: () => <Page /> } : {}),
+    // Pass the page component straight through: a `lazyRouteComponent`'s
+    // `.preload` survives (the old `() => <Page/>` wrapper shadowed it), and an
+    // eager component is unchanged.
+    ...(route.component ? { component: route.component } : {}),
   });
 }
 

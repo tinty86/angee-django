@@ -1,40 +1,35 @@
 import type { BaseAddonRoute } from "@angee/app";
 import { defineBaseAddon } from "@angee/app";
 import type { BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { Box, Cpu, GitBranch, LayoutTemplate, Server, Sparkles, Wrench } from "lucide-react";
 
 import { enAgentsMessages } from "./i18n";
-import { AgentsPage, TemplatesPage } from "./views/AgentsPage";
-import { AgentSessionsPage } from "./views/AgentSessionsPage";
 import { AgentChatterPane } from "./views/AgentChatterPane";
-import { InferenceModelsPage, InferenceProvidersPage } from "./views/InferencePage";
-import { McpServersPage, McpToolsPage } from "./views/McpPage";
-import { SkillsPage } from "./views/SkillsPage";
-import { SourcesPage } from "./views/SourcesPage";
 
 const AGENTS_ID = "agents";
 
 const agentsRoutes: readonly BaseAddonRoute[] = [
-  { name: "agents.agents", path: "/agents", layout: "console", component: AgentsPage, resource: "agents.Agent" },
+  { name: "agents.agents", path: "/agents", layout: "console", component: lazyRouteComponent(() => import("./views/AgentsPage"), "AgentsPage"), resource: "agents.Agent" },
   { name: "agents.agent", path: "/agents/$id", layout: "console", parent: "agents.agents" },
   // Static segments outrank the `/agents/$id` param route.
-  { name: "agents.templates", path: "/agents/templates", layout: "console", component: TemplatesPage },
+  { name: "agents.templates", path: "/agents/templates", layout: "console", component: lazyRouteComponent(() => import("./views/AgentsPage"), "TemplatesPage") },
   { name: "agents.template", path: "/agents/templates/$id", layout: "console", parent: "agents.templates" },
   // The full-page sessions view. The `$id` child carries no component — it is the URL
   // placeholder the parent renders through, so the parent stays mounted across `:id`
   // changes (the substrate keep-alive needs). Static `/agents/sessions` outranks `/agents/$id`.
-  { name: "agents.sessions", path: "/agents/sessions", layout: "console", component: AgentSessionsPage },
+  { name: "agents.sessions", path: "/agents/sessions", layout: "console", component: lazyRouteComponent(() => import("./views/AgentSessionsPage"), "AgentSessionsPage") },
   { name: "agents.session", path: "/agents/sessions/$id", layout: "console", parent: "agents.sessions" },
-  { name: "agents.skills", path: "/agents/skills", layout: "console", component: SkillsPage, resource: "agents.Skill" },
-  { name: "agents.sources", path: "/agents/sources", layout: "console", component: SourcesPage },
+  { name: "agents.skills", path: "/agents/skills", layout: "console", component: lazyRouteComponent(() => import("./views/SkillsPage"), "SkillsPage"), resource: "agents.Skill" },
+  { name: "agents.sources", path: "/agents/sources", layout: "console", component: lazyRouteComponent(() => import("./views/SourcesPage"), "SourcesPage") },
   { name: "agents.source", path: "/agents/sources/$id", layout: "console", parent: "agents.sources" },
-  { name: "agents.mcp-servers", path: "/agents/mcp-servers", layout: "console", component: McpServersPage, resource: "agents.MCPServer" },
+  { name: "agents.mcp-servers", path: "/agents/mcp-servers", layout: "console", component: lazyRouteComponent(() => import("./views/McpPage"), "McpServersPage"), resource: "agents.MCPServer" },
   { name: "agents.mcp-server", path: "/agents/mcp-servers/$id", layout: "console", parent: "agents.mcp-servers" },
-  { name: "agents.mcp-tools", path: "/agents/mcp-tools", layout: "console", component: McpToolsPage, resource: "agents.MCPTool" },
+  { name: "agents.mcp-tools", path: "/agents/mcp-tools", layout: "console", component: lazyRouteComponent(() => import("./views/McpPage"), "McpToolsPage"), resource: "agents.MCPTool" },
   { name: "agents.mcp-tool", path: "/agents/mcp-tools/$id", layout: "console", parent: "agents.mcp-tools" },
-  { name: "agents.providers", path: "/agents/providers", layout: "console", component: InferenceProvidersPage, resource: "agents.InferenceProvider" },
+  { name: "agents.providers", path: "/agents/providers", layout: "console", component: lazyRouteComponent(() => import("./views/InferencePage"), "InferenceProvidersPage"), resource: "agents.InferenceProvider" },
   { name: "agents.provider", path: "/agents/providers/$id", layout: "console", parent: "agents.providers" },
-  { name: "agents.models", path: "/agents/models", layout: "console", component: InferenceModelsPage, resource: "agents.InferenceModel" },
+  { name: "agents.models", path: "/agents/models", layout: "console", component: lazyRouteComponent(() => import("./views/InferencePage"), "InferenceModelsPage"), resource: "agents.InferenceModel" },
   { name: "agents.model", path: "/agents/models/$id", layout: "console", parent: "agents.models" },
 ];
 

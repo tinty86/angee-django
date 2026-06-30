@@ -58,6 +58,7 @@ export function usePageEditor(
   const [body, setBodyState] = useState(initial.body);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const bodyHashRef = useRef(initial.bodyHash);
+  const savedBodyRef = useRef(initial.body);
   const savedTitleRef = useRef(initial.title);
   const mountedRef = useRef(true);
   // Held in a ref so the save callbacks stay stable across an unstable `onSaved`
@@ -94,6 +95,7 @@ export function usePageEditor(
         const payload = data?.update_page_body;
         if (payload?.ok && payload.markdown) {
           bodyHashRef.current = payload.markdown.body_hash;
+          savedBodyRef.current = next;
           setSafeStatus("saved");
           onSavedRef.current();
         } else {
@@ -110,6 +112,11 @@ export function usePageEditor(
   const setBody = useCallback(
     (next: string) => {
       setBodyState(next);
+      if (next === savedBodyRef.current) {
+        debouncedSaveBody.cancel();
+        setStatus("idle");
+        return;
+      }
       setStatus("saving");
       void debouncedSaveBody(next);
     },

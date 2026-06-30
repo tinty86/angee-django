@@ -256,29 +256,47 @@ export function useCollapsiblePane(
   const { collapsedSize = 0, defaultCollapsed = false } = opts ?? {};
   const [handle, panelRef] = usePanelCallbackRef();
   const [collapsed, setCollapsed] = React.useState(defaultCollapsed);
+  const handleRef = React.useRef<PanelImperativeHandle | null>(handle);
+  const panelRefRef = React.useRef(panelRef);
+  handleRef.current = handle;
+  panelRefRef.current = panelRef;
+
+  const stablePanelRef = React.useCallback(
+    (next: PanelImperativeHandle | null) => panelRefRef.current(next),
+    [],
+  );
 
   const onResize = React.useCallback<NonNullable<OnPanelResize>>(
     (panelSize) => {
+      const current = handleRef.current;
       setCollapsed(
         panelSize.asPercentage <= collapsedSize ||
-          (handle?.isCollapsed() ?? false),
+          (current?.isCollapsed() ?? false),
       );
     },
-    [collapsedSize, handle],
+    [collapsedSize],
   );
 
-  const collapse = React.useCallback(() => handle?.collapse(), [handle]);
-  const expand = React.useCallback(() => handle?.expand(), [handle]);
+  const collapse = React.useCallback(() => handleRef.current?.collapse(), []);
+  const expand = React.useCallback(() => handleRef.current?.expand(), []);
   const toggle = React.useCallback(() => {
-    if (!handle) return;
-    if (handle.isCollapsed()) handle.expand();
-    else handle.collapse();
-  }, [handle]);
+    const current = handleRef.current;
+    if (!current) return;
+    if (current.isCollapsed()) current.expand();
+    else current.collapse();
+  }, []);
 
   // Stable object identity (changes only when `collapsed` flips) so a consumer
   // that publishes the controller through an effect does not re-fire every render.
   return React.useMemo(
-    () => ({ panelRef, onResize, collapsed, toggle, collapse, expand }),
-    [panelRef, onResize, collapsed, toggle, collapse, expand],
+    () => ({
+      panelRef: stablePanelRef,
+      onResize,
+      collapsed,
+      toggle,
+      collapse,
+      expand,
+    }),
+    [stablePanelRef, onResize, collapsed, toggle, collapse, expand],
   );
 }

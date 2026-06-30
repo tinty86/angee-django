@@ -35,6 +35,22 @@ export function ConsoleLayout({
     React.useState<HTMLDivElement | null>(null);
   const [primaryController, setPrimaryController] =
     React.useState<CollapsiblePane | null>(null);
+  const handlePrimaryController = React.useCallback(
+    (controller: CollapsiblePane | null) => {
+      setPrimaryController((current) =>
+        current === controller
+        || (
+          current != null
+          && controller != null
+          && current.collapsed === controller.collapsed
+          && current.toggle === controller.toggle
+        )
+          ? current
+          : controller,
+      );
+    },
+    [],
+  );
   // Apps that opt into the sidebar (`sidebar: true` on their root menu) render
   // their sections in a left settings-style sub-nav *in addition to* the top bar.
   // It now rides the Workbench primary pane (collapsible + resizable), so the
@@ -77,7 +93,7 @@ export function ConsoleLayout({
                   <ConsoleWorkbench
                     showSubNav={showSubNav}
                     showChatter={showChatter}
-                    onPrimaryController={setPrimaryController}
+                    onPrimaryController={handlePrimaryController}
                   >
                     {children}
                   </ConsoleWorkbench>

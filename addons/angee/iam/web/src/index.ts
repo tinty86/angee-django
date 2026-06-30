@@ -1,20 +1,13 @@
 import { AUTH_LOGIN_METHOD_SLOT } from "@angee/app/auth";
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import { formViewSectionsSlot, type BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { createElement } from "react";
 
 import { enIamMessages } from "./i18n";
-import { OAuthCallbackPage } from "./OAuthCallbackPage";
 import { OAuthLoginMethods } from "./OAuthLoginMethods";
 import { LOGIN_CALLBACK_PATH } from "./redirects";
-import { GrantsPage } from "./views/GrantsPage";
-import { GroupsPage } from "./views/GroupsPage";
 import { oidcLoginSection } from "./views/oidc-section";
-import { OverviewPage } from "./views/OverviewPage";
-import { RelationshipsPage } from "./views/RelationshipsPage";
-import { RolesPage } from "./views/RolesPage";
-import { SchemaPage } from "./views/SchemaPage";
-import { UsersPage } from "./views/UsersPage";
 
 export {
   IamLoginPage,
@@ -80,15 +73,15 @@ const iam = defineBaseAddon({
       name: "iam.login.callback",
       path: LOGIN_CALLBACK_PATH,
       layout: "public",
-      component: OAuthCallbackPage,
+      component: lazyRouteComponent(() => import("./OAuthCallbackPage"), "OAuthCallbackPage"),
     },
-    { name: "iam.overview", path: "/iam", layout: "console", component: OverviewPage },
-    ...consolePage("iam.users", "/iam/users", UsersPage, "User"),
-    { name: "iam.roles", path: "/iam/roles", layout: "console", resource: "iam.Role", component: RolesPage },
-    ...consolePage("iam.groups", "/iam/groups", GroupsPage, "iam.Group"),
-    { name: "iam.grants", path: "/iam/grants", layout: "console", resource: "iam.Grant", component: GrantsPage },
-    { name: "iam.relationships", path: "/iam/relationships", layout: "console", resource: "iam.Relationship", component: RelationshipsPage },
-    { name: "iam.schema", path: "/iam/schema", layout: "console", component: SchemaPage },
+    { name: "iam.overview", path: "/iam", layout: "console", component: lazyRouteComponent(() => import("./views/OverviewPage"), "OverviewPage") },
+    ...consolePage("iam.users", "/iam/users", lazyRouteComponent(() => import("./views/UsersPage"), "UsersPage"), "User"),
+    { name: "iam.roles", path: "/iam/roles", layout: "console", resource: "iam.Role", component: lazyRouteComponent(() => import("./views/RolesPage"), "RolesPage") },
+    ...consolePage("iam.groups", "/iam/groups", lazyRouteComponent(() => import("./views/GroupsPage"), "GroupsPage"), "iam.Group"),
+    { name: "iam.grants", path: "/iam/grants", layout: "console", resource: "iam.Grant", component: lazyRouteComponent(() => import("./views/GrantsPage"), "GrantsPage") },
+    { name: "iam.relationships", path: "/iam/relationships", layout: "console", resource: "iam.Relationship", component: lazyRouteComponent(() => import("./views/RelationshipsPage"), "RelationshipsPage") },
+    { name: "iam.schema", path: "/iam/schema", layout: "console", component: lazyRouteComponent(() => import("./views/SchemaPage"), "SchemaPage") },
   ],
   menus: identityMenu,
   i18n: { iam: enIamMessages },

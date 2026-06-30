@@ -110,7 +110,12 @@ export function ChatterProvider({
     (owner: symbol, content: ChatterContent | null) => {
       const next = normalizeChatterContent(content);
       setContentState((current) => {
-        if (next) return { ...next, owner };
+        if (next) {
+          if (current?.owner === owner && sameChatterContent(current, next)) {
+            return current;
+          }
+          return { ...next, owner };
+        }
         return current?.owner === owner ? null : current;
       });
     },
@@ -174,4 +179,11 @@ function normalizeChatterContent(content: ChatterContent | null): ChatterContent
   if (content === null) return null;
   if (content.tabs?.length === 0 && content.composer === undefined) return null;
   return content;
+}
+
+function sameChatterContent(
+  current: (ChatterContent & { owner: symbol }) | null,
+  next: ChatterContent,
+): boolean {
+  return current?.tabs === next.tabs && current?.composer === next.composer;
 }

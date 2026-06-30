@@ -1,11 +1,10 @@
 import type { BaseAddonRoute } from "@angee/app";
 import { defineBaseAddon } from "@angee/app";
 import type { BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { BookOpen, FileStack, FileText, Library } from "lucide-react";
 
 import { enKnowledgeMessages } from "./i18n";
-import { KnowledgePage } from "./views/KnowledgePage";
-import { KnowledgeSettingsPage } from "./views/KnowledgeSettingsPage";
 import { vaultCreateForm } from "./views/vault-form";
 
 const KNOWLEDGE_ID = "knowledge";
@@ -16,7 +15,7 @@ const knowledgeRoutes: readonly BaseAddonRoute[] = [
     path: "/knowledge",
     layout: "console",
     menu: KNOWLEDGE_ID,
-    component: KnowledgePage,
+    component: lazyRouteComponent(() => import("./views/KnowledgePage"), "KnowledgePage"),
   },
   {
     // The vaults admin. A static `/knowledge/settings` outranks the
@@ -24,7 +23,7 @@ const knowledgeRoutes: readonly BaseAddonRoute[] = [
     name: "knowledge.settings",
     path: "/knowledge/settings",
     layout: "console",
-    component: KnowledgeSettingsPage,
+    component: lazyRouteComponent(() => import("./views/KnowledgeSettingsPage"), "KnowledgeSettingsPage"),
   },
   {
     // The page reader nests under the wiki; `KnowledgePage` reads the `$id`

@@ -1,7 +1,7 @@
 import { defineBaseAddon } from "@angee/app";
 import { FORM_VIEW_RECORD_CHROME_SLOT } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 
-import { NotePage } from "./NotePage";
 import { RecordChrome } from "./RecordChrome";
 
 /** The notes addon: one console surface and a menu entry pointing at it. The
@@ -14,7 +14,7 @@ const notes = defineBaseAddon({
       path: "/notes",
       layout: "console",
       resource: "notes.Note",
-      component: NotePage,
+      component: lazyRouteComponent(() => import("./NotePage"), "NotePage"),
     },
     {
       name: "notes.record",

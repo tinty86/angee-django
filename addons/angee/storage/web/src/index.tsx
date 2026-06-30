@@ -1,12 +1,11 @@
 import type { BaseAddonRoute } from "@angee/app";
 import { defineBaseAddon } from "@angee/app";
 import type { BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { ArchiveRestore, Download, HardDrive, Image, Pencil } from "lucide-react";
 
 import { enStorageMessages } from "./i18n";
 import { storagePreviews } from "./previews";
-import { StoragePage } from "./views/StoragePage";
-import { StorageSettingsPage } from "./views/StorageSettingsPage";
 
 const STORAGE_ID = "storage";
 
@@ -16,7 +15,7 @@ const storageRoutes: readonly BaseAddonRoute[] = [
     path: "/storage",
     layout: "console",
     menu: STORAGE_ID,
-    component: StoragePage,
+    component: lazyRouteComponent(() => import("./views/StoragePage"), "StoragePage"),
   },
   {
     // The file record nests under the list; `StoragePage` reads the `$id` param
@@ -33,7 +32,7 @@ const storageRoutes: readonly BaseAddonRoute[] = [
     name: "storage.settings",
     path: "/storage/settings",
     layout: "console",
-    component: StorageSettingsPage,
+    component: lazyRouteComponent(() => import("./views/StorageSettingsPage"), "StorageSettingsPage"),
   },
 ];
 

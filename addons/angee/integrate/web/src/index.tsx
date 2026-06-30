@@ -1,5 +1,6 @@
 import type { BaseMenuItem } from "@angee/ui";
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import {
   Cable,
   FolderGit2,
@@ -12,35 +13,30 @@ import {
 } from "lucide-react";
 
 import { credentialCreateForm } from "./connect/credential-form";
-import { OAuthConnectCallbackPage } from "./connect/OAuthConnectCallbackPage";
-import { CredentialsPage } from "./connect/views/CredentialsPage";
-import { ExternalAccountsPage } from "./connect/views/ExternalAccountsPage";
-import { ProvidersPage } from "./connect/views/ProvidersPage";
 import {
   CONNECT_CALLBACK_LOOPBACK_PATH,
   CONNECT_CALLBACK_PATH,
 } from "./connect/redirects";
 import { enIntegrateMessages } from "./i18n";
-import { IntegrationsPage } from "./views/IntegrationsPage";
-import { RepositoriesPage } from "./views/RepositoriesPage";
-import { SourcesPage } from "./views/SourcesPage";
-import { TemplatesPage } from "./views/TemplatesPage";
-import { VcsBridgesPage } from "./views/VcsBridgesPage";
-import { VendorsPage } from "./views/VendorsPage";
-import { WebhooksPage } from "./views/WebhooksPage";
 
 const INTEGRATE_ID = "integrate";
+
+// Both connect-callback routes render the same page — split it once and share.
+const oauthConnectCallback = lazyRouteComponent(
+  () => import("./connect/OAuthConnectCallbackPage"),
+  "OAuthConnectCallbackPage",
+);
 
 const integrateRoutes: readonly BaseAddonRoute[] = [
   // List/detail pairs: the list route owns the component/model, and the `$id`
   // child carries only the nested record URL.
-  ...consoleRecordRoutes("integrate.integrations", "integrate.integration", "/integrate", IntegrationsPage, "Integration"),
-  ...consoleRecordRoutes("integrate.vendors", "integrate.vendor", "/integrate/vendors", VendorsPage, "Vendor"),
-  ...consoleRecordRoutes("integrate.webhooks", "integrate.webhook", "/integrate/webhooks", WebhooksPage, "WebhookSubscription"),
-  ...consoleRecordRoutes("integrate.vcs", "integrate.vcsBridge", "/integrate/vcs", VcsBridgesPage, "VcsBridge"),
-  ...consoleRecordRoutes("integrate.repositories", "integrate.repository", "/integrate/repositories", RepositoriesPage, "Repository"),
-  ...consoleRecordRoutes("integrate.sources", "integrate.source", "/integrate/sources", SourcesPage, "Source"),
-  ...consoleRecordRoutes("integrate.templates", "integrate.template", "/integrate/templates", TemplatesPage, "Template"),
+  ...consoleRecordRoutes("integrate.integrations", "integrate.integration", "/integrate", lazyRouteComponent(() => import("./views/IntegrationsPage"), "IntegrationsPage"), "Integration"),
+  ...consoleRecordRoutes("integrate.vendors", "integrate.vendor", "/integrate/vendors", lazyRouteComponent(() => import("./views/VendorsPage"), "VendorsPage"), "Vendor"),
+  ...consoleRecordRoutes("integrate.webhooks", "integrate.webhook", "/integrate/webhooks", lazyRouteComponent(() => import("./views/WebhooksPage"), "WebhooksPage"), "WebhookSubscription"),
+  ...consoleRecordRoutes("integrate.vcs", "integrate.vcsBridge", "/integrate/vcs", lazyRouteComponent(() => import("./views/VcsBridgesPage"), "VcsBridgesPage"), "VcsBridge"),
+  ...consoleRecordRoutes("integrate.repositories", "integrate.repository", "/integrate/repositories", lazyRouteComponent(() => import("./views/RepositoriesPage"), "RepositoriesPage"), "Repository"),
+  ...consoleRecordRoutes("integrate.sources", "integrate.source", "/integrate/sources", lazyRouteComponent(() => import("./views/SourcesPage"), "SourcesPage"), "Source"),
+  ...consoleRecordRoutes("integrate.templates", "integrate.template", "/integrate/templates", lazyRouteComponent(() => import("./views/TemplatesPage"), "TemplatesPage"), "Template"),
 
   // --- Connect surface (outbound OAuth) -----------------------------------
   // The account-connect callback: the provider redirects back here after the user
@@ -51,7 +47,7 @@ const integrateRoutes: readonly BaseAddonRoute[] = [
     name: "integrate.connect.callback",
     path: CONNECT_CALLBACK_PATH,
     layout: "console",
-    component: OAuthConnectCallbackPage,
+    component: oauthConnectCallback,
   },
   // Loopback alias for fixed public clients (e.g. Anthropic) whose allow-list registers
   // only the bare `/callback` loopback: on localhost the backend rewrites the connect
@@ -61,11 +57,11 @@ const integrateRoutes: readonly BaseAddonRoute[] = [
     name: "integrate.connect.callbackLoopback",
     path: CONNECT_CALLBACK_LOOPBACK_PATH,
     layout: "console",
-    component: OAuthConnectCallbackPage,
+    component: oauthConnectCallback,
   },
-  ...consoleRecordRoutes("integrate.providers", "integrate.provider", "/integrate/providers", ProvidersPage, "OAuthClient"),
-  ...consoleRecordRoutes("integrate.accounts", "integrate.account", "/integrate/accounts", ExternalAccountsPage, "ExternalAccount"),
-  ...consoleRecordRoutes("integrate.credentials", "integrate.credential", "/integrate/credentials", CredentialsPage, "Credential"),
+  ...consoleRecordRoutes("integrate.providers", "integrate.provider", "/integrate/providers", lazyRouteComponent(() => import("./connect/views/ProvidersPage"), "ProvidersPage"), "OAuthClient"),
+  ...consoleRecordRoutes("integrate.accounts", "integrate.account", "/integrate/accounts", lazyRouteComponent(() => import("./connect/views/ExternalAccountsPage"), "ExternalAccountsPage"), "ExternalAccount"),
+  ...consoleRecordRoutes("integrate.credentials", "integrate.credential", "/integrate/credentials", lazyRouteComponent(() => import("./connect/views/CredentialsPage"), "CredentialsPage"), "Credential"),
 ];
 
 function consoleRecordRoutes(

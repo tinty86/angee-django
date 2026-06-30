@@ -110,6 +110,33 @@ describe("usePageEditor", () => {
     expect(result.current.status).toBe("saved");
   });
 
+  test("cancels a pending body save when the draft returns to the saved body", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() =>
+      usePageEditor(
+        "pag_1",
+        { title: "Page", body: "Old body", bodyHash: "hash-old" },
+        onSaved,
+      ),
+      { wrapper: MetadataWrapper },
+    );
+
+    act(() => {
+      result.current.setBody("Changed body");
+      result.current.setBody("Old body");
+    });
+
+    expect(result.current.body).toBe("Old body");
+    expect(result.current.status).toBe("idle");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+
+    expect(sdkMocks.updateBody).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   test("commits title changes through the SDK page update mutation", async () => {
     const onSaved = vi.fn();
     const { result } = renderHook(() =>

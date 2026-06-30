@@ -1,14 +1,9 @@
 import { defineBaseAddon, type BaseAddonRoute } from "@angee/app";
 import { type BaseMenuItem } from "@angee/ui";
+import { lazyRouteComponent } from "@tanstack/react-router";
 
 import { enPlatformMessages } from "./i18n";
 import { PlatformGlyph } from "./PlatformGlyph";
-import { AddonDetail } from "./views/AddonDetail";
-import { AddonsPage } from "./views/AddonsPage";
-import { FieldsPage } from "./views/FieldsPage";
-import { GraphPage } from "./views/GraphPage";
-import { ModelDetail } from "./views/ModelDetail";
-import { ModelsPage } from "./views/ModelsPage";
 
 // The platform app: a route-less rail root in the bottom platform cluster
 // (`group: "platform"`) that opts into the left settings sub-nav (`sidebar: true`).
@@ -40,12 +35,12 @@ const platformMenu: readonly BaseMenuItem[] = [
 ];
 
 const platformRoutes: readonly BaseAddonRoute[] = [
-  { name: "platform.graph", path: "/platform", layout: "console", component: GraphPage },
-  { name: "platform.models", path: "/platform/models", layout: "console", resource: "platform.Model", component: ModelsPage },
-  { name: "platform.models.record", path: "/platform/models/$id", layout: "console", menu: "platform.models", component: ModelDetail },
-  { name: "platform.fields", path: "/platform/fields", layout: "console", resource: "platform.Field", component: FieldsPage },
-  { name: "platform.addons", path: "/platform/addons", layout: "console", resource: "platform.Addon", component: AddonsPage },
-  { name: "platform.addons.record", path: "/platform/addons/$id", layout: "console", menu: "platform.addons", component: AddonDetail },
+  { name: "platform.graph", path: "/platform", layout: "console", component: lazyRouteComponent(() => import("./views/GraphPage"), "GraphPage") },
+  { name: "platform.models", path: "/platform/models", layout: "console", resource: "platform.Model", component: lazyRouteComponent(() => import("./views/ModelsPage"), "ModelsPage") },
+  { name: "platform.models.record", path: "/platform/models/$id", layout: "console", menu: "platform.models", component: lazyRouteComponent(() => import("./views/ModelDetail"), "ModelDetail") },
+  { name: "platform.fields", path: "/platform/fields", layout: "console", resource: "platform.Field", component: lazyRouteComponent(() => import("./views/FieldsPage"), "FieldsPage") },
+  { name: "platform.addons", path: "/platform/addons", layout: "console", resource: "platform.Addon", component: lazyRouteComponent(() => import("./views/AddonsPage"), "AddonsPage") },
+  { name: "platform.addons.record", path: "/platform/addons/$id", layout: "console", menu: "platform.addons", component: lazyRouteComponent(() => import("./views/AddonDetail"), "AddonDetail") },
 ];
 
 const platform = defineBaseAddon({

@@ -303,8 +303,12 @@ export function useGroupedResourceViewSurface<TRow extends Row = Row>({
     [resourceView.state.sort, modelMetadata, order],
   );
   const tableColumns = React.useMemo(
-    () => buildColumns(columns, resourceView),
-    [columns, resourceView],
+    () =>
+      buildColumns(columns, {
+        sort: resourceView.state.sort,
+        setSort: resourceView.setSort,
+      }),
+    [columns, resourceView.state.sort, resourceView.setSort],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -417,8 +421,12 @@ export function useResourceViewSurface<TRow extends Row = Row>({
     [resourceView.state.sort, modelMetadata, order],
   );
   const tableColumns = React.useMemo(
-    () => buildColumns(columns, resourceView),
-    [columns, resourceView],
+    () =>
+      buildColumns(columns, {
+        sort: resourceView.state.sort,
+        setSort: resourceView.setSort,
+      }),
+    [columns, resourceView.state.sort, resourceView.setSort],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -776,8 +784,12 @@ function useResourceViewPresentationSurface<TRow extends Row>({
   getRowId: (row: TRow, index: number) => string;
 }): ResourceViewPresentationSurface<TRow> {
   const tableColumns = React.useMemo(
-    () => buildColumns(columns, resourceView),
-    [columns, resourceView],
+    () =>
+      buildColumns(columns, {
+        sort: resourceView.state.sort,
+        setSort: resourceView.setSort,
+      }),
+    [columns, resourceView.state.sort, resourceView.setSort],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
