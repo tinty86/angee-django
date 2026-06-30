@@ -1,16 +1,16 @@
-import { useEffect, useState, type ReactElement } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { lazy, useEffect, useState, type ReactElement } from "react";
 
 import { EmptyState } from "../fragments/EmptyState";
 import { LoadingPanel } from "../fragments/LoadingPanel";
 import { useBaseT } from "../i18n";
-import { cn } from "../lib/cn";
 import { formatSize, isJsonMime } from "./model";
 import {
   type PreviewProvider,
   type PreviewProviderProps,
 } from "./registry";
+
+// react-markdown (and remark-gfm) loads on first markdown preview, not at boot.
+const MarkdownPreviewBody = lazy(() => import("./MarkdownPreviewBody"));
 
 /** Fetch a text file's body for the text-based renderers. */
 function useFileText(url: string): {
@@ -95,17 +95,7 @@ function TextPreview({ file, mime }: PreviewProviderProps): ReactElement {
 function MarkdownPreview({ file }: PreviewProviderProps): ReactElement {
   return (
     <FileText url={file.url}>
-      {(text) => (
-        <div
-          className={cn(
-            "prose-angee h-full overflow-auto bg-sheet p-6 text-fg-2",
-            "[&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-semibold",
-            "[&_p]:my-2 [&_code]:rounded-6 [&_code]:bg-inset [&_code]:px-1 [&_a]:text-link [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6",
-          )}
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-        </div>
-      )}
+      {(text) => <MarkdownPreviewBody text={text} />}
     </FileText>
   );
 }
