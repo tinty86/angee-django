@@ -42,10 +42,6 @@ import {
   GroupedListBody,
 } from "./GroupedList";
 import {
-  groupPagerStatesEqual,
-  type GroupPagerState,
-} from "./grouped-list-utils";
-import {
   FlatListBody,
   resourceViewGroupToAggregateDimension,
   groupMeasuresFromColumns,
@@ -86,6 +82,7 @@ export type {
   ListColumn,
 } from "./ListInternals";
 export type {
+  CardActionContext,
   ListEmptyAction,
   ListEmptyContent,
   ListEmptyState,
@@ -155,6 +152,7 @@ function ListViewBody<TRow extends Row = Row>({
   rowHref,
   toolbarActions,
   cardActions,
+  renderCard,
   emptyMessage = "No records.",
   emptyState,
   className,
@@ -301,7 +299,6 @@ function ListViewBody<TRow extends Row = Row>({
       modelMetadata={modelMetadata}
       resourceView={resourceView}
       effectiveGroupStack={effectiveGroupStack}
-      groupDimensions={groupDimensions}
       groupedListMode={groupedListMode}
       declaredFacets={declaredFacets}
       scalarFacets={scalarFacets}
@@ -318,6 +315,7 @@ function ListViewBody<TRow extends Row = Row>({
       rowHref={rowHref}
       toolbarActions={toolbarActions}
       cardActions={cardActions}
+      renderCard={renderCard}
       emptyContent={emptyContent}
       className={className}
     />
@@ -368,7 +366,6 @@ interface ListViewContentProps<TRow extends Row> {
   modelMetadata: ReturnType<typeof useModelMetadata>;
   resourceView: ResourceViewContextValue;
   effectiveGroupStack: readonly ResourceViewGroup[];
-  groupDimensions: ReturnType<typeof resourceViewGroupToAggregateDimension>[];
   groupedListMode: boolean;
   declaredFacets: ReturnType<typeof useRelationFacets>;
   scalarFacets: ReturnType<typeof useScalarFacets>;
@@ -385,6 +382,7 @@ interface ListViewContentProps<TRow extends Row> {
   rowHref: ListViewProps<TRow>["rowHref"];
   toolbarActions: ListViewProps<TRow>["toolbarActions"];
   cardActions: ListViewProps<TRow>["cardActions"];
+  renderCard: ListViewProps<TRow>["renderCard"];
   emptyContent: ListEmptyContent;
   className: string | undefined;
 }
@@ -396,7 +394,6 @@ function ListViewContent<TRow extends Row = Row>({
   modelMetadata,
   resourceView,
   effectiveGroupStack,
-  groupDimensions,
   groupedListMode,
   declaredFacets,
   scalarFacets,
@@ -413,22 +410,13 @@ function ListViewContent<TRow extends Row = Row>({
   rowHref,
   toolbarActions,
   cardActions,
+  renderCard,
   emptyContent,
   className,
 }: ListViewContentProps<TRow>): React.ReactElement {
   const flatMeasures = React.useMemo(
     () => groupMeasuresFromColumns(resolvedColumns),
     [resolvedColumns],
-  );
-  const [groupPagerState, setGroupPagerState] =
-    React.useState<GroupPagerState | null>(null);
-  const handleGroupPagerStateChange = React.useCallback(
-    (next: GroupPagerState) => {
-      setGroupPagerState((current) =>
-        groupPagerStatesEqual(current, next) ? current : next,
-      );
-    },
-    [],
   );
   const toolbarPager = React.useMemo<PagerState>(() => {
     if (!groupedListMode) {
@@ -440,16 +428,14 @@ function ListViewContent<TRow extends Row = Row>({
         hasNext: surface.list.hasNext,
       };
     }
-    // Group-level pager: Pager derives hasPrev/hasNext from page/total.
+    // Group-level pager: the surface reports the level-0 group total; Pager
+    // derives hasPrev/hasNext from page/total.
     return {
-      total: groupPagerState?.total ?? 0,
-      page: resourceView.state.page,
-      pageSize: resourceView.state.pageSize,
+      total: surface.list.total ?? 0,
+      page: surface.list.page,
+      pageSize: surface.list.pageSize,
     };
   }, [
-    resourceView.state.page,
-    resourceView.state.pageSize,
-    groupPagerState?.total,
     groupedListMode,
     surface.list.hasNext,
     surface.list.hasPrev,
@@ -614,28 +600,29 @@ function ListViewContent<TRow extends Row = Row>({
     >
       {groupedListMode ? (
         <GroupedListBody
-          resource={resource}
           columns={resolvedColumns}
           table={surface.table}
           tableColumns={surface.tableColumns}
-          columnVisibility={surface.columnVisibility}
           visibleColumnCount={surface.visibleColumnCount}
           visibleFields={surface.visibleFields}
           onVisibleFieldToggle={surface.toggleVisibleField}
           resourceView={resourceView}
-          groupStack={effectiveGroupStack}
-          groupDimensions={groupDimensions}
           modelMetadata={modelMetadata}
-          requestedFields={surface.requestedFields}
-          mergedFilter={surface.mergedFilter}
-          sortOrder={surface.sortOrder}
-          order={order}
+          listItems={surface.groupedItems}
+          tableScrollRef={surface.tableScrollRef}
+          rowVirtualizer={surface.rowVirtualizer}
+          footerAggregate={surface.footerAggregate}
+          expandedKeys={surface.expandedKeys}
+          toggleGroup={surface.toggleGroup}
+          setScopePage={surface.setScopePage}
+          selectedIds={surface.selectedIds}
           interactive={interactive}
           rowHref={rowHref}
           onRowClick={onRowClick}
-          emptyMessage={emptyContent}
-          onPagerStateChange={handleGroupPagerStateChange}
           onListStateChange={onListStateChange}
+          emptyMessage={emptyContent}
+          fetching={surface.list.fetching}
+          error={surface.list.error}
         />
       ) : resourceView.state.view === "board" ? (
         <BoardView
@@ -650,6 +637,7 @@ function ListViewContent<TRow extends Row = Row>({
           onRowClick={onRowClick}
           cardActions={cardActions}
           cardActionContext={cardActionContext}
+          renderCard={renderCard}
         />
       ) : flatMeasures.length > 0 ? (
         <FlatListBodyWithAggregate
