@@ -40,23 +40,23 @@ def test_registry_facts_full_row_for_enabled_and_zeroed_for_available(db) -> Non
     full counts when enabled, a complete *zeroed* row when available-but-not-enabled
     (so a state flip never leaves stale counts), with reverse-deps as a list."""
 
-    from angee.platform.models import AddonManager
+    from angee.platform.models import Addon, AddonManager
 
     facts = AddonManager._registry_facts()
     row_keys = {
-        "label", "namespace", "kind", "source", "enabled",
+        "label", "namespace", "kind", "source", "state",
         "model_count", "field_count", "resource_count",
         "depends_on", "depended_by", "model_labels",
     }
 
     enabled = facts["angee.iam"]  # in the test INSTALLED_APPS
-    assert enabled["enabled"] is True
+    assert enabled["state"] == Addon.State.ENABLED
     assert set(enabled) == row_keys  # complete row, no partial dict
 
     # an installed bundle that is *not* enabled in the test settings
     available = facts["angee.knowledge_graph_pgvector"]
     assert set(available) == row_keys  # complete row even when available-only
-    assert available["enabled"] is False
+    assert available["state"] == Addon.State.DISABLED
     assert available["model_count"] == 0
     assert available["field_count"] == 0
     assert available["depends_on"] == []

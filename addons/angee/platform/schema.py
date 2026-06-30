@@ -233,10 +233,11 @@ class AddonNode:
     label: auto
     namespace: auto
     # Exposed as the string value, not an `auto` enum: strawberry would name the
-    # generated enum `Source`, colliding with `integrate`'s connection-source enum.
+    # generated enums `Source`/`State`, colliding with `integrate`'s connection-source
+    # enum and the shared StateField names.
     kind: str
     source: str
-    enabled: auto
+    state: str
     model_count: auto
     field_count: auto
     resource_count: auto
@@ -259,10 +260,10 @@ _ADDON_RESOURCE = hasura_model_resource(
     model=_Addon,
     name="platform_addons",
     model_label="platform.Addon",
-    filterable=["label", "namespace", "kind", "source", "enabled", "model_count", "field_count", "resource_count"],
-    sortable=["label", "namespace", "kind", "model_count", "field_count", "resource_count"],
+    filterable=["label", "namespace", "kind", "source", "state", "model_count", "field_count", "resource_count"],
+    sortable=["label", "namespace", "kind", "state", "model_count", "field_count", "resource_count"],
     aggregatable=["id"],
-    groupable=["namespace", "kind", "source"],
+    groupable=["namespace", "kind", "source", "state"],
     insert=False,
     update=False,
     delete=False,

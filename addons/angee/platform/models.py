@@ -9,9 +9,11 @@ authoritatively *derived*, never authored: ``settings.yaml`` (enabled) and
 mirror that backs the console.
 
 Scope is deliberately **local**: which addons are *available* (installed bundles +
-local ``addon.toml``) and *enabled* (composed). The remote marketplace — addons
-known from VCS provenance but not materialised — is **not** here; the
-``platform_integrate_vcs`` addon extends ``Addon`` with that.
+local ``addon.toml``) and which lifecycle ``state`` each is in — ``enabled``
+(composed), ``disabled`` (available but not composed), or ``removed`` (gone from the
+env, the row kept as history; the reconcile marks state, it never deletes). The
+remote marketplace — addons known from VCS provenance but not materialised — is
+**not** here; the ``platform_integrate_vcs`` addon extends ``Addon`` with that tier.
 
 ``PlatformExplorer`` stays a table-less REBAC type anchor for the schema explorer.
 """
@@ -35,17 +37,27 @@ class AddonManager(AngeeManager):
     def reconcile_from_registry(self, using: str) -> None:
         """Converge the table to the composed app graph + available addons.
 
-        The content-type reconcile: create-missing, update, prune-stale — a **full
-        overwrite per row** so a state flip (enabled → available) resets every
-        reflected field rather than leaving stale counts. Runs under the caller's
+        A **state** reconcile, never a delete: an addon that leaves the project is
+        marked ``REMOVED`` — its row, and so its history, is kept — rather than
+        pruned. Scoped to the tier this reconcile owns (installed/local); rows of
+        other tiers (the VCS marketplace ``platform_integrate_vcs`` contributes) are
+        left untouched. Each present addon's row is a full overwrite so a state flip
+        (enabled ↔ disabled) resets every reflected field. Runs under the caller's
         ``system_context`` (see ``signals.py``); routed through ``using``.
         """
 
         facts = self._registry_facts()
         rows = self.using(using)
-        stale = set(rows.values_list("name", flat=True)) - set(facts)
-        if stale:
-            rows.filter(name__in=stale).delete()
+        owned = (Addon.Source.INSTALLED, Addon.Source.LOCAL)
+        rows.filter(source__in=owned).exclude(name__in=facts).update(
+            state=Addon.State.REMOVED,
+            model_count=0,
+            field_count=0,
+            resource_count=0,
+            depends_on=[],
+            model_labels=[],
+            depended_by=[],
+        )
         for name, defaults in facts.items():
             rows.update_or_create(name=name, defaults=defaults)
 
@@ -66,7 +78,7 @@ class AddonManager(AngeeManager):
                     "namespace": rollup.namespace,
                     "kind": rollup.kind,
                     "source": source,
-                    "enabled": True,
+                    "state": Addon.State.ENABLED,
                     "model_count": rollup.model_count,
                     "field_count": rollup.field_count,
                     "resource_count": rollup.resource_count,
@@ -79,7 +91,7 @@ class AddonManager(AngeeManager):
                     "namespace": name.split(".")[0],
                     "kind": Addon.Kind.REQUIRED,
                     "source": source,
-                    "enabled": False,
+                    "state": Addon.State.DISABLED,
                     "model_count": 0,
                     "field_count": 0,
                     "resource_count": 0,
@@ -120,12 +132,19 @@ class Addon(AngeeModel):
         INSTALLED = "installed", "Installed"  # an installed bundle's entry point (uv.lock)
         LOCAL = "local", "Local"  # an addon.toml under ANGEE_ADDON_DIRS
 
+    class State(models.TextChoices):
+        """The addon's lifecycle in this project — reconciled, never deleted."""
+
+        ENABLED = "enabled", "Enabled"  # composed into the app graph
+        DISABLED = "disabled", "Disabled"  # available/known but not composed
+        REMOVED = "removed", "Removed"  # was present, now gone from the env (kept as history)
+
     name = models.CharField(max_length=200, unique=True)
     label = models.CharField(max_length=100, blank=True, default="")
     namespace = models.CharField(max_length=100, blank=True, default="")
     kind = StateField(choices_enum=Kind, default=Kind.REQUIRED)
     source = StateField(choices_enum=Source, default=Source.INSTALLED)
-    enabled = models.BooleanField(default=False, db_index=True)
+    state = StateField(choices_enum=State, default=State.DISABLED, db_index=True)
     model_count = models.PositiveIntegerField(default=0)
     field_count = models.PositiveIntegerField(default=0)
     resource_count = models.PositiveIntegerField(default=0)
