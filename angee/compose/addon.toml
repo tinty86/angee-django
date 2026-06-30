@@ -1,6 +1,8 @@
-# Angee addon manifest — the declarative contract. hatch-angee's metadata hook
-# turns this into an `angee.addons` entry point at build; the runtime enumerates
-# those over uv.lock to list *available* addons. (depends_on/contributions migrate
-# here from apps.py over time; for now this is the discovery marker + identity.)
+# Angee addon manifest. The declarative contract hatch-angee compiles into
+# the package's [project] + entry points; see angee/addons.py (AddonContract).
 [addon]
 name = "angee.compose"
+description = "Bootstrap composed runtime models during app population."
+keywords = ["composer", "build", "runtime"]
+category = "Foundation"
+depends_on = ["django_yamlconf"]

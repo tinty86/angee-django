@@ -91,12 +91,17 @@ Rules that follow from the layering:
   concern: serving code such as schema building enumerates Django's installed
   app configs and reads only the declaration attributes it owns. Serving code
   never imports `angee.compose` just to list addons.
-- **An Angee addon is a plain Django app config with explicit attributes.**
-  Addons do not subclass an Angee base config. `angee_addon = True` opts the app
-  into framework addon discovery for conventional routes, and `depends_on` is
-  only an ordering contract; each lifecycle step reads only the contract it owns:
-  `graphql` reads `schemas`, `resources` reads `resources`, REBAC sync reads
-  `permissions`, stable serving imports conventional `urls.py` / `asgi.py`,
+- **An Angee addon is a plain Django app config plus a co-located `addon.toml`.**
+  Addons do not subclass an Angee base config. The `AppConfig` keeps only the
+  `angee_addon = True` marker (which opts the app into framework addon discovery
+  for conventional routes), identity, and `ready()`; the declarative contract —
+  `depends_on` (an ordering contract) plus the contribution seams — lives in
+  `addon.toml` and is read through `angee.addons.addon_contract`. Each lifecycle
+  step reads only the contract it owns: `graphql` reads `[contributes].schemas`,
+  `resources` reads `[contributes.resources]`, the web projector reads
+  `[contributes].web` / `[contributes.web_codegen]`, the MCP server reads
+  `[contributes].mcp_tools`, REBAC sync discovers an adjacent `permissions.zed`
+  by convention, stable serving imports conventional `urls.py` / `asgi.py`,
   runtime emission reads model-level `runtime = True`, and settings composition reads
   the addon's optional `autoconfig.py`.
 - **There is a single app set and a single boot.** `DJANGO_SETTINGS_MODULE`
@@ -416,8 +421,9 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   adding a stack or service template.
 - **`makemigrations` must name every changed app** — include `resources` (and
   `base`) or `resources load` fails with `no such table: resources_resource`.
-- **A resource yaml loads only when listed** in the addon's `AppConfig.resources`
-  manifest (`{tier: (paths,)}`); an unlisted file silently loads nothing.
+- **A resource yaml loads only when listed** in the addon's `addon.toml`
+  `[contributes.resources]` manifest (`{tier: (paths,)}`); an unlisted file silently
+  loads nothing.
 - **Give a model an opaque public id by mixing in `SqidMixin` and declaring
   `sqid_prefix = "abc_"`** — the one fact that varies per model. The shared
   `angee.base.fields.SqidField` reads that prefix in `contribute_to_class`; don't
@@ -473,8 +479,8 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   addon's `mcp.py` that does `from mcp.server… import …` becomes an importable
   top-level `mcp` that shadows the real package — `ModuleNotFoundError: 'mcp' is not
   a package` during a test run, while a single-module run and `manage.py check` pass.
-  Name such a module for its role, not the library (the MCP tool seam discovers a
-  `mcp_tools` manifest attribute → `mcp_tools.py`, not `mcp.py`).
+  Name such a module for its role, not the library (the MCP tool seam resolves the
+  `[contributes].mcp_tools` dotted reference → `mcp_tools.py`, not `mcp.py`).
 
 ## Framework Contracts
 
@@ -484,15 +490,16 @@ module-level constants. Add docstrings to private helpers when their role is not
 obvious from the function name and signature. Do not maintain a parallel spec, field inventory, or model
 API list for behavior that can live clearly beside the code.
 
-`AppConfig` is the addon manifest and owns addon-local interpretation. Use
-Django's own facts before adding an Angee fact: the addon root is
+The addon's `addon.toml` is the declarative manifest (its contract owner is
+`angee.addons.AddonContract`); the `AppConfig` owns addon-local *interpretation*.
+Use Django's own facts before adding an Angee fact: the addon root is
 `AppConfig.path`, source models live in `models.py`, and GraphQL contributions
 live in `schema.py`. Put validation, normalization, and path resolution for one
 addon on the `AppConfig` subclass. Prefer methods on the object that owns the
 data — the `AppConfig` for one addon, a runtime build object for composition —
 over loose functions; keep a function loose only for orchestration no single
-object owns. Put current manifest attributes and their exact authoring forms in
-the `AppConfig` base class docstrings, not in this guideline.
+object owns. Put the manifest keys and their exact authoring forms in the
+`AddonContract` docstring, not in this guideline.
 
 Before decomposing backend code, classify each fact by its Django owner:
 

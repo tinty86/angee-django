@@ -13,4 +13,3 @@ class PartiesIntegrateCarddavConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "angee.parties_integrate_carddav"
     label = "parties_integrate_carddav"
-    depends_on = ("angee.parties", "angee.integrate")

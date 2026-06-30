@@ -22,7 +22,7 @@ from strawberry.types.execution import ExecutionContext
 from strawberry.utils.str_converters import to_camel_case
 from strawberry_django_hasura import hasura_config
 
-from angee.addons import resolve_addon_reference
+from angee.addons import addon_contract, resolve_addon_reference
 from angee.graphql.data.metadata import (
     DataResourceMetadata,
     data_resource_metadata,
@@ -468,13 +468,10 @@ def schema_parts_for(app_config: AppConfig) -> dict[str, SchemaParts]:
 def _raw_schemas(app_config: AppConfig) -> object:
     """Return the raw schema declaration object for one addon, when present."""
 
-    declaration = getattr(app_config, "schemas", None)
+    contract = addon_contract(app_config)
+    declaration = contract.schemas if contract is not None else None
     if declaration is None:
         return None
-    if isinstance(declaration, Mapping):
-        return declaration
-    if not isinstance(declaration, str):
-        raise ImproperlyConfigured(f"{app_config.name}.schemas must be a mapping or dotted reference")
     return resolve_addon_reference(app_config, declaration, attr="schemas")
 
 

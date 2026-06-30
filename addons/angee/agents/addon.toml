@@ -1,6 +1,19 @@
-# Angee addon manifest — the declarative contract. hatch-angee's metadata hook
-# turns this into an `angee.addons` entry point at build; the runtime enumerates
-# those over uv.lock to list *available* addons. (depends_on/contributions migrate
-# here from apps.py over time; for now this is the discovery marker + identity.)
+# Angee addon manifest. The declarative contract hatch-angee compiles into
+# the package's [project] + entry points; see angee/addons.py (AddonContract).
 [addon]
 name = "angee.agents"
+description = "Source app manifest for the agent catalogue."
+keywords = ["agents", "ai", "inference"]
+category = "Agents"
+depends_on = ["angee.integrate", "angee.operator", "angee.mcp"]
+schemas = "schema.schemas"
+permissions = "permissions.zed"
+
+[web]
+package = "@angee/agents"
+
+[resources]
+demo = [
+  { path = "resources/demo/010_integrate.credential.yaml", depends_on = "iam:resources/demo/010_iam.user.yaml", adopt = ["user", "name"] },
+  { path = "resources/demo/020_agents.mcpserver.yaml", depends_on = "resources/demo/010_integrate.credential.yaml", adopt = "name" },
+]

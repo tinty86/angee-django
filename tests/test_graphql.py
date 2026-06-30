@@ -27,6 +27,7 @@ from angee.graphql.schema import (
     SCHEMA_PART_KEYS,
     GraphQLSchemas,
 )
+from tests.conftest import make_addon
 
 
 @strawberry.type
@@ -237,10 +238,6 @@ class RelatedRevisionEntryType:
     owner: strawberry.auto
 
 
-class FakeAddon(AppConfig):
-    """Stand-in addon config exposing raw schema declarations."""
-
-
 def _parts(**buckets: list) -> dict[str, tuple]:
     """Return a raw schema declaration with all known buckets."""
 
@@ -259,9 +256,7 @@ def addon(**name_to_parts: dict[str, list]) -> AppConfig:
     """Build a fake addon contributing parts to one or more schema names."""
 
     schemas = {name: _parts(**parts) for name, parts in name_to_parts.items()}
-    config = FakeAddon("tests.fake_graphql", _module("tests.fake_graphql"))
-    config.schemas = schemas
-    return config
+    return make_addon(schemas=schemas)
 
 
 def test_collect_folds_addons_in_order() -> None:

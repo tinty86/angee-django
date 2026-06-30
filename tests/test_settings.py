@@ -808,19 +808,47 @@ def _write_addon(
                 "",
                 "class TestConfig(AppConfig):",
                 "    default = True",
+                "    angee_addon = True",
                 f"    name = {name!r}",
                 *([f"    label = {label!r}"] if label is not None else []),
-                f"    depends_on = {depends_on!r}",
                 "",
             ]
         ),
         encoding="utf-8",
     )
+    (package / "addon.toml").write_text(_addon_toml(name, depends_on), encoding="utf-8")
     (package / "autoconfig.py").write_text(autoconfig, encoding="utf-8")
 
 
+def _addon_toml(name: str, depends_on: object) -> str:
+    """Render a temp addon's addon.toml manifest with its declared depends_on.
+
+    A bare string is written as a TOML string (not a one-element array), so the
+    reader's bare-string coercion is exercised end to end rather than pre-normalized
+    here.
+    """
+
+    if isinstance(depends_on, str):
+        rendered = f'"{depends_on}"'
+    else:
+        items = []
+        for item in depends_on:
+            if isinstance(item, str):
+                items.append(f'"{item}"')
+            elif isinstance(item, bool):
+                items.append("true" if item else "false")
+            else:
+                items.append(repr(item))
+        rendered = "[" + ", ".join(items) + "]"
+    return f'[addon]\nname = "{name}"\ndepends_on = {rendered}\n'
+
+
 def _addon_test_config(name: str) -> AppConfig:
-    """Return an opted-in ``AppConfig`` for a temp addon package."""
+    """Return an opted-in ``AppConfig`` for a temp addon package.
+
+    The temp package carries its contract in a co-located ``addon.toml`` (see
+    ``_write_addon``); the composer reads it from ``config.path``.
+    """
 
     module = importlib.import_module(name)
     config_cls = getattr(importlib.import_module(f"{name}.apps"), "TestConfig")
@@ -1002,7 +1030,12 @@ def test_composer_rejects_dependency_cycles(
 
 
 def test_addon_contribution_ignores_plain_django_dependency_urls() -> None:
-    """Plain Django dependencies must not leak conventional URLs into Angee."""
+    """Only the ``angee_addon`` marker opts an app into route mounting.
+
+    ``django.contrib.auth`` ships a real ``urls`` submodule with ``urlpatterns``, yet
+    contributes nothing: it is not marked ``angee_addon``, so the marker (not a
+    populated module, and not any dependency declaration) is the gate.
+    """
 
     import django.contrib.auth as auth_module
     from django.contrib.auth.apps import AuthConfig
@@ -1010,20 +1043,6 @@ def test_addon_contribution_ignores_plain_django_dependency_urls() -> None:
     from angee.addons import addon_contribution
 
     auth_config = AuthConfig("django.contrib.auth", auth_module)
-
-    assert addon_contribution(auth_config, "urls", "urlpatterns") == []
-
-
-def test_addon_contribution_requires_explicit_angee_addon_marker() -> None:
-    """A ``depends_on`` attribute alone does not opt an app into route mounting."""
-
-    import django.contrib.auth as auth_module
-    from django.contrib.auth.apps import AuthConfig
-
-    from angee.addons import addon_contribution
-
-    auth_config = AuthConfig("django.contrib.auth", auth_module)
-    auth_config.depends_on = ()  # type: ignore[attr-defined]
 
     assert addon_contribution(auth_config, "urls", "urlpatterns") == []
 

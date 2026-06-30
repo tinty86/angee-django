@@ -19,7 +19,7 @@ import pytest
 from django.apps import apps
 from fastmcp import FastMCP
 
-from angee.addons import resolve_addon_reference
+from angee.addons import addon_contract, resolve_addon_reference
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
 from tests.conftest import SchemaAddon
 
@@ -158,12 +158,13 @@ def test_page_backlinks_projects_only_backlinks(knowledge_discovery: None) -> No
 
 
 def test_appconfig_wires_the_registrar() -> None:
-    """The knowledge AppConfig declares ``mcp_tools`` and it resolves to ``register``.
+    """The knowledge manifest declares ``mcp_tools`` and it resolves to ``register``.
 
-    Proves the discovery seam (``mcp/server.py`` reads ``app_config.mcp_tools``) finds the
+    Proves the discovery seam (``mcp/server.py`` reads ``contract.mcp_tools``) finds the
     knowledge registrar without building the whole server.
     """
 
     app_config = apps.get_app_config("knowledge")
-    assert app_config.mcp_tools == "mcp_tools.register"
-    assert resolve_addon_reference(app_config, app_config.mcp_tools, attr="mcp_tools") is knowledge_mcp_tools.register
+    mcp_tools = addon_contract(app_config).mcp_tools
+    assert mcp_tools == "mcp_tools.register"
+    assert resolve_addon_reference(app_config, mcp_tools, attr="mcp_tools") is knowledge_mcp_tools.register

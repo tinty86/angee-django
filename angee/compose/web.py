@@ -22,6 +22,7 @@ from pathlib import Path
 from django.apps import AppConfig
 from django.core.exceptions import ImproperlyConfigured
 
+from angee.addons import addon_contract
 from angee.fs import GENERATED_SENTINEL
 
 CORE_WEB_PACKAGES: tuple[str, ...] = ("@angee/app", "@angee/ui")
@@ -155,17 +156,18 @@ class WebRuntime:
         packages: list[WebPackage] = []
         seen: dict[str, AppConfig] = {}
         for addon in self.addons:
-            raw_package = getattr(addon, "angee_web_package", None)
+            contract = addon_contract(addon)
+            raw_package = contract.web if contract is not None else None
             if raw_package is None:
                 continue
             if not isinstance(raw_package, str) or not WEB_PACKAGE_RE.match(raw_package):
                 raise ImproperlyConfigured(
-                    f"{addon.name}.angee_web_package must be a valid npm package name"
+                    f"{addon.name} addon.toml [web].package must be a valid npm package name"
                 )
             previous = seen.setdefault(raw_package, addon)
             if previous is not addon:
                 raise ImproperlyConfigured(
-                    f"Duplicate angee_web_package {raw_package!r}: {previous.name} and {addon.name}"
+                    f"Duplicate [web].package {raw_package!r}: {previous.name} and {addon.name}"
                 )
             packages.append(
                 WebPackage(
@@ -182,27 +184,28 @@ class WebRuntime:
         entries: list[WebCodegen] = []
         seen: dict[str, AppConfig] = {}
         for addon in self.addons:
-            raw = getattr(addon, "angee_web_codegen", None)
-            if raw is None:
+            contract = addon_contract(addon)
+            if contract is None or contract.web_codegen is None:
                 continue
+            raw = contract.web_codegen
             if not isinstance(raw, dict) or not {"schema", "sdl", "documents"} <= set(raw):
                 raise ImproperlyConfigured(
-                    f"{addon.name}.angee_web_codegen must be a dict with 'schema', 'sdl', and 'documents'"
+                    f"{addon.name} addon.toml [web].codegen must declare 'schema', 'sdl', and 'documents'"
                 )
             schema = raw["schema"]
             if not isinstance(schema, str) or not schema.isidentifier():
                 raise ImproperlyConfigured(
-                    f"{addon.name}.angee_web_codegen['schema'] must be a model-safe name"
+                    f"{addon.name} [web].codegen.schema must be a model-safe name"
                 )
-            package = getattr(addon, "angee_web_package", None)
+            package = contract.web
             if not isinstance(package, str):
                 raise ImproperlyConfigured(
-                    f"{addon.name}.angee_web_codegen requires the addon to declare angee_web_package"
+                    f"{addon.name} [web].codegen requires [web].package"
                 )
             previous = seen.setdefault(schema, addon)
             if previous is not addon:
                 raise ImproperlyConfigured(
-                    f"Duplicate angee_web_codegen schema {schema!r}: {previous.name} and {addon.name}"
+                    f"Duplicate [web].codegen.schema {schema!r}: {previous.name} and {addon.name}"
                 )
             entries.append(
                 WebCodegen(

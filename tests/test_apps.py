@@ -9,10 +9,11 @@ import pytest
 from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
 
+from angee.addons import addon_contract
 from angee.base.apps import BaseConfig
 from angee.graphql.schema import schema_parts_for
 from angee.resources.entries import ResourceEntry, resource_manifest_for
-from angee.resources.tiers import ResourceTier
+from tests.conftest import make_contract
 
 
 def _module(name: str) -> ModuleType:
@@ -38,7 +39,7 @@ def test_base_config_is_a_dependency_node() -> None:
     base = apps.get_app_config("base")
 
     assert isinstance(base, BaseConfig)
-    assert base.depends_on == (
+    assert addon_contract(base).depends_on == (
         "angee.compose",
         "django.contrib.contenttypes",
         "rebac",
@@ -47,29 +48,30 @@ def test_base_config_is_a_dependency_node() -> None:
     )
 
 
-def test_resource_manifest_normalizes_tiers_and_entries() -> None:
-    """Resource declarations normalize in the resource subsystem."""
+def test_resource_manifest_normalizes_tiers_and_entries(monkeypatch) -> None:
+    """Resource declarations from the manifest normalize in the resource subsystem."""
 
-    class ResourceConfig(AppConfig):
-        name = "tests.resources"
-        label = "test_resources"
-        resources = {
-            "install": (
-                "resources/users.csv",
-                {
-                    "path": "resources/notes.yaml",
-                    "depends_on": ["resources/users.csv"],
-                    "adopt": True,
-                },
-                {
-                    "path": "resources/comments.yaml",
-                    "depends_on": "resources/notes.yaml",
-                },
-            ),
-            "demo": {"url": "https://example.test/demo.csv"},
-        }
-
-    config = ResourceConfig("tests.resources", _module("tests.resources"))
+    config = apps.get_app_config("base")
+    monkeypatch.setattr(
+        "angee.resources.entries.addon_contract",
+        lambda _config: make_contract(
+            resources={
+                "install": (
+                    "resources/users.csv",
+                    {
+                        "path": "resources/notes.yaml",
+                        "depends_on": ["resources/users.csv"],
+                        "adopt": True,
+                    },
+                    {
+                        "path": "resources/comments.yaml",
+                        "depends_on": "resources/notes.yaml",
+                    },
+                ),
+                "demo": {"url": "https://example.test/demo.csv"},
+            }
+        ),
+    )
     manifest = resource_manifest_for(config)
 
     assert manifest["master"] == ()
@@ -86,20 +88,6 @@ def test_resource_manifest_normalizes_tiers_and_entries() -> None:
         },
     )
     assert manifest["demo"] == ({"url": "https://example.test/demo.csv"},)
-
-
-def test_resource_manifest_accepts_resource_tier_enum_keys() -> None:
-    """Manifest tier normalization delegates enum handling to ResourceTier."""
-
-    class ResourceConfig(AppConfig):
-        name = "tests.enum_resources"
-        label = "enum_resources"
-        resources = {ResourceTier.INSTALL: ("resources/users.csv",)}
-
-    config = ResourceConfig("tests.enum_resources", _module("tests.enum_resources"))
-    manifest = resource_manifest_for(config)
-
-    assert manifest["install"] == ({"path": "resources/users.csv"},)
 
 
 def test_integrate_config_installs_public_oauth_provider_resources() -> None:
@@ -337,7 +325,6 @@ def test_iam_integrate_oidc_config_installs_oauth_client_oidc_defaults() -> None
     config = apps.get_app_config("iam_integrate_oidc")
     manifest = resource_manifest_for(config)
 
-    assert config.permissions == "permissions.zed"
     assert manifest["install"] == (
         {"path": "resources/install/010_integrate.oauthclient.yaml", "adopt": ("slug", "environment")},
     )
@@ -402,88 +389,66 @@ def test_storage_install_resources_adopt_unique_slugs() -> None:
     )
 
 
-def test_resource_manifest_rejects_unknown_tiers() -> None:
+def test_resource_manifest_rejects_unknown_tiers(monkeypatch) -> None:
     """Only resource tiers owned by the resource subsystem are accepted."""
 
-    class BrokenConfig(AppConfig):
-        name = "tests.broken_resources"
-        label = "broken_resources"
-        resources = {"fixture": ("resources/fixture.csv",)}
-
-    config = BrokenConfig(
-        "tests.broken_resources",
-        _module("tests.broken_resources"),
+    config = apps.get_app_config("base")
+    monkeypatch.setattr(
+        "angee.resources.entries.addon_contract",
+        lambda _config: make_contract(resources={"fixture": ("resources/fixture.csv",)}),
     )
-
     with pytest.raises(ImproperlyConfigured, match="Unknown resource tier"):
         resource_manifest_for(config)
 
 
-def _config_with_schemas(schemas: object) -> AppConfig:
-    """Return an app config whose ``schemas`` attribute carries a declaration."""
+def _schema_config(monkeypatch, schemas: object) -> AppConfig:
+    """Return a config whose resolved schema declaration is ``schemas``."""
 
-    config = AppConfig("tests.graphql", _module("tests.graphql"))
-    config.schemas = schemas
-    return config
+    monkeypatch.setattr("angee.graphql.schema._raw_schemas", lambda _config: schemas)
+    return apps.get_app_config("base")
 
 
-def test_get_schema_parts_normalizes_scalars_and_buckets() -> None:
+def test_get_schema_parts_normalizes_scalars_and_buckets(monkeypatch) -> None:
     """A scalar contribution becomes a one-tuple; absent buckets are empty."""
 
     sentinel = object()
-    config = _config_with_schemas({"public": {"query": sentinel}})
+    config = _schema_config(monkeypatch, {"public": {"query": sentinel}})
     parts = schema_parts_for(config)
 
     assert parts["public"].query == (sentinel,)
     assert parts["public"].mutation == ()
 
 
-def test_get_schema_parts_rejects_unknown_keys() -> None:
+def test_get_schema_parts_rejects_unknown_keys(monkeypatch) -> None:
     """An unknown merge bucket fails fast."""
 
-    config = _config_with_schemas({"public": {"queries": []}})
+    config = _schema_config(monkeypatch, {"public": {"queries": []}})
     with pytest.raises(ImproperlyConfigured, match="unknown keys: queries"):
         schema_parts_for(config)
 
 
-def test_get_schema_parts_rejects_sets() -> None:
+def test_get_schema_parts_rejects_sets(monkeypatch) -> None:
     """Unordered sets are rejected so builds stay deterministic."""
 
-    config = _config_with_schemas({"public": {"query": {object()}}})
+    config = _schema_config(monkeypatch, {"public": {"query": {object()}}})
     with pytest.raises(ImproperlyConfigured, match="not a set"):
         schema_parts_for(config)
 
 
 def test_get_schema_parts_missing_module_is_empty() -> None:
-    """An addon without a schema module contributes nothing."""
+    """An addon without a schema declaration contributes nothing."""
 
     config = AppConfig("tests.no_schema", _module("tests.no_schema"))
 
     assert schema_parts_for(config) == {}
 
 
-def test_config_attributes_are_owned_by_consumers() -> None:
-    """Config attributes are explicit declarations owned by consumers."""
+def test_addon_contract_is_owned_by_the_manifest() -> None:
+    """The contract is read from addon.toml; plain Django apps have none."""
 
-    class ManifestOnlyConfig(AppConfig):
-        name = "tests.manifest_only"
-        label = "manifest_only"
-        schemas: dict[str, object] = {}
-        resources: dict[str, object] = {}
-
-    class DependencyNodeConfig(AppConfig):
-        name = "tests.marked_addon"
-        label = "marked_addon"
-        angee_addon = True
-        depends_on = ()
-
-    manifest_only = ManifestOnlyConfig(
-        "tests.manifest_only",
-        _module("tests.manifest_only"),
-    )
-    dependency_node = DependencyNodeConfig("tests.marked_addon", _module("tests.marked_addon"))
-
-    assert manifest_only.schemas == {}
-    assert manifest_only.resources == {}
-    assert dependency_node.angee_addon is True
-    assert dependency_node.depends_on == ()
+    iam = addon_contract(apps.get_app_config("iam"))
+    assert iam is not None
+    assert "angee.graphql" in iam.depends_on
+    assert iam.schemas == "schema.schemas"
+    assert iam.web == "@angee/iam"
+    assert addon_contract(apps.get_app_config("contenttypes")) is None

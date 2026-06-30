@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import itertools
+import sys
+import tempfile
 from collections.abc import Iterator
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
@@ -16,6 +20,7 @@ from django.db import connection, models
 from django.test import RequestFactory
 from rebac import actor_context, system_context
 
+from angee.addons import AddonContract
 from angee.agents.backends import InferenceBackend, InferenceModelSpec
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
 from angee.iam_integrate_oidc.models import OAuthClientOidc as AbstractOAuthClientOidc
@@ -485,14 +490,71 @@ def vault_for(owner: Any, *, name: str = "Research") -> Any:
         return Vault.objects.create_for(owner, name=name)
 
 
-class SchemaAddon(AppConfig):
-    """Small addon stand-in exposing raw GraphQL schema declarations."""
+_TEST_ADDON_SEQ = itertools.count()
 
-    def __init__(self, schemas: dict[str, dict[str, tuple[object, ...]]]) -> None:
-        module = ModuleType("tests.graphql_addon")
-        module.__file__ = __file__
-        super().__init__("tests.graphql_addon", module)
-        self.schemas = schemas
+
+def make_addon(
+    *,
+    schemas: dict[str, Any] | None = None,
+    depends_on: tuple[str, ...] = (),
+    name: str | None = None,
+) -> AppConfig:
+    """Return a fake AppConfig backed by a real tmp ``addon.toml`` (+ schema module).
+
+    Bridges the old in-memory test idiom to the addon.toml contract: ``schemas`` is
+    exposed through a registered ``<name>.schema`` module that the manifest's
+    ``schemas = "schema.schemas"`` reference resolves to, and ``depends_on`` is written
+    straight into the manifest. So the readers (the manifest is their sole source)
+    see exactly what the test declares.
+    """
+
+    name = name or f"tests._addon_{next(_TEST_ADDON_SEQ)}"
+    tmp = Path(tempfile.mkdtemp())
+    module = ModuleType(name)
+    module.__file__ = str(tmp / "apps.py")
+    module.__path__ = [str(tmp)]  # type: ignore[attr-defined]
+    sys.modules[name] = module
+
+    body = ["[addon]", f'name = "{name}"']
+    if depends_on:
+        body.append("depends_on = [" + ", ".join(f'"{dep}"' for dep in depends_on) + "]")
+    if schemas is not None:
+        schema_module = ModuleType(f"{name}.schema")
+        schema_module.schemas = schemas  # type: ignore[attr-defined]
+        sys.modules[f"{name}.schema"] = schema_module
+        body.append('schemas = "schema.schemas"')
+    (tmp / "addon.toml").write_text("\n".join(body) + "\n")
+
+    config = AppConfig(name, module)
+    config.angee_addon = True  # type: ignore[attr-defined]
+    return config
+
+
+def SchemaAddon(schemas: dict[str, dict[str, tuple[object, ...]]]) -> AppConfig:  # noqa: N802 - kept for call sites
+    """Build an addon stand-in whose manifest exposes the given GraphQL schemas."""
+
+    return make_addon(schemas=schemas)
+
+
+def make_contract(**overrides: object) -> AddonContract:
+    """Build an AddonContract for fake addons, defaulting every unset seam to empty.
+
+    Attached to a stub app config as ``_addon_contract`` and surfaced by the
+    test-side contract-reader stub (see ``stub_contracts`` in ``test_compose``), so a
+    fake config with no ``addon.toml`` on disk still resolves a declared contract.
+    """
+
+    fields: dict[str, object] = {
+        "name": "tests.addon",
+        "depends_on": (),
+        "schemas": None,
+        "web": None,
+        "web_codegen": None,
+        "mcp_tools": None,
+        "resources": {},
+    }
+    fields.update(overrides)
+    return AddonContract(**fields)  # type: ignore[arg-type]
 
 
 def addon_schema(schemas: dict[str, Any], name: str) -> Any:

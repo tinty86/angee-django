@@ -7,6 +7,8 @@ from collections.abc import Iterable
 from django.apps import AppConfig
 from django.core.exceptions import ImproperlyConfigured
 
+from angee.addons import addon_contract
+
 
 class AppGraph:
     """Resolve project addon roots into ordered Django app configs.
@@ -108,14 +110,10 @@ class AppGraph:
         return tuple(ordered)
 
     def app_dependencies(self, config: AppConfig) -> tuple[str, ...]:
-        """Return the app names or labels declared in ``depends_on``."""
+        """Return the app names or labels the addon's ``addon.toml`` declares."""
 
-        value = getattr(config, "depends_on", ())
-        if isinstance(value, str):
-            return (value,)
-        if not isinstance(value, Iterable):
-            raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
-        dependencies = tuple(value)
+        contract = addon_contract(config)
+        dependencies = contract.depends_on if contract is not None else ()
         if not all(isinstance(item, str) for item in dependencies):
             raise ImproperlyConfigured("depends_on must be a string or iterable of strings")
         seen: set[str] = set()

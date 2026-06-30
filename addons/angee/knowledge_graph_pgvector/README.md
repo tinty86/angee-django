@@ -49,8 +49,8 @@ plugin (`pgvector`, `graphrag`).
 
 ### 2. GraphQL — projection extension + new query (`schemas`)
 
-`schemas = "schema.schemas"` on the AppConfig contributes into knowledge's
-existing `public`/`console` buckets (the composer merges per bucket):
+`schemas = "schema.schemas"` in `addon.toml` `[contributes]` contributes into
+knowledge's existing `public`/`console` buckets (the composer merges per bucket):
 
 - **`type_extensions`** — `@strawberry_django.type(Page, name="PageType",
   extend=True)` adds `related_pages` onto knowledge's `PageType` (mirrors
@@ -60,7 +60,8 @@ existing `public`/`console` buckets (the composer merges per bucket):
 
 ### 3. MCP tools — the `mcp_tools` register seam
 
-`mcp_tools = "mcp_tools.register"` adds a `semantic_search` `GraphQLTool` over the
+`mcp_tools = "mcp_tools.register"` in `addon.toml` `[contributes]` adds a
+`semantic_search` `GraphQLTool` over the
 query above. It runs the same actor-scoped GraphQL engine the knowledge tools use,
 so REBAC scoping and projection are reused — the tool only names the operation and
 its projection. The `/mcp` mount auto-lights via `has_tools()`.

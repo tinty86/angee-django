@@ -17,14 +17,7 @@ class IAMIntegrateOidcConfig(AppConfig):
     angee_addon = True
     name = "angee.iam_integrate_oidc"
     label = "iam_integrate_oidc"
-    depends_on = ("angee.iam", "angee.integrate")
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"
 
-    resources = {
-        "install": ({"path": "resources/install/010_integrate.oauthclient.yaml", "adopt": ["slug", "environment"]},),
-        "demo": ({"path": "resources/demo/010_integrate.oauthclient.yaml", "adopt": ["slug", "environment"]},),
-    }
 
     def ready(self) -> None:
         """Wire the last-sign-in disconnect guard after app population."""

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import importlib
 import tomllib
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,92 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string, module_has_submodule
 
 ADDON_ENTRY_POINT_GROUP = "angee.addons"
+
+
+@dataclass(frozen=True, slots=True)
+class AddonContract:
+    """An addon's declarative contract, read from its co-located ``addon.toml``.
+
+    The manifest reuses pyproject's metadata vocabulary verbatim
+    (``description``/``keywords``/``license``/``readme``/``version``/``authors``/
+    ``urls``) so hatch-angee can compile it straight into the package's
+    ``[project]``. The Angee-owned fields are only what pyproject lacks: the addon
+    ``name`` (import id), the inter-addon ``depends_on`` graph, the freeform
+    ``category``, and the contribution seams — ``schemas``/``permissions`` (simple
+    strings) in ``[addon]``; ``web``/``mcp``/``resources`` as their own sections.
+    ``apps.py`` keeps only the ``angee_addon`` marker, identity, and the ``python``
+    seam (``ready()``). ``permissions`` records the ``.zed`` contribution for the
+    catalog — a remote catalog reads the manifest, never the addon's files — while
+    the runtime still discovers the ``.zed`` by convention (adjacent to the addon).
+    """
+
+    name: str
+    depends_on: tuple[str, ...] = ()
+    schemas: str | None = None
+    permissions: str | None = None
+    web: str | None = None
+    web_codegen: Mapping[str, Any] | None = None
+    mcp_tools: str | None = None
+    resources: Mapping[str, Any] = field(default_factory=dict)
+    # Metadata — pyproject vocabulary, compiled into [project] by hatch-angee.
+    description: str = ""
+    keywords: tuple[str, ...] = ()
+    category: str | None = None
+    license: str | None = None
+    readme: str | None = None
+    version: str | None = None
+    authors: tuple[Mapping[str, Any], ...] = ()
+    urls: Mapping[str, str] = field(default_factory=dict)
+
+
+@lru_cache(maxsize=None)
+def _read_addon_contract(marker: str) -> AddonContract | None:
+    """Parse one ``addon.toml`` into its contract (cached per path), or ``None``."""
+
+    path = Path(marker)
+    if not path.is_file():
+        return None
+    data = tomllib.loads(path.read_text())
+    addon = data.get("addon", {})
+    web = data.get("web", {})
+    mcp = data.get("mcp", {})
+    raw_depends_on = addon.get("depends_on", ())
+    return AddonContract(
+        name=addon.get("name", ""),
+        depends_on=(raw_depends_on,) if isinstance(raw_depends_on, str) else tuple(raw_depends_on),
+        schemas=addon.get("schemas"),
+        permissions=addon.get("permissions"),
+        web=web.get("package"),
+        web_codegen=web.get("codegen"),
+        mcp_tools=mcp.get("tools"),
+        resources=data.get("resources", {}),
+        description=addon.get("description", ""),
+        keywords=tuple(addon.get("keywords", ())),
+        category=addon.get("category"),
+        license=addon.get("license"),
+        readme=addon.get("readme"),
+        version=addon.get("version"),
+        authors=tuple(addon.get("authors", ())),
+        urls=addon.get("urls", {}),
+    )
+
+
+def addon_contract(app_config: AppConfig) -> AddonContract | None:
+    """Return the addon's declared contract.
+
+    An explicit ``_addon_contract`` attribute wins — a code-defined addon (or a
+    test) that carries its contract in memory rather than a file on disk. Otherwise
+    the contract is parsed from the co-located ``addon.toml``. ``None`` for any app
+    with neither (plain Django apps, non-addons).
+    """
+
+    explicit = getattr(app_config, "_addon_contract", None)
+    if explicit is not None:
+        return explicit
+    path = getattr(app_config, "path", None)
+    if path is None:
+        return None
+    return _read_addon_contract(str(Path(path) / "addon.toml"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,9 +159,12 @@ def resolve_addon_reference(app_config: AppConfig, dotted: str, *, attr: str) ->
     (``app_config.name``); an already-qualified path is used as-is. Raises
     ``ImproperlyConfigured`` naming ``<addon>.<attr>`` on failure. The one owner of
     the manifest dotted-reference contract shared by the ``schemas`` (GraphQL) and
-    ``mcp_tools`` (MCP) discovery seams.
+    ``mcp_tools`` (MCP) discovery seams — including the fail-fast that the reference
+    is a dotted string in the first place.
     """
 
+    if not isinstance(dotted, str):
+        raise ImproperlyConfigured(f"{app_config.name}.{attr} must be a dotted reference")
     path = dotted if dotted.startswith(f"{app_config.name}.") else f"{app_config.name}.{dotted}"
     try:
         return import_string(path)

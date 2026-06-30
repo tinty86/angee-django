@@ -10,34 +10,8 @@ class KnowledgeConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/knowledge"
     name = "angee.knowledge"
     label = "knowledge"
-    depends_on = ("angee.iam",)
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"
-    # ``mcp_tools`` (never ``mcp``) so the module never shadows the third-party ``mcp``
-    # package; ``register`` adds the knowledge GraphQL-backed tools to the MCP server.
-    mcp_tools = "mcp_tools.register"
-    resources = {
-        "demo": (
-            {
-                "path": "resources/demo/010_knowledge.vault.yaml",
-                "depends_on": "iam:resources/demo/010_iam.user.yaml",
-                "adopt": ("owner", "name"),
-            },
-            {
-                "path": "resources/demo/020_knowledge.page.yaml",
-                "depends_on": "resources/demo/010_knowledge.vault.yaml",
-                "adopt": ("vault", "title"),
-            },
-            {
-                "path": "resources/demo/030_knowledge.markdown_page.yaml",
-                "depends_on": "resources/demo/020_knowledge.page.yaml",
-                "adopt": "page",
-            },
-        ),
-    }
 
     def ready(self) -> None:
         """Register the backlink index signal after app population."""

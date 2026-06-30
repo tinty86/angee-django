@@ -158,9 +158,9 @@ looks for `asgi.py`, but only on apps that opt in as Angee addons via
 `angee.addons.is_angee_addon()`. That keeps third-party apps that happen to ship
 route modules from leaking into the composed root router.
 
-Other lifecycles remain explicit AppConfig facts. GraphQL schema declarations are
-owned by `angee.graphql`; web declarations are owned by the declaring `AppConfig`
-(`angee_web_package` names its rendered package; `angee_web_codegen` declares an
+Other lifecycles remain explicit `addon.toml` facts. GraphQL schema declarations are
+owned by `angee.graphql`; web declarations are owned by the addon's `addon.toml`
+(`[contributes].web` names its rendered package; `[contributes.web_codegen]` declares an
 external GraphQL codegen pass, e.g. the operator daemon). The composer is a pure
 projector here: it renders `runtime/web/manifest.json` (package graph + codegen
 entries) and `runtime/web/tailwind.sources.css` from those static declarations,

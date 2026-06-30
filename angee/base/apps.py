@@ -12,10 +12,3 @@ class BaseConfig(AppConfig):
     angee_addon = True
     name = "angee.base"
     label = "base"
-    depends_on = (
-        "angee.compose",
-        "django.contrib.contenttypes",
-        "rebac",
-        "reversion",
-        "simple_history",
-    )

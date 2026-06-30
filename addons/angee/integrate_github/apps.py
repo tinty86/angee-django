@@ -18,4 +18,3 @@ class IntegrateGithubConfig(AppConfig):
     angee_addon = True
     name = "angee.integrate_github"
     label = "integrate_github"
-    depends_on = ("angee.integrate",)

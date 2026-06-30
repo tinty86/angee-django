@@ -182,11 +182,16 @@ def test_appconfig_wires_the_seams() -> None:
     dotted refs resolve to the contributions, and the plugin depends on both owners.
     """
 
+    import angee.knowledge_graph_pgvector as plugin_pkg
+    from angee.addons import addon_contract
     from angee.knowledge_graph_pgvector.apps import KnowledgeGraphPgvectorConfig
 
-    assert KnowledgeGraphPgvectorConfig.depends_on == ("angee.knowledge", "angee.mcp")
-    assert KnowledgeGraphPgvectorConfig.schemas == "schema.schemas"
-    assert KnowledgeGraphPgvectorConfig.mcp_tools == "mcp_tools.register"
+    config = KnowledgeGraphPgvectorConfig("angee.knowledge_graph_pgvector", plugin_pkg)
+    contract = addon_contract(config)
+    assert contract is not None
+    assert contract.depends_on == ("angee.knowledge", "angee.mcp")
+    assert contract.schemas == "schema.schemas"
+    assert contract.mcp_tools == "mcp_tools.register"
     # The dotted refs resolve to the contributions composed above.
     assert plugin_schema.schemas["public"]["query"]
     assert callable(plugin_mcp_tools.register)

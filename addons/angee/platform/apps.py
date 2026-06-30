@@ -19,12 +19,8 @@ class PlatformConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/platform"
     name = "angee.platform"
     label = "platform"
-    depends_on = ("angee.iam", "angee.resources")
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"
 
     def ready(self) -> None:
         """Register the Addon-reflection reconcile receiver (see ``signals.py``)."""

@@ -10,14 +10,6 @@ class PartiesConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/parties"
     default_auto_field = "django.db.models.BigAutoField"
     name = "angee.parties"
     label = "parties"
-    depends_on = (
-        "angee.iam",
-        "angee.integrate",
-        "angee.storage",
-    )
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"

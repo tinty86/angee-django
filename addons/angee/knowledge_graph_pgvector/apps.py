@@ -19,8 +19,3 @@ class KnowledgeGraphPgvectorConfig(AppConfig):
     angee_addon = True
     name = "angee.knowledge_graph_pgvector"
     label = "knowledge_graph_pgvector"
-    depends_on = ("angee.knowledge", "angee.mcp")
-    schemas = "schema.schemas"
-    # ``mcp_tools`` (never ``mcp``) so the module never shadows the third-party
-    # ``mcp`` package; ``register`` adds this plugin's GraphQL-backed tools.
-    mcp_tools = "mcp_tools.register"

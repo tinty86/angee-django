@@ -1,7 +1,7 @@
 """The process-wide MCP server: one FastMCP instance, tools from addon manifests.
 
-Each installed addon contributes tools by declaring an ``mcp_tools`` manifest
-attribute on its ``AppConfig`` — a ``"<module>.<attr>"`` dotted reference to a
+Each installed addon contributes tools by declaring ``mcp_tools`` in its
+``addon.toml`` ``[contributes]`` — a ``"<module>.<attr>"`` dotted reference to a
 ``register(server: FastMCP) -> None`` callable (the same declaration shape the
 GraphQL ``schemas`` seam uses, resolved by the shared
 :func:`angee.addons.resolve_addon_reference`). The server authenticates the inbound
@@ -28,7 +28,7 @@ from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from fastmcp import FastMCP
 
-from angee.addons import is_angee_addon, resolve_addon_reference
+from angee.addons import addon_contract, is_angee_addon, resolve_addon_reference
 from angee.mcp.middleware import ActorMiddleware
 from angee.mcp.verifier import RebacTokenVerifier
 
@@ -82,11 +82,10 @@ def _registrars() -> tuple[ToolRegistrar, ...]:
     for app_config in apps.get_app_configs():
         if not is_angee_addon(app_config):
             continue
-        declaration = getattr(app_config, "mcp_tools", None)
+        contract = addon_contract(app_config)
+        declaration = contract.mcp_tools if contract is not None else None
         if declaration is None:
             continue
-        if not isinstance(declaration, str):
-            raise ImproperlyConfigured(f"{app_config.name}.mcp_tools must be a dotted reference")
         registrar = resolve_addon_reference(app_config, declaration, attr="mcp_tools")
         if not callable(registrar):
             raise ImproperlyConfigured(f"{app_config.name}.mcp_tools must reference a callable")

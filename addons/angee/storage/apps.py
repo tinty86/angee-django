@@ -17,26 +17,8 @@ class StorageConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/storage"
     name = "angee.storage"
     label = "storage"
-    depends_on = (
-        "angee.iam",
-        "angee.resources",
-        "angee.graphql",
-        "django.contrib.contenttypes",
-    )
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"
-
-    resources = {
-        "master": ({"path": "resources/master/010_storage.mimetype.yaml", "adopt": "mime_type"},),
-        "install": (
-            {"path": "resources/install/010_storage.backend.yaml", "adopt": "slug"},
-            {"path": "resources/install/020_storage.drive.yaml", "adopt": "slug"},
-        ),
-    }
-    """MIME taxonomy (master, adopted by mime type) plus the default local backend and drive."""
 
     def ready(self) -> None:
         """Wire storage-owned signal receivers after app population."""

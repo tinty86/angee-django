@@ -10,7 +10,4 @@ class ResourcesConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/resources-addon"
     name = "angee.resources"
-    depends_on = ("angee.base",)
-    schemas = "schema.schemas"

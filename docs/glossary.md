@@ -71,12 +71,12 @@ the owning library explicitly supports them, such as `rebac_resource_type`.
 
 **REBAC** — Relationship-Based Access Control (via `django-zed-rebac`).
 Authorization is structural: reads scope through the model manager, writes check
-the instance. Addons point their AppConfig `permissions` attribute at the owning
-`permissions.zed` contract; `django-zed-rebac` owns sync.
+the instance. Addons keep the owning `permissions.zed` contract adjacent to the
+addon (discovered by convention); `django-zed-rebac` owns sync.
 
 **Resource** — tabular data owned by an addon and imported idempotently by tier
-(`master`, `install`, `demo`). Addons list resource files in their
-`AppConfig.resources` manifest.
+(`master`, `install`, `demo`). Addons list resource files in their `addon.toml`
+`[contributes.resources]` manifest.
 
 **Symbolic model reference** — referring to a model by symbol/string across addon
 boundaries instead of importing it, to avoid import cycles.

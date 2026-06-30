@@ -1,6 +1,13 @@
-# Angee addon manifest — the declarative contract. hatch-angee's metadata hook
-# turns this into an `angee.addons` entry point at build; the runtime enumerates
-# those over uv.lock to list *available* addons. (depends_on/contributions migrate
-# here from apps.py over time; for now this is the discovery marker + identity.)
+# Angee addon manifest. The declarative contract hatch-angee compiles into
+# the package's [project] + entry points; see angee/addons.py (AddonContract).
 [addon]
 name = "angee.messaging"
+description = "Messaging addon: threads, messages, and the channel-bridge substrate."
+keywords = ["messaging", "channels", "chat"]
+category = "Data"
+depends_on = ["angee.parties", "angee.integrate", "angee.storage"]
+schemas = "schema.schemas"
+permissions = "permissions.zed"
+
+[web]
+package = "@angee/messaging"

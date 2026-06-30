@@ -11,7 +11,6 @@ class ComposeConfig(AppConfig):
     default = True
     angee_addon = True
     name = "angee.compose"
-    depends_on = ("django_yamlconf",)
 
     def import_models(self) -> None:
         """Emit the runtime if stale, then import the generated models.

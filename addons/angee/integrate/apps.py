@@ -10,20 +10,8 @@ class IntegrateConfig(AppConfig):
 
     default = True
     angee_addon = True
-    angee_web_package = "@angee/integrate"
     name = "angee.integrate"
     label = "integrate"
-    depends_on = ("angee.iam", "angee.resources")
-    schemas = "schema.schemas"
-    permissions = "permissions.zed"
-
-    resources = {
-        "master": ({"path": "resources/master/010_integrate.vendor.yaml", "adopt": "slug"},),
-        "install": ({"path": "resources/install/010_integrate.oauthclient.yaml", "adopt": ["slug", "environment"]},),
-    }
-    """Default vendor catalogue (master) and public OAuth client seeds (install),
-    adopted by natural key so reloads stay idempotent. The OIDC refinements for the
-    login-capable clients are seeded by the ``iam_integrate_oidc`` addon."""
 
     def ready(self) -> None:
         """Wire integration-owned denormalization maintenance after app population."""

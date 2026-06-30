@@ -22,6 +22,25 @@ from angee.compose.apps import ComposeConfig
 from angee.compose.management.commands.angee import Command
 from angee.compose.runtime import Runtime
 from angee.compose.web import WebRuntime
+from tests.conftest import make_contract
+
+
+@pytest.fixture
+def stub_contracts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve a test ``_addon_contract`` through the compose readers.
+
+    The web and appgraph projectors read ``addon_contract`` at module scope. The
+    stubs in these tests are bare app configs with no ``addon.toml`` on disk, so a
+    test attaches an in-memory contract as ``_addon_contract`` and this points the
+    readers at it — keeping the injection on the test side, out of the production
+    reader (which has the manifest as its sole source).
+    """
+
+    def fake(app_config: Any) -> Any:
+        return getattr(app_config, "_addon_contract", None)
+
+    monkeypatch.setattr("angee.compose.web.addon_contract", fake)
+    monkeypatch.setattr("angee.compose.appgraph.addon_contract", fake)
 
 
 class DecoratedRevisionThing(RevisionMixin, AngeeModel):
@@ -85,12 +104,12 @@ def test_runtime_renders_resource_sources(tmp_path: Path) -> None:
     assert '@source "../../web/node_modules/@angee/resources-addon/src";' in sources[Path("web/tailwind.sources.css")]
 
 
-def test_web_runtime_projects_addon_web_packages_in_composed_order() -> None:
+def test_web_runtime_projects_addon_web_packages_in_composed_order(stub_contracts: None) -> None:
     """Addon web package declarations feed one generated web manifest."""
 
-    first = SimpleNamespace(name="tests.first", label="first", angee_web_package="@demo/first")
+    first = SimpleNamespace(name="tests.first", label="first", _addon_contract=make_contract(web="@demo/first"))
     backend_only = SimpleNamespace(name="tests.backend", label="backend")
-    second = SimpleNamespace(name="tests.second", label="second", angee_web_package="@demo/second")
+    second = SimpleNamespace(name="tests.second", label="second", _addon_contract=make_contract(web="@demo/second"))
 
     manifest = WebRuntime((first, backend_only, second)).manifest_json()
 
@@ -101,19 +120,21 @@ def test_web_runtime_projects_addon_web_packages_in_composed_order() -> None:
     assert '"schemas"' not in manifest
 
 
-def test_web_runtime_projects_external_codegen_entries() -> None:
-    """An addon's angee_web_codegen declaration projects into the manifest."""
+def test_web_runtime_projects_external_codegen_entries(stub_contracts: None) -> None:
+    """An addon's web_codegen declaration projects into the manifest."""
 
     daemon = SimpleNamespace(
         name="tests.daemon",
         label="daemon",
-        angee_web_package="@demo/daemon",
-        angee_web_codegen={
-            "schema": "operator",
-            "sdl": "schema/operator.graphql",
-            "documents": "documents.daemon.ts",
-            "types": True,
-        },
+        _addon_contract=make_contract(
+            web="@demo/daemon",
+            web_codegen={
+                "schema": "operator",
+                "sdl": "schema/operator.graphql",
+                "documents": "documents.daemon.ts",
+                "types": True,
+            },
+        ),
     )
 
     manifest = WebRuntime((daemon,)).manifest_json()
@@ -125,33 +146,33 @@ def test_web_runtime_projects_external_codegen_entries() -> None:
     assert '"app": "tests.daemon"' in manifest
 
 
-def test_web_runtime_rejects_codegen_without_web_package() -> None:
+def test_web_runtime_rejects_codegen_without_web_package(stub_contracts: None) -> None:
     """An external codegen entry requires its addon to ship a web package."""
 
     daemon = SimpleNamespace(
         name="tests.daemon",
         label="daemon",
-        angee_web_codegen={"schema": "operator", "sdl": "s.graphql", "documents": "d.ts"},
+        _addon_contract=make_contract(web_codegen={"schema": "operator", "sdl": "s.graphql", "documents": "d.ts"}),
     )
 
-    with pytest.raises(ImproperlyConfigured, match="requires the addon to declare angee_web_package"):
+    with pytest.raises(ImproperlyConfigured, match=r"requires \[web\]\.package"):
         WebRuntime((daemon,))
 
 
-def test_web_runtime_rejects_duplicate_addon_web_packages() -> None:
+def test_web_runtime_rejects_duplicate_addon_web_packages(stub_contracts: None) -> None:
     """Two addons cannot claim the same web package identity."""
 
-    first = SimpleNamespace(name="tests.first", label="first", angee_web_package="@demo/shared")
-    second = SimpleNamespace(name="tests.second", label="second", angee_web_package="@demo/shared")
+    first = SimpleNamespace(name="tests.first", label="first", _addon_contract=make_contract(web="@demo/shared"))
+    second = SimpleNamespace(name="tests.second", label="second", _addon_contract=make_contract(web="@demo/shared"))
 
-    with pytest.raises(ImproperlyConfigured, match="Duplicate angee_web_package"):
+    with pytest.raises(ImproperlyConfigured, match=r"Duplicate \[web\]\.package"):
         WebRuntime((first, second))
 
 
-def test_web_runtime_rejects_invalid_package_names() -> None:
-    """The AppConfig package contract fails before a broken manifest is emitted."""
+def test_web_runtime_rejects_invalid_package_names(stub_contracts: None) -> None:
+    """The web package contract fails before a broken manifest is emitted."""
 
-    broken = SimpleNamespace(name="tests.broken", label="broken", angee_web_package="../broken")
+    broken = SimpleNamespace(name="tests.broken", label="broken", _addon_contract=make_contract(web="../broken"))
 
     with pytest.raises(ImproperlyConfigured, match="valid npm package name"):
         WebRuntime((broken,))
@@ -668,11 +689,11 @@ def test_appgraph_root_wins_when_also_a_dependency() -> None:
     assert configs["angee.resources"].angee_addon_root is True
 
 
-def test_appgraph_rejects_duplicate_dependencies() -> None:
+def test_appgraph_rejects_duplicate_dependencies(stub_contracts: None) -> None:
     """Repeated dependencies are rejected at their declaring owner."""
 
     config = AppConfig("tests.duplicate_dependency", sys.modules[__name__])
-    config.depends_on = ("angee.base", "angee.base")
+    config._addon_contract = make_contract(depends_on=("angee.base", "angee.base"))
 
     with pytest.raises(ImproperlyConfigured, match="duplicate dependency 'angee.base'"):
         AppGraph().resolve([config])
