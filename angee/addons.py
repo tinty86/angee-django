@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+import re
 import tomllib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -29,10 +31,14 @@ class AddonContract:
     ``name`` (import id), the inter-addon ``depends_on`` graph, the freeform
     ``category``, and the contribution seams — ``schemas``/``permissions`` (simple
     strings) in ``[addon]``; ``web``/``mcp``/``resources`` as their own sections.
-    ``apps.py`` keeps only the ``angee_addon`` marker, identity, and the ``python``
-    seam (``ready()``). ``permissions`` records the ``.zed`` contribution for the
-    catalog — a remote catalog reads the manifest, never the addon's files — while
-    the runtime still discovers the ``.zed`` by convention (adjacent to the addon).
+    The presence of the manifest *is* the addon marker, so an addon needs an
+    ``apps.py`` only when it has a ``python`` seam to run (``ready()``). The
+    contribution seams default to what the directory reveals (``schema.py``,
+    ``permissions.zed``, ``web/package.json``, ``mcp_tools.py``); a manifest entry
+    only overrides that default. ``permissions`` records the ``.zed`` contribution
+    for the catalog — a remote catalog reads the manifest, never the addon's files —
+    while the runtime still discovers the ``.zed`` by convention (adjacent to the
+    addon).
     """
 
     name: str
@@ -54,9 +60,53 @@ class AddonContract:
     urls: Mapping[str, str] = field(default_factory=dict)
 
 
+def _module_defines(module_path: Path, symbol: str) -> bool:
+    """Return whether a module file defines a top-level ``symbol`` (def/assignment)."""
+
+    pattern = re.compile(
+        rf"^(?:async def |def ){re.escape(symbol)}\b|^{re.escape(symbol)}\s*[:=]",
+        re.MULTILINE,
+    )
+    return bool(pattern.search(module_path.read_text()))
+
+
+def _infer_contributions(addon_dir: Path) -> dict[str, str]:
+    """Infer the path-derivable contribution seams present in an addon directory.
+
+    The conventional file *is* the declaration — an explicit ``addon.toml`` entry
+    only exists to override it. ``schema.py`` → the GraphQL ``schemas`` bucket,
+    ``permissions.zed`` → the REBAC ``permissions`` contribution,
+    ``web/package.json`` → the web package (its ``name``), and ``mcp_tools.py`` with
+    a top-level ``register`` → the MCP ``tools`` seam. The dependency graph, resource
+    tiers, and metadata are never inferred — order and intent are not path-derivable.
+    """
+
+    inferred: dict[str, str] = {}
+    schema_module = addon_dir / "schema.py"
+    if schema_module.is_file() and _module_defines(schema_module, "schemas"):
+        inferred["schemas"] = "schema.schemas"
+    if (addon_dir / "permissions.zed").is_file():
+        inferred["permissions"] = "permissions.zed"
+    package_json = addon_dir / "web" / "package.json"
+    if package_json.is_file():
+        name = json.loads(package_json.read_text()).get("name")
+        if isinstance(name, str) and name:
+            inferred["web"] = name
+    mcp_module = addon_dir / "mcp_tools.py"
+    if mcp_module.is_file() and _module_defines(mcp_module, "register"):
+        inferred["mcp_tools"] = "mcp_tools.register"
+    return inferred
+
+
 @lru_cache(maxsize=None)
 def _read_addon_contract(marker: str) -> AddonContract | None:
-    """Parse one ``addon.toml`` into its contract (cached per path), or ``None``."""
+    """Parse one ``addon.toml`` into its contract (cached per path), or ``None``.
+
+    Contribution seams default to what the addon directory reveals
+    (:func:`_infer_contributions`); an explicit ``addon.toml`` entry overrides the
+    inferred default. The marker path fully determines the directory scanned, so the
+    per-path cache stays correct.
+    """
 
     path = Path(marker)
     if not path.is_file():
@@ -65,15 +115,16 @@ def _read_addon_contract(marker: str) -> AddonContract | None:
     addon = data.get("addon", {})
     web = data.get("web", {})
     mcp = data.get("mcp", {})
+    inferred = _infer_contributions(path.parent)
     raw_depends_on = addon.get("depends_on", ())
     return AddonContract(
         name=addon.get("name", ""),
         depends_on=(raw_depends_on,) if isinstance(raw_depends_on, str) else tuple(raw_depends_on),
-        schemas=addon.get("schemas"),
-        permissions=addon.get("permissions"),
-        web=web.get("package"),
+        schemas=addon.get("schemas") or inferred.get("schemas"),
+        permissions=addon.get("permissions") or inferred.get("permissions"),
+        web=web.get("package") or inferred.get("web"),
         web_codegen=web.get("codegen"),
-        mcp_tools=mcp.get("tools"),
+        mcp_tools=mcp.get("tools") or inferred.get("mcp_tools"),
         resources=data.get("resources", {}),
         description=addon.get("description", ""),
         keywords=tuple(addon.get("keywords", ())),
@@ -147,9 +198,15 @@ def available_addons(addon_dirs: Iterable[Path | str] = ()) -> dict[str, Availab
 
 
 def is_angee_addon(app_config: AppConfig) -> bool:
-    """Return whether ``app_config`` opts into Angee addon discovery."""
+    """Return whether ``app_config`` is an Angee addon.
 
-    return getattr(app_config, "angee_addon", False) is True
+    An app is an addon exactly when it carries a contract — a co-located
+    ``addon.toml`` manifest (the on-disk case) or an in-memory ``_addon_contract``
+    (a code-defined addon or a test). The manifest is the marker; no ``apps.py``
+    opt-in flag is needed.
+    """
+
+    return addon_contract(app_config) is not None
 
 
 def resolve_addon_reference(app_config: AppConfig, dotted: str, *, attr: str) -> Any:

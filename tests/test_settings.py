@@ -47,7 +47,7 @@ def test_base_is_installed_exactly_once(tmp_path: Path) -> None:
 
     settings = _compose(tmp_path)
     installed = _installed_paths(settings["INSTALLED_APPS"])
-    base_app = "angee.base.apps.BaseConfig"
+    base_app = "angee.base"
     assert installed.count(base_app) == 1
 
 
@@ -62,11 +62,11 @@ def test_resources_root_expands_framework_dependencies(tmp_path: Path) -> None:
     installed = _installed_paths(settings["INSTALLED_APPS"])
 
     compose_at = installed.index("angee.compose.apps.ComposeConfig")
-    base_at = installed.index("angee.base.apps.BaseConfig")
-    resources_at = installed.index("angee.resources.apps.ResourcesConfig")
+    base_at = installed.index("angee.base")
+    resources_at = installed.index("angee.resources")
 
     assert compose_at < base_at < resources_at
-    assert "angee.graphql.apps.GraphQLConfig" not in installed
+    assert "angee.graphql" not in installed
     assert "angee.iam.apps.IAMConfig" not in installed
 
 
@@ -77,9 +77,9 @@ def test_iam_user_is_the_default_auth_model(tmp_path: Path) -> None:
     installed = _installed_paths(settings["INSTALLED_APPS"])
 
     assert "angee.compose.apps.ComposeConfig" in installed
-    assert "angee.base.apps.BaseConfig" in installed
-    assert "angee.graphql.apps.GraphQLConfig" in installed
-    assert "angee.resources.apps.ResourcesConfig" in installed
+    assert "angee.base" in installed
+    assert "angee.graphql" in installed
+    assert "angee.resources" in installed
     assert settings["AUTH_USER_MODEL"] == "iam.User"
     assert "angee.iam.apps.IAMConfig" in installed
 
@@ -115,11 +115,11 @@ def test_addons_are_sorted_by_declared_dependencies(tmp_path: Path) -> None:
     installed = _installed_paths(settings["INSTALLED_APPS"])
 
     compose_at = installed.index("angee.compose.apps.ComposeConfig")
-    base_at = installed.index("angee.base.apps.BaseConfig")
-    graphql_at = installed.index("angee.graphql.apps.GraphQLConfig")
+    base_at = installed.index("angee.base")
+    graphql_at = installed.index("angee.graphql")
     iam_at = installed.index("angee.iam.apps.IAMConfig")
-    resources_at = installed.index("angee.resources.apps.ResourcesConfig")
-    notes_at = installed.index("example.notes.apps.NotesConfig")
+    resources_at = installed.index("angee.resources")
+    notes_at = installed.index("example.notes")
 
     assert compose_at < base_at < resources_at
     assert base_at < graphql_at < iam_at
@@ -139,20 +139,20 @@ def test_notes_app_order_is_stable(tmp_path: Path) -> None:
         "rebac.apps.RebacConfig",
         "reversion.apps.ReversionConfig",
         "simple_history",
-        "angee.base.apps.BaseConfig",
+        "angee.base",
         "channels.apps.ChannelsConfig",
-        "angee.graphql.apps.GraphQLConfig",
-        "angee.resources.apps.ResourcesConfig",
+        "angee.graphql",
+        "angee.resources",
         "django.contrib.auth.apps.AuthConfig",
         "django.contrib.sessions.apps.SessionsConfig",
         "angee.iam.apps.IAMConfig",
         "angee.integrate.apps.IntegrateConfig",
-        "angee.mcp.apps.McpConfig",
-        "angee.operator.apps.OperatorConfig",
-        "angee.agents.apps.AgentsConfig",
-        "angee.agents_integrate_anthropic.apps.AgentsIntegrateAnthropicConfig",
+        "angee.mcp",
+        "angee.operator",
+        "angee.agents",
+        "angee.agents_integrate_anthropic",
         "angee.iam_integrate_oidc.apps.IAMIntegrateOidcConfig",
-        "example.notes.apps.NotesConfig",
+        "example.notes",
     ]
 
 
@@ -169,12 +169,12 @@ def test_one_app_set_orders_compose_before_adopters(
     installed = _installed_paths(settings["INSTALLED_APPS"])
 
     assert installed.count("angee.compose.apps.ComposeConfig") == 1
-    assert installed.count("angee.base.apps.BaseConfig") == 1
-    assert installed.count("angee.graphql.apps.GraphQLConfig") == 1
-    assert installed.count("angee.resources.apps.ResourcesConfig") == 1
+    assert installed.count("angee.base") == 1
+    assert installed.count("angee.graphql") == 1
+    assert installed.count("angee.resources") == 1
     compose_at = installed.index("angee.compose.apps.ComposeConfig")
-    base_at = installed.index("angee.base.apps.BaseConfig")
-    notes_at = installed.index("example.notes.apps.NotesConfig")
+    base_at = installed.index("angee.base")
+    notes_at = installed.index("example.notes")
     assert compose_at < base_at < notes_at
     assert "ANGEE_BUILD" not in settings
 
@@ -310,7 +310,7 @@ def test_compose_settings_module_reads_project_runtime(
     assert compose_settings.ASGI_APPLICATION == "angee.asgi.application"
     installed = _installed_paths(compose_settings.INSTALLED_APPS)
     assert "angee.compose.apps.ComposeConfig" in installed
-    assert "angee.resources.apps.ResourcesConfig" in installed
+    assert "angee.resources" in installed
     assert not hasattr(compose_settings, "ANGEE_RUNTIME")
 
 
@@ -347,7 +347,7 @@ def test_compose_settings_module_reads_named_project_settings_module(
     assert compose_settings.SECRET_KEY == "package-secret"
     assert compose_settings.ANGEE_RUNTIME_DIR == tmp_path / "runtime"
     installed = _installed_paths(compose_settings.INSTALLED_APPS)
-    assert "angee.resources.apps.ResourcesConfig" in installed
+    assert "angee.resources" in installed
 
 
 def test_compose_settings_module_does_not_import_external_settings_module(
@@ -473,8 +473,8 @@ def test_compose_settings_module_reads_settings_yaml(
     assert sys.path.index(str(tmp_path / "addons")) < sys.path.index(str(tmp_path))
     installed = _installed_paths(compose_settings.INSTALLED_APPS)
     assert "django_yamlconf" in installed
-    assert "angee.resources.apps.ResourcesConfig" in installed
-    assert installed.index("angee.compose.apps.ComposeConfig") < installed.index("angee.resources.apps.ResourcesConfig")
+    assert "angee.resources" in installed
+    assert installed.index("angee.compose.apps.ComposeConfig") < installed.index("angee.resources")
 
 
 def test_compose_settings_module_uses_configured_addon_dirs(
@@ -808,7 +808,6 @@ def _write_addon(
                 "",
                 "class TestConfig(AppConfig):",
                 "    default = True",
-                "    angee_addon = True",
                 f"    name = {name!r}",
                 *([f"    label = {label!r}"] if label is not None else []),
                 "",
@@ -844,17 +843,16 @@ def _addon_toml(name: str, depends_on: object) -> str:
 
 
 def _addon_test_config(name: str) -> AppConfig:
-    """Return an opted-in ``AppConfig`` for a temp addon package.
+    """Return an ``AppConfig`` for a temp addon package.
 
     The temp package carries its contract in a co-located ``addon.toml`` (see
-    ``_write_addon``); the composer reads it from ``config.path``.
+    ``_write_addon``); the composer reads it from ``config.path``, and the manifest's
+    presence is what marks the app as an addon.
     """
 
     module = importlib.import_module(name)
     config_cls = getattr(importlib.import_module(f"{name}.apps"), "TestConfig")
-    config = config_cls(name, module)
-    config.angee_addon = True
-    return config
+    return config_cls(name, module)
 
 
 def test_addon_autoconfig_applies_setting_fragments(
@@ -1030,11 +1028,11 @@ def test_composer_rejects_dependency_cycles(
 
 
 def test_addon_contribution_ignores_plain_django_dependency_urls() -> None:
-    """Only the ``angee_addon`` marker opts an app into route mounting.
+    """Only an Angee addon — one carrying a manifest — opts into route mounting.
 
     ``django.contrib.auth`` ships a real ``urls`` submodule with ``urlpatterns``, yet
-    contributes nothing: it is not marked ``angee_addon``, so the marker (not a
-    populated module, and not any dependency declaration) is the gate.
+    contributes nothing: it has no ``addon.toml`` manifest, so the contract's presence
+    (not a populated module, and not any dependency declaration) is the gate.
     """
 
     import django.contrib.auth as auth_module

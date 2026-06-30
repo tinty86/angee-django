@@ -9,9 +9,7 @@ class IntegrateConfig(AppConfig):
     """Source app manifest for Angee integration runtime primitives."""
 
     default = True
-    angee_addon = True
     name = "angee.integrate"
-    label = "integrate"
 
     def ready(self) -> None:
         """Wire integration-owned denormalization maintenance after app population."""

@@ -6,11 +6,6 @@ description = "Source app manifest for Angee identity models."
 keywords = ["identity", "rebac", "auth"]
 category = "Foundation"
 depends_on = ["angee.resources", "angee.graphql", "django.contrib.auth", "django.contrib.sessions"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/iam"
 
 [resources]
 demo = [

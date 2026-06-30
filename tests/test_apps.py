@@ -10,7 +10,6 @@ from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
 
 from angee.addons import addon_contract
-from angee.base.apps import BaseConfig
 from angee.graphql.schema import schema_parts_for
 from angee.resources.entries import ResourceEntry, resource_manifest_for
 from tests.conftest import make_contract
@@ -38,7 +37,7 @@ def test_base_config_is_a_dependency_node() -> None:
 
     base = apps.get_app_config("base")
 
-    assert isinstance(base, BaseConfig)
+    assert base.name == "angee.base"
     assert addon_contract(base).depends_on == (
         "angee.compose",
         "django.contrib.contenttypes",
@@ -198,10 +197,8 @@ def test_agents_config_owns_builtin_mcp_demo_seed() -> None:
 def test_anthropic_addon_owns_demo_provider_chain() -> None:
     """The demo Anthropic inference chain lives with the Anthropic addon."""
 
-    from angee.agents_integrate_anthropic.apps import AgentsIntegrateAnthropicConfig
-
     module = import_module("angee.agents_integrate_anthropic")
-    config = AgentsIntegrateAnthropicConfig("angee.agents_integrate_anthropic", module)
+    config = AppConfig("angee.agents_integrate_anthropic", module)
     manifest = resource_manifest_for(config)
 
     assert [item["path"] for item in manifest["demo"]] == [
@@ -225,10 +222,8 @@ def test_anthropic_addon_owns_demo_provider_chain() -> None:
 def test_openai_addon_owns_demo_provider_chain() -> None:
     """The demo OpenAI inference chain lives with the OpenAI addon."""
 
-    from angee.agents_integrate_openai.apps import AgentsIntegrateOpenAIConfig
-
     module = import_module("angee.agents_integrate_openai")
-    config = AgentsIntegrateOpenAIConfig("angee.agents_integrate_openai", module)
+    config = AppConfig("angee.agents_integrate_openai", module)
     manifest = resource_manifest_for(config)
 
     assert [item["path"] for item in manifest["demo"]] == [
@@ -250,10 +245,8 @@ def test_openai_addon_owns_demo_provider_chain() -> None:
 def test_notes_demo_only_composes_reusable_agent_seeds() -> None:
     """The notes example keeps project-specific demo rows and references addon seeds."""
 
-    from example.notes.apps import NotesConfig
-
     module = import_module("example.notes")
-    config = NotesConfig("example.notes", module)
+    config = AppConfig("example.notes", module)
     manifest = resource_manifest_for(config)
     assert manifest["install"] == ({"path": "resources/install/010_integrate.vendor.yaml", "adopt": "slug"},)
     demo_by_path = {item["path"]: item for item in manifest["demo"]}

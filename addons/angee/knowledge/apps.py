@@ -9,9 +9,7 @@ class KnowledgeConfig(AppConfig):
     """Source app manifest for the knowledge addon."""
 
     default = True
-    angee_addon = True
     name = "angee.knowledge"
-    label = "knowledge"
 
     def ready(self) -> None:
         """Register the backlink index signal after app population."""

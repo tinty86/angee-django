@@ -6,14 +6,6 @@ description = "Source app manifest for the knowledge addon."
 keywords = ["knowledge", "rag", "embeddings"]
 category = "Data"
 depends_on = ["angee.iam"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/knowledge"
-
-[mcp]
-tools = "mcp_tools.register"
 
 [resources]
 demo = [

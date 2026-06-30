@@ -76,7 +76,7 @@ addon (discovered by convention); `django-zed-rebac` owns sync.
 
 **Resource** — tabular data owned by an addon and imported idempotently by tier
 (`master`, `install`, `demo`). Addons list resource files in their `addon.toml`
-`[contributes.resources]` manifest.
+`[resources]` manifest.
 
 **Symbolic model reference** — referring to a model by symbol/string across addon
 boundaries instead of importing it, to avoid import cycles.

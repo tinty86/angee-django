@@ -149,19 +149,22 @@ phase 2 it calls `emit_if_stale()` and then imports generated models:
 
 ## Addon Declarations
 
-An Angee addon is a plain Django app. It does not subclass an Angee base config.
-Lifecycle declarations live on the addon's `AppConfig`; each lifecycle reads only
-the declaration it owns.
+An Angee addon is a Django app marked by a co-located `addon.toml`. It does not
+subclass an Angee base config, and it needs an `apps.py` only to run a Python seam
+(`ready()` / `import_models()`); the declarative contract lives in the manifest, and
+each lifecycle reads only the declaration it owns.
 
 Routes are conventional: `angee.urls` looks for `urls.py`, and `angee.asgi`
-looks for `asgi.py`, but only on apps that opt in as Angee addons via
-`angee.addons.is_angee_addon()`. That keeps third-party apps that happen to ship
+looks for `asgi.py`, but only on apps that are Angee addons (they carry a manifest)
+per `angee.addons.is_angee_addon()`. That keeps third-party apps that happen to ship
 route modules from leaking into the composed root router.
 
-Other lifecycles remain explicit `addon.toml` facts. GraphQL schema declarations are
-owned by `angee.graphql`; web declarations are owned by the addon's `addon.toml`
-(`[contributes].web` names its rendered package; `[contributes.web_codegen]` declares an
-external GraphQL codegen pass, e.g. the operator daemon). The composer is a pure
+Other lifecycles remain `addon.toml` facts — declared explicitly, or inferred from
+the addon's files when conventional (see the addon-contract guideline). GraphQL
+schema declarations are owned by `angee.graphql`; web declarations are owned by the
+addon's `addon.toml` (`[web].package` names its rendered package — inferred from
+`web/package.json` — and `[web].codegen` declares an external GraphQL codegen pass,
+e.g. the operator daemon). The composer is a pure
 projector here: it renders `runtime/web/manifest.json` (package graph + codegen
 entries) and `runtime/web/tailwind.sources.css` from those static declarations,
 holding no schema-name or schema-shape knowledge — the `angee-web-codegen` CLI

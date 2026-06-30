@@ -172,21 +172,24 @@ def test_semantic_search_tool_compiles(plugin_discovery: None) -> None:
     assert set(tool.output_schema["properties"]) == {"result"}
 
 
-# --- The composition contract: AppConfig wires the three seams -------------------
+# --- The composition contract: the manifest wires the three seams ----------------
 
 
-def test_appconfig_wires_the_seams() -> None:
-    """The plugin AppConfig declares the seams and their dotted refs point at real objects.
+def test_manifest_wires_the_seams() -> None:
+    """The plugin's manifest + inferred seams resolve to real contributions.
 
-    Proves the manifest is composable without installing the app: the schema/mcp
-    dotted refs resolve to the contributions, and the plugin depends on both owners.
+    Proves the addon is composable without installing the app and without an
+    ``apps.py``: ``schemas``/``mcp_tools`` are inferred from the addon's
+    ``schema.py``/``mcp_tools.py``, their dotted refs resolve to the contributions,
+    and the manifest depends on both owners.
     """
+
+    from django.apps import AppConfig
 
     import angee.knowledge_graph_pgvector as plugin_pkg
     from angee.addons import addon_contract
-    from angee.knowledge_graph_pgvector.apps import KnowledgeGraphPgvectorConfig
 
-    config = KnowledgeGraphPgvectorConfig("angee.knowledge_graph_pgvector", plugin_pkg)
+    config = AppConfig("angee.knowledge_graph_pgvector", plugin_pkg)
     contract = addon_contract(config)
     assert contract is not None
     assert contract.depends_on == ("angee.knowledge", "angee.mcp")

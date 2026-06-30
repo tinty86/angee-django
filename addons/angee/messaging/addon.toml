@@ -6,8 +6,3 @@ description = "Messaging addon: threads, messages, and the channel-bridge substr
 keywords = ["messaging", "channels", "chat"]
 category = "Data"
 depends_on = ["angee.parties", "angee.integrate", "angee.storage"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/messaging"

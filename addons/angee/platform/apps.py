@@ -18,9 +18,7 @@ class PlatformConfig(AppConfig):
     """
 
     default = True
-    angee_addon = True
     name = "angee.platform"
-    label = "platform"
 
     def ready(self) -> None:
         """Register the Addon-reflection reconcile receiver (see ``signals.py``)."""

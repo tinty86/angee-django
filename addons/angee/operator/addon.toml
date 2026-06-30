@@ -6,9 +6,6 @@ description = "Source app manifest for the operator daemon bridge."
 keywords = ["operator", "daemon", "stack"]
 category = "Platform"
 depends_on = ["angee.iam"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
 
 [web]
-package = "@angee/operator"
 codegen = { schema = "operator", sdl = "schema/operator.graphql", documents = "documents.daemon.ts", types = true }

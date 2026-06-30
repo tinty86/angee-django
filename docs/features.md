@@ -58,7 +58,7 @@ actually unique to your product.
   …), field widgets bound by meaning, Tailwind-token theming, and per-addon
   i18n.
 - **Resources** — tiered, idempotent reference and seed data
-  (`master` / `install` / `demo`) declared in `addon.toml` `[contributes.resources]`
+  (`master` / `install` / `demo`) declared in `addon.toml` `[resources]`
   and applied by `manage.py resources load`.
 - **Admin** — a Django admin auto-emitted for every model from the same `Meta`,
   REBAC-scoped like everything else.

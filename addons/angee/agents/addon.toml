@@ -6,11 +6,6 @@ description = "Source app manifest for the agent catalogue."
 keywords = ["agents", "ai", "inference"]
 category = "Agents"
 depends_on = ["angee.integrate", "angee.operator", "angee.mcp"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/agents"
 
 [resources]
 demo = [

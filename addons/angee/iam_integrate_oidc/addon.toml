@@ -6,8 +6,6 @@ description = "Source app manifest for the OIDC login addon."
 keywords = ["oidc", "login", "sso"]
 category = "Integration"
 depends_on = ["angee.iam", "angee.integrate"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
 
 [resources]
 install = [

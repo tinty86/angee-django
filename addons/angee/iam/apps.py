@@ -9,9 +9,7 @@ class IAMConfig(AppConfig):
     """Source app manifest for Angee identity models."""
 
     default = True
-    angee_addon = True
     name = "angee.iam"
-    label = "iam"
 
     def ready(self) -> None:
         """Wire IAM-owned REBAC relationships after app population."""

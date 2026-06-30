@@ -6,11 +6,6 @@ description = "Source app manifest for Angee integration runtime primitives."
 keywords = ["integrations", "oauth", "connections"]
 category = "Integration"
 depends_on = ["angee.iam", "angee.resources"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/integrate"
 
 [resources]
 master = [

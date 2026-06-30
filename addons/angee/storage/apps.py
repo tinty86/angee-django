@@ -16,9 +16,7 @@ class StorageConfig(AppConfig):
     """
 
     default = True
-    angee_addon = True
     name = "angee.storage"
-    label = "storage"
 
     def ready(self) -> None:
         """Wire storage-owned signal receivers after app population."""

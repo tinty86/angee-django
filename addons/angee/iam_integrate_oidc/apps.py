@@ -14,10 +14,7 @@ class IAMIntegrateOidcConfig(AppConfig):
     """
 
     default = True
-    angee_addon = True
     name = "angee.iam_integrate_oidc"
-    label = "iam_integrate_oidc"
-
 
     def ready(self) -> None:
         """Wire the last-sign-in disconnect guard after app population."""

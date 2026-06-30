@@ -6,7 +6,3 @@ description = "Resource addon marker and command/model host."
 keywords = ["resources", "import", "data"]
 category = "Foundation"
 depends_on = ["angee.base"]
-schemas = "schema.schemas"
-
-[web]
-package = "@angee/resources-addon"

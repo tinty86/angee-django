@@ -39,13 +39,16 @@ A wrapper must prove it adds a real new concept. If it only forwards,
 normalizes, or renames a Django object, delete it.
 
 Django-native also means app-native. Addons are reusable Django apps with
-conventional files: `apps.py` declares addon facts, `models.py` owns data and row
-behavior, `managers.py` owns reusable row-set APIs when they outgrow the model
-module, `schema.py` owns Strawberry declarations, `permissions.zed` owns REBAC
-structure, `forms.py` owns Django form validation/presentation, `admin.py` owns
-Django admin presentation, and `management/commands/` owns CLI parsing. Do not
-add a parallel registry, loader, or naming convention until the native Django
-surface is proven insufficient.
+conventional files: `addon.toml` declares the addon contract (and its presence is
+the marker that makes the app an addon), `models.py` owns data and row behavior,
+`managers.py` owns reusable row-set APIs when they outgrow the model module,
+`schema.py` owns Strawberry declarations, `permissions.zed` owns REBAC structure,
+`mcp_tools.py` owns MCP tool registration, `forms.py` owns Django form
+validation/presentation, `admin.py` owns Django admin presentation, and
+`management/commands/` owns CLI parsing. `apps.py` is optional — an addon needs one
+only to run a Python seam (`ready()` / `import_models()`). Do not add a parallel
+registry, loader, or naming convention until the native Django surface is proven
+insufficient.
 
 Before adding backend structure, pass the Django architecture gate:
 
@@ -91,19 +94,28 @@ Rules that follow from the layering:
   concern: serving code such as schema building enumerates Django's installed
   app configs and reads only the declaration attributes it owns. Serving code
   never imports `angee.compose` just to list addons.
-- **An Angee addon is a plain Django app config plus a co-located `addon.toml`.**
-  Addons do not subclass an Angee base config. The `AppConfig` keeps only the
-  `angee_addon = True` marker (which opts the app into framework addon discovery
-  for conventional routes), identity, and `ready()`; the declarative contract —
-  `depends_on` (an ordering contract) plus the contribution seams — lives in
-  `addon.toml` and is read through `angee.addons.addon_contract`. Each lifecycle
-  step reads only the contract it owns: `graphql` reads `[contributes].schemas`,
-  `resources` reads `[contributes.resources]`, the web projector reads
-  `[contributes].web` / `[contributes.web_codegen]`, the MCP server reads
-  `[contributes].mcp_tools`, REBAC sync discovers an adjacent `permissions.zed`
-  by convention, stable serving imports conventional `urls.py` / `asgi.py`,
-  runtime emission reads model-level `runtime = True`, and settings composition reads
-  the addon's optional `autoconfig.py`.
+- **An Angee addon is a Django app marked by a co-located `addon.toml`.** The
+  manifest's presence is the marker (`angee.addons.is_angee_addon`); there is no
+  `AppConfig` flag and no Angee base config to subclass. An addon needs an `apps.py`
+  only to run a Python seam (`ready()` / `import_models()`); otherwise Django's
+  auto-created `AppConfig` is enough. The declarative contract — `depends_on` (the
+  ordering contract) plus the contribution seams — lives in `addon.toml` and is read
+  through `angee.addons.addon_contract`.
+- **The contribution seams default to what the addon directory reveals; an explicit
+  manifest entry only overrides that default.** `schema.py` (defining `schemas`) →
+  the GraphQL bucket, `permissions.zed` → the REBAC contribution, `web/package.json`
+  → the web package (its `name`), `mcp_tools.py` (defining `register`) → the MCP
+  tools. So a conventional addon declares only `[addon]` identity + `depends_on` +
+  metadata (and any ordered `[resources]` tiers); it spells a seam out in the
+  manifest only to override the convention (a non-default web package, or
+  `[web].codegen`). The dependency graph, resource tiers, and metadata are never
+  inferred — order and intent are not path-derivable. Each lifecycle step then reads
+  only the contract it owns: `graphql` reads `contract.schemas`, `resources` reads
+  the `[resources]` tiers, the web projector reads `[web].package` / `[web].codegen`,
+  the MCP server reads `[mcp].tools`, REBAC sync discovers an adjacent
+  `permissions.zed` by convention, stable serving imports conventional `urls.py` /
+  `asgi.py`, runtime emission reads model-level `runtime = True`, and settings
+  composition reads the addon's optional `autoconfig.py`.
 - **There is a single app set and a single boot.** `DJANGO_SETTINGS_MODULE`
   points at `angee.compose.settings`, which imports the project's settings
   contract (`settings.yaml` or `settings.py` beside `manage.py`). YAML projects
@@ -422,7 +434,7 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **`makemigrations` must name every changed app** — include `resources` (and
   `base`) or `resources load` fails with `no such table: resources_resource`.
 - **A resource yaml loads only when listed** in the addon's `addon.toml`
-  `[contributes.resources]` manifest (`{tier: (paths,)}`); an unlisted file silently
+  `[resources]` manifest (`{tier = [paths]}`); an unlisted file silently
   loads nothing.
 - **Give a model an opaque public id by mixing in `SqidMixin` and declaring
   `sqid_prefix = "abc_"`** — the one fact that varies per model. The shared
@@ -479,8 +491,8 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   addon's `mcp.py` that does `from mcp.server… import …` becomes an importable
   top-level `mcp` that shadows the real package — `ModuleNotFoundError: 'mcp' is not
   a package` during a test run, while a single-module run and `manage.py check` pass.
-  Name such a module for its role, not the library (the MCP tool seam resolves the
-  `[contributes].mcp_tools` dotted reference → `mcp_tools.py`, not `mcp.py`).
+  Name such a module for its role, not the library (the MCP tool seam infers — or
+  resolves a `[mcp].tools` override to — `mcp_tools.py`, not `mcp.py`).
 
 ## Framework Contracts
 
@@ -491,15 +503,16 @@ obvious from the function name and signature. Do not maintain a parallel spec, f
 API list for behavior that can live clearly beside the code.
 
 The addon's `addon.toml` is the declarative manifest (its contract owner is
-`angee.addons.AddonContract`); the `AppConfig` owns addon-local *interpretation*.
-Use Django's own facts before adding an Angee fact: the addon root is
-`AppConfig.path`, source models live in `models.py`, and GraphQL contributions
-live in `schema.py`. Put validation, normalization, and path resolution for one
-addon on the `AppConfig` subclass. Prefer methods on the object that owns the
-data — the `AppConfig` for one addon, a runtime build object for composition —
-over loose functions; keep a function loose only for orchestration no single
-object owns. Put the manifest keys and their exact authoring forms in the
-`AddonContract` docstring, not in this guideline.
+`angee.addons.AddonContract`); when an addon carries a Python seam, its `AppConfig`
+owns addon-local *interpretation*. Use Django's own facts before adding an Angee
+fact: the addon root is `AppConfig.path`, source models live in `models.py`, and
+GraphQL contributions live in `schema.py`. Put validation, normalization, and path
+resolution for one addon on the object that owns the data — its `AppConfig` (the
+`ready()` / `import_models()` seam is the reason an addon adds an `apps.py`), a
+model/manager, or a runtime build object for composition — not on loose functions;
+keep a function loose only for orchestration no single object owns. Put the manifest
+keys and their exact authoring forms in the `AddonContract` docstring, not in this
+guideline.
 
 Before decomposing backend code, classify each fact by its Django owner:
 

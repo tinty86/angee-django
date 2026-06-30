@@ -9,7 +9,6 @@ class ComposeConfig(AppConfig):
     """Bootstrap composed runtime models during app population."""
 
     default = True
-    angee_addon = True
     name = "angee.compose"
 
     def import_models(self) -> None:

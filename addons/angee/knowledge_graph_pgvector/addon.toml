@@ -6,7 +6,3 @@ description = "Source app manifest for the knowledge semantic-retrieval plugin."
 keywords = ["pgvector", "embeddings", "knowledge"]
 category = "Integration"
 depends_on = ["angee.knowledge", "angee.mcp"]
-schemas = "schema.schemas"
-
-[mcp]
-tools = "mcp_tools.register"

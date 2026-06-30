@@ -1,10 +1,10 @@
 """The process-wide MCP server: one FastMCP instance, tools from addon manifests.
 
-Each installed addon contributes tools by declaring ``mcp_tools`` in its
-``addon.toml`` ``[contributes]`` — a ``"<module>.<attr>"`` dotted reference to a
-``register(server: FastMCP) -> None`` callable (the same declaration shape the
-GraphQL ``schemas`` seam uses, resolved by the shared
-:func:`angee.addons.resolve_addon_reference`). The server authenticates the inbound
+Each installed addon contributes tools through the ``mcp_tools`` seam — an
+``mcp_tools.py`` module exposing a ``register(server: FastMCP) -> None`` callable,
+inferred by convention (an ``addon.toml`` ``[mcp].tools`` entry overrides the dotted
+reference). It resolves the same way the GraphQL ``schemas`` seam does, through the
+shared :func:`angee.addons.resolve_addon_reference`. The server authenticates the inbound
 bearer with :class:`~angee.mcp.verifier.RebacTokenVerifier` and brackets every tool
 call in the authenticated REBAC actor with :class:`~angee.mcp.middleware.ActorMiddleware`.
 It is mounted as a StreamableHTTP ASGI app by :mod:`angee.mcp.asgi`; :mod:`angee.asgi`

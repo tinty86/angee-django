@@ -6,11 +6,6 @@ description = "Source app manifest for the Angee file domain."
 keywords = ["storage", "files", "drives"]
 category = "Data"
 depends_on = ["angee.iam", "angee.resources", "angee.graphql", "django.contrib.contenttypes"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/storage"
 
 [resources]
 master = [

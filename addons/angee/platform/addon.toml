@@ -6,8 +6,3 @@ description = "Source app manifest for the platform console."
 keywords = ["console", "admin", "explorer"]
 category = "Platform"
 depends_on = ["angee.iam", "angee.resources"]
-schemas = "schema.schemas"
-permissions = "permissions.zed"
-
-[web]
-package = "@angee/platform"

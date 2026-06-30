@@ -525,9 +525,7 @@ def make_addon(
         body.append('schemas = "schema.schemas"')
     (tmp / "addon.toml").write_text("\n".join(body) + "\n")
 
-    config = AppConfig(name, module)
-    config.angee_addon = True  # type: ignore[attr-defined]
-    return config
+    return AppConfig(name, module)
 
 
 def SchemaAddon(schemas: dict[str, dict[str, tuple[object, ...]]]) -> AppConfig:  # noqa: N802 - kept for call sites
