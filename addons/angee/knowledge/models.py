@@ -462,10 +462,12 @@ class MarkdownPage(SqidMixin, AuditMixin, AngeeModel, RevisionMixin):
                 level=int(token.tag[1:]),
                 text=tokens[index + 1].content,
                 slug=MarkdownPage._slug(tokens[index + 1].content),
-                line=token.map[0],
+                line=token_map[0],
             )
             for index, token in enumerate(tokens)
-            if token.type == "heading_open" and token.markup.startswith("#")
+            if token.type == "heading_open"
+            and token.markup.startswith("#")
+            and (token_map := token.map) is not None
         ]
 
     @staticmethod

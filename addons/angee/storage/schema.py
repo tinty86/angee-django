@@ -392,13 +392,13 @@ class StorageMutation:
         )
 
 
-StorageMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     StorageMutation,
     model=File,
     node=FileType,
     field="delete_file",
 )
-StorageMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     StorageMutation,
     model=Folder,
     node=FolderType,

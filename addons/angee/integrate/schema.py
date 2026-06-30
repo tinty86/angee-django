@@ -1081,13 +1081,13 @@ class IntegrateCredentialMutation:
         )
 
 
-IntegrateExternalAccountMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     IntegrateExternalAccountMutation,
     model=ExternalAccount,
     node=ExternalAccountType,
     field="delete_external_account",
 )
-IntegrateCredentialMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     IntegrateCredentialMutation,
     model=Credential,
     node=CredentialType,

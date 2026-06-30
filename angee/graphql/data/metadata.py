@@ -6,7 +6,7 @@ import dataclasses
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
@@ -448,10 +448,13 @@ def model_resource_fields(
     )
 
 
+_SurfaceT = TypeVar("_SurfaceT")
+
+
 def attach_data_resource_metadata(
-    surface: type,
+    surface: type[_SurfaceT],
     metadata: DataResourceMetadata,
-) -> type:
+) -> type[_SurfaceT]:
     """Attach model resource metadata to a generated Strawberry surface."""
 
     existing = data_resource_metadata(surface)

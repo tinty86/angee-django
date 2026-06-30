@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
 
 import strawberry
 from django.db import models, transaction
@@ -218,15 +218,18 @@ def delete_by_public_id(
     return preview
 
 
+_SurfaceT = TypeVar("_SurfaceT")
+
+
 def attach_delete_preview_metadata(
-    surface: type,
+    surface: type[_SurfaceT],
     *,
     model: type[models.Model],
     node: type,
     field: str,
     model_label: str | None = None,
     public_id_field: str = PUBLIC_ID_FIELD_NAME,
-) -> type:
+) -> type[_SurfaceT]:
     """Attach resource metadata for one authored cascade-preview mutation."""
 
     return attach_data_resource_metadata(

@@ -1241,7 +1241,7 @@ class IAMUserDeletePreviewMutation:
         return _delete_user_preview(str(id), confirm=confirm)
 
 
-IAMUserDeletePreviewMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     IAMUserDeletePreviewMutation,
     model=User,
     node=UserType,

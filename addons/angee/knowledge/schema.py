@@ -443,13 +443,13 @@ class KnowledgeMutation:
         )
 
 
-KnowledgeMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     KnowledgeMutation,
     model=Vault,
     node=VaultType,
     field="delete_vault",
 )
-KnowledgeMutation = attach_delete_preview_metadata(
+attach_delete_preview_metadata(
     KnowledgeMutation,
     model=Page,
     node=PageType,
