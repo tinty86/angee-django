@@ -10,6 +10,8 @@ on the [Angee platform](https://angee.ai).**
 ![React](https://img.shields.io/badge/react-19-61DAFB.svg)
 ![Status](https://img.shields.io/badge/status-early%20alpha%20preview-orange.svg)
 
+![Angee agent-native app collage](docs/screenshots/angee-readme-collage.png)
+
 > **For developers, not end users.** This repository is the framework source for
 > teams building Angee applications and addons. If you want a product to use,
 > start with a derivative distribution built on Angee:
