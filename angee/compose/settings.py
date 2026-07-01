@@ -150,6 +150,19 @@ seed = {
 }
 seed.setdefault("BASE_DIR", project_dir)
 
+# Honor the standard 12-factor service URLs a deployment injects, each translated to
+# its Django setting by django-environ. Generic and override-safe: a URL only fills a
+# setting the project left unset (setdefault); absent the URL, the framework floor /
+# Django default stands. The stack provides the URLs — the composer decides none of
+# them, and a project can still pin DATABASES/CACHES/EMAIL_* explicitly.
+if "DATABASE_URL" in os.environ:
+    seed.setdefault("DATABASES", {"default": env.db()})
+if "CACHE_URL" in os.environ:
+    seed.setdefault("CACHES", {"default": env.cache()})
+if "EMAIL_URL" in os.environ:
+    for _email_setting, _email_value in env.email_url().items():
+        seed.setdefault(_email_setting, _email_value)
+
 globals().update(
     {
         name: value
