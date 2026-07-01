@@ -4,6 +4,7 @@
 on the [Angee platform](https://angee.ai).**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-docs.angee.ai-1f6feb.svg)](https://docs.angee.ai)
 ![Python](https://img.shields.io/badge/python-3.14%2B-3776AB.svg)
 ![Django](https://img.shields.io/badge/django-6.0%2B-092E20.svg)
 ![React](https://img.shields.io/badge/react-19-61DAFB.svg)
@@ -11,7 +12,7 @@ on the [Angee platform](https://angee.ai).**
 
 > **For developers, not end users.** This repository is the framework source for
 > teams building Angee applications and addons. If you want a product to use,
-> start with derivative distributions built on Angee:
+> start with a derivative distribution built on Angee:
 > [ARP](https://github.com/ang-ee/arp-angee) (open-source agentic ERP / aERP),
 > [fyltr.ai](https://fyltr.ai/) (personal AI), [SmartOPS Aero](https://smartops.aero/)
 > (aviation operations), or another product-specific Angee distribution.
@@ -82,19 +83,30 @@ angee dev                                     # run the examples/notes-angee sta
 `angee dev` is the only supported way to bring the local stack up — run it from
 the repository root, and never start Django, Vite, Daphne, or workers by hand.
 For the full onboarding path (one-shot management commands and isolated
-workspaces), see **[Get Started](docs/howto/getstarted.md#i-have-access--now-what)**.
+workspaces), see **[Get Started → Set it up](docs/howto/getstarted.md#set-it-up)**.
 
-## What's inside
+## Repository layout
 
-- **`django-angee`** — the backend framework core + composer (`angee/`) and the
-  base addons (`addons/angee/`), sharing the one `angee.*` namespace
-  (composition, GraphQL, REBAC, resources).
-- **`@angee/sdk`** (`packages/sdk/`) — the headless frontend bindings.
-- **`@angee/base`** (`packages/base/`) — the single rendered (styled) binding.
+Angee ships its Python and its JavaScript from a **single distribution**: the
+shared React libraries live under the framework core, so they travel inside the
+`django-angee` Python wheel — one release channel for both languages.
+
+- **`angee/`** — the backend framework core and composer, plus the shared React
+  libraries:
+  - Python (`angee/…`) — composition, GraphQL, REBAC, resources, and the
+    `manage.py angee build` composer.
+  - `angee/web/*` — the shared React libraries: `@angee/ui`, `@angee/app`,
+    `@angee/refine`, `@angee/resources`.
+- **`addons/angee/*`** — the base addons, each a vertical slice: Python
+  (source models · GraphQL · REBAC) plus its React surface under
+  `addons/angee/<name>/web` (`@angee/iam`, `@angee/agents`, `@angee/platform`,
+  `@angee/storage`, …). Core and addons share the one `angee.*` Python namespace.
+- **`packages/*`** — dev-only tooling (`@angee/storybook`, `@angee/e2e`); not
+  shipped in the wheel.
 - **`examples/notes-angee/`** — the example project the root stack runs.
 - **`templates/`** — the Stack and Workspace Copier templates Angee renders.
 
-The full repository layout lives in **[`AGENTS.md`](AGENTS.md)**.
+The full annotated layout lives in **[`AGENTS.md`](AGENTS.md)**.
 
 ## Documentation
 
@@ -116,23 +128,42 @@ intent.**
   project.
 - **[`AGENTS.md`](AGENTS.md)** — the constitution, repository layout, and how the
   framework composes.
-- **[docs.angee.ai](https://docs.angee.ai)** — the operator: concepts, the
-  `angee.yaml` manifest, templates, commands, and the REST + GraphQL API.
+- **[docs.angee.ai](https://docs.angee.ai)** — the full site: the operator's
+  concepts, the `angee.yaml` manifest, templates, commands, and the REST +
+  GraphQL API.
 
-Generated API references — extracted from the code's own docstrings — will land
-under `docs/generated/` as the framework matures.
+**Generated API references** — extracted from the code's own docstrings and
+TSDoc on every docs build — are published on the site: the
+**[backend / Python reference](https://docs.angee.ai/django/reference)** and the
+**[frontend / React reference](https://docs.angee.ai/react/reference)**.
 
-## Development & contributing
+## Community & support
 
-All work follows the process in **[`docs/guidelines.md`](docs/guidelines.md)**
-and the constitution in **[`AGENTS.md`](AGENTS.md)**. Bring the stack up with
-`angee dev` from the repository root — never start the individual processes by
-hand. Run the backend checks (ruff, mypy, pytest) and the frontend checks listed
-in the [backend](docs/backend/guidelines.md) and
-[frontend](docs/frontend/guidelines.md) guidelines before opening a pull
-request.
+- **Docs & concepts** — [docs.angee.ai](https://docs.angee.ai).
+- **Bugs & feature requests** — open an
+  [issue](https://github.com/ang-ee/angee-django/issues).
+- **Security reports** — please report **privately**; see the
+  [Security Policy](SECURITY.md) (`security@angee.ai`). Do not open a public
+  issue for vulnerabilities.
 
-## Status
+## Contributing
+
+Contributions are welcome — this is a public alpha and feedback is especially
+valuable. Start with **[`CONTRIBUTING.md`](CONTRIBUTING.md)**, which points at the
+constitution in **[`AGENTS.md`](AGENTS.md)** and the process in
+**[`docs/guidelines.md`](docs/guidelines.md)**.
+
+- Bring the stack up with `angee dev` from the repository root — never start the
+  individual processes by hand.
+- Run the backend checks (ruff, mypy, pytest) and the frontend checks from the
+  [backend](docs/backend/guidelines.md) and [frontend](docs/frontend/guidelines.md)
+  guidelines before opening a pull request.
+- By participating you agree to uphold our
+  **[Code of Conduct](CODE_OF_CONDUCT.md)**.
+
+Notable changes are recorded in **[`CHANGELOG.md`](CHANGELOG.md)**.
+
+## Roadmap & status
 
 **Early alpha preview.** Production-readiness is targeted for **Q3 2026** —
 a target, not a promise — and arrives capability-by-capability. See
