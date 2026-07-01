@@ -60,6 +60,10 @@ import {
 import type {
   ResourceListSnapshot,
 } from "@angee/ui/views/resource-view-surface";
+import type {
+  AngeeListBatchScope,
+  GroupByBatchScope,
+} from "@angee/ui/data/hooks";
 import {
   Action,
   Column,
@@ -733,6 +737,61 @@ vi.mock("@angee/ui/data/hooks", async (importOriginal) => {
     }
     return snakeToCamel(field);
   }
+  function groupByResult(
+    options: GroupByRequestOptions & { enabled?: boolean },
+  ) {
+    sdkMocks.groupByCalls.push(options);
+    if (options.enabled === false || options.dimensions.length === 0) {
+      return {
+        count: 0,
+        totalCount: 0,
+        buckets: [],
+        fetching: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    }
+    const buckets = groupBuckets(
+      filteredRows(sdkMocks.rows, options.where),
+      options.dimensions,
+      options.measures,
+    );
+    const pageSize = options.pageSize ?? buckets.length;
+    const page = Math.max(1, options.page ?? 1);
+    const visibleBuckets = buckets.slice(
+      (page - 1) * pageSize,
+      page * pageSize,
+    );
+    return {
+      count: visibleBuckets.reduce((total, bucket) => total + bucket.count, 0),
+      totalCount: buckets.length,
+      buckets: visibleBuckets,
+      fetching: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  }
+  function listBatchEntry(scope: AngeeListBatchScope) {
+    sdkMocks.listCalls.push({
+      page: scope.page,
+      pageSize: scope.pageSize,
+      filter: scope.filter,
+      order: scope.order,
+      enabled: true,
+    });
+    const matchingRows = refineRowsForWhere(sdkMocks.rows, scope.filter);
+    const pageCount = Math.max(1, Math.ceil(matchingRows.length / scope.pageSize));
+    const page = Math.min(pageCount, Math.max(1, scope.page));
+    return {
+      rows: matchingRows.slice(
+        (page - 1) * scope.pageSize,
+        page * scope.pageSize,
+      ),
+      total: matchingRows.length,
+      fetching: false,
+      error: null,
+    };
+  }
   function snakeToCamel(field: string): string {
     return field
       .toLowerCase()
@@ -743,38 +802,32 @@ vi.mock("@angee/ui/data/hooks", async (importOriginal) => {
     useAngeeGroupBy: (
       _resource: unknown,
       options: GroupByRequestOptions & { enabled?: boolean },
-    ) => {
-      sdkMocks.groupByCalls.push(options);
-      if (options.enabled === false || options.dimensions.length === 0) {
-        return {
-          count: 0,
-          totalCount: 0,
-          buckets: [],
-          fetching: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
-      const buckets = groupBuckets(
-        filteredRows(sdkMocks.rows, options.where),
-        options.dimensions,
-        options.measures,
-      );
-      const pageSize = options.pageSize ?? buckets.length;
-      const page = Math.max(1, options.page ?? 1);
-      const visibleBuckets = buckets.slice(
-        (page - 1) * pageSize,
-        page * pageSize,
-      );
-      return {
-        count: visibleBuckets.reduce((total, bucket) => total + bucket.count, 0),
-        totalCount: buckets.length,
-        buckets: visibleBuckets,
-        fetching: false,
-        error: null,
-        refetch: vi.fn(),
-      };
-    },
+    ) => groupByResult(options),
+    useAngeeGroupByBatch: (
+      _resource: unknown,
+      scopes: readonly GroupByBatchScope[],
+      options: { enabled?: boolean } = {},
+    ) =>
+      new Map(
+        scopes.map((scope) => [
+          scope.key,
+          groupByResult({
+            ...scope.query,
+            enabled: options.enabled,
+          }),
+        ]),
+      ),
+    useAngeeListBatch: (
+      _resource: unknown,
+      scopes: readonly AngeeListBatchScope[],
+      options: { enabled?: boolean } = {},
+    ) =>
+      new Map(
+        (options.enabled === false ? [] : scopes).map((scope) => [
+          scope.key,
+          listBatchEntry(scope),
+        ]),
+      ),
     useAngeeAggregate: (
       _resource: unknown,
       options: AggregateRequestOptions & { enabled?: boolean },
@@ -2380,8 +2433,7 @@ describe("ResourceList", () => {
       </TestUrlState>,
     );
 
-    const yearGroups = await screen.findAllByRole("button", { name: /2026/ });
-    fireEvent.click(yearGroups[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: "2026" }));
 
     await waitFor(() =>
       expect(
