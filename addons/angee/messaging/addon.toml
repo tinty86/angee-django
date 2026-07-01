@@ -1,0 +1,8 @@
+# Angee addon manifest. The declarative contract hatch-angee compiles into
+# the package's [project] + entry points; see angee/addons.py (AddonContract).
+[addon]
+name = "angee.messaging"
+description = "Threads, messages, and channel bridges that ingest mail and social conversations"
+keywords = ["messaging", "channels", "chat"]
+category = "Data"
+depends_on = ["angee.iam", "angee.parties", "angee.integrate", "angee.storage", "django.contrib.contenttypes"]

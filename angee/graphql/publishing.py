@@ -1,0 +1,95 @@
+"""Model-change event publishing over the channel layer for GraphQL subscriptions."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import Any
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.db import models, transaction
+from django.db.models.signals import post_delete, post_save
+
+from angee.graphql.events import ChangePayload
+
+
+def change_group(model: type[models.Model]) -> str:
+    """Return the channel-layer group name for ``model`` changes."""
+
+    return f"angee.changes.{model._meta.app_label}.{model._meta.model_name}"
+
+
+def connect_publishers(model: type[models.Model]) -> None:
+    """Connect save and delete publishers for ``model`` exactly once."""
+
+    dispatch_uid = f"angee-changes-{model._meta.label}"
+    post_save.connect(
+        _on_save,
+        sender=model,
+        dispatch_uid=f"{dispatch_uid}-save",
+    )
+    post_delete.connect(
+        _on_delete,
+        sender=model,
+        dispatch_uid=f"{dispatch_uid}-delete",
+    )
+
+
+def _on_save(
+    sender: type[models.Model],
+    instance: models.Model,
+    created: bool = False,
+    update_fields: Iterable[str] | None = None,
+    raw: bool = False,
+    **kwargs: Any,
+) -> None:
+    """Publish a create or update event after the transaction commits."""
+
+    del sender, kwargs
+    if raw:
+        return
+    _publish(
+        instance,
+        action="create" if created else "update",
+        update_fields=update_fields,
+    )
+
+
+def _on_delete(
+    sender: type[models.Model],
+    instance: models.Model,
+    **kwargs: Any,
+) -> None:
+    """Publish a delete event after the transaction commits."""
+
+    del sender, kwargs
+    _publish(instance, action="delete", update_fields=None)
+
+
+def _publish(
+    instance: models.Model,
+    *,
+    action: str,
+    update_fields: Iterable[str] | None,
+) -> None:
+    """Build and broadcast one change payload after commit."""
+
+    model = type(instance)
+    payload = ChangePayload.from_instance(
+        instance,
+        action=action,
+        update_fields=update_fields,
+    )
+    transaction.on_commit(lambda: _broadcast(model, payload.as_message()))
+
+
+def _broadcast(model: type[models.Model], payload: dict[str, Any]) -> None:
+    """Send ``payload`` to the model's channel-layer change group."""
+
+    layer = get_channel_layer()
+    if layer is None:
+        return
+    async_to_sync(layer.group_send)(
+        change_group(model),
+        {"type": "angee.change", "payload": payload},
+    )

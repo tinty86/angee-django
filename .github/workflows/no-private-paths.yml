@@ -1,0 +1,23 @@
+name: no private paths
+
+# Guards the public mirror: private per-developer work-state lives in `.work/`
+# (a gitignored symlink to a separate private repo) and must never be committed
+# here. See AGENTS.md -> Where Knowledge Lives.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject tracked .work/ paths
+        run: |
+          if git ls-files | grep -E '^\.work(/|$)'; then
+            echo "::error::Private .work/ content must never be committed to the public repo."
+            exit 1
+          fi
+          echo "OK: no .work/ paths tracked."

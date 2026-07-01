@@ -1,0 +1,10 @@
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@0.0.76",
+    "--browser",
+    "chrome",
+    "--user-data-dir",
+    ".angee/data/chrome",
+]

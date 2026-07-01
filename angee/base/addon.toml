@@ -1,0 +1,8 @@
+# Angee addon manifest. The declarative contract hatch-angee compiles into
+# the package's [project] + entry points; see angee/addons.py (AddonContract).
+[addon]
+name = "angee.base"
+description = "The model toolkit every addon builds on — abstract models, mixins, fields, and REBAC-aware managers"
+keywords = ["models", "toolkit", "orm"]
+category = "Foundation"
+depends_on = ["angee.compose", "django.contrib.contenttypes", "rebac", "reversion", "simple_history"]

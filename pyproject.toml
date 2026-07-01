@@ -1,0 +1,191 @@
+[build-system]
+requires = ["hatch-angee>=0.1.3"]
+build-backend = "hatch_angee.build"
+
+[project]
+name = "django-angee"
+version = "0.1.0"
+description = "Thin Django composition primitives for Angee applications."
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+# `dynamic = ["entry-points"]` and the build hooks are injected by the hatch-angee
+# build backend (build-backend above) — see [tool.hatch-angee] below.
+dependencies = [
+  "channels>=4.0",
+  "cryptography>=44",
+  "django-import-export>=4.3",
+  "django-reversion>=5.1",
+  "django-simple-history>=3.7",
+  "django-sqids>=0.1",
+  "django-zed-rebac[strawberry-django]>=0.12",
+  "django>=6.0",
+  "pydantic>=2.13",
+  "pyjwt[crypto]>=2.12",
+  "pyyaml>=6",
+  # Comment/format-preserving YAML round-trip: the AddonInstaller's settings.yaml
+  # INSTALLED_APPS install/uninstall edit (pyyaml round-trips lose comments/layout).
+  "ruamel.yaml>=0.18",
+  "strawberry-graphql>=0.270",
+  "strawberry-django-aggregates>=0.9.1",
+  "strawberry-django-hasura>=0.3.2",
+  "strawberry-graphql-django>=0.86",
+  "tablib>=3",
+  "django-choices-field>=4.0.0",
+  "django-yamlconf>=1.5.0",
+  "django-environ>=0.12",
+  "python-magic>=0.4.27",
+  "mcp>=1.2",
+  # ASGI server: serves the composed app (Django + channels WebSocket + the MCP
+  # StreamableHTTP mount). uvicorn sends the ASGI lifespan that runs the mount's
+  # session manager; [standard] adds WebSocket and --reload support for dev.
+  "uvicorn[standard]>=0.30",
+  "fastmcp>=3.4.2,<4",
+  "anthropic>=0.109.2",
+  "openai>=2.43.0",
+  "vobject>=0.9.9",
+  "markdown-it-py>=4.2",
+  "authlib>=1.7.2",
+  # httpcore is bounded and named directly: integrate.http subclasses its SyncBackend
+  # and swaps the ConnectionPool's network backend for the SSRF pin, so the pin owns
+  # httpcore's API. httpx is bounded to the verified range for the same reason.
+  "httpcore>=1.0,<2",
+  "httpx>=0.28.1,<0.29",
+]
+
+[dependency-groups]
+dev = [
+  # Test-only: channels.testing imports daphne (ChannelsLiveServerTestCase). It is
+  # not a runtime dependency — Angee serves with uvicorn (see [project.dependencies]).
+  "daphne>=4.0",
+  "faker>=30.0",
+  "mypy>=1.10",
+  "pytest>=8.0",
+  "pytest-django>=4.8",
+  "ruff>=0.15.12",
+  "vulture>=2.16",
+]
+
+[tool.uv]
+# Keep uv's build cache inside the project (.angee is gitignored) instead of the
+# shared home cache, so each checkout/workspace owns its cache. uv resolves this
+# relative path against the working directory, which is the repo root for every
+# supported "run from the root" invocation.
+cache-dir = ".angee/caches/uv"
+
+[tool.uv.sources]
+# Developing against the Angee Strawberry forks. strawberry-django is on
+# `hotfix-angee-django` = `codex/input-object-extensions` + upstream/main + two
+# upstream bug fixes (DEFAULT_PK_FIELD_NAME mutation lookups, #927; __copy__
+# dropping key_attr/argument_name). strawberry core stays on codex — the fixes are
+# strawberry-django-only. Keep pins explicit so every environment resolves identically.
+strawberry-graphql = { git = "https://github.com/ang-ee/strawberry.git", branch = "codex/input-object-extensions" }
+strawberry-graphql-django = { git = "https://github.com/ang-ee/strawberry-django.git", branch = "hotfix-angee-django" }
+
+[tool.hatch.build.targets.wheel]
+# Two source roots merge into the one `angee` PEP 420 namespace: the framework
+# core at ./angee, the base addons at ./addons/angee. `dev-mode-dirs` pins both
+# roots on the editable path — hatchling otherwise drops the repo-root entry, so
+# `angee.base` would not resolve when `manage.py` runs from the example dir.
+packages = ["angee", "addons/angee"]
+dev-mode-dirs = [".", "addons"]
+artifacts = [
+  "angee/**/*.csv",
+  "angee/**/*.pyi",
+  "angee/**/*.typed",
+  "angee/**/*.yaml",
+  "angee/**/*.zed",
+  "addons/angee/**/*.csv",
+  "addons/angee/**/*.pyi",
+  "addons/angee/**/*.typed",
+  "addons/angee/**/*.yaml",
+  "addons/angee/**/*.zed",
+  # Addon manifests ship in the wheel so the runtime can read each addon's
+  # contract from its installed package; the entry points only carry identity.
+  "angee/**/addon.toml",
+  "addons/angee/**/addon.toml",
+]
+# The web/ sources are added by hatch-angee's addon-sources hook (the single source
+# of truth for them), so keep hatchling's default walk out of them — otherwise a
+# package the walk *does* pick up would be added twice. node_modules is never a
+# Python package, so this also drops the dependency tree the broad artifacts above
+# would otherwise force-include from web/*/node_modules.
+exclude = [
+  "angee/web/**",
+  "addons/angee/*/web/**",
+  "**/node_modules",
+]
+
+# Build machinery is hatch-angee, via its build backend (no per-repo hook code or
+# tables). The metadata hook generates the `angee.addons` entry points from each
+# addon.toml; the addon-sources hook ships every addon's web/ (remapping the
+# addons/angee/* roots onto the angee namespace). extra-web names the framework's
+# non-addon core web libraries (shared React packages with no addon.toml).
+[tool.hatch-angee]
+extra-web = ["angee/web/*"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "AGENTS.md",
+  "LICENSE",
+  "README.md",
+  "addons",
+  "angee",
+  "docs",
+  "examples",
+  "pyproject.toml",
+  "tests",
+  "uv.lock",
+]
+
+[tool.pytest.ini_options]
+cache_dir = ".pytest_cache"
+DJANGO_SETTINGS_MODULE = "tests.settings"
+python_files = ["test_*.py"]
+testpaths = ["tests", "addons/angee/resources/tests"]
+pythonpath = [".", "addons", "examples/notes-angee/addons"]
+addopts = "-ra --strict-markers --import-mode=importlib"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+cache-dir = ".ruff_cache"
+# First-party roots so isort classifies `angee.*` correctly across both source
+# roots (framework at ., base addons at addons/) and the example project.
+src = [".", "addons", "examples/notes-angee/addons"]
+exclude = [
+  ".angee",
+  ".git",
+  ".mypy_cache",
+  ".reference",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".venv",
+  "node_modules",
+  # Generated runtime is emitted output, not source: concrete models and
+  # Django-authored migrations live here. The composer owns its shape; lint
+  # the abstract sources instead.
+  "**/runtime",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.14"
+cache_dir = ".mypy_cache"
+explicit_package_bases = true
+files = ["angee", "addons/angee"]
+ignore_missing_imports = true
+mypy_path = [".", "addons"]
+warn_unused_ignores = true
+
+[tool.vulture]
+paths = ["angee", "addons/angee", "examples/notes-angee/addons", "tests"]
+exclude = [
+  "*/runtime/*",
+]
+ignore_names = [
+  "*_tables",
+]
+min_confidence = 80

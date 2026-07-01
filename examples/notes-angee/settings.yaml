@@ -1,0 +1,28 @@
+SECRET_KEY: notes-example-dev-key
+DEBUG: true
+ALLOWED_HOSTS:
+  - "*"
+
+INSTALLED_APPS:
+  - angee.agents
+  - angee.agents_integrate_anthropic
+  - angee.agents_integrate_openai
+  - angee.integrate
+  - angee.iam_integrate_oidc
+  - angee.integrate_github
+  - angee.knowledge
+  - angee.mcp
+  - angee.operator
+  - angee.parties
+  - angee.parties_integrate_carddav
+  - angee.messaging
+  - angee.social
+  - angee.platform
+  - angee.platform_integrate_vcs
+  - angee.storage
+  - example.notes
+
+ANGEE_ADDON_DIRS:
+  - "{BASE_DIR}/addons"
+ANGEE_RUNTIME_DIR: "{BASE_DIR}/runtime"
+ANGEE_DATA_DIR: "{BASE_DIR}/../../.angee/data"

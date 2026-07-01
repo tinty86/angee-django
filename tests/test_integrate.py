@@ -1,0 +1,84 @@
+"""Tests for the integration runtime abstract bases."""
+
+from __future__ import annotations
+
+from django.db import models
+
+from angee.integrate.models import Bridge, IntegrationStatus
+from tests.conftest import Integration
+
+
+class ConcreteBridge(Integration, Bridge):
+    """Concrete bridge used only to inspect inherited field declarations."""
+
+    class Meta(Bridge.Meta):
+        """Django model options for the concrete bridge test double."""
+
+        abstract = False
+        app_label = "tests"
+        db_table = "test_integrate_bridge"
+        rebac_resource_type = "tests/bridge"
+        rebac_id_attr = "sqid"
+
+
+def test_integrate_bases_are_abstract() -> None:
+    """Bridge is an abstract inheritance base only."""
+
+    assert Bridge._meta.abstract is True
+    assert "integration" not in {field.name for field in Bridge._meta.local_fields}
+
+
+def test_bridge_declares_runtime_contract_methods() -> None:
+    """Bridge exposes the contract domain subclasses implement."""
+
+    for method_name in ("sync", "handle_webhook", "verify_webhook", "start_live", "stop_live"):
+        assert callable(getattr(Bridge, method_name))
+
+
+def test_concrete_bridge_inherits_scheduler_field() -> None:
+    """A domain concrete bridge receives the scheduler index field."""
+
+    field = ConcreteBridge._meta.get_field("next_sync_at")
+
+    assert isinstance(field, models.DateTimeField)
+
+
+def test_concrete_bridge_uses_django_mti_parent_link() -> None:
+    """A concrete bridge is a Django MTI child of Integration."""
+
+    parent_link = ConcreteBridge._meta.get_field("integration_ptr")
+
+    assert parent_link.primary_key is True
+    assert parent_link.remote_field.model is Integration
+
+
+def test_report_status_records_integration_telemetry() -> None:
+    """report_status writes telemetry on the integration row itself."""
+
+    integration = Integration()
+
+    integration.report_status(status=IntegrationStatus.ERROR, error="boom")
+
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_used_status == "error"
+    assert integration.last_error == "boom"
+    assert integration.last_error_at is not None
+    assert integration.last_used_at is not None
+
+    # A bare-string status with no error clears the error timestamp.
+    integration.report_status(status="active")
+
+    assert integration.last_used_status == "active"
+    assert integration.last_error == ""
+    assert integration.last_error_at is None
+
+
+def test_report_status_updates_unsaved_integration_in_memory() -> None:
+    """report_status updates an unsaved integration without trying to persist it."""
+
+    integration = Integration()
+
+    integration.report_status(status=IntegrationStatus.ERROR, error="boom")
+
+    assert integration.status == IntegrationStatus.ERROR
+    assert integration.last_error == "boom"
