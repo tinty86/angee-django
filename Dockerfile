@@ -102,3 +102,38 @@ WORKDIR /app
 # the concrete command (wait-for-postgres · migrate · rebac sync · runserver); the
 # venv is on PATH and runtime/ is committed, so there is no uv/angee build at start.
 ENTRYPOINT ["tini", "--"]
+
+# --- web-src: collect every @angee/* JS package the wheel ships into one tree -----
+# The framework JS is scattered in the venv — the core libs at angee/web/*, each
+# addon's frontend at angee/<addon>/web (e.g. @angee/operator, @angee/iam). Flatten
+# them into /opt/angee-js/<name> so the web image COPIES one dir as a flat workspace.
+FROM runtime AS web-src
+USER root
+WORKDIR /opt/.venv/lib/python3.14/site-packages
+RUN mkdir -p /opt/angee-js && \
+    find angee -name package.json -not -path '*/node_modules/*' | while read -r f; do \
+      name=$(sed -n 's/.*"name": *"@angee\/\([^"]*\)".*/\1/p' "$f" | head -1); \
+      [ -n "$name" ] && cp -R "$(dirname "$f")" "/opt/angee-js/$name"; \
+    done
+
+# --- angee-web: node + ALL the framework @angee/* packages as a pnpm workspace ----
+# ghcr.io/ang-ee/angee-web — the framework's JS runtime. The @angee/* packages are
+# private and ship inside the django-angee wheel (one distribution channel), so this
+# image COPIES them (via web-src) straight from the runtime venv — they can never
+# drift from the Python side — and installs their deps once into a pnpm workspace. The
+# self-contained `local` stack runs its `vite` service here: the project's web/
+# bind-mounts in and joins the workspace, resolving @angee/* (whose inter-deps use
+# `workspace:*`) from the baked packages. Build it explicitly:
+#   docker build --target angee-web -t ghcr.io/ang-ee/angee-web:latest .
+FROM node:22-slim AS angee-web
+RUN corepack enable
+WORKDIR /opt/angee-web
+# Every @angee/* package (core + addon frontends), byte-identical to the wheel's JS.
+COPY --from=web-src /opt/angee-js ./packages
+# A workspace over the copied packages so `workspace:*` inter-deps resolve;
+# link-workspace-packages so a downstream project's `@angee/*: ^x` range still links
+# the baked package by name; auto-install-peers keeps a single React instance.
+RUN printf 'packages:\n  - "packages/*"\n' > pnpm-workspace.yaml \
+ && printf '{"name":"@angee/web-runtime","private":true,"packageManager":"pnpm@11.1.3"}\n' > package.json \
+ && printf 'link-workspace-packages=true\nprefer-workspace-packages=true\nauto-install-peers=true\n' > .npmrc \
+ && pnpm install
