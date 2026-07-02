@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
 from django.db import connection
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 from rebac import ObjectRef, app_settings, system_context
 from rebac.actors import to_subject_ref
 from rebac.models import active_relationship_model
@@ -321,6 +321,47 @@ def test_iam_overview_aggregates_do_not_depend_on_paginated_rows(
         "hub-overview-target-001",
         "hub-overview-target-002",
     ]
+
+
+def test_iam_overview_privileged_grants_on_registry_relationship_storage(
+    iam_permission_hub_tables: None,
+) -> None:
+    """Privileged-grant filtering works on the FK-backed registry relationship store.
+
+    Composed projects default to ``REBAC_LOCAL_BACKEND_STORAGE = "registry"``
+    (``angee.base`` autoconfig), where the denormalized relationship field names
+    exist only through the storage mode's queryset kwargs translation — a filter
+    built from Q objects bypasses it and fails live while the bare test settings
+    (denormalized store) stay green.
+    """
+
+    with override_settings(REBAC_LOCAL_BACKEND_STORAGE="registry"):
+        admin = _platform_admin("hub-registry-admin")
+        auditor = User.objects.create_user(
+            username="hub-registry-auditor",
+            email="registry-auditor@example.com",
+        )
+        grant(actor=auditor, role="angee/role:auditor")
+
+        overview = _data(
+            _execute(
+                _schema("console"),
+                """
+                query {
+                  iam_overview(peek_limit: 5) {
+                    grant_count
+                    privileged_grant_count
+                    privileged_grants { role }
+                  }
+                }
+                """,
+                user=admin,
+            )
+        )["iam_overview"]
+
+    assert overview["grant_count"] == 2
+    assert overview["privileged_grant_count"] == 1
+    assert {row["role"] for row in overview["privileged_grants"]} == {"angee/role:admin"}
 
 
 def test_permission_hub_mutations_are_admin_only(

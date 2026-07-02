@@ -362,6 +362,17 @@ data through REBAC, never a queryset bypass.
   it fails live ("loaded N rows outside actor scope") while passing unit tests.
   Resolve the field elevated by FK id under `system_context`, and verify by
   rendering the live page, not just the test.
+- The relationship store has two storage modes, and only `filter`/`exclude`/`get`
+  **kwargs** are storage-translated. Composed projects run the FK-backed
+  `registry` mode (`angee.base` autoconfig) while bare `tests/settings.py` runs
+  the library's `denormalized` default — so a `Q(resource_type=…)`,
+  `values_list("subject_id")`, or `order_by("resource_type")` against
+  `active_relationship_model()` passes unit tests and raises `FieldError` live.
+  Read relationship rows only through translated filter kwargs, the library's
+  `for_resource`/`order_by_resource`-style helpers, or instance attributes
+  (`row.subject_id` — the registry manager eager-joins them); regression-test
+  permission-hub surfaces under
+  `override_settings(REBAC_LOCAL_BACKEND_STORAGE="registry")`.
 - Derive operator/edge token scope from `<ns>/role:<id>#effective_member` (folds
   in role-hierarchy `includes`), never `roles_of`/`roleRefs` (a direct-grants UX
   hint that under-grants).
