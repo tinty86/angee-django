@@ -275,7 +275,7 @@ class AngeeResource(resources.ModelResource):
     ) -> None:
         """Create or update the ledger row for an imported object."""
 
-        self.ledger_model._default_manager.update_or_create(
+        ledger, _ = self.ledger_model._default_manager.update_or_create(
             source_addon=self.entry.addon.name,
             xref=xref,
             defaults={
@@ -286,6 +286,7 @@ class AngeeResource(resources.ModelResource):
                 "tier": self.entry.tier,
             },
         )
+        self._existing_ledgers[xref] = ledger
 
     def _instance_from_ledger(
         self,

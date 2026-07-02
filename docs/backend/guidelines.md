@@ -444,6 +444,17 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **A resource yaml loads only when listed** in the addon's `addon.toml`
   `[resources]` manifest (`{tier = [paths]}`); an unlisted file silently
   loads nothing.
+- **Workflow step implementations persist continuation state in `resume_state`.**
+  Pre-suspend side effects must be idempotent because resume replays from the
+  journal row, not process memory.
+- **Workflow joins count rows, not broker messages.** `join_rule` is evaluated
+  over sibling `StepRun` rows.
+- **Never trust a workflow step to self-limit.** The engine owns `max_steps` and
+  budget enforcement.
+- **Invalid decision resolution re-opens the decision.** It increments the
+  attempt audit and leaves journal history immutable.
+- **zed exclusion binds loosest.** Parenthesize `(a - b) + c` when combining
+  exclusion with union.
 - **Give a model an opaque public id by mixing in `SqidMixin` and declaring
   `sqid_prefix = "abc_"`** — the one fact that varies per model. The shared
   `angee.base.fields.SqidField` reads that prefix in `contribute_to_class`; don't

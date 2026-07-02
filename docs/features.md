@@ -87,9 +87,8 @@ actually unique to your product.
 - **Connect** *(Planned)* — people and conversations: contacts and organisations +
   threads and messages across web, email, and agent channels (agents are
   participants).
-- **Workflows** *(Planned)* — durable queue + scheduled jobs + state machines with
-  a React-Flow canvas; every step is a permissioned operation, with
-  human-in-the-loop and agent steps first-class.
+- **Workflows** — durable runs, step journals, gates, decisions, triggers, and
+  published lineages for permissioned human-in-the-loop automation.
 - **MCP** *(Planned)* — an agent tool surface generated from the framework's
   persisted, REBAC-gated GraphQL operations.
 - **ARP** *(Planned)* — ERP re-cut as composable addons (invoicing, accounting,

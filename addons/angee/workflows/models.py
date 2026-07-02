@@ -11,7 +11,7 @@ references; public ids stay at the transport boundary.
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, Self, cast
 
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -116,6 +116,12 @@ def _save_decision_verdict(instance: models.Model, source: Any, target: Any) -> 
     cast("Decision", instance)._save_verdict_change()
 
 
+def _choice_value(value: Any) -> str:
+    """Return a stable stored value for Django choice fields."""
+
+    return str(getattr(value, "value", value))
+
+
 class WorkflowManager(AngeeManager):
     """Manager owning workflow lineage lookups."""
 
@@ -184,6 +190,24 @@ class Workflow(AuditMixin, AngeeDataModel):
 
         return self.name
 
+    @classmethod
+    def after_resource_load(
+        cls,
+        instances: Iterable[Any],
+        *,
+        tier: str,
+        source: str,
+        publish: bool = False,
+    ) -> None:
+        """Publish loaded draft lineages when the resource declaration asks for it."""
+
+        del tier, source
+        if not publish:
+            return
+        for workflow in sorted(instances, key=lambda instance: instance.pk or 0):
+            if workflow.status == WorkflowStatus.DRAFT and workflow.published_from_id is None:
+                workflow.publish_if_changed()
+
     @transition(status, source=WorkflowStatus.DRAFT, target=WorkflowStatus.PUBLISHED, on_success=_save_workflow_status)
     def mark_published(self) -> None:
         """Mark this copied version as published."""
@@ -246,6 +270,14 @@ class Workflow(AuditMixin, AngeeDataModel):
             published.mark_published()
             return cast(Self, published)
 
+    def publish_if_changed(self) -> Self | None:
+        """Publish this draft only when no current version has the same definition."""
+
+        current = type(self).objects.current_published_for(self)
+        if current is not None and self._definition_signature() == current._definition_signature():
+            return None
+        return self.publish()
+
     def _next_published_version(self) -> int:
         """Return the next immutable version number for this lineage head."""
 
@@ -281,6 +313,44 @@ class Workflow(AuditMixin, AngeeDataModel):
                 target=step_map[edge.target_id],
                 condition=edge.condition,
             ).save()
+
+    def _definition_signature(self) -> dict[str, Any]:
+        """Return the versioned definition content for publish idempotency."""
+
+        return {
+            "workflow": {
+                "name": self.name,
+                "description": self.description,
+                "error_workflow_id": self.error_workflow_id,
+                "max_steps": self.max_steps,
+                "budget": copy.deepcopy(self.budget),
+            },
+            "steps": [
+                {
+                    "key": step.key,
+                    "name": step.name,
+                    "step_class": step.step_class,
+                    "config": copy.deepcopy(step.config),
+                    "join_rule": _choice_value(step.join_rule),
+                    "is_entry": step.is_entry,
+                    "position": copy.deepcopy(step.position),
+                }
+                for step in self.steps.order_by("key", "pk")
+            ],
+            "edges": [
+                {
+                    "source": edge.source.key,
+                    "target": edge.target.key,
+                    "condition": edge.condition,
+                }
+                for edge in self.edges.select_related("source", "target").order_by(
+                    "source__key",
+                    "target__key",
+                    "condition",
+                    "pk",
+                )
+            ],
+        }
 
     def _validate_publishable(self) -> None:
         """Require exactly one entry step before publishing."""
@@ -480,6 +550,7 @@ class Trigger(AuditMixin, AngeeDataModel):
     def clean(self) -> None:
         """Validate lineage ownership and trigger declaration shape."""
 
+        self._sync_index_fields()
         super().clean()
         if self.workflow_id is not None and self.workflow.published_from_id is not None:
             raise ValidationError({"workflow": "Triggers attach only to workflow lineage heads."})

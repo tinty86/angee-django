@@ -89,6 +89,7 @@ class ResourceQuerySet(AngeeUnscopedQuerySet[Any]):
         try:
             reason = "resources.validate" if dry_run else "resources.load"
             with system_context(reason=reason), transaction.atomic():
+                loaded_groups: list[tuple[ResourceGroup, Any]] = []
                 for group in groups:
                     resource = build_resource(
                         group.model,
@@ -107,11 +108,37 @@ class ResourceQuerySet(AngeeUnscopedQuerySet[Any]):
                     except (IntegrityError, ResourceImportError) as error:
                         raise ResourceLoadError(f"{group.entry.display}: {error}") from error
                     load_result = load_result.with_result(result)
+                    loaded_groups.append((group, resource))
+                if not dry_run:
+                    self._run_post_load_hooks(loaded_groups)
                 if dry_run:
                     raise DryRunRollback()
         except DryRunRollback:
             pass
         return load_result
+
+    def _run_post_load_hooks(
+        self,
+        loaded_groups: list[tuple[ResourceGroup, Any]],
+    ) -> None:
+        """Dispatch model-owned hooks after all selected resource rows load."""
+
+        for group, resource in loaded_groups:
+            hook = getattr(group.model, "after_resource_load", None)
+            if not callable(hook):
+                continue
+            instances_by_pk: dict[Any, models.Model] = {}
+            for row in group.rows:
+                instance = resource.instance_for_xref(row.xref)
+                if instance is not None:
+                    instances_by_pk[instance.pk] = instance
+            if instances_by_pk:
+                hook(
+                    tuple(instances_by_pk.values()),
+                    tier=group.entry.tier,
+                    source=group.entry.source,
+                    publish=group.entry.publish,
+                )
 
     def _addon_aliases(self, addons: Iterable[Any]) -> dict[str, str]:
         """Return app names and labels mapped to canonical app names."""

@@ -178,6 +178,9 @@ def test_notes_app_order_is_stable(tmp_path: Path) -> None:
         "angee.storage.apps.StorageConfig",
         "angee.parties.apps.PartiesConfig",
         "angee.messaging.apps.MessagingConfig",
+        "procrastinate.contrib.django.apps.ProcrastinateConfig",
+        "angee.tasks.apps.TasksConfig",
+        "angee.workflows.apps.WorkflowsConfig",
         "example.notes",
     ]
 
