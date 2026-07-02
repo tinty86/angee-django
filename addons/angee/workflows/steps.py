@@ -24,11 +24,26 @@ from typing import Any, ClassVar, Self
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from rebac import system_context
 
 from angee.base.impl import ImplBase
 
 GATE_POLICIES = frozenset({"one_done", "all_success", "majority", "sequential"})
 """Seat aggregation policies supported by the built-in gate step."""
+
+
+class TransientStepError(Exception):
+    """Signal that a step implementation failed with a retryable condition."""
+
+
+@dataclass(frozen=True, slots=True)
+class StepRetryPolicy:
+    """Static queue retry policy declared by one step's JSON config."""
+
+    max_attempts: int = 1
+    wait: int = 0
+    linear_wait: int = 0
+    exponential_wait: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +129,54 @@ class StepImpl(ImplBase):
         """Execute one step-run journal row."""
 
         raise NotImplementedError(f"{type(self).__name__}.run() is supplied by a runtime slice.")
+
+    def heartbeat(self, step_run: Any, *, at: datetime | None = None) -> None:
+        """Refresh ``step_run``'s heartbeat while a long implementation is running."""
+
+        if str(getattr(step_run.status, "value", step_run.status)) != "started":
+            return
+        step_run.heartbeat_at = at or timezone.now()
+        with system_context(reason="workflows.step.heartbeat"):
+            step_run.save(update_fields=["heartbeat_at", "updated_at"])
+
+
+def retry_policy_from_config(config: Any) -> StepRetryPolicy:
+    """Return the queue retry policy declared by ``config``."""
+
+    if not isinstance(config, Mapping):
+        raise ValidationError({"config": "Step config must be a JSON object."})
+    retry = config.get("retry")
+    if retry in (None, "", False):
+        return StepRetryPolicy()
+    if not isinstance(retry, Mapping):
+        raise ValidationError({"config": "Step retry must be a JSON object."})
+
+    max_attempts = _positive_int(retry.get("max_attempts", 1), "Step retry max_attempts")
+    wait = 0
+    linear_wait = 0
+    exponential_wait = 0
+    backoff = retry.get("backoff", 0)
+    if isinstance(backoff, Mapping):
+        wait = _non_negative_int(backoff.get("wait", 0), "Step retry backoff.wait")
+        linear_wait = _non_negative_int(backoff.get("linear_wait", 0), "Step retry backoff.linear_wait")
+        exponential_wait = _non_negative_int(
+            backoff.get("exponential_wait", 0),
+            "Step retry backoff.exponential_wait",
+        )
+    else:
+        wait = _non_negative_int(backoff, "Step retry backoff")
+    return StepRetryPolicy(
+        max_attempts=max_attempts,
+        wait=wait,
+        linear_wait=linear_wait,
+        exponential_wait=exponential_wait,
+    )
+
+
+def validate_retry_config(config: Any) -> None:
+    """Validate the common per-step retry block."""
+
+    retry_policy_from_config(config)
 
 
 class HandlerStep(StepImpl):
@@ -238,6 +301,30 @@ def _config_datetime(value: Any) -> datetime | None:
         return None
     if timezone.is_naive(parsed):
         return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _positive_int(value: Any, label: str) -> int:
+    """Return ``value`` as a positive integer or raise a config error."""
+
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValidationError({"config": f"{label} must be an integer."}) from error
+    if parsed < 1:
+        raise ValidationError({"config": f"{label} must be positive."})
+    return parsed
+
+
+def _non_negative_int(value: Any, label: str) -> int:
+    """Return ``value`` as a non-negative integer or raise a config error."""
+
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValidationError({"config": f"{label} must be an integer."}) from error
+    if parsed < 0:
+        raise ValidationError({"config": f"{label} must be non-negative."})
     return parsed
 
 

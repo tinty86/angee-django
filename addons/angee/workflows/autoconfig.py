@@ -11,5 +11,6 @@ SETTINGS = {
         "wait": "angee.workflows.steps.WaitStep",
         "gate": "angee.workflows.steps.GateStep",
     },
+    "ANGEE_WORKFLOWS_HEARTBEAT_TIMEOUT": 300,
 }
 """Django settings contributed when the workflows addon is installed."""

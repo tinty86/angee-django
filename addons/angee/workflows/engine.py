@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import traceback
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -30,7 +31,7 @@ from rebac.types import RelationshipTuple
 
 from angee.base.actors import actor_user_id
 from angee.workflows.models import JoinRule, RunStatus, StepRunStatus, Verdict, WorkflowStatus
-from angee.workflows.steps import DecisionSpec, StepResult
+from angee.workflows.steps import DecisionSpec, StepResult, TransientStepError
 
 RUN_TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 STEP_TERMINAL = {
@@ -89,7 +90,11 @@ def start(
             "created_by_id": owner_id,
             "updated_by_id": owner_id,
         }
-        if dedup_key:
+        if parent_step_run is not None:
+            run, created = run_model.objects.get_or_create(parent_step_run=parent_step_run, defaults=attrs)
+            if not created:
+                return run
+        elif dedup_key:
             run, created = run_model.objects.get_or_create(dedup_key=dedup_key, defaults=attrs)
             if not created:
                 return run
@@ -149,12 +154,21 @@ def execute(step_run_id: int, *, now: datetime | None = None) -> dict[str, int]:
             return {"executed": 0}
         impl_class = step_run.step.resolve_impl("step_class", default="handler")
         setattr(step_run, "_engine_now", timestamp)
+    with system_context(reason="workflows.engine.execute.attempt"), transaction.atomic():
+        locked = step_run_model.objects.select_for_update().select_related("run").get(pk=step_run_id)
+        if locked.status != StepRunStatus.STARTED or locked.run.status in RUN_TERMINAL:
+            return {"executed": 0}
+        locked.record_attempt(heartbeat_at=timestamp)
+        step_run.attempt = locked.attempt
+        step_run.heartbeat_at = locked.heartbeat_at
 
     result: StepResult | None = None
     error = ""
     stack = ""
     try:
         result = cast(Any, impl_class)().run(step_run)
+    except TransientStepError:
+        raise
     except Exception as exc:  # noqa: BLE001 - impl failure is journaled as a step result.
         error = str(exc)
         stack = traceback.format_exc()
@@ -235,6 +249,30 @@ def sweep(*, now: datetime | None = None) -> dict[str, int]:
     for run_id in run_ids:
         advance(run_id, now=timestamp)
     return {"runs": len(run_ids)}
+
+
+def reap(*, now: datetime | None = None) -> dict[str, int]:
+    """Fail started step-runs whose heartbeat is past the configured deadline."""
+
+    timestamp = now or timezone.now()
+    deadline = timestamp - _heartbeat_timeout()
+    step_run_model = _model("StepRun")
+    run_ids: list[int] = []
+    with system_context(reason="workflows.engine.reap"), transaction.atomic():
+        stale_rows = list(
+            step_run_model.objects.select_for_update()
+            .filter(status=StepRunStatus.STARTED, heartbeat_at__lt=deadline)
+            .order_by("pk")
+        )
+        for step_run in stale_rows:
+            message = "Step heartbeat timed out."
+            if step_run.resume_state.get("cancel_requested"):
+                message = "Cancellation requested; heartbeat timed out."
+            step_run.mark_failed(error=message, stacktrace="")
+            run_ids.append(step_run.run_id)
+    for run_id in sorted(set(run_ids)):
+        enqueue_advance(run_id)
+    return {"reaped": len(run_ids)}
 
 
 def decide(decision: Any, verdict: str, *, payload: Any = None, actor: Any = None) -> Any:
@@ -823,17 +861,19 @@ def _route_skip(run: Any, step_run: Any) -> None:
 
 
 def _route_done(run: Any, step_run: Any) -> None:
-    for edge in step_run.step.outgoing_edges.select_related("target").filter(condition="").order_by("pk"):
-        _maybe_schedule_target(run, edge.target)
+    for edge in step_run.step.outgoing_edges.select_related("target").order_by("pk"):
+        if edge.condition and edge.condition != step_run.outcome:
+            continue
+        _maybe_schedule_target(run, edge.target, routed_row=step_run)
 
 
-def _maybe_schedule_target(run: Any, target: Any) -> Any | None:
+def _maybe_schedule_target(run: Any, target: Any, *, routed_row: Any | None = None) -> Any | None:
     step_run_model = _model("StepRun")
     existing = step_run_model.objects.filter(run=run, step=target, map_index=-1).first()
     if existing is not None:
         return existing
     upstream = _upstream_rows(run, target)
-    decision = _join_decision(target.join_rule, upstream)
+    decision = _join_decision(target.join_rule, upstream, routed_row=routed_row)
     previous = [row for row in upstream if row is not None]
     if decision == "skip":
         return _ensure_skipped(run, target, previous=previous)
@@ -883,8 +923,11 @@ def _upstream_rows(run: Any, target: Any) -> list[Any | None]:
     return rows
 
 
-def _join_decision(rule: Any, upstream: list[Any | None]) -> str:
-    statuses = [row.status if row is not None else None for row in upstream]
+def _join_decision(rule: Any, upstream: list[Any | None], *, routed_row: Any | None = None) -> str:
+    statuses = [
+        StepRunStatus.SUCCEEDED if _same_step_run(row, routed_row) else row.status if row is not None else None
+        for row in upstream
+    ]
     if not statuses:
         return "run"
 
@@ -921,6 +964,12 @@ def _join_decision(rule: Any, upstream: list[Any | None]) -> str:
     if rule == JoinRule.ALWAYS:
         return "run" if not has_missing_or_active else "wait"
     return "wait"
+
+
+def _same_step_run(left: Any | None, right: Any | None) -> bool:
+    """Return whether two optional step-run rows identify the same journal row."""
+
+    return left is not None and right is not None and left.pk == right.pk
 
 
 def _claim_due_steps(run: Any, *, timestamp: datetime) -> list[int]:
@@ -1011,11 +1060,11 @@ def _update_run_status(run: Any, *, timestamp: datetime) -> None:
             run.save(update_fields=["wake_at", "updated_at"])
         return
 
-    failed = run.step_runs.filter(status__in=[StepRunStatus.FAILED, StepRunStatus.CANCELED]).order_by("pk").first()
+    failed = run.step_runs.filter(status__in=[StepRunStatus.FAILED, StepRunStatus.CANCELED]).order_by("-pk").first()
     if failed is not None:
         if run.status == RunStatus.PENDING:
             run.mark_running()
-        run.mark_failed(failed.error or f"Step {failed.pk} ended as {failed.status}.")
+        _fail_run(run, failed.error or f"Step {failed.pk} ended as {failed.status}.", failed_step_run=failed)
         return
 
     if run.step_runs.exists():
@@ -1041,6 +1090,31 @@ def _step_key(step_run: Any) -> str:
     if step_run.step_id is not None:
         return str(step_run.step.key)
     return step_run.system_kind or str(step_run.pk)
+
+
+def _heartbeat_timeout() -> timedelta:
+    """Return the configured heartbeat timeout as a timedelta."""
+
+    configured = getattr(settings, "ANGEE_WORKFLOWS_HEARTBEAT_TIMEOUT", 300)
+    if isinstance(configured, timedelta):
+        return configured
+    return timedelta(seconds=float(configured))
+
+
+def _fail_run(run: Any, error: str, *, failed_step_run: Any) -> None:
+    """Mark ``run`` failed and start its linked error workflow once."""
+
+    run.mark_failed(error)
+    _start_error_workflow(run, failed_step_run=failed_step_run)
+
+
+def _start_error_workflow(run: Any, *, failed_step_run: Any) -> None:
+    """Start the pinned workflow's error workflow for ``failed_step_run``."""
+
+    lineage = getattr(run.workflow, "error_workflow", None)
+    if lineage is None:
+        return
+    start(lineage, subject=run, actor=None, parent_step_run=failed_step_run)
 
 
 def _object_ref(value: Any) -> tuple[Any | None, Any | None]:

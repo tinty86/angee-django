@@ -2,8 +2,38 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from django.apps import apps
 from procrastinate import RetryStrategy
+from procrastinate import jobs as procrastinate_jobs
 from procrastinate.contrib.django import app
+from rebac import system_context
+
+from angee.workflows.steps import StepRetryPolicy, TransientStepError, retry_policy_from_config
+
+
+class StepRunRetryStrategy(RetryStrategy):
+    """Procrastinate retry strategy driven by a step row's static config."""
+
+    def __init__(self) -> None:
+        """Retry only transient step failures."""
+
+        super().__init__(retry_exceptions=(TransientStepError,))
+
+    def get_retry_decision(self, *, exception: BaseException, job: procrastinate_jobs.Job) -> Any:
+        """Return the retry decision for ``job``'s StepRun."""
+
+        if not isinstance(exception, TransientStepError):
+            return None
+        policy = _retry_policy_for_job(job)
+        return RetryStrategy(
+            max_attempts=policy.max_attempts,
+            wait=policy.wait,
+            linear_wait=policy.linear_wait,
+            exponential_wait=policy.exponential_wait,
+            retry_exceptions=(TransientStepError,),
+        ).get_retry_decision(exception=exception, job=job)
 
 
 @app.task(name="workflows.advance", retry=RetryStrategy(max_attempts=5, exponential_wait=15))
@@ -15,7 +45,7 @@ def advance_workflow_run(run_id: int) -> None:
     engine.advance(run_id)
 
 
-@app.task(name="workflows.execute", retry=RetryStrategy(max_attempts=3, exponential_wait=30))
+@app.task(name="workflows.execute", retry=StepRunRetryStrategy())
 def execute_workflow_step(step_run_id: int) -> None:
     """Execute one claimed step-run outside the advance lock."""
 
@@ -50,3 +80,28 @@ def sweep_workflow_runs(_timestamp: int) -> None:
     from angee.workflows import engine
 
     engine.sweep()
+
+
+@app.periodic(cron="* * * * *", periodic_id="workflows.reap")
+@app.task(name="workflows.reap", retry=RetryStrategy(max_attempts=3, exponential_wait=30))
+def reap_workflow_step_runs(_timestamp: int) -> None:
+    """Fail started step-runs whose heartbeat has expired."""
+
+    from angee.workflows import engine
+
+    engine.reap()
+
+
+def _retry_policy_for_job(job: procrastinate_jobs.Job) -> StepRetryPolicy:
+    """Return the StepRun retry policy for a Procrastinate job."""
+
+    raw_step_run_id = job.task_kwargs.get("step_run_id")
+    if not isinstance(raw_step_run_id, int):
+        return StepRetryPolicy()
+
+    step_run_model = apps.get_model("workflows", "StepRun")
+    with system_context(reason="workflows.retry_policy"):
+        step_run = step_run_model.objects.select_related("step").filter(pk=raw_step_run_id).first()
+    if step_run is None or step_run.step_id is None:
+        return StepRetryPolicy()
+    return retry_policy_from_config(step_run.step.config)

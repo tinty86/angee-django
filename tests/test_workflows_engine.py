@@ -7,85 +7,64 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import connection
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
+from procrastinate import jobs
+from procrastinate import retry as procrastinate_retry
 from rebac import system_context
 
 from angee.workflows import models as workflow_models
+from angee.workflows import steps as workflow_steps
 from angee.workflows.steps import HandlerStep, StepResult
 from tests.conftest import _clear_model_tables, _create_missing_tables
 from tests.test_workflows import Edge, Step, Trigger, Workflow
 
-AbstractWorkflowRun = getattr(workflow_models, "WorkflowRun", None)
-AbstractStepRun = getattr(workflow_models, "StepRun", None)
+
+class WorkflowRun(workflow_models.WorkflowRun):
+    """Concrete workflow run model for source-addon engine tests."""
+
+    class Meta(workflow_models.WorkflowRun.Meta):
+        """Django options for the concrete test workflow run model."""
+
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_workflow_run"
+        rebac_resource_type = "workflows/run"
+        rebac_id_attr = "sqid"
 
 
-if AbstractWorkflowRun is not None:
+class StepRun(workflow_models.StepRun):
+    """Concrete workflow step-run journal model for source-addon engine tests."""
 
-    class WorkflowRun(AbstractWorkflowRun):
-        """Concrete workflow run model for source-addon engine tests."""
+    class Meta(workflow_models.StepRun.Meta):
+        """Django options for the concrete test step-run model."""
 
-        class Meta(AbstractWorkflowRun.Meta):
-            """Django options for the concrete test workflow run model."""
-
-            abstract = False
-            app_label = "workflows"
-            db_table = "test_workflows_workflow_run"
-            rebac_resource_type = "workflows/run"
-            rebac_id_attr = "sqid"
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_step_run"
+        rebac_resource_type = "workflows/step_run"
+        rebac_id_attr = "sqid"
 
 
-else:
-    WorkflowRun = None
+class Decision(workflow_models.Decision):
+    """Concrete decision model for source-addon runtime tests."""
 
+    class Meta(workflow_models.Decision.Meta):
+        """Django options for the concrete test decision model."""
 
-if AbstractStepRun is not None:
-
-    class StepRun(AbstractStepRun):
-        """Concrete workflow step-run journal model for source-addon engine tests."""
-
-        class Meta(AbstractStepRun.Meta):
-            """Django options for the concrete test step-run model."""
-
-            abstract = False
-            app_label = "workflows"
-            db_table = "test_workflows_step_run"
-            rebac_resource_type = "workflows/step_run"
-            rebac_id_attr = "sqid"
-
-
-else:
-    StepRun = None
-
-
-AbstractDecision = getattr(workflow_models, "Decision", None)
-
-
-if AbstractDecision is not None:
-
-    class Decision(AbstractDecision):
-        """Concrete decision model for source-addon runtime tests."""
-
-        class Meta(AbstractDecision.Meta):
-            """Django options for the concrete test decision model."""
-
-            abstract = False
-            app_label = "workflows"
-            db_table = "test_workflows_decision"
-            rebac_resource_type = "workflows/decision"
-            rebac_id_attr = "sqid"
-
-
-else:
-    Decision = None
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_decision"
+        rebac_resource_type = "workflows/decision"
+        rebac_id_attr = "sqid"
 
 
 def runtime_models() -> tuple[type[Any], type[Any]]:
     """Return concrete runtime models, failing loudly while Slice 3 is absent."""
 
-    if WorkflowRun is None or StepRun is None:
-        pytest.fail("WorkflowRun and StepRun runtime models must be implemented.")
     return WorkflowRun, StepRun
 
 
@@ -105,9 +84,7 @@ def workflow_engine_tables(transactional_db: Any) -> Iterator[None]:
 
     del transactional_db
     run_model, step_run_model = runtime_models()
-    models: tuple[type[Any], ...] = (Workflow, Step, Edge, Trigger, run_model, step_run_model)
-    if Decision is not None:
-        models = (*models, Decision)
+    models: tuple[type[Any], ...] = (Workflow, Step, Edge, Trigger, run_model, step_run_model, Decision)
     created = _create_missing_tables(models)
     call_command("rebac", "sync", verbosity=0)
     _clear_model_tables(models)
@@ -266,6 +243,19 @@ def step_for(workflow: Workflow, key: str) -> Step:
 
     with system_context(reason="test workflows engine step read"):
         return Step.objects.get(workflow=workflow, key=key)
+
+
+def execute_job(step_run_id: int, *, attempts: int) -> jobs.Job:
+    """Return a Procrastinate job payload for retry-strategy tests."""
+
+    return jobs.Job(
+        queue="default",
+        lock=None,
+        queueing_lock=f"workflows.execute:{step_run_id}",
+        task_name="workflows.execute",
+        task_kwargs={"step_run_id": step_run_id},
+        attempts=attempts,
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -674,3 +664,396 @@ def test_cancellation_propagates_to_journal_and_child_runs(
     assert waiting_row.status == step_run_status.CANCELED
     assert started.status == step_run_status.STARTED
     assert started.resume_state["cancel_requested"] is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_transient_step_error_uses_configured_retry_backoff(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient impl failures stay started and let Procrastinate retry per step config."""
+
+    del workflow_engine_tables, no_workflow_queue
+    transient_error = getattr(workflow_steps, "TransientStepError", None)
+    assert transient_error is not None
+    _, step_run_status = run_statuses()
+    workflow = workflow_with_steps(
+        steps=(
+            {
+                "key": "start",
+                "config": {"retry": {"max_attempts": 3, "backoff": 7}},
+            },
+        ),
+        edges=(),
+    )
+    run = start_run(workflow)
+    step_run = advance_once(run)[0]
+
+    def run_transient(self: HandlerStep, step_run: Any) -> StepResult:
+        del self, step_run
+        raise transient_error("try again")
+
+    monkeypatch.setattr(HandlerStep, "run", run_transient)
+
+    from angee.workflows import engine, tasks
+
+    with pytest.raises(transient_error):
+        engine.execute(step_run.pk)
+
+    step_run.refresh_from_db()
+    assert step_run.status == step_run_status.STARTED
+    assert step_run.attempt == 1
+
+    monkeypatch.setattr(
+        procrastinate_retry.utils,
+        "datetime_from_timedelta_params",
+        lambda params: params,
+    )
+    retry_exception = tasks.execute_workflow_step.get_retry_exception(
+        transient_error("try again"),
+        execute_job(step_run.pk, attempts=1),
+    )
+    assert retry_exception is not None
+    assert retry_exception.retry_decision.retry_at == {"seconds": 7}
+    assert (
+        tasks.execute_workflow_step.get_retry_exception(
+            transient_error("try again"),
+            execute_job(step_run.pk, attempts=3),
+        )
+        is None
+    )
+    assert (
+        tasks.execute_workflow_step.get_retry_exception(
+            RuntimeError("hard failure"),
+            execute_job(step_run.pk, attempts=1),
+        )
+        is None
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_hard_failure_routes_failed_outcome(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    handler_calls: list[dict[str, Any]],
+) -> None:
+    """Hard impl failures journal outcome=failed and activate matching edges."""
+
+    del workflow_engine_tables, no_workflow_queue, handler_calls
+    run_status, step_run_status = run_statuses()
+    workflow = workflow_with_steps(
+        steps=(
+            {"key": "start", "config": {"mode": "error", "error": "boom"}},
+            {"key": "cleanup", "config": {"outcome": "done"}},
+        ),
+        edges=(("start", "cleanup", "failed"),),
+    )
+    run = start_run(workflow)
+
+    advance_once(run)
+    execute_started(run)
+    advance_once(run)
+
+    failed = step_run_for(run, "start")
+    cleanup = step_run_for(run, "cleanup")
+    assert failed.status == step_run_status.FAILED
+    assert failed.outcome == "failed"
+    assert cleanup.status == step_run_status.STARTED
+
+    execute_started(run)
+    advance_once(run)
+    run.refresh_from_db()
+    assert run.status == run_status.FAILED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_step_impl_heartbeat_helper_updates_started_row(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Long-running impls can refresh their own StepRun heartbeat."""
+
+    del workflow_engine_tables, no_workflow_queue
+    started_at = timezone.now()
+    pulse_at = started_at + timedelta(seconds=30)
+    workflow = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    run = start_run(workflow)
+
+    def run_with_heartbeat(self: HandlerStep, step_run: Any) -> StepResult:
+        self.heartbeat(step_run, at=pulse_at)
+        return StepResult.done(output={}, outcome="done")
+
+    monkeypatch.setattr(HandlerStep, "run", run_with_heartbeat)
+    advance_once(run, now=started_at)
+    execute_started(run, now=started_at)
+
+    step_run = step_run_for(run, "start")
+    assert step_run.heartbeat_at == pulse_at
+
+
+@pytest.mark.django_db(transaction=True)
+def test_heartbeat_timeout_reaps_started_rows_and_routes_failed_outcome(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    settings: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    handler_calls: list[dict[str, Any]],
+) -> None:
+    """The reaper fails stale started rows, enqueues advance, and failed edges route."""
+
+    del workflow_engine_tables, no_workflow_queue, handler_calls
+    settings.ANGEE_WORKFLOWS_HEARTBEAT_TIMEOUT = 60
+    _, step_run_status = run_statuses()
+    now = timezone.now()
+    stale_at = now - timedelta(seconds=61)
+    enqueued: list[int] = []
+    workflow = workflow_with_steps(
+        steps=(
+            {"key": "start", "config": {"outcome": "done"}},
+            {"key": "cleanup", "config": {"outcome": "done"}},
+        ),
+        edges=(("start", "cleanup", "failed"),),
+    )
+    run = start_run(workflow)
+    advance_once(run, now=stale_at)
+
+    from angee.workflows import engine
+
+    monkeypatch.setattr(engine, "enqueue_advance", lambda run_id: enqueued.append(run_id))
+    assert engine.reap(now=now) == {"reaped": 1}
+
+    failed = step_run_for(run, "start")
+    assert failed.status == step_run_status.FAILED
+    assert failed.outcome == "failed"
+    assert "heartbeat" in failed.error
+    assert enqueued == [run.pk]
+
+    advance_once(run, now=now)
+    assert step_run_for(run, "cleanup").status == step_run_status.STARTED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reaper_ignores_waiting_rows(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    settings: Any,
+    handler_calls: list[dict[str, Any]],
+) -> None:
+    """Waiting rows represent durable waits and are exempt from heartbeat reaping."""
+
+    del workflow_engine_tables, no_workflow_queue, handler_calls
+    settings.ANGEE_WORKFLOWS_HEARTBEAT_TIMEOUT = 60
+    _, step_run_status = run_statuses()
+    now = timezone.now()
+    workflow = workflow_with_steps(
+        steps=(
+            {
+                "key": "wait",
+                "step_class": "wait",
+                "config": {"until": (now + timedelta(hours=1)).isoformat()},
+            },
+        ),
+        edges=(),
+    )
+    run = start_run(workflow)
+    advance_once(run, now=now - timedelta(minutes=10))
+    execute_started(run, now=now - timedelta(minutes=10))
+    waiting = step_run_for(run, "wait")
+    with system_context(reason="test workflows waiting stale heartbeat"):
+        waiting.heartbeat_at = now - timedelta(minutes=10)
+        waiting.save(update_fields=["heartbeat_at", "updated_at"])
+
+    from angee.workflows import engine
+
+    assert engine.reap(now=now) == {"reaped": 0}
+    waiting.refresh_from_db()
+    assert waiting.status == step_run_status.WAITING
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reaper_finishes_canceled_started_rows(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    settings: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canceled runs flag started rows; the heartbeat reaper moves those rows terminal."""
+
+    del workflow_engine_tables, no_workflow_queue
+    settings.ANGEE_WORKFLOWS_HEARTBEAT_TIMEOUT = 60
+    run_status, step_run_status = run_statuses()
+    now = timezone.now()
+    stale_at = now - timedelta(seconds=61)
+    enqueued: list[int] = []
+    workflow = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    run = start_run(workflow)
+    step_run = advance_once(run, now=stale_at)[0]
+
+    from angee.workflows import engine
+
+    engine.cancel(run)
+    monkeypatch.setattr(engine, "enqueue_advance", lambda run_id: enqueued.append(run_id))
+    assert engine.reap(now=now) == {"reaped": 1}
+
+    run.refresh_from_db()
+    step_run.refresh_from_db()
+    assert run.status == run_status.CANCELED
+    assert step_run.status == step_run_status.FAILED
+    assert step_run.resume_state["cancel_requested"] is True
+    assert enqueued == [run.pk]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_error_workflow_fires_once_with_failed_run_subject(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    handler_calls: list[dict[str, Any]],
+) -> None:
+    """A failed run starts its linked error workflow once using the failed StepRun as parent."""
+
+    del workflow_engine_tables, no_workflow_queue, handler_calls
+    run_status = run_statuses()[0]
+    error_version = workflow_with_steps(
+        name="Error workflow",
+        steps=({"key": "recover", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    with system_context(reason="test workflows error workflow definition"):
+        draft = Workflow.objects.create(name="Primary", error_workflow=error_version.published_from)
+        Step.objects.create(
+            workflow=draft,
+            key="explode",
+            name="Explode",
+            config={"mode": "error", "error": "boom"},
+            is_entry=True,
+        )
+        workflow = draft.publish()
+    run = run_to_terminal(start_run(workflow))
+    failed = step_run_for(run, "explode")
+
+    from angee.workflows import engine
+
+    engine.advance(run.pk)
+    with system_context(reason="test workflows error workflow children"):
+        children = list(WorkflowRun.objects.filter(parent_step_run=failed).order_by("pk"))
+
+    assert run.status == run_status.FAILED
+    assert len(children) == 1
+    child = children[0]
+    assert child.workflow == error_version
+    assert child.subject == run
+
+
+@pytest.mark.django_db(transaction=True)
+def test_publish_retargets_new_starts_without_migrating_trigger(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Existing runs keep v1 while trigger-backed new starts resolve the v2 lineage head."""
+
+    del workflow_engine_tables, no_workflow_queue
+    first = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done", "output": {"version": 1}}},),
+        edges=(),
+    )
+    draft = first.published_from
+    old_run = start_run(draft)
+    with system_context(reason="test workflows publish retarget"):
+        trigger = Trigger.objects.create(workflow=draft, enabled=True)
+        start = Step.objects.get(workflow=draft, key="start")
+        start.config = {"outcome": "done", "output": {"version": 2}}
+        start.save()
+        second = draft.publish()
+
+    from angee.workflows import engine
+
+    new_run = engine.start(draft, subject=None, actor=None, trigger=trigger)
+
+    old_run.refresh_from_db()
+    assert old_run.workflow == first
+    assert new_run.workflow == second
+    assert trigger.workflow == draft
+
+
+@pytest.mark.django_db(transaction=True)
+def test_published_and_archived_definition_rows_are_immutable(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Step and Edge writes are rejected on published and archived workflow versions."""
+
+    del workflow_engine_tables, no_workflow_queue
+    workflow = workflow_with_steps(
+        steps=(
+            {"key": "start", "config": {"outcome": "done"}},
+            {"key": "finish", "config": {"outcome": "done"}},
+        ),
+        edges=(("start", "finish", ""),),
+    )
+    step = step_for(workflow, "start")
+    with system_context(reason="test workflows immutable definitions"):
+        edge = Edge.objects.get(workflow=workflow)
+
+        with pytest.raises(ValidationError, match="immutable"):
+            Step.objects.create(workflow=workflow, key="late", name="Late")
+
+        step.name = "Edited"
+        with pytest.raises(ValidationError, match="immutable"):
+            step.save()
+
+        edge.condition = "changed"
+        with pytest.raises(ValidationError, match="immutable"):
+            edge.save()
+
+        workflow.archive()
+        step.name = "Edited archived"
+        with pytest.raises(ValidationError, match="immutable"):
+            step.save()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_archived_latest_version_refuses_new_runs(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Archiving the latest lineage version prevents falling back to an older published version."""
+
+    del workflow_engine_tables, no_workflow_queue
+    first = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    draft = first.published_from
+    with system_context(reason="test workflows archive latest"):
+        second = draft.publish()
+        second.archive()
+
+    with pytest.raises(ValidationError, match="published version|archived"):
+        start_run(draft)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_referenced_published_version_delete_is_protected(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """A WorkflowRun's pinned version FK blocks deleting the referenced published version."""
+
+    del workflow_engine_tables, no_workflow_queue
+    workflow = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    start_run(workflow)
+
+    with system_context(reason="test workflows version protect"):
+        with pytest.raises(ProtectedError):
+            Workflow.objects.filter(pk=workflow.pk).delete()

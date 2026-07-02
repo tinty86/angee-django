@@ -23,7 +23,7 @@ from angee.base.impl import ImplDefaultsMixin
 from angee.base.mixins import AuditMixin
 from angee.base.models import AngeeDataModel, AngeeManager
 from angee.base.transitions import StateTransitions, transition
-from angee.workflows.steps import StepImpl
+from angee.workflows.steps import StepImpl, validate_retry_config
 
 
 class WorkflowStatus(models.TextChoices):
@@ -122,12 +122,15 @@ class WorkflowManager(AngeeManager):
         """Return the latest published version for ``workflow``'s lineage."""
 
         head = workflow if getattr(workflow, "published_from_id", None) is None else workflow.published_from
-        return (
-            self.filter(status=WorkflowStatus.PUBLISHED)
+        latest = (
+            self.filter(status__in=[WorkflowStatus.PUBLISHED, WorkflowStatus.ARCHIVED])
             .filter(models.Q(pk=head.pk) | models.Q(published_from=head))
             .order_by("-version", "-pk")
             .first()
         )
+        if latest is None or latest.status != WorkflowStatus.PUBLISHED:
+            return None
+        return latest
 
 
 class Workflow(AuditMixin, AngeeDataModel):
@@ -349,6 +352,7 @@ class Step(ImplDefaultsMixin, AuditMixin, AngeeDataModel):
         try:
             impl = cast(type[StepImpl], self.resolve_impl("step_class", default="handler"))
             impl.validate_config(self.config)
+            validate_retry_config(self.config)
         except ValidationError:
             raise
         except Exception as error:
@@ -745,9 +749,16 @@ class StepRun(AuditMixin, AngeeDataModel):
     def mark_started(self, *, heartbeat_at: Any = None) -> None:
         """Claim this row for execution."""
 
-        self.attempt += 1
         self.heartbeat_at = heartbeat_at
-        self._transition_fields = {"attempt", "heartbeat_at"}
+        self._transition_fields = {"heartbeat_at"}
+
+    def record_attempt(self, *, heartbeat_at: Any = None) -> None:
+        """Record one implementation invocation for this started row."""
+
+        self.attempt += 1
+        if heartbeat_at is not None:
+            self.heartbeat_at = heartbeat_at
+        self.save(update_fields=["attempt", "heartbeat_at", "updated_at"])
 
     @transition(status, source=StepRunStatus.STARTED, target=StepRunStatus.WAITING, on_success=_save_step_run_status)
     def mark_waiting(
@@ -788,14 +799,15 @@ class StepRun(AuditMixin, AngeeDataModel):
         target=StepRunStatus.FAILED,
         on_success=_save_step_run_status,
     )
-    def mark_failed(self, *, error: str = "", stacktrace: str = "") -> None:
+    def mark_failed(self, *, error: str = "", stacktrace: str = "", outcome: str = "failed") -> None:
         """Persist a failed step result."""
 
         self.error = error
         self.stacktrace = stacktrace
+        self.outcome = outcome
         self.wait_until = None
         self.wait_event = ""
-        self._transition_fields = {"error", "stacktrace", "wait_until", "wait_event"}
+        self._transition_fields = {"error", "stacktrace", "outcome", "wait_until", "wait_event"}
 
     @transition(
         status,
