@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+import strawberry
 import strawberry_django
 from django.apps import apps
+from django.db import models
+from rebac import system_context
 from strawberry import auto
 from strawberry.scalars import JSON
 
+from angee.graphql.actions import ActionResult, action_target, resolve_action_target
 from angee.graphql.data import AngeeHasuraWriteBackend, hasura_model_resource, public_pk_decoder
+from angee.graphql.ids import PublicID, instance_for_id
 from angee.graphql.node import AngeeNode
+from angee.graphql.subscriptions import changes
+from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
+from angee.workflows import engine
 
 Workflow = apps.get_model("workflows", "Workflow")
 Step = apps.get_model("workflows", "Step")
 Edge = apps.get_model("workflows", "Edge")
 Trigger = apps.get_model("workflows", "Trigger")
+WorkflowRun = apps.get_model("workflows", "WorkflowRun")
+StepRun = apps.get_model("workflows", "StepRun")
 
 
 @strawberry_django.type(Workflow)
@@ -70,6 +82,57 @@ class TriggerType(AngeeNode):
     config: JSON
     created_at: auto
     updated_at: auto
+
+
+@strawberry_django.type(WorkflowRun)
+class WorkflowRunType(AngeeNode):
+    """Admin projection of a workflow run."""
+
+    workflow: WorkflowType
+    trigger: TriggerType | None
+    parent_step_run: "StepRunType | None"
+    status: auto
+    subject_object_id: auto
+    artifact_object_id: auto
+    data: JSON
+    wake_at: auto
+    steps_taken: auto
+    budget_spent: JSON
+    error: auto
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(StepRun)
+class StepRunType(AngeeNode):
+    """Admin projection of one workflow step-run journal row."""
+
+    run: WorkflowRunType
+    step: StepType | None
+    system_kind: auto
+    map_index: auto
+    status: auto
+    input: JSON
+    output: JSON
+    resume_state: JSON
+    outcome: auto
+    attempt: auto
+    wait_until: auto
+    wait_event: auto
+    heartbeat_at: auto
+    error: auto
+    stacktrace: auto
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry.input
+class WorkflowObjectRefInput:
+    """Generic subject reference for starting a workflow run."""
+
+    app_label: str
+    model: str
+    id: PublicID
 
 
 _WORKFLOW_RESOURCE = hasura_model_resource(
@@ -131,16 +194,105 @@ _TRIGGER_RESOURCE = hasura_model_resource(
     field_id_decode={"workflow": public_pk_decoder(Workflow)},
     write_backend=AngeeHasuraWriteBackend(Trigger, public_id_fields=("workflow",)),
 )
+_WORKFLOW_RUN_RESOURCE = hasura_model_resource(
+    WorkflowRunType,
+    model=WorkflowRun,
+    name="workflow_runs",
+    filterable=[
+        "id",
+        "workflow",
+        "trigger",
+        "parent_step_run",
+        "status",
+        "wake_at",
+        "updated_at",
+    ],
+    sortable=["workflow", "status", "wake_at", "steps_taken", "created_at", "updated_at"],
+    aggregatable=["id", "steps_taken"],
+    groupable=["workflow", "workflow__name", "status", "updated_at"],
+    insert=False,
+    update=False,
+    delete=False,
+    field_id_decode={
+        "workflow": public_pk_decoder(Workflow),
+        "trigger": public_pk_decoder(Trigger),
+        "parent_step_run": public_pk_decoder(StepRun),
+    },
+)
+_STEP_RUN_RESOURCE = hasura_model_resource(
+    StepRunType,
+    model=StepRun,
+    name="workflow_step_runs",
+    filterable=[
+        "id",
+        "run",
+        "step",
+        "system_kind",
+        "map_index",
+        "status",
+        "outcome",
+        "wait_until",
+        "updated_at",
+    ],
+    sortable=["run", "step", "map_index", "status", "attempt", "created_at", "updated_at"],
+    aggregatable=["id", "attempt"],
+    groupable=["run", "step", "step__key", "system_kind", "status", "outcome", "updated_at"],
+    insert=False,
+    update=False,
+    delete=False,
+    field_id_decode={
+        "run": public_pk_decoder(WorkflowRun),
+        "step": public_pk_decoder(Step),
+    },
+)
+
+
+@strawberry.type
+class WorkflowRunActionMutation:
+    """Console actions for workflow run lifecycle."""
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def start_workflow_run(
+        self,
+        info: strawberry.Info,
+        workflow: PublicID,
+        subject: WorkflowObjectRefInput | None = None,
+    ) -> ActionResult:
+        """Start the current published version of a workflow lineage."""
+
+        target = resolve_action_target(Workflow, workflow, reason="workflows.graphql.start_workflow_run")
+        try:
+            run = engine.start(
+                target,
+                subject=_resolve_subject(subject),
+                actor=getattr(info.context.request, "user", None),
+            )
+        except Exception as error:  # noqa: BLE001 - domain start failures return action results.
+            return ActionResult(ok=False, message=f"Start failed: {error}")
+        return ActionResult(ok=True, message=f"Started workflow run {run.sqid}.")
+
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def cancel_workflow_run(self, run: PublicID) -> ActionResult:
+        """Cancel a workflow run and its active journal rows."""
+
+        with action_target(WorkflowRun, run, reason="workflows.graphql.cancel_workflow_run") as target:
+            engine.cancel(target)
+        return ActionResult(ok=True, message="Workflow run canceled.")
 
 _CONSOLE_TYPES: list[object] = [
     WorkflowType,
     StepType,
     EdgeType,
     TriggerType,
+    WorkflowRunType,
+    StepRunType,
+    WorkflowObjectRefInput,
     *_WORKFLOW_RESOURCE.types,
     *_STEP_RESOURCE.types,
     *_EDGE_RESOURCE.types,
     *_TRIGGER_RESOURCE.types,
+    *_WORKFLOW_RUN_RESOURCE.types,
+    *_STEP_RUN_RESOURCE.types,
 ]
 
 schemas = {
@@ -150,14 +302,28 @@ schemas = {
             _STEP_RESOURCE.query,
             _EDGE_RESOURCE.query,
             _TRIGGER_RESOURCE.query,
+            _WORKFLOW_RUN_RESOURCE.query,
+            _STEP_RUN_RESOURCE.query,
         ],
         "mutation": [
             _WORKFLOW_RESOURCE.mutation,
             _STEP_RESOURCE.mutation,
             _EDGE_RESOURCE.mutation,
             _TRIGGER_RESOURCE.mutation,
+            WorkflowRunActionMutation,
         ],
+        "subscription": [changes(WorkflowRun, field="workflowRunChanged")],
         "types": _CONSOLE_TYPES,
     },
 }
 """GraphQL contributions installed by the workflows addon."""
+
+
+def _resolve_subject(ref: WorkflowObjectRefInput | None) -> models.Model | None:
+    """Resolve an optional generic subject reference from GraphQL input."""
+
+    if ref is None:
+        return None
+    model = apps.get_model(ref.app_label, ref.model)
+    with system_context(reason="workflows.graphql.subject"):
+        return cast(models.Model | None, instance_for_id(cast(type[models.Model], model), ref.id))

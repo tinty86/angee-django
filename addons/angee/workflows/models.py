@@ -13,6 +13,8 @@ from __future__ import annotations
 import copy
 from typing import Any, Self, cast
 
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models, transaction
 
@@ -52,11 +54,48 @@ class TriggerKind(models.TextChoices):
     SCHEDULE = "schedule", "Schedule"
 
 
+class RunStatus(models.TextChoices):
+    """Execution lifecycle for one pinned workflow run."""
+
+    PENDING = "pending", "Pending"
+    RUNNING = "running", "Running"
+    WAITING = "waiting", "Waiting"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+    CANCELED = "canceled", "Canceled"
+
+
+class StepRunStatus(models.TextChoices):
+    """Execution lifecycle for one step-run journal row."""
+
+    SCHEDULED = "scheduled", "Scheduled"
+    STARTED = "started", "Started"
+    WAITING = "waiting", "Waiting"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+    CANCELED = "canceled", "Canceled"
+    SKIPPED = "skipped", "Skipped"
+
+
 def _save_workflow_status(instance: models.Model, source: Any, target: Any) -> None:
     """Persist a transition-owned workflow status change."""
 
     del source, target
     cast("Workflow", instance)._save_status_change()
+
+
+def _save_run_status(instance: models.Model, source: Any, target: Any) -> None:
+    """Persist a transition-owned workflow run status change."""
+
+    del source, target
+    cast("WorkflowRun", instance)._save_status_change()
+
+
+def _save_step_run_status(instance: models.Model, source: Any, target: Any) -> None:
+    """Persist a transition-owned step-run status change."""
+
+    del source, target
+    cast("StepRun", instance)._save_status_change()
 
 
 class WorkflowManager(AngeeManager):
@@ -423,3 +462,343 @@ class Trigger(AuditMixin, AngeeDataModel):
 
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class WorkflowRun(AuditMixin, AngeeDataModel):
+    """One execution of a pinned published workflow version."""
+
+    runtime = True
+
+    sqid_prefix = "wfr_"
+    workflow = models.ForeignKey("workflows.Workflow", on_delete=models.PROTECT, related_name="runs")
+    trigger = models.ForeignKey(
+        "workflows.Trigger",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="runs",
+    )
+    parent_step_run = models.ForeignKey(
+        "workflows.StepRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="child_runs",
+    )
+    status = StateField(choices_enum=RunStatus, default=RunStatus.PENDING)
+    subject_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    subject_object_id = models.PositiveBigIntegerField(null=True, blank=True)
+    subject = GenericForeignKey("subject_content_type", "subject_object_id")
+    artifact_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    artifact_object_id = models.PositiveBigIntegerField(null=True, blank=True)
+    artifact = GenericForeignKey("artifact_content_type", "artifact_object_id")
+    dedup_key = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    data = models.JSONField(default=dict, blank=True)
+    wake_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    steps_taken = models.PositiveIntegerField(default=0)
+    budget_spent = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+
+    status_transitions = StateTransitions(
+        status,
+        {
+            RunStatus.PENDING: [RunStatus.RUNNING, RunStatus.FAILED, RunStatus.CANCELED],
+            RunStatus.RUNNING: [RunStatus.WAITING, RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED],
+            RunStatus.WAITING: [RunStatus.RUNNING, RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED],
+        },
+    )
+
+    objects = AngeeManager()
+
+    class Meta:
+        """Django model options for workflow runs."""
+
+        abstract = True
+        ordering = ("-created_at", "sqid")
+        rebac_resource_type = "workflows/run"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(
+                fields=("parent_step_run",),
+                condition=models.Q(parent_step_run__isnull=False),
+                name="uniq_workflows_run_parent_step_run",
+            ),
+        )
+        indexes = (
+            models.Index(fields=("subject_content_type", "subject_object_id"), name="idx_wfr_subject_ref"),
+            models.Index(fields=("artifact_content_type", "artifact_object_id"), name="idx_wfr_artifact_ref"),
+        )
+
+    @property
+    def outcome_counts(self) -> dict[str, int]:
+        """Return per-outcome counts aggregated from the step-run journal."""
+
+        return {
+            str(row["outcome"] or ""): int(row["count"])
+            for row in self.step_runs.values("outcome").annotate(count=models.Count("pk")).order_by("outcome")
+        }
+
+    @property
+    def is_terminal(self) -> bool:
+        """Return whether this run has reached a terminal status."""
+
+        return self.status in {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
+
+    @transition(status, source=RunStatus.PENDING, target=RunStatus.RUNNING, on_success=_save_run_status)
+    def mark_running(self) -> None:
+        """Mark a pending run as actively orchestrating."""
+
+    @transition(status, source=RunStatus.WAITING, target=RunStatus.RUNNING, on_success=_save_run_status)
+    def resume(self) -> None:
+        """Mark a waiting run as actively orchestrating again."""
+
+    @transition(
+        status,
+        source=RunStatus.RUNNING,
+        target=RunStatus.WAITING,
+        on_success=_save_run_status,
+    )
+    def mark_waiting(self, *, wake_at: Any = None) -> None:
+        """Mark a run as waiting on durable external or timer state."""
+
+        self.wake_at = wake_at
+        self._transition_fields = {"wake_at"}
+
+    @transition(
+        status,
+        source=[RunStatus.RUNNING, RunStatus.WAITING],
+        target=RunStatus.SUCCEEDED,
+        on_success=_save_run_status,
+    )
+    def mark_succeeded(self) -> None:
+        """Mark a run as successful."""
+
+        self.wake_at = None
+        self._transition_fields = {"wake_at"}
+
+    @transition(
+        status,
+        source=[RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING],
+        target=RunStatus.FAILED,
+        on_success=_save_run_status,
+    )
+    def mark_failed(self, error: str = "") -> None:
+        """Mark a run as failed with an optional durable error message."""
+
+        self.error = error
+        self.wake_at = None
+        self._transition_fields = {"error", "wake_at"}
+
+    @transition(
+        status,
+        source=[RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING],
+        target=RunStatus.CANCELED,
+        on_success=_save_run_status,
+    )
+    def mark_canceled(self) -> None:
+        """Mark a run as canceled."""
+
+        self.wake_at = None
+        self._transition_fields = {"wake_at"}
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Persist the run while keeping trigger dedup keys immutable."""
+
+        self._raise_if_dedup_key_changed()
+        super().save(*args, **kwargs)
+
+    def _save_status_change(self) -> None:
+        """Save a transition-owned status change plus fields touched by its body."""
+
+        fields = {"status", *getattr(self, "_transition_fields", set())}
+        try:
+            self.save(update_fields=fields)
+        finally:
+            if hasattr(self, "_transition_fields"):
+                del self._transition_fields
+
+    def _raise_if_dedup_key_changed(self) -> None:
+        """Reject updates that alter the immutable trigger-start dedup key."""
+
+        if self._state.adding:
+            return
+        try:
+            persisted = type(self)._base_manager.only("dedup_key").get(pk=self.pk)
+        except ObjectDoesNotExist:
+            return
+        if persisted.dedup_key != self.dedup_key:
+            raise ValidationError({"dedup_key": "Workflow run dedup keys are immutable."})
+
+
+class StepRun(AuditMixin, AngeeDataModel):
+    """Journal row for one workflow step execution or system-injected event."""
+
+    runtime = True
+
+    sqid_prefix = "wsr_"
+    run = models.ForeignKey("workflows.WorkflowRun", on_delete=models.CASCADE, related_name="step_runs")
+    step = models.ForeignKey(
+        "workflows.Step",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="step_runs",
+    )
+    system_kind = models.SlugField(max_length=100, blank=True, default="")
+    map_index = models.IntegerField(default=-1)
+    status = StateField(choices_enum=StepRunStatus, default=StepRunStatus.SCHEDULED)
+    previous = models.ManyToManyField("self", symmetrical=False, blank=True, related_name="next_step_runs")
+    input = models.JSONField(default=dict, blank=True)
+    output = models.JSONField(default=dict, blank=True)
+    resume_state = models.JSONField(default=dict, blank=True)
+    outcome = models.SlugField(max_length=100, blank=True, default="")
+    attempt = models.PositiveIntegerField(default=0)
+    wait_until = models.DateTimeField(null=True, blank=True, db_index=True)
+    wait_event = models.SlugField(max_length=200, blank=True, default="")
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    stacktrace = models.TextField(blank=True)
+
+    status_transitions = StateTransitions(
+        status,
+        {
+            StepRunStatus.SCHEDULED: [
+                StepRunStatus.STARTED,
+                StepRunStatus.CANCELED,
+                StepRunStatus.SKIPPED,
+            ],
+            StepRunStatus.STARTED: [
+                StepRunStatus.WAITING,
+                StepRunStatus.SUCCEEDED,
+                StepRunStatus.FAILED,
+                StepRunStatus.CANCELED,
+            ],
+            StepRunStatus.WAITING: [
+                StepRunStatus.STARTED,
+                StepRunStatus.SUCCEEDED,
+                StepRunStatus.FAILED,
+                StepRunStatus.CANCELED,
+                StepRunStatus.SKIPPED,
+            ],
+        },
+    )
+
+    objects = AngeeManager()
+
+    class Meta:
+        """Django model options for workflow step-run journal rows."""
+
+        abstract = True
+        ordering = ("created_at", "sqid")
+        rebac_resource_type = "workflows/step_run"
+        rebac_id_attr = "sqid"
+        constraints = (
+            models.UniqueConstraint(fields=("run", "step", "map_index"), name="uniq_workflows_step_run_map"),
+        )
+
+    @property
+    def is_terminal(self) -> bool:
+        """Return whether this journal row has reached a terminal status."""
+
+        return self.status in {
+            StepRunStatus.SUCCEEDED,
+            StepRunStatus.FAILED,
+            StepRunStatus.CANCELED,
+            StepRunStatus.SKIPPED,
+        }
+
+    @transition(
+        status,
+        source=[StepRunStatus.SCHEDULED, StepRunStatus.WAITING],
+        target=StepRunStatus.STARTED,
+        on_success=_save_step_run_status,
+    )
+    def mark_started(self, *, heartbeat_at: Any = None) -> None:
+        """Claim this row for execution."""
+
+        self.attempt += 1
+        self.heartbeat_at = heartbeat_at
+        self._transition_fields = {"attempt", "heartbeat_at"}
+
+    @transition(status, source=StepRunStatus.STARTED, target=StepRunStatus.WAITING, on_success=_save_step_run_status)
+    def mark_waiting(
+        self,
+        *,
+        until: Any = None,
+        event: str = "",
+        resume_state: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist durable wait conditions for this row."""
+
+        self.wait_until = until
+        self.wait_event = event
+        if resume_state is not None:
+            self.resume_state = resume_state
+        self._transition_fields = {"wait_until", "wait_event", "resume_state"}
+
+    @transition(
+        status,
+        source=[StepRunStatus.STARTED, StepRunStatus.WAITING],
+        target=StepRunStatus.SUCCEEDED,
+        on_success=_save_step_run_status,
+    )
+    def mark_succeeded(self, *, output: Any = None, outcome: str = "") -> None:
+        """Persist a successful step result."""
+
+        self.output = output if output is not None else {}
+        self.outcome = outcome
+        self.error = ""
+        self.stacktrace = ""
+        self.wait_until = None
+        self.wait_event = ""
+        self._transition_fields = {"output", "outcome", "error", "stacktrace", "wait_until", "wait_event"}
+
+    @transition(status, source=StepRunStatus.STARTED, target=StepRunStatus.FAILED, on_success=_save_step_run_status)
+    def mark_failed(self, *, error: str = "", stacktrace: str = "") -> None:
+        """Persist a failed step result."""
+
+        self.error = error
+        self.stacktrace = stacktrace
+        self.wait_until = None
+        self.wait_event = ""
+        self._transition_fields = {"error", "stacktrace", "wait_until", "wait_event"}
+
+    @transition(
+        status,
+        source=[StepRunStatus.SCHEDULED, StepRunStatus.WAITING],
+        target=StepRunStatus.SKIPPED,
+        on_success=_save_step_run_status,
+    )
+    def mark_skipped(self) -> None:
+        """Mark this row as skipped by routing or join semantics."""
+
+    @transition(
+        status,
+        source=[StepRunStatus.SCHEDULED, StepRunStatus.STARTED, StepRunStatus.WAITING],
+        target=StepRunStatus.CANCELED,
+        on_success=_save_step_run_status,
+    )
+    def mark_canceled(self) -> None:
+        """Mark this row as canceled."""
+
+    def _save_status_change(self) -> None:
+        """Save a transition-owned status change plus fields touched by its body."""
+
+        fields = {"status", *getattr(self, "_transition_fields", set())}
+        try:
+            self.save(update_fields=fields)
+        finally:
+            if hasattr(self, "_transition_fields"):
+                del self._transition_fields

@@ -42,3 +42,24 @@ definition workflows/trigger {
     permission write = workflow->write + admin->member
     permission delete = workflow->write + admin->member
 }
+
+definition workflows/run {
+    relation owner: auth/user // rebac:field=created_by
+    relation workflow: workflows/workflow // rebac:field=workflow
+    relation admin: angee/role // rebac:const=admin
+
+    permission create = workflow->write + admin->member
+    permission read = owner + workflow->read + admin->member
+    permission write = owner + workflow->write + admin->member
+    permission delete = admin->member
+}
+
+definition workflows/step_run {
+    relation run: workflows/run // rebac:field=run
+    relation admin: angee/role // rebac:const=admin
+
+    permission create = run->write + admin->member
+    permission read = run->read + admin->member
+    permission write = run->write + admin->member
+    permission delete = admin->member
+}
