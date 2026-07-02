@@ -15,6 +15,7 @@ from strawberry_django_hasura import (
     HasuraResource,
     WriteBackend,
 )
+from strawberry_django_hasura import filtering as hasura_filtering
 from strawberry_django_hasura import (
     hasura_resource as build_hasura_resource,
 )
@@ -55,6 +56,15 @@ from angee.graphql.introspection import (
     require_field_for_path,
 )
 from angee.graphql.writes import write_queryset
+
+# The stock refine Hasura provider encodes startsWith/endsWith as anchored
+# regexes (`_iregex: "^v"` / `_iregex: "v$"`). The library leaves regex lookups
+# project-supplied (`filtering._LOOKUPS` is the registration seam) and Django
+# owns `__iregex`, so Angee registers the mapping here — one wire contract for
+# rows and aggregates. The case-sensitive family rides `_similar`, which needs
+# LIKE-pattern conversion the seam cannot express; Angee's toolbar does not
+# offer it (see `ANGEE_TEXT_FILTER_LOOKUP_OPERATORS`).
+hasura_filtering._LOOKUPS["iregex"] = ("__iregex", False)
 
 
 class AngeeHasuraWriteBackend:
