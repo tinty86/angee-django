@@ -1181,6 +1181,16 @@ describe("ResourceList", () => {
     expect(scrollableChipLane?.className).toContain("scroll-x-contained");
     expect(scrollableChipLane?.contains(trigger)).toBe(false);
 
+    const lane = scrollableChipLane as HTMLElement;
+    Object.defineProperties(lane, {
+      clientWidth: { configurable: true, value: 120 },
+      scrollWidth: { configurable: true, value: 480 },
+    });
+
+    fireEvent.wheel(lane, { deltaY: 160 });
+
+    expect(lane.scrollLeft).toBe(160);
+
     fireEvent.click(trigger);
 
     expect(await screen.findByRole("button", { name: "Add custom filter" }))

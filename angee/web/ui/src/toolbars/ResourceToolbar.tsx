@@ -345,7 +345,10 @@ function FilterPicker({
     <PopoverRoot>
       <div className="inline-flex h-8 min-w-0 max-w-xl flex-1 items-center gap-1 rounded-6 border border-transparent bg-inset pl-2 pr-1 text-13 text-fg focus-within:border-border-focus focus-within:bg-sheet focus-within:focus-ring">
         <Glyph name="search" className="size-3.5 shrink-0 text-fg-muted" />
-        <div className="flex min-w-0 flex-1 items-center gap-1 scroll-x-contained">
+        <div
+          className="flex min-w-0 flex-1 items-center gap-1 scroll-x-contained"
+          onWheel={handleChipLaneWheel}
+        >
           {groups.map((nextGroup, index) => (
             <FacetChip
               key={`${nextGroup.field}:${nextGroup.granularity ?? ""}`}
@@ -566,6 +569,23 @@ function FilterPicker({
       </PopoverPortal>
     </PopoverRoot>
   );
+}
+
+function handleChipLaneWheel(event: React.WheelEvent<HTMLDivElement>): void {
+  if (event.deltaX !== 0 || event.deltaY === 0) return;
+
+  const lane = event.currentTarget;
+  const maxScrollLeft = lane.scrollWidth - lane.clientWidth;
+  if (maxScrollLeft <= 0) return;
+
+  const nextScrollLeft = Math.max(
+    0,
+    Math.min(maxScrollLeft, lane.scrollLeft + event.deltaY),
+  );
+  if (nextScrollLeft === lane.scrollLeft) return;
+
+  event.preventDefault();
+  lane.scrollLeft = nextScrollLeft;
 }
 
 function FacetChip({
