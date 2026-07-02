@@ -18,6 +18,7 @@ from angee.graphql.ids import PublicID, instance_for_id
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import ADMIN_PERMISSION_CLASSES as _ADMIN_PERMISSION_CLASSES
+from angee.iam.permissions import session_user
 from angee.workflows import engine
 
 Workflow = apps.get_model("workflows", "Workflow")
@@ -26,6 +27,7 @@ Edge = apps.get_model("workflows", "Edge")
 Trigger = apps.get_model("workflows", "Trigger")
 WorkflowRun = apps.get_model("workflows", "WorkflowRun")
 StepRun = apps.get_model("workflows", "StepRun")
+Decision = apps.get_model("workflows", "Decision")
 
 
 @strawberry_django.type(Workflow)
@@ -122,6 +124,25 @@ class StepRunType(AngeeNode):
     heartbeat_at: auto
     error: auto
     stacktrace: auto
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(Decision)
+class DecisionType(AngeeNode):
+    """Public projection of one awaited workflow decision."""
+
+    step_run: StepRunType
+    priority: auto
+    action: auto
+    payload: JSON
+    verdict: auto
+    resolution: JSON
+    resolved_by: auto
+    attempts: auto
+    max_attempts: auto
+    expires_at: auto
+    escalate_at: auto
     created_at: auto
     updated_at: auto
 
@@ -245,6 +266,56 @@ _STEP_RUN_RESOURCE = hasura_model_resource(
         "step": public_pk_decoder(Step),
     },
 )
+_DECISION_RESOURCE = hasura_model_resource(
+    DecisionType,
+    model=Decision,
+    name="workflow_decisions",
+    filterable=[
+        "id",
+        "step_run",
+        "priority",
+        "action",
+        "verdict",
+        "expires_at",
+        "escalate_at",
+        "updated_at",
+    ],
+    sortable=[
+        "step_run",
+        "priority",
+        "action",
+        "verdict",
+        "expires_at",
+        "escalate_at",
+        "created_at",
+        "updated_at",
+    ],
+    aggregatable=["id", "priority", "attempts"],
+    groupable=["step_run", "action", "verdict", "updated_at"],
+    insert=False,
+    update=False,
+    delete=False,
+    field_id_decode={"step_run": public_pk_decoder(StepRun)},
+)
+
+
+@strawberry.type
+class DecisionMutation:
+    """Public decision resolution mutation."""
+
+    @strawberry.mutation
+    def decide(
+        self,
+        info: strawberry.Info,
+        decision: PublicID,
+        verdict: str,
+        payload: JSON | None = None,
+    ) -> DecisionType:
+        """Resolve one pending decision as the signed-in session actor."""
+
+        actor = session_user(info)
+        target = resolve_action_target(Decision, decision, reason="workflows.graphql.decide")
+        return cast(DecisionType, engine.decide(target, verdict, payload=payload, actor=actor))
 
 
 @strawberry.type
@@ -279,6 +350,19 @@ class WorkflowRunActionMutation:
             engine.cancel(target)
         return ActionResult(ok=True, message="Workflow run canceled.")
 
+    @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
+    def override_run(self, info: strawberry.Info, run: PublicID, next_steps: list[PublicID]) -> ActionResult:
+        """Cancel active rows and schedule chosen next steps through an override row."""
+
+        actor = session_user(info)
+        target = resolve_action_target(WorkflowRun, run, reason="workflows.graphql.override_run")
+        steps = [
+            resolve_action_target(Step, step_id, reason="workflows.graphql.override_run.step")
+            for step_id in next_steps
+        ]
+        override = engine.override_run(target, steps, actor=actor)
+        return ActionResult(ok=True, message=f"Override recorded as {override.sqid}.")
+
 _CONSOLE_TYPES: list[object] = [
     WorkflowType,
     StepType,
@@ -286,6 +370,7 @@ _CONSOLE_TYPES: list[object] = [
     TriggerType,
     WorkflowRunType,
     StepRunType,
+    DecisionType,
     WorkflowObjectRefInput,
     *_WORKFLOW_RESOURCE.types,
     *_STEP_RESOURCE.types,
@@ -293,9 +378,21 @@ _CONSOLE_TYPES: list[object] = [
     *_TRIGGER_RESOURCE.types,
     *_WORKFLOW_RUN_RESOURCE.types,
     *_STEP_RUN_RESOURCE.types,
+    *_DECISION_RESOURCE.types,
+]
+
+_PUBLIC_TYPES: list[object] = [
+    DecisionType,
+    *_DECISION_RESOURCE.types,
 ]
 
 schemas = {
+    "public": {
+        "query": [_DECISION_RESOURCE.query],
+        "mutation": [DecisionMutation],
+        "subscription": [changes(Decision, field="decisionChanged")],
+        "types": _PUBLIC_TYPES,
+    },
     "console": {
         "query": [
             _WORKFLOW_RESOURCE.query,
@@ -304,6 +401,7 @@ schemas = {
             _TRIGGER_RESOURCE.query,
             _WORKFLOW_RUN_RESOURCE.query,
             _STEP_RUN_RESOURCE.query,
+            _DECISION_RESOURCE.query,
         ],
         "mutation": [
             _WORKFLOW_RESOURCE.mutation,
@@ -311,8 +409,12 @@ schemas = {
             _EDGE_RESOURCE.mutation,
             _TRIGGER_RESOURCE.mutation,
             WorkflowRunActionMutation,
+            DecisionMutation,
         ],
-        "subscription": [changes(WorkflowRun, field="workflowRunChanged")],
+        "subscription": [
+            changes(WorkflowRun, field="workflowRunChanged"),
+            changes(Decision, field="decisionChanged"),
+        ],
         "types": _CONSOLE_TYPES,
     },
 }

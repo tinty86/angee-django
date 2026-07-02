@@ -17,7 +17,7 @@ suspended result.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar, Self
 
@@ -26,6 +26,25 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from angee.base.impl import ImplBase
+
+GATE_POLICIES = frozenset({"one_done", "all_success", "majority", "sequential"})
+"""Seat aggregation policies supported by the built-in gate step."""
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionSpec:
+    """Declaration for one awaited decision slot created while a step suspends."""
+
+    assignees: tuple[str, ...]
+    action: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    priority: int = 0
+    requester: str = ""
+    escalation: tuple[str, ...] = ()
+    max_attempts: int | None = None
+    expires_at: datetime | None = None
+    escalate_at: datetime | None = None
+    decision_schema: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +63,7 @@ class StepResult:
     until: datetime | None = None
     event: str = ""
     resume_state: dict[str, Any] | None = None
+    decisions: tuple[DecisionSpec, ...] = ()
 
     @classmethod
     def done(cls, output: Any = None, outcome: str = "") -> Self:
@@ -66,10 +86,15 @@ class StepResult:
         return cls(kind="wait", until=until, event=event, resume_state=resume_state)
 
     @classmethod
-    def suspend(cls, *, resume_state: dict[str, Any] | None = None) -> Self:
+    def suspend(
+        cls,
+        *,
+        resume_state: dict[str, Any] | None = None,
+        decisions: list[DecisionSpec] | tuple[DecisionSpec, ...] = (),
+    ) -> Self:
         """Return a suspended step result."""
 
-        return cls(kind="suspend", resume_state=resume_state)
+        return cls(kind="suspend", resume_state=resume_state, decisions=tuple(decisions))
 
 
 class StepImpl(ImplBase):
@@ -147,14 +172,61 @@ class GateStep(StepImpl):
     label = "Gate"
     category = "Control"
 
+    @classmethod
+    def validate_config(cls, config: Any) -> None:
+        """Validate declarative gate slot configuration."""
+
+        super().validate_config(config)
+        policy = str(config.get("policy", "one_done") or "one_done")
+        if policy not in GATE_POLICIES:
+            raise ValidationError({"config": f"Gate policy must be one of {', '.join(sorted(GATE_POLICIES))}."})
+        if not str(config.get("action", "") or ""):
+            raise ValidationError({"config": "Gate steps require an action slug."})
+        slots = config.get("slots")
+        if slots is None:
+            slots = [{"assignee": subject} for subject in config.get("assignees", ())]
+        if not isinstance(slots, list) or not slots:
+            raise ValidationError({"config": "Gate steps require at least one slot."})
+        for index, slot in enumerate(slots):
+            if not isinstance(slot, Mapping):
+                raise ValidationError({"config": f"Gate slot {index + 1} must be an object."})
+            assignees = _slot_assignees(slot)
+            if not assignees:
+                raise ValidationError({"config": f"Gate slot {index + 1} requires an assignee."})
+            try:
+                int(slot.get("priority", index))
+            except (TypeError, ValueError) as error:
+                raise ValidationError({"config": f"Gate slot {index + 1} priority must be an integer."}) from error
+        max_attempts = config.get("max_attempts")
+        if max_attempts not in (None, ""):
+            try:
+                parsed_max_attempts = int(max_attempts)
+            except (TypeError, ValueError) as error:
+                raise ValidationError({"config": "Gate max_attempts must be an integer."}) from error
+            if parsed_max_attempts < 1:
+                raise ValidationError({"config": "Gate max_attempts must be positive when set."})
+        for key in ("expires_at", "escalate_at"):
+            if config.get(key) not in (None, "") and _config_datetime(config.get(key)) is None:
+                raise ValidationError({"config": f"Gate {key} must be an ISO datetime."})
+
     def run(self, step_run: Any) -> StepResult:
         """Suspend the step, keeping only durable resume state."""
 
-        return StepResult.suspend(resume_state={"gate": dict(step_run.step.config)})
+        config = dict(step_run.step.config)
+        return StepResult.suspend(
+            resume_state={"gate": config},
+            decisions=_decision_specs_from_config(config),
+        )
 
 
 def _config_until(value: Any) -> datetime | None:
     """Return an aware datetime parsed from a wait config value."""
+
+    return _config_datetime(value)
+
+
+def _config_datetime(value: Any) -> datetime | None:
+    """Return an aware datetime parsed from a config value."""
 
     if value in (None, ""):
         return None
@@ -167,3 +239,50 @@ def _config_until(value: Any) -> datetime | None:
     if timezone.is_naive(parsed):
         return timezone.make_aware(parsed, timezone.get_current_timezone())
     return parsed
+
+
+def _decision_specs_from_config(config: Mapping[str, Any]) -> tuple[DecisionSpec, ...]:
+    """Return gate decision specs from declarative config."""
+
+    slots = config.get("slots")
+    if slots is None:
+        slots = [{"assignee": subject} for subject in config.get("assignees", ())]
+    action = str(config.get("action", "") or "")
+    payload = dict(config.get("payload") or {})
+    requester = str(config.get("requester", "") or "")
+    escalation = tuple(str(subject) for subject in config.get("escalation", ()) if str(subject))
+    max_attempts = config.get("max_attempts")
+    parsed_max_attempts = None if max_attempts in (None, "") else int(str(max_attempts))
+    expires_at = _config_datetime(config.get("expires_at"))
+    escalate_at = _config_datetime(config.get("escalate_at"))
+    decision_schema = dict(config.get("decision_schema") or {})
+    specs: list[DecisionSpec] = []
+    for index, slot in enumerate(slots if isinstance(slots, list) else []):
+        if not isinstance(slot, Mapping):
+            continue
+        specs.append(
+            DecisionSpec(
+                assignees=_slot_assignees(slot),
+                action=action,
+                payload=payload,
+                priority=int(slot.get("priority", index)),
+                requester=str(slot.get("requester", requester) or requester),
+                escalation=tuple(str(subject) for subject in slot.get("escalation", escalation) if str(subject)),
+                max_attempts=parsed_max_attempts,
+                expires_at=expires_at,
+                escalate_at=escalate_at,
+                decision_schema=decision_schema,
+            )
+        )
+    return tuple(specs)
+
+
+def _slot_assignees(slot: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return normalized assignee subject refs for one gate slot."""
+
+    raw = slot.get("assignees", slot.get("assignee", ()))
+    if isinstance(raw, str):
+        return (raw,) if raw else ()
+    if raw is None:
+        return ()
+    return tuple(str(subject) for subject in raw if str(subject))

@@ -11,7 +11,7 @@ from __future__ import annotations
 import traceback
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
@@ -19,12 +19,18 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 from procrastinate import exceptions as procrastinate_exceptions
-from rebac import system_context
+from pydantic import ValidationError as PydanticValidationError
+from pydantic import create_model
+from rebac import PermissionDenied, SubjectRef, current_actor, system_context
 from rebac.actors import NoActorResolvedError, to_subject_ref
+from rebac.backends import backend as rebac_backend
+from rebac.relationships import write_relationships
+from rebac.resources import to_object_ref
+from rebac.types import RelationshipTuple
 
 from angee.base.actors import actor_user_id
-from angee.workflows.models import JoinRule, RunStatus, StepRunStatus, WorkflowStatus
-from angee.workflows.steps import StepResult
+from angee.workflows.models import JoinRule, RunStatus, StepRunStatus, Verdict, WorkflowStatus
+from angee.workflows.steps import DecisionSpec, StepResult
 
 RUN_TERMINAL = {RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELED}
 STEP_TERMINAL = {
@@ -34,6 +40,20 @@ STEP_TERMINAL = {
     StepRunStatus.SKIPPED,
 }
 STEP_ACTIVE = {StepRunStatus.SCHEDULED, StepRunStatus.STARTED, StepRunStatus.WAITING}
+VERDICT_PENDING = cast(Verdict, Verdict.PENDING)
+VERDICT_COMPLETED = cast(Verdict, Verdict.COMPLETED)
+VERDICT_REJECTED = cast(Verdict, Verdict.REJECTED)
+VERDICT_ESCALATED = cast(Verdict, Verdict.ESCALATED)
+VERDICT_EXPIRED = cast(Verdict, Verdict.EXPIRED)
+VERDICT_TERMINAL = {VERDICT_COMPLETED, VERDICT_REJECTED, VERDICT_ESCALATED, VERDICT_EXPIRED}
+DECISION_VERBS: dict[str, Verdict] = {
+    "complete": VERDICT_COMPLETED,
+    "completed": VERDICT_COMPLETED,
+    "reject": VERDICT_REJECTED,
+    "rejected": VERDICT_REJECTED,
+    "escalate": VERDICT_ESCALATED,
+    "escalated": VERDICT_ESCALATED,
+}
 
 
 def start(
@@ -154,7 +174,7 @@ def execute(step_run_id: int, *, now: datetime | None = None) -> dict[str, int]:
             locked.mark_waiting(until=result.until, event=result.event, resume_state=result.resume_state)
             wait_until = result.until
         elif result.kind == "suspend":
-            locked.mark_waiting(resume_state=result.resume_state or {})
+            _suspend_step_run(locked, result)
         else:
             locked.mark_failed(error=f"Unknown step result kind {result.kind!r}.", stacktrace="")
         transaction.on_commit(lambda run_id=run_id: enqueue_advance(cast(int, run_id)))
@@ -184,6 +204,7 @@ def cancel(run: Any) -> None:
             if step_run.status == StepRunStatus.SCHEDULED:
                 step_run.mark_canceled()
             elif step_run.status == StepRunStatus.WAITING:
+                _expire_pending_decisions(step_run, resolved_by="workflows/cancel")
                 step_run.mark_canceled()
             elif step_run.status == StepRunStatus.STARTED:
                 state = dict(step_run.resume_state)
@@ -212,6 +233,103 @@ def sweep(*, now: datetime | None = None) -> dict[str, int]:
     for run_id in run_ids:
         advance(run_id, now=timestamp)
     return {"runs": len(run_ids)}
+
+
+def decide(decision: Any, verdict: str, *, payload: Any = None, actor: Any = None) -> Any:
+    """Resolve one pending decision as an actor after checking ``act``."""
+
+    target = _verdict_for_verb(verdict)
+    actor_ref = _actor_ref(actor)
+    decision_model = _model("Decision")
+    decision_id = decision.pk if hasattr(decision, "pk") else int(decision)
+    with system_context(reason="workflows.engine.decide.load"):
+        current = decision_model.objects.get(pk=decision_id)
+    _check_decision_act(current, actor_ref)
+
+    run_id: int | None = None
+    with system_context(reason="workflows.engine.decide"), transaction.atomic():
+        locked = (
+            decision_model.objects.select_for_update()
+            .select_related("step_run", "step_run__run", "step_run__step")
+            .get(pk=decision_id)
+        )
+        if locked.verdict != VERDICT_PENDING:
+            return locked
+        _ensure_sequential_turn(locked)
+        try:
+            resolution = _validate_resolution(locked, payload)
+        except ValidationError as error:
+            _record_invalid_resolution(locked, error)
+            run_id = locked.step_run.run_id
+        else:
+            _mark_decision(locked, target, resolution=resolution, resolved_by=str(actor_ref))
+            _apply_decision_policy(locked.step_run)
+            run_id = locked.step_run.run_id
+        transaction.on_commit(lambda run_id=run_id: enqueue_advance(cast(int, run_id)))
+    return locked
+
+
+def escalate_decision(decision_id: int, attempt: int, *, now: datetime | None = None) -> dict[str, int]:
+    """Resolve a pending decision as escalated when its timer is still current."""
+
+    return _resolve_timed_decision(
+        decision_id,
+        attempt,
+        VERDICT_ESCALATED,
+        resolved_by="workflows/timer:escalate",
+        timestamp=now or timezone.now(),
+    )
+
+
+def expire_decision(decision_id: int, attempt: int, *, now: datetime | None = None) -> dict[str, int]:
+    """Resolve a pending decision as expired when its timer is still current."""
+
+    return _resolve_timed_decision(
+        decision_id,
+        attempt,
+        VERDICT_EXPIRED,
+        resolved_by="workflows/timer:expire",
+        timestamp=now or timezone.now(),
+    )
+
+
+def override_run(run: Any, next_steps: Iterable[Any], *, actor: Any) -> Any:
+    """Cancel active rows, insert an override journal row, and schedule next steps."""
+
+    run_model = _model("WorkflowRun")
+    step_run_model = _model("StepRun")
+    run_id = run.pk if hasattr(run, "pk") else int(run)
+    actor_ref = _actor_ref(actor)
+    actor_id = actor_user_id(actor_ref)
+    step_ids = [step.pk if hasattr(step, "pk") else int(step) for step in next_steps]
+
+    with system_context(reason="workflows.engine.override"), transaction.atomic():
+        locked = run_model.objects.select_for_update().get(pk=run_id)
+        for step_run in step_run_model.objects.select_for_update().filter(run=locked, status__in=list(STEP_ACTIVE)):
+            step_run.mark_canceled()
+        override = step_run_model.objects.create(
+            run=locked,
+            step=None,
+            system_kind="override",
+            status=StepRunStatus.SUCCEEDED,
+            output={"next_steps": step_ids},
+            outcome="override",
+            created_by_id=actor_id,
+            updated_by_id=actor_id,
+        )
+        for step_id in step_ids:
+            row = step_run_model.objects.create(
+                run=locked,
+                step_id=step_id,
+                map_index=-1,
+                status=StepRunStatus.SCHEDULED,
+                input={},
+            )
+            row.previous.set([override])
+        if locked.status == RunStatus.WAITING:
+            locked.resume()
+        transaction.on_commit(lambda run_id=locked.pk: enqueue_advance(run_id))
+    return override
 
 
 def enqueue_advance(run_id: int) -> None:
@@ -248,6 +366,42 @@ def enqueue_advance_at(run_id: int, when: datetime) -> None:
     transaction.on_commit(defer)
 
 
+def enqueue_decision_escalation_at(decision_id: int, attempt: int, when: datetime) -> None:
+    """Enqueue a deferred escalation timer for one decision attempt."""
+
+    def defer() -> None:
+        from angee.workflows.tasks import escalate_workflow_decision
+
+        try:
+            escalate_workflow_decision.configure(
+                lock=f"workflows.decision:{decision_id}",
+                queueing_lock=f"workflows.decision.escalate:{decision_id}:{attempt}",
+                schedule_at=when,
+            ).defer(decision_id=decision_id, attempt=attempt)
+        except procrastinate_exceptions.AlreadyEnqueued:
+            return
+
+    transaction.on_commit(defer)
+
+
+def enqueue_decision_expiry_at(decision_id: int, attempt: int, when: datetime) -> None:
+    """Enqueue a deferred expiry timer for one decision attempt."""
+
+    def defer() -> None:
+        from angee.workflows.tasks import expire_workflow_decision
+
+        try:
+            expire_workflow_decision.configure(
+                lock=f"workflows.decision:{decision_id}",
+                queueing_lock=f"workflows.decision.expire:{decision_id}:{attempt}",
+                schedule_at=when,
+            ).defer(decision_id=decision_id, attempt=attempt)
+        except procrastinate_exceptions.AlreadyEnqueued:
+            return
+
+    transaction.on_commit(defer)
+
+
 def enqueue_execute(step_run_id: int) -> None:
     """Enqueue one step execution job after the current transaction commits."""
 
@@ -268,6 +422,345 @@ def _model(name: str) -> type[Any]:
     """Return a concrete workflows model from the Django app registry."""
 
     return apps.get_model("workflows", name)
+
+
+def _suspend_step_run(step_run: Any, result: StepResult) -> None:
+    """Persist a suspended result and create its awaited decisions."""
+
+    resume_state = dict(result.resume_state or {})
+    decisions = tuple(result.decisions)
+    if decisions:
+        resume_state["_decision_specs"] = {
+            str(index): dict(spec.decision_schema) for index, spec in enumerate(decisions) if spec.decision_schema
+        }
+    step_run.mark_waiting(resume_state=resume_state)
+    for index, spec in enumerate(decisions):
+        decision = _create_decision(step_run, spec)
+        if spec.decision_schema:
+            state = dict(step_run.resume_state)
+            schemas = dict(state.get("_decision_schemas", {}))
+            schemas[str(decision.pk)] = dict(spec.decision_schema)
+            state["_decision_schemas"] = schemas
+            step_run.resume_state = state
+            step_run.save(update_fields=["resume_state", "updated_at"])
+
+
+def _create_decision(step_run: Any, spec: DecisionSpec) -> Any:
+    """Create one decision row and its explicit REBAC relationship tuples."""
+
+    decision_model = _model("Decision")
+    decision = decision_model.objects.create(
+        step_run=step_run,
+        priority=spec.priority,
+        action=spec.action,
+        payload=spec.payload,
+        max_attempts=spec.max_attempts,
+        expires_at=spec.expires_at,
+        escalate_at=spec.escalate_at,
+    )
+    _write_decision_relationships(
+        decision,
+        assignees=spec.assignees,
+        requester=spec.requester,
+        escalation=spec.escalation,
+    )
+    _schedule_decision_timers(decision)
+    return decision
+
+
+def _write_decision_relationships(
+    decision: Any,
+    *,
+    assignees: Iterable[str | SubjectRef] = (),
+    requester: str | SubjectRef = "",
+    escalation: Iterable[str | SubjectRef] = (),
+) -> None:
+    """Write explicit decision relationship tuples through django-zed-rebac."""
+
+    resource = to_object_ref(decision)
+    tuples: list[RelationshipTuple] = []
+    for subject in assignees:
+        tuples.append(RelationshipTuple(resource=resource, relation="assignee", subject=_subject_ref(subject)))
+    if requester:
+        tuples.append(RelationshipTuple(resource=resource, relation="requester", subject=_subject_ref(requester)))
+    for subject in escalation:
+        tuples.append(RelationshipTuple(resource=resource, relation="escalation", subject=_subject_ref(subject)))
+    if tuples:
+        write_relationships(tuples)
+
+
+def _schedule_decision_timers(decision: Any) -> None:
+    """Schedule deadline jobs for the decision's current attempt."""
+
+    if decision.escalate_at is not None:
+        enqueue_decision_escalation_at(decision.pk, decision.attempts, decision.escalate_at)
+    if decision.expires_at is not None:
+        enqueue_decision_expiry_at(decision.pk, decision.attempts, decision.expires_at)
+
+
+def _subject_ref(subject: str | SubjectRef) -> SubjectRef:
+    """Return a REBAC subject ref from a stored subject spelling."""
+
+    if isinstance(subject, SubjectRef):
+        return subject
+    return SubjectRef.parse(str(subject))
+
+
+def _actor_ref(actor: Any) -> SubjectRef:
+    """Return the explicit actor for a resolution path."""
+
+    if actor is None:
+        actor = current_actor()
+    if actor is None:
+        raise PermissionDenied("Authentication required.")
+    return actor if isinstance(actor, SubjectRef) else to_subject_ref(actor)
+
+
+def _verdict_for_verb(verb: str) -> Verdict:
+    """Return the stored terminal verdict for a public resolution verb."""
+
+    try:
+        return DECISION_VERBS[str(verb)]
+    except KeyError as error:
+        raise ValidationError({"verdict": "Verdict must be complete, reject, or escalate."}) from error
+
+
+def _check_decision_act(decision: Any, actor: SubjectRef) -> None:
+    """Raise when ``actor`` cannot act on ``decision``."""
+
+    result = rebac_backend().check_access(subject=actor, action="act", resource=to_object_ref(decision))
+    if not result.allowed:
+        raise PermissionDenied(f"Denied: {actor} cannot act on workflows/decision:{decision.sqid}")
+
+
+def _ensure_sequential_turn(decision: Any) -> None:
+    """Enforce priority order for sequential gate slots."""
+
+    if _policy_for(decision.step_run) != "sequential":
+        return
+    current = (
+        decision.step_run.decisions.filter(verdict=VERDICT_PENDING)
+        .order_by("priority", "pk")
+        .values_list("pk", flat=True)
+        .first()
+    )
+    if current != decision.pk:
+        raise ValidationError({"decision": "Sequential decisions must resolve in priority order."})
+
+
+def _validate_resolution(decision: Any, payload: Any) -> dict[str, Any]:
+    """Validate a decision resolution against its step-owned schema."""
+
+    resolution = payload if payload is not None else {}
+    if not isinstance(resolution, dict):
+        raise ValidationError({"payload": "Decision payload must be a JSON object."})
+
+    schema = _schema_for_decision(decision)
+    if schema is None:
+        return dict(resolution)
+    if isinstance(schema, dict):
+        return _validate_mapping_schema(schema, resolution)
+    if hasattr(schema, "model_validate"):
+        try:
+            parsed = schema.model_validate(resolution)
+        except PydanticValidationError as error:
+            raise ValidationError({"payload": str(error)}) from error
+        dumped = parsed.model_dump()
+        return cast(dict[str, Any], dumped)
+    return dict(resolution)
+
+
+def _schema_for_decision(decision: Any) -> Any | None:
+    """Return the resolution schema owned by the suspended step."""
+
+    schemas = dict(decision.step_run.resume_state.get("_decision_schemas", {}))
+    if str(decision.pk) in schemas:
+        return schemas[str(decision.pk)]
+    gate = decision.step_run.resume_state.get("gate")
+    if isinstance(gate, dict) and isinstance(gate.get("decision_schema"), dict):
+        return gate["decision_schema"]
+    if decision.step_run.step_id is None:
+        return None
+    impl_class = decision.step_run.step.resolve_impl("step_class", default="handler")
+    return getattr(impl_class, "decision_schema", None)
+
+
+def _validate_mapping_schema(schema: dict[str, Any], resolution: dict[str, Any]) -> dict[str, Any]:
+    """Validate a JSON-authored decision schema through a pydantic model."""
+
+    if not schema:
+        return dict(resolution)
+    if schema.get("type", "object") != "object":
+        raise ValidationError({"payload": "Decision schema root type must be object."})
+    required = set(schema.get("required", ()))
+    properties = schema.get("properties", {})
+    if not isinstance(properties, dict):
+        raise ValidationError({"payload": "Decision schema properties must be an object."})
+    fields: dict[str, tuple[Any, Any]] = {}
+    for name, spec in properties.items():
+        field_schema = spec if isinstance(spec, dict) else {}
+        annotation = _annotation_for_field_schema(field_schema)
+        default = ... if name in required else None
+        fields[str(name)] = (annotation, default)
+    for name in required:
+        fields.setdefault(str(name), (Any, ...))
+    model_factory = cast(Any, create_model)
+    model = model_factory("DecisionResolution", **fields)
+    try:
+        parsed = model.model_validate(resolution)
+    except PydanticValidationError as error:
+        raise ValidationError({"payload": str(error)}) from error
+    return cast(dict[str, Any], parsed.model_dump(exclude_none=False))
+
+
+def _annotation_for_field_schema(schema: dict[str, Any]) -> Any:
+    """Return a pydantic annotation for the supported decision-schema subset."""
+
+    if "const" in schema:
+        return Literal.__getitem__((schema["const"],))
+    if "enum" in schema and isinstance(schema["enum"], list):
+        return Literal.__getitem__(tuple(schema["enum"]))
+    field_type = schema.get("type", "any")
+    return {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+        "object": dict[str, Any],
+        "array": list[Any],
+        "any": Any,
+    }.get(str(field_type), Any)
+
+
+def _record_invalid_resolution(decision: Any, error: ValidationError) -> None:
+    """Re-open an invalid decision attempt or fail the suspended step at max."""
+
+    decision.record_invalid_resolution()
+    if decision.max_attempts is not None and decision.attempts >= decision.max_attempts:
+        decision.step_run.mark_failed(error=f"Decision resolution failed validation: {error}", stacktrace="")
+        return
+    _schedule_decision_timers(decision)
+
+
+def _mark_decision(decision: Any, verdict: Verdict, *, resolution: dict[str, Any], resolved_by: str) -> None:
+    """Apply a terminal verdict transition to one decision."""
+
+    if verdict == VERDICT_COMPLETED:
+        decision.mark_completed(resolution=resolution, resolved_by=resolved_by)
+    elif verdict == VERDICT_REJECTED:
+        decision.mark_rejected(resolution=resolution, resolved_by=resolved_by)
+    elif verdict == VERDICT_ESCALATED:
+        decision.mark_escalated(resolution=resolution, resolved_by=resolved_by)
+    elif verdict == VERDICT_EXPIRED:
+        decision.mark_expired(resolution=resolution, resolved_by=resolved_by)
+    else:
+        raise ValidationError({"verdict": "Decision verdict must be terminal."})
+
+
+def _apply_decision_policy(step_run: Any) -> None:
+    """Complete ``step_run`` when its decision collection satisfies its policy."""
+
+    if step_run.status != StepRunStatus.WAITING:
+        return
+    decisions = list(step_run.decisions.order_by("priority", "pk"))
+    outcome = _decision_policy_outcome(_policy_for(step_run), decisions)
+    if outcome is None:
+        return
+    step_run.mark_succeeded(
+        output={"decisions": [decision.sqid for decision in decisions]},
+        outcome=outcome,
+    )
+
+
+def _policy_for(step_run: Any) -> str:
+    """Return the gate aggregation policy for a suspended step."""
+
+    gate = step_run.resume_state.get("gate")
+    if isinstance(gate, dict):
+        return str(gate.get("policy", "one_done") or "one_done")
+    return "one_done"
+
+
+def _decision_policy_outcome(policy: str, decisions: list[Any]) -> str | None:
+    """Return the aggregate outcome for ``decisions`` under ``policy``."""
+
+    terminal = [decision for decision in decisions if decision.verdict in VERDICT_TERMINAL]
+    if not decisions or not terminal:
+        return None
+    if policy == "one_done":
+        return str(terminal[0].verdict.value)
+    if policy == "all_success":
+        for verdict in (VERDICT_REJECTED, VERDICT_ESCALATED, VERDICT_EXPIRED):
+            if any(decision.verdict == verdict for decision in terminal):
+                return str(verdict.value)
+        return "completed" if len(terminal) == len(decisions) else None
+    if policy == "majority":
+        for verdict in (VERDICT_ESCALATED, VERDICT_EXPIRED):
+            if any(decision.verdict == verdict for decision in terminal):
+                return str(verdict.value)
+        threshold = len(decisions) // 2 + 1
+        completed = sum(1 for decision in terminal if decision.verdict == VERDICT_COMPLETED)
+        rejected = sum(1 for decision in terminal if decision.verdict == VERDICT_REJECTED)
+        if completed >= threshold:
+            return "completed"
+        if rejected >= threshold:
+            return "rejected"
+        return "rejected" if len(terminal) == len(decisions) else None
+    if policy == "sequential":
+        for decision in terminal:
+            if decision.verdict != VERDICT_COMPLETED:
+                return str(decision.verdict.value)
+        return "completed" if len(terminal) == len(decisions) else None
+    return None
+
+
+def _resolve_timed_decision(
+    decision_id: int,
+    attempt: int,
+    verdict: Verdict,
+    *,
+    resolved_by: str,
+    timestamp: datetime,
+) -> dict[str, int]:
+    """Resolve a deadline decision if the attempt and deadline are still current."""
+
+    decision_model = _model("Decision")
+    with system_context(reason="workflows.engine.decision_timer"), transaction.atomic():
+        decision = (
+            decision_model.objects.select_for_update()
+            .select_related("step_run", "step_run__run", "step_run__step")
+            .filter(pk=decision_id)
+            .first()
+        )
+        if decision is None or decision.verdict != VERDICT_PENDING or decision.attempts != attempt:
+            return {"resolved": 0}
+        if verdict == VERDICT_ESCALATED and (decision.escalate_at is None or decision.escalate_at > timestamp):
+            return {"resolved": 0}
+        if verdict == VERDICT_EXPIRED and (decision.expires_at is None or decision.expires_at > timestamp):
+            return {"resolved": 0}
+        if verdict == VERDICT_ESCALATED:
+            _write_decision_relationships(decision, escalation=_escalation_subjects(decision))
+        _mark_decision(decision, verdict, resolution={}, resolved_by=resolved_by)
+        _apply_decision_policy(decision.step_run)
+        run_id = decision.step_run.run_id
+        transaction.on_commit(lambda run_id=run_id: enqueue_advance(run_id))
+    return {"resolved": 1}
+
+
+def _escalation_subjects(decision: Any) -> tuple[str, ...]:
+    """Return escalation subject refs from the suspended gate config."""
+
+    gate = decision.step_run.resume_state.get("gate")
+    if not isinstance(gate, dict):
+        return ()
+    return tuple(str(subject) for subject in gate.get("escalation", ()) if str(subject))
+
+
+def _expire_pending_decisions(step_run: Any, *, resolved_by: str) -> None:
+    """Expire pending decisions attached to a canceled waiting step-run."""
+
+    for decision in step_run.decisions.select_for_update().filter(verdict=VERDICT_PENDING):
+        decision.mark_expired(resolution={}, resolved_by=resolved_by)
 
 
 def _activate_run_if_needed(run: Any, *, timestamp: datetime) -> None:

@@ -77,6 +77,16 @@ class StepRunStatus(models.TextChoices):
     SKIPPED = "skipped", "Skipped"
 
 
+class Verdict(models.TextChoices):
+    """Resolution lifecycle for one awaited decision slot."""
+
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Completed"
+    REJECTED = "rejected", "Rejected"
+    ESCALATED = "escalated", "Escalated"
+    EXPIRED = "expired", "Expired"
+
+
 def _save_workflow_status(instance: models.Model, source: Any, target: Any) -> None:
     """Persist a transition-owned workflow status change."""
 
@@ -96,6 +106,13 @@ def _save_step_run_status(instance: models.Model, source: Any, target: Any) -> N
 
     del source, target
     cast("StepRun", instance)._save_status_change()
+
+
+def _save_decision_verdict(instance: models.Model, source: Any, target: Any) -> None:
+    """Persist a transition-owned decision verdict change."""
+
+    del source, target
+    cast("Decision", instance)._save_verdict_change()
 
 
 class WorkflowManager(AngeeManager):
@@ -765,7 +782,12 @@ class StepRun(AuditMixin, AngeeDataModel):
         self.wait_event = ""
         self._transition_fields = {"output", "outcome", "error", "stacktrace", "wait_until", "wait_event"}
 
-    @transition(status, source=StepRunStatus.STARTED, target=StepRunStatus.FAILED, on_success=_save_step_run_status)
+    @transition(
+        status,
+        source=[StepRunStatus.STARTED, StepRunStatus.WAITING],
+        target=StepRunStatus.FAILED,
+        on_success=_save_step_run_status,
+    )
     def mark_failed(self, *, error: str = "", stacktrace: str = "") -> None:
         """Persist a failed step result."""
 
@@ -797,6 +819,108 @@ class StepRun(AuditMixin, AngeeDataModel):
         """Save a transition-owned status change plus fields touched by its body."""
 
         fields = {"status", *getattr(self, "_transition_fields", set())}
+        try:
+            self.save(update_fields=fields)
+        finally:
+            if hasattr(self, "_transition_fields"):
+                del self._transition_fields
+
+
+class Decision(AuditMixin, AngeeDataModel):
+    """One awaited resolution slot for a suspended step-run."""
+
+    runtime = True
+
+    sqid_prefix = "wdc_"
+    step_run = models.ForeignKey("workflows.StepRun", on_delete=models.CASCADE, related_name="decisions")
+    priority = models.IntegerField(default=0)
+    action = models.SlugField(max_length=100)
+    payload = models.JSONField(default=dict, blank=True)
+    verdict = StateField(choices_enum=Verdict, default=Verdict.PENDING)
+    resolution = models.JSONField(default=dict, blank=True)
+    resolved_by = models.CharField(max_length=255, blank=True, default="")
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    escalate_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    verdict_transitions = StateTransitions(
+        verdict,
+        {
+            Verdict.PENDING: [
+                Verdict.COMPLETED,
+                Verdict.REJECTED,
+                Verdict.ESCALATED,
+                Verdict.EXPIRED,
+            ],
+        },
+    )
+
+    objects = AngeeManager()
+
+    class Meta:
+        """Django model options for workflow decisions."""
+
+        abstract = True
+        ordering = ("step_run", "priority", "created_at", "sqid")
+        rebac_resource_type = "workflows/decision"
+        rebac_id_attr = "sqid"
+        indexes = (
+            models.Index(fields=("step_run", "verdict", "priority"), name="idx_wdc_step_verdict"),
+        )
+
+    @property
+    def is_terminal(self) -> bool:
+        """Return whether this decision has a terminal verdict."""
+
+        return self.verdict in {
+            Verdict.COMPLETED,
+            Verdict.REJECTED,
+            Verdict.ESCALATED,
+            Verdict.EXPIRED,
+        }
+
+    @transition(verdict, source=Verdict.PENDING, target=Verdict.COMPLETED, on_success=_save_decision_verdict)
+    def mark_completed(self, *, resolution: Any = None, resolved_by: str = "") -> None:
+        """Resolve this slot as completed."""
+
+        self._set_resolution(resolution=resolution, resolved_by=resolved_by)
+
+    @transition(verdict, source=Verdict.PENDING, target=Verdict.REJECTED, on_success=_save_decision_verdict)
+    def mark_rejected(self, *, resolution: Any = None, resolved_by: str = "") -> None:
+        """Resolve this slot as rejected."""
+
+        self._set_resolution(resolution=resolution, resolved_by=resolved_by)
+
+    @transition(verdict, source=Verdict.PENDING, target=Verdict.ESCALATED, on_success=_save_decision_verdict)
+    def mark_escalated(self, *, resolution: Any = None, resolved_by: str = "") -> None:
+        """Resolve this slot as escalated."""
+
+        self._set_resolution(resolution=resolution, resolved_by=resolved_by)
+
+    @transition(verdict, source=Verdict.PENDING, target=Verdict.EXPIRED, on_success=_save_decision_verdict)
+    def mark_expired(self, *, resolution: Any = None, resolved_by: str = "") -> None:
+        """Resolve this slot as expired."""
+
+        self._set_resolution(resolution=resolution, resolved_by=resolved_by)
+
+    def record_invalid_resolution(self) -> None:
+        """Record one failed validation attempt while leaving the slot pending."""
+
+        self.attempts += 1
+        self.save(update_fields=["attempts", "updated_at"])
+
+    def _set_resolution(self, *, resolution: Any = None, resolved_by: str = "") -> None:
+        """Persist normalized resolution audit fields for a terminal verdict."""
+
+        self.resolution = resolution if resolution is not None else {}
+        self.resolved_by = resolved_by
+        self._transition_fields = {"resolution", "resolved_by"}
+
+    def _save_verdict_change(self) -> None:
+        """Save a transition-owned verdict change plus touched resolution fields."""
+
+        fields = {"verdict", *getattr(self, "_transition_fields", set())}
         try:
             self.save(update_fields=fields)
         finally:

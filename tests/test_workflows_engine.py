@@ -612,7 +612,11 @@ def test_cancellation_propagates_to_journal_and_child_runs(
         steps=(
             {"key": "entry", "config": {"outcome": "done"}},
             {"key": "queued", "config": {"outcome": "done"}},
-            {"key": "waiting", "step_class": "gate", "config": {}},
+            {
+                "key": "waiting",
+                "step_class": "gate",
+                "config": {"action": "approve", "slots": [{"assignee": "auth/user:test-waiting"}]},
+            },
         ),
         edges=(("entry", "queued", ""), ("queued", "waiting", "")),
     )
