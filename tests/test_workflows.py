@@ -1,0 +1,231 @@
+"""Tests for workflow definition models."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.db import connection
+from rebac import system_context
+
+from angee.workflows.models import (
+    Edge as AbstractEdge,
+)
+from angee.workflows.models import (
+    Step as AbstractStep,
+)
+from angee.workflows.models import (
+    Trigger as AbstractTrigger,
+)
+from angee.workflows.models import (
+    TriggerKind,
+    WorkflowStatus,
+)
+from angee.workflows.models import (
+    Workflow as AbstractWorkflow,
+)
+
+
+class Workflow(AbstractWorkflow):
+    """Concrete workflow model for source-addon tests."""
+
+    class Meta(AbstractWorkflow.Meta):
+        """Django options for the concrete test workflow model."""
+
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_workflow"
+        rebac_resource_type = "workflows/workflow"
+        rebac_id_attr = "sqid"
+
+
+class Step(AbstractStep):
+    """Concrete workflow step model for source-addon tests."""
+
+    class Meta(AbstractStep.Meta):
+        """Django options for the concrete test step model."""
+
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_step"
+        rebac_resource_type = "workflows/step"
+        rebac_id_attr = "sqid"
+
+
+class Edge(AbstractEdge):
+    """Concrete workflow edge model for source-addon tests."""
+
+    class Meta(AbstractEdge.Meta):
+        """Django options for the concrete test edge model."""
+
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_edge"
+        rebac_resource_type = "workflows/edge"
+        rebac_id_attr = "sqid"
+
+
+class Trigger(AbstractTrigger):
+    """Concrete workflow trigger model for source-addon tests."""
+
+    class Meta(AbstractTrigger.Meta):
+        """Django options for the concrete test trigger model."""
+
+        abstract = False
+        app_label = "workflows"
+        db_table = "test_workflows_trigger"
+        rebac_resource_type = "workflows/trigger"
+        rebac_id_attr = "sqid"
+
+
+WORKFLOW_TEST_MODELS = (Workflow, Step, Edge, Trigger)
+
+
+@pytest.fixture()
+def workflow_tables(transactional_db: Any) -> Iterator[None]:
+    """Clear concrete workflow tables and sync their REBAC schema."""
+
+    del transactional_db
+    call_command("rebac", "sync", verbosity=0)
+    clear_workflow_tables()
+    try:
+        yield
+    finally:
+        clear_workflow_tables()
+
+
+def clear_workflow_tables() -> None:
+    """Delete test workflow rows without dropping pytest-owned tables."""
+
+    existing_tables = set(connection.introspection.table_names())
+    with connection.constraint_checks_disabled(), connection.cursor() as cursor:
+        for model in reversed(WORKFLOW_TEST_MODELS):
+            table_name = model._meta.db_table
+            if table_name in existing_tables:
+                cursor.execute(f"DELETE FROM {connection.ops.quote_name(table_name)}")
+
+
+def create_workflow(name: str = "Document Review") -> Workflow:
+    """Create one draft workflow in the test table."""
+
+    return Workflow.objects.create(name=name)
+
+
+def create_entry(workflow: Workflow, *, key: str = "start", name: str = "Start") -> Step:
+    """Create one entry step for ``workflow``."""
+
+    return Step.objects.create(workflow=workflow, key=key, name=name, is_entry=True)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_publish_requires_exactly_one_entry_step(workflow_tables: None) -> None:
+    """Publishing validates that a definition has exactly one entry step."""
+
+    with system_context(reason="test workflows publish validation"):
+        workflow = create_workflow()
+
+        with pytest.raises(ValidationError, match="exactly one entry"):
+            workflow.publish()
+
+        create_entry(workflow)
+        Step.objects.create(workflow=workflow, key="other", name="Other", is_entry=True)
+
+        with pytest.raises(ValidationError, match="exactly one entry"):
+            workflow.publish()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_step_and_edge_definition_validation(workflow_tables: None) -> None:
+    """Step classes and graph edges validate at the model boundary."""
+
+    with system_context(reason="test workflows definition validation"):
+        first = create_workflow("First")
+        second = create_workflow("Second")
+        source = create_entry(first, key="source", name="Source")
+        target = Step.objects.create(workflow=first, key="target", name="Target")
+        other_target = create_entry(second, key="other", name="Other")
+
+        with pytest.raises(ValidationError, match="step_class"):
+            Step.objects.create(workflow=first, key="bad", name="Bad", step_class="missing")
+
+        with pytest.raises(ValidationError, match="config"):
+            Step.objects.create(workflow=first, key="bad-config", name="Bad config", config=["not", "an", "object"])
+
+        Edge.objects.create(workflow=first, source=source, target=target, condition="ok")
+
+        with pytest.raises(ValidationError, match="same workflow"):
+            Edge.objects.create(workflow=first, source=source, target=other_target, condition="wrong")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_publish_copies_draft_to_immutable_version(workflow_tables: None) -> None:
+    """Publishing copies the draft graph and later draft edits do not alter versions."""
+
+    with system_context(reason="test workflows publish copy"):
+        draft = create_workflow()
+        entry = create_entry(draft)
+        finish = Step.objects.create(workflow=draft, key="finish", name="Finish")
+        Edge.objects.create(workflow=draft, source=entry, target=finish, condition="done")
+
+        first = draft.publish()
+        draft.name = "Document Review Draft"
+        draft.save()
+        entry.name = "Start Draft"
+        entry.save()
+        second = draft.publish()
+
+        first.refresh_from_db()
+        assert first.status == WorkflowStatus.PUBLISHED
+        assert first.published_from == draft
+        assert first.version == 1
+        assert first.name == "Document Review"
+        assert Step.objects.get(workflow=first, key="start").name == "Start"
+        assert Edge.objects.filter(workflow=first, condition="done").count() == 1
+
+        assert second.version == 2
+        assert second.name == "Document Review Draft"
+        assert Step.objects.get(workflow=second, key="start").name == "Start Draft"
+        assert Workflow.objects.current_published_for(draft) == second
+
+        first.name = "Edited"
+        with pytest.raises(ValidationError, match="immutable"):
+            first.save()
+
+        published_step = Step.objects.get(workflow=first, key="start")
+        published_step.name = "Edited"
+        with pytest.raises(ValidationError, match="immutable"):
+            published_step.save()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_current_published_resolution_uses_lineage_head(workflow_tables: None) -> None:
+    """The manager resolves the latest published version from any row in a lineage."""
+
+    with system_context(reason="test workflows current version"):
+        draft = create_workflow()
+        create_entry(draft)
+        first = draft.publish()
+        second = draft.publish()
+
+        assert Workflow.objects.current_published_for(draft) == second
+        assert Workflow.objects.current_published_for(first) == second
+        assert Workflow.objects.current_published_for(second) == second
+
+
+@pytest.mark.django_db(transaction=True)
+def test_triggers_attach_to_lineage_heads_and_default_disabled(workflow_tables: None) -> None:
+    """Triggers point at lineage heads and are disabled unless explicitly enabled."""
+
+    with system_context(reason="test workflows trigger constraints"):
+        draft = create_workflow()
+        create_entry(draft)
+        trigger = Trigger.objects.create(workflow=draft, kind=TriggerKind.MANUAL)
+        published = draft.publish()
+
+        assert trigger.enabled is False
+
+        with pytest.raises(ValidationError, match="lineage head"):
+            Trigger.objects.create(workflow=published, kind=TriggerKind.SCHEDULE)

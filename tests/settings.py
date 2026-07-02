@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "angee.integrate",
     "angee.iam_integrate_oidc",
     "angee.agents",
+    "angee.workflows",
     "angee.knowledge",
     "angee.mcp",
     "angee.storage",
@@ -70,6 +71,11 @@ ANGEE_AGENT_RUNTIME_CLASSES = {
     "none": "angee.agents.runtimes.NoRuntime",
     "claude_code": "angee.agents.runtimes.ClaudeCodeRuntime",
     "opencode": "angee.agents.runtimes.OpenCodeRuntime",
+}
+ANGEE_WORKFLOW_STEP_CLASSES = {
+    "handler": "angee.workflows.steps.HandlerStep",
+    "wait": "angee.workflows.steps.WaitStep",
+    "gate": "angee.workflows.steps.GateStep",
 }
 ANGEE_KNOWLEDGE_RETRIEVAL_CLASSES = {
     "lexical": "angee.knowledge.retrieval.LexicalRetrievalBackend",

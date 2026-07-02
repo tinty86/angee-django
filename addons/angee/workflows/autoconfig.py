@@ -1,0 +1,15 @@
+"""Settings fragments required by the workflows addon."""
+
+from __future__ import annotations
+
+SETTINGS = {
+    # Step rows select behavior through registry keys, never dotted paths in row
+    # data. Product addons contribute their own StepImpl subclasses under their
+    # own keys through this same setting.
+    "ANGEE_WORKFLOW_STEP_CLASSES": {
+        "handler": "angee.workflows.steps.HandlerStep",
+        "wait": "angee.workflows.steps.WaitStep",
+        "gate": "angee.workflows.steps.GateStep",
+    },
+}
+"""Django settings contributed when the workflows addon is installed."""
