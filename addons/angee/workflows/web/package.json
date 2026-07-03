@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@angee/app": "workspace:*",
+    "@angee/metadata": "workspace:*",
     "@angee/refine": "workspace:*",
-    "@angee/resources": "workspace:*",
     "@angee/ui": "workspace:*",
     "lucide-react": "^1.21.0"
   },

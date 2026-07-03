@@ -67,16 +67,16 @@ class StepResult:
     """Result returned by a workflow step implementation.
 
     ``done(output, outcome)`` completes the step and routes by ``outcome``.
-    ``wait(until=..., event=...)`` records durable timer/event wake conditions;
-    when both are supplied the runtime treats them as first-of. ``suspend()``
-    pauses the step until an external resolution writes the next journal facts.
+    ``wait(until=...)`` records a durable timer wake. Event delivery is a future
+    seam and must arrive through an explicit journal writer before returning to
+    this API. ``suspend()`` pauses the step until an external resolution writes
+    the next journal facts.
     """
 
     kind: str
     output: Any = None
     outcome: str = ""
     until: datetime | None = None
-    event: str = ""
     resume_state: dict[str, Any] | None = None
     decisions: tuple[DecisionSpec, ...] = ()
 
@@ -91,14 +91,13 @@ class StepResult:
         cls,
         *,
         until: datetime | None = None,
-        event: str = "",
         resume_state: dict[str, Any] | None = None,
     ) -> Self:
         """Return a durable wait result."""
 
-        if until is None and not event:
-            raise ValueError("StepResult.wait requires until, event, or both.")
-        return cls(kind="wait", until=until, event=event, resume_state=resume_state)
+        if until is None:
+            raise ValueError("StepResult.wait requires until.")
+        return cls(kind="wait", until=until, resume_state=resume_state)
 
     @classmethod
     def suspend(
@@ -189,7 +188,7 @@ class HandlerStep(StepImpl):
 
 
 class WaitStep(StepImpl):
-    """Built-in wait step for timer/event first-of waits."""
+    """Built-in timer wait step."""
 
     key = "wait"
     label = "Wait"
@@ -197,11 +196,11 @@ class WaitStep(StepImpl):
 
     @classmethod
     def validate_config(cls, config: Any) -> None:
-        """Validate timer/event wait configuration."""
+        """Validate timer wait configuration."""
 
         super().validate_config(config)
-        if "until" not in config and "event" not in config:
-            raise ValidationError({"config": "Wait steps require an until timestamp, event, or both."})
+        if "until" not in config:
+            raise ValidationError({"config": "Wait steps require an until timestamp."})
         if "until" in config and _config_until(config["until"]) is None:
             raise ValidationError({"config": "Wait until must be an ISO datetime."})
 
@@ -212,20 +211,16 @@ class WaitStep(StepImpl):
         if str(getattr(step_run.status, "value", step_run.status)) == "waiting":
             if step_run.wait_until is not None and step_run.wait_until <= now:
                 return StepResult.done(output=step_run.output, outcome="timer")
-            if step_run.wait_event and step_run.resume_state.get("event_received"):
-                return StepResult.done(output=step_run.output, outcome=step_run.wait_event)
             return StepResult.wait(
                 until=step_run.wait_until,
-                event=step_run.wait_event,
                 resume_state=dict(step_run.resume_state),
             )
 
         config = dict(step_run.step.config)
         until = _config_until(config.get("until")) if "until" in config else None
-        event = str(config.get("event", "") or "")
         if until is not None and until <= now:
             return StepResult.done(output={}, outcome="timer")
-        return StepResult.wait(until=until, event=event, resume_state={"config": config})
+        return StepResult.wait(until=until, resume_state={"config": config})
 
 
 class GateStep(StepImpl):

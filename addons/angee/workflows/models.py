@@ -14,6 +14,7 @@ import copy
 from collections.abc import Iterable, Mapping
 from typing import Any, Self, cast
 
+from croniter import CroniterBadCronError, croniter
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -252,7 +253,7 @@ class Workflow(AuditMixin, AngeeDataModel):
         self._validate_publishable()
 
         with transaction.atomic():
-            draft = type(self).objects.select_for_update().get(pk=self.pk)
+            draft = type(self).objects.lock_if_supported().get(pk=self.pk)
             draft._validate_publishable()
             version = draft._next_published_version()
             published = type(self)(
@@ -526,7 +527,7 @@ class Trigger(AuditMixin, AngeeDataModel):
     kind = StateField(choices_enum=TriggerKind, default=TriggerKind.MANUAL)
     enabled = models.BooleanField(default=False)
     config = models.JSONField(default=dict, blank=True)
-    event_model_label = models.CharField(max_length=200, blank=True, default="", db_index=True)
+    event_model_label = models.CharField(max_length=200, blank=True, default="")
     next_fire_at = models.DateTimeField(null=True, blank=True, db_index=True)
     last_fire_at = models.DateTimeField(null=True, blank=True)
     hourly_window_started_at = models.DateTimeField(null=True, blank=True)
@@ -541,6 +542,13 @@ class Trigger(AuditMixin, AngeeDataModel):
         ordering = ("workflow", "kind", "created_at")
         rebac_resource_type = "workflows/trigger"
         rebac_id_attr = "sqid"
+        indexes = (
+            models.Index(
+                fields=("event_model_label",),
+                condition=models.Q(kind=TriggerKind.EVENT, enabled=True),
+                name="idx_wft_event_enabled",
+            ),
+        )
 
     def __str__(self) -> str:
         """Return the trigger's display label."""
@@ -562,6 +570,27 @@ class Trigger(AuditMixin, AngeeDataModel):
             condition = self.config.get("condition", {})
             if condition is not None and not isinstance(condition, Mapping):
                 raise ValidationError({"config": "Event trigger condition must be a JSON object."})
+        if self.kind == TriggerKind.SCHEDULE:
+            cron = str(self.config.get("cron", "") or "").strip()
+            interval = self.config.get("interval_seconds")
+            has_interval = interval not in (None, "")
+            if bool(cron) == has_interval:
+                raise ValidationError({"config": "Schedule triggers require cron or interval_seconds, but not both."})
+            if has_interval:
+                interval_value = cast(str | int, interval)
+                try:
+                    parsed_interval = int(interval_value)
+                except (TypeError, ValueError) as error:
+                    raise ValidationError(
+                        {"config": "Schedule interval_seconds must be a positive integer."}
+                    ) from error
+                if parsed_interval <= 0:
+                    raise ValidationError({"config": "Schedule interval_seconds must be a positive integer."})
+            if cron:
+                try:
+                    croniter(cron)
+                except CroniterBadCronError as error:
+                    raise ValidationError({"config": "Schedule cron is invalid."}) from error
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Persist the trigger after model validation."""
@@ -752,6 +781,15 @@ class WorkflowRun(AuditMixin, AngeeDataModel):
         self._raise_if_dedup_key_changed()
         super().save(*args, **kwargs)
 
+    @classmethod
+    def from_db(cls, db: str | None, field_names: list[str], values: list[Any]) -> Self:
+        """Capture immutable loaded facts without a save-time SELECT."""
+
+        instance = cast(Self, super().from_db(db, field_names, values))
+        if "dedup_key" in field_names:
+            instance._loaded_dedup_key = values[field_names.index("dedup_key")]
+        return instance
+
     def _save_status_change(self) -> None:
         """Save a transition-owned status change plus fields touched by its body."""
 
@@ -767,11 +805,8 @@ class WorkflowRun(AuditMixin, AngeeDataModel):
 
         if self._state.adding:
             return
-        try:
-            persisted = type(self)._base_manager.only("dedup_key").get(pk=self.pk)
-        except ObjectDoesNotExist:
-            return
-        if persisted.dedup_key != self.dedup_key:
+        loaded_dedup_key = getattr(self, "_loaded_dedup_key", self.dedup_key)
+        if loaded_dedup_key != self.dedup_key:
             raise ValidationError({"dedup_key": "Workflow run dedup keys are immutable."})
 
 
@@ -799,7 +834,6 @@ class StepRun(AuditMixin, AngeeDataModel):
     outcome = models.SlugField(max_length=100, blank=True, default="")
     attempt = models.PositiveIntegerField(default=0)
     wait_until = models.DateTimeField(null=True, blank=True, db_index=True)
-    wait_event = models.SlugField(max_length=200, blank=True, default="")
     heartbeat_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
     stacktrace = models.TextField(blank=True)
@@ -825,6 +859,10 @@ class StepRun(AuditMixin, AngeeDataModel):
                 StepRunStatus.CANCELED,
                 StepRunStatus.SKIPPED,
             ],
+            StepRunStatus.SUCCEEDED: [StepRunStatus.SCHEDULED],
+            StepRunStatus.FAILED: [StepRunStatus.SCHEDULED],
+            StepRunStatus.CANCELED: [StepRunStatus.SCHEDULED],
+            StepRunStatus.SKIPPED: [StepRunStatus.SCHEDULED],
         },
     )
 
@@ -877,16 +915,14 @@ class StepRun(AuditMixin, AngeeDataModel):
         self,
         *,
         until: Any = None,
-        event: str = "",
         resume_state: dict[str, Any] | None = None,
     ) -> None:
         """Persist durable wait conditions for this row."""
 
         self.wait_until = until
-        self.wait_event = event
         if resume_state is not None:
             self.resume_state = resume_state
-        self._transition_fields = {"wait_until", "wait_event", "resume_state"}
+        self._transition_fields = {"wait_until", "resume_state"}
 
     @transition(
         status,
@@ -902,8 +938,7 @@ class StepRun(AuditMixin, AngeeDataModel):
         self.error = ""
         self.stacktrace = ""
         self.wait_until = None
-        self.wait_event = ""
-        self._transition_fields = {"output", "outcome", "error", "stacktrace", "wait_until", "wait_event"}
+        self._transition_fields = {"output", "outcome", "error", "stacktrace", "wait_until"}
 
     @transition(
         status,
@@ -918,8 +953,7 @@ class StepRun(AuditMixin, AngeeDataModel):
         self.stacktrace = stacktrace
         self.outcome = outcome
         self.wait_until = None
-        self.wait_event = ""
-        self._transition_fields = {"error", "stacktrace", "outcome", "wait_until", "wait_event"}
+        self._transition_fields = {"error", "stacktrace", "outcome", "wait_until"}
 
     @transition(
         status,
@@ -938,6 +972,36 @@ class StepRun(AuditMixin, AngeeDataModel):
     )
     def mark_canceled(self) -> None:
         """Mark this row as canceled."""
+
+    @transition(
+        status,
+        source=[StepRunStatus.SUCCEEDED, StepRunStatus.FAILED, StepRunStatus.CANCELED, StepRunStatus.SKIPPED],
+        target=StepRunStatus.SCHEDULED,
+        on_success=_save_step_run_status,
+    )
+    def reschedule_for_override(self, *, input: Any = None) -> None:
+        """Reset a terminal journal row so a manual override can run it again."""
+
+        self.input = input if input is not None else {}
+        self.output = {}
+        self.resume_state = {}
+        self.outcome = ""
+        self.attempt = 0
+        self.wait_until = None
+        self.heartbeat_at = None
+        self.error = ""
+        self.stacktrace = ""
+        self._transition_fields = {
+            "input",
+            "output",
+            "resume_state",
+            "outcome",
+            "attempt",
+            "wait_until",
+            "heartbeat_at",
+            "error",
+            "stacktrace",
+        }
 
     def _save_status_change(self) -> None:
         """Save a transition-owned status change plus fields touched by its body."""

@@ -39,10 +39,13 @@ class AngeeQuerySet(RebacQuerySet[_ModelT]):
         self._apply_scope_in_place()
         return self
 
-    def lock_if_supported(self) -> Self:
-        """Apply ``select_for_update`` only on database backends that support it."""
+    def lock_if_supported(self, *, of: tuple[str, ...] = ("self",)) -> Self:
+        """Apply a self-scoped row lock only on database backends that support it."""
 
-        if connections[self.db].features.has_select_for_update:
+        features = connections[self.db].features
+        if features.has_select_for_update:
+            if of and features.has_select_for_update_of:
+                return cast(Self, self.select_for_update(of=of))
             return cast(Self, self.select_for_update())
         return self
 

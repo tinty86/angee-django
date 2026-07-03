@@ -491,7 +491,8 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   backend/signal path, so the password GraphQL mutation stays a thin caller.
 - **Row locks must keep the SQLite floor.** Wrap `select_for_update()` through the
   owning queryset/manager's feature-gated helper; SQLite is a supported backend
-  and raises `NotSupportedError` if a caller takes a row lock unconditionally.
+  and Django 6 silently drops plain `FOR UPDATE` there, so the helper is the
+  greppable contract that keeps lock intent explicit and backend-gated.
 - **A gated factory that uses `sudo()` must restore the actor before returning.**
   Elevated writes may be necessary to create the row, but callers continue under
   the original actor. Capture `current_actor()` before the elevated block and

@@ -2,26 +2,48 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from croniter import croniter
+from croniter import CroniterBadCronError, croniter
 from django.apps import apps
+from django.core.exceptions import FieldError
 from django.db import OperationalError, ProgrammingError, models, transaction
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 from rebac import system_context
 
 from angee.workflows.models import TriggerKind
 
 _EVENT_TRIGGER_DISPATCH_UID = "angee-workflows-event-triggers"
+_TRIGGER_CACHE_DISPATCH_UID = "angee-workflows-trigger-cache"
+_EVENT_TRIGGER_LABEL_TTL_SECONDS = 5.0
+_event_trigger_label_cache: tuple[float, frozenset[str]] | None = None
+logger = logging.getLogger(__name__)
 
 
 def connect_event_trigger_receiver() -> None:
     """Connect the generic event-trigger receiver exactly once."""
 
+    _clear_event_trigger_label_cache()
     post_save.connect(_on_model_save, dispatch_uid=_EVENT_TRIGGER_DISPATCH_UID)
+    try:
+        trigger_model = _model("Trigger")
+    except LookupError:
+        return
+    post_save.connect(
+        _invalidate_trigger_cache_on_change,
+        sender=trigger_model,
+        dispatch_uid=f"{_TRIGGER_CACHE_DISPATCH_UID}:save",
+    )
+    post_delete.connect(
+        _invalidate_trigger_cache_on_change,
+        sender=trigger_model,
+        dispatch_uid=f"{_TRIGGER_CACHE_DISPATCH_UID}:delete",
+    )
 
 
 def run_due_schedule_triggers(*, now: datetime | None = None) -> dict[str, int]:
@@ -81,12 +103,7 @@ def next_schedule_fire_at(config: Mapping[str, Any], *, after: datetime, now: da
     cron = str(config.get("cron", "") or "")
     if not cron:
         return None
-    iterator = croniter(cron, after)
-    next_at = cast(datetime, iterator.get_next(datetime))
-    while next_at <= now:
-        iterator = croniter(cron, next_at)
-        next_at = cast(datetime, iterator.get_next(datetime))
-    return next_at
+    return cast(datetime, croniter(cron, max(after, now)).get_next(datetime))
 
 
 def _on_model_save(
@@ -102,8 +119,16 @@ def _on_model_save(
         return
 
     model_label = sender._meta.label_lower
-    trigger_model = _model("Trigger")
+    # Django records migrations inside the same transaction as migration DDL.
+    if model_label == "migrations.migration":
+        return
+    if model_label.startswith("workflows."):
+        return
+    if model_label not in _enabled_event_model_labels():
+        return
+
     try:
+        trigger_model = _model("Trigger")
         triggers = list(
             trigger_model._base_manager.filter(
                 kind=TriggerKind.EVENT,
@@ -113,13 +138,20 @@ def _on_model_save(
             .select_related("workflow")
             .order_by("pk")
         )
+    except LookupError:
+        return
     except (ProgrammingError, OperationalError):
         # Saves fire during ``migrate`` while the trigger table/columns are
         # still mid-flight; there is nothing to dispatch until the schema
         # exists, and probing it per save would cost a query on every write.
         return
     for trigger in triggers:
-        if not _condition_matches(sender, instance, trigger):
+        try:
+            matches = _condition_matches(sender, instance, trigger)
+        except (FieldError, ValueError, TypeError):
+            logger.exception("Skipping workflow event trigger %s after condition evaluation failed.", trigger.pk)
+            continue
+        if not matches:
             continue
         claimed = _claim_event_trigger(trigger.pk, timestamp=timezone.now())
         if claimed is not None:
@@ -139,7 +171,7 @@ def _claim_event_trigger(trigger_id: int, *, timestamp: datetime) -> Any | None:
     trigger_model = _model("Trigger")
     with system_context(reason="workflows.event_triggers.claim"), transaction.atomic():
         trigger = (
-            trigger_model.objects.select_for_update()
+            trigger_model.objects.lock_if_supported()
             .select_related("workflow")
             .filter(pk=trigger_id, kind=TriggerKind.EVENT, enabled=True)
             .first()
@@ -154,7 +186,7 @@ def _claim_schedule_trigger(trigger_id: int, *, timestamp: datetime) -> tuple[An
     trigger_model = _model("Trigger")
     with system_context(reason="workflows.schedule_triggers.claim"), transaction.atomic():
         trigger = (
-            trigger_model.objects.select_for_update()
+            trigger_model.objects.lock_if_supported()
             .select_related("workflow")
             .filter(pk=trigger_id, kind=TriggerKind.SCHEDULE, enabled=True)
             .first()
@@ -162,7 +194,11 @@ def _claim_schedule_trigger(trigger_id: int, *, timestamp: datetime) -> tuple[An
         if trigger is None or trigger.next_fire_at is None or trigger.next_fire_at > timestamp:
             return None
         due_at = trigger.next_fire_at
-        trigger.next_fire_at = next_schedule_fire_at(_config(trigger), after=due_at, now=timestamp)
+        try:
+            trigger.next_fire_at = next_schedule_fire_at(_config(trigger), after=due_at, now=timestamp)
+        except (CroniterBadCronError, ValueError, TypeError):
+            logger.exception("Skipping workflow schedule trigger %s after next fire calculation failed.", trigger.pk)
+            return None
         if not _rate_limit_allows(trigger, timestamp=timestamp):
             trigger.save(update_fields={"next_fire_at", "updated_at"})
             return None
@@ -187,13 +223,20 @@ def _prime_schedule_triggers(*, timestamp: datetime) -> int:
     for trigger_id in trigger_ids:
         with system_context(reason="workflows.schedule_triggers.prime"), transaction.atomic():
             trigger = (
-                trigger_model.objects.select_for_update()
+                trigger_model.objects.lock_if_supported()
                 .filter(pk=trigger_id, kind=TriggerKind.SCHEDULE, enabled=True, next_fire_at__isnull=True)
                 .first()
             )
             if trigger is None:
                 continue
-            trigger.next_fire_at = initial_schedule_fire_at(_config(trigger), now=timestamp)
+            try:
+                trigger.next_fire_at = initial_schedule_fire_at(_config(trigger), now=timestamp)
+            except (CroniterBadCronError, ValueError, TypeError):
+                logger.exception(
+                    "Skipping workflow schedule trigger %s after initial fire calculation failed.",
+                    trigger.pk,
+                )
+                continue
             if trigger.next_fire_at is None:
                 continue
             trigger.save(update_fields={"next_fire_at", "updated_at"})
@@ -239,9 +282,56 @@ def _enqueue_start(trigger: Any, *, subject: models.Model | None, dedup_key: str
     def start() -> None:
         from angee.workflows import engine
 
-        engine.start(trigger.workflow, subject=subject, actor=None, trigger=trigger, dedup_key=dedup_key)
+        try:
+            engine.start(trigger.workflow, subject=subject, actor=None, trigger=trigger, dedup_key=dedup_key)
+        except Exception:
+            logger.exception("Workflow trigger %s failed to start workflow.", trigger.pk)
 
     transaction.on_commit(start)
+
+
+def _enabled_event_model_labels() -> frozenset[str]:
+    """Return enabled event model labels with a short in-process cache."""
+
+    global _event_trigger_label_cache
+    now = time.monotonic()
+    if _event_trigger_label_cache is not None:
+        expires_at, labels = _event_trigger_label_cache
+        if expires_at > now:
+            return labels
+    try:
+        trigger_model = _model("Trigger")
+        labels = frozenset(
+            str(label)
+            for label in trigger_model._base_manager.filter(
+                kind=TriggerKind.EVENT,
+                enabled=True,
+            )
+            .exclude(event_model_label="")
+            .values_list("event_model_label", flat=True)
+        )
+    except LookupError:
+        labels = frozenset()
+    except (ProgrammingError, OperationalError):
+        labels = frozenset()
+    _event_trigger_label_cache = (now + _EVENT_TRIGGER_LABEL_TTL_SECONDS, labels)
+    return labels
+
+
+def _invalidate_trigger_cache_on_change(
+    **kwargs: Any,
+) -> None:
+    """Invalidate enabled event-label cache when a Trigger row changes."""
+
+    del kwargs
+    _clear_event_trigger_label_cache()
+
+
+def _clear_event_trigger_label_cache() -> None:
+    """Clear the process-local enabled event-label cache."""
+
+    global _event_trigger_label_cache
+    _event_trigger_label_cache = None
 
 
 def _config(trigger: Any) -> Mapping[str, Any]:
@@ -275,5 +365,3 @@ def _bridge_sync_active() -> bool:
 
 def _model(name: str) -> type[Any]:
     return apps.get_model("workflows", name)
-
-

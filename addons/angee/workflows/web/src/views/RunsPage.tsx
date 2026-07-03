@@ -1,5 +1,6 @@
 import * as React from "react";
-import { rowPublicId } from "@angee/resources";
+import { rowPublicId } from "@angee/metadata";
+import { useAuthoredMutation, useAuthoredQuery } from "@angee/refine";
 import {
   Action,
   Badge,
@@ -16,8 +17,6 @@ import {
   ResourceList,
   TimelineView,
   cn,
-  useAuthoredMutation,
-  useAuthoredQuery,
   type ActionContext,
   type RecordTabDescriptor,
   type Tone,
@@ -50,18 +49,18 @@ export function RunsPage(): React.ReactElement {
   const t = useWorkflowsT();
   const [cancelRun] = useAuthoredMutation(CancelWorkflowRunDocument, {
     invalidateModels: [RUN_MODEL, STEP_RUN_MODEL, DECISION_MODEL],
+    errorFrom: (data) =>
+      data?.cancel_workflow_run.ok === false ? data.cancel_workflow_run.message : null,
   });
   const cancel = React.useCallback(
     async (context: ActionContext) => {
       const id = rowPublicId(context.record);
       if (!id) return;
       const data = await cancelRun({ id });
-      const result = data?.cancel_workflow_run;
-      if (!result?.ok) throw new Error(result?.message ?? t("workflows.form.cancel"));
       context.refresh();
-      return result.message;
+      return data?.cancel_workflow_run?.message;
     },
-    [cancelRun, t],
+    [cancelRun],
   );
   const recordTabs = React.useMemo<readonly RecordTabDescriptor[]>(
     () => [
@@ -156,7 +155,7 @@ function RunTimelinePanel({ runId }: { runId: string }): React.ReactElement {
         rows={stepRuns as readonly (WorkflowRunStepRun & Record<string, unknown>)[]}
         dateField="created_at"
         rowKey="id"
-        emptyMessage={t("workflows.runs.emptyTimeline")}
+        emptyContent={t("workflows.runs.emptyTimeline")}
         className="border-r border-border-subtle"
         renderEntry={(row) => <RunJournalEntry row={row} />}
       />
@@ -197,7 +196,7 @@ function RunJournalEntry({
             {row.step?.key ? <Code tone="muted">{row.step.key}</Code> : null}
           </div>
           <div className="mt-1 text-xs text-fg-muted">
-            {row.outcome || row.wait_event || row.system_kind}
+            {row.outcome || row.system_kind}
           </div>
         </div>
         <Badge tone={toneForStepRun(row.status)}>{row.status}</Badge>

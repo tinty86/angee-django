@@ -1,10 +1,12 @@
 import * as React from "react";
-import { rowPublicId } from "@angee/resources";
+import { rowPublicId } from "@angee/metadata";
+import { useAuthoredMutation, useAuthoredQuery } from "@angee/refine";
 import {
   Action,
   Badge,
   Column,
   EmptyState,
+  ErrorBanner,
   Facet,
   Field,
   Form,
@@ -14,8 +16,6 @@ import {
   LoadingPanel,
   ResourceEdit,
   ResourceList,
-  useAuthoredMutation,
-  useAuthoredQuery,
   useEnumOptions,
   useImplPrefill,
   type ActionContext,
@@ -48,33 +48,33 @@ export function WorkflowsPage(): React.ReactElement {
   const t = useWorkflowsT();
   const [publishWorkflow] = useAuthoredMutation(PublishWorkflowDocument, {
     invalidateModels: [WORKFLOW_MODEL, STEP_MODEL, EDGE_MODEL],
+    errorFrom: (data) =>
+      data?.publish_workflow.ok === false ? data.publish_workflow.message : null,
   });
   const [startWorkflowRun] = useAuthoredMutation(StartWorkflowRunDocument, {
     invalidateModels: [RUN_MODEL],
+    errorFrom: (data) =>
+      data?.start_workflow_run.ok === false ? data.start_workflow_run.message : null,
   });
   const publish = React.useCallback(
     async (context: ActionContext) => {
       const id = rowPublicId(context.record);
       if (!id) return;
       const data = await publishWorkflow({ id });
-      const result = data?.publish_workflow;
-      if (!result?.ok) throw new Error(result?.message ?? t("workflows.form.publish"));
       context.refresh();
-      return result.message;
+      return data?.publish_workflow?.message;
     },
-    [publishWorkflow, t],
+    [publishWorkflow],
   );
   const start = React.useCallback(
     async (context: ActionContext) => {
       const id = rowPublicId(context.record);
       if (!id) return;
       const data = await startWorkflowRun({ id });
-      const result = data?.start_workflow_run;
-      if (!result?.ok) throw new Error(result?.message ?? t("workflows.form.start"));
       context.refresh();
-      return result.message;
+      return data?.start_workflow_run?.message;
     },
-    [startWorkflowRun, t],
+    [startWorkflowRun],
   );
   const recordTabs = React.useMemo<readonly RecordTabDescriptor[]>(
     () => [
@@ -161,6 +161,7 @@ function WorkflowCanvas({
   });
   const [selectedStep, setSelectedStep] = React.useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = React.useState<string | null>(null);
+  const [mutationError, setMutationError] = React.useState<string | null>(null);
   const workflow = graphQuery.data?.workflows_by_pk;
   const steps = graphQuery.data?.workflow_steps ?? [];
   const edges = graphQuery.data?.workflow_edges ?? [];
@@ -168,29 +169,38 @@ function WorkflowCanvas({
   const graphNodes = React.useMemo(() => workflowGraphNodes(steps), [steps]);
   const graphEdges = React.useMemo(() => workflowGraphEdges(edges), [edges]);
   const refreshGraph = React.useCallback(() => {
-    graphQuery.refetch();
     onChanged?.();
-  }, [graphQuery, onChanged]);
+  }, [onChanged]);
   const handleNodeDragEnd = React.useCallback(
     async (
       node: (typeof graphNodes)[number],
       position: GraphViewPosition,
     ) => {
-      await updatePosition({ id: node.id, position });
-      refreshGraph();
+      try {
+        setMutationError(null);
+        await updatePosition({ id: node.id, position });
+        refreshGraph();
+      } catch (error) {
+        setMutationError(errorMessage(error));
+      }
     },
     [refreshGraph, updatePosition],
   );
   const handleConnect = React.useCallback(
     async (edge: GraphViewConnection) => {
       if (edge.source === edge.target) return;
-      await createEdge({
-        workflow: workflowId,
-        source: edge.source,
-        target: edge.target,
-        condition: "",
-      });
-      refreshGraph();
+      try {
+        setMutationError(null);
+        await createEdge({
+          workflow: workflowId,
+          source: edge.source,
+          target: edge.target,
+          condition: "",
+        });
+        refreshGraph();
+      } catch (error) {
+        setMutationError(errorMessage(error));
+      }
     },
     [createEdge, refreshGraph, workflowId],
   );
@@ -233,6 +243,9 @@ function WorkflowCanvas({
             {isDraft ? t("workflows.canvas.draft") : t("workflows.canvas.readOnly")}
           </Badge>
         </div>
+        <div className="absolute inset-x-3 bottom-3">
+          <ErrorBanner description={mutationError} />
+        </div>
       </div>
       <CanvasInspector
         selectedStep={selectedStep}
@@ -241,6 +254,10 @@ function WorkflowCanvas({
       />
     </div>
   );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function CanvasInspector({
@@ -336,7 +353,7 @@ function WorkflowTriggersPanel({
     <ResourceList
       resource={TRIGGER_MODEL}
       placement="inline"
-      filter={{ workflow: { exact: workflowId } }}
+      baseFilter={{ workflow: { exact: workflowId } }}
       createDefaults={{ workflow: workflowId }}
     >
       <List resource={TRIGGER_MODEL}>

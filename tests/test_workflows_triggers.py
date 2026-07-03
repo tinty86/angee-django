@@ -9,14 +9,17 @@ from typing import Any
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import connection, models
+from django.db.migrations.recorder import MigrationRecorder
 from django.utils import timezone
 from rebac import app_settings, system_context
 from rebac.roles import grant
 
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
 from angee.integrate.models import Bridge
+from angee.workflows import engine
 from angee.workflows import models as workflow_models
 from angee.workflows.steps import HandlerStep, StepResult
 from tests.conftest import SchemaAddon, _clear_model_tables, _create_missing_tables, execute_schema, result_data
@@ -41,7 +44,7 @@ class TriggerSubject(models.Model):
     state = models.CharField(max_length=50, default="draft")
 
     class Meta:
-        app_label = "workflows"
+        app_label = "tests"
         db_table = "test_workflows_trigger_subject"
 
 
@@ -136,6 +139,48 @@ def test_event_trigger_condition_starts_matching_saved_subject(
     assert runs[0].trigger is not None
 
 
+def test_event_trigger_receiver_ignores_django_migration_ledger_saves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Django's migration recorder rows are not workflow event subjects."""
+
+    workflow_triggers = importlib.import_module("angee.workflows.triggers")
+
+    def fail_model_lookup(name: str) -> object:
+        pytest.fail(f"workflow trigger lookup should be skipped for {name}")
+
+    monkeypatch.setattr(workflow_triggers, "_model", fail_model_lookup)
+    migration = MigrationRecorder.Migration(app="contenttypes", name="0001_initial")
+    migration.pk = 1
+
+    workflow_triggers._on_model_save(
+        sender=MigrationRecorder.Migration,
+        instance=migration,
+        using="default",
+    )
+
+
+def test_event_trigger_receiver_skips_when_workflow_models_are_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host save must not fail when concrete workflow models are not registered."""
+
+    workflow_triggers = importlib.import_module("angee.workflows.triggers")
+
+    def missing_model(name: str) -> object:
+        raise LookupError(name)
+
+    monkeypatch.setattr(workflow_triggers, "_model", missing_model)
+    subject = TriggerSubject(name="standalone", state="ready")
+    subject.pk = 1
+
+    workflow_triggers._on_model_save(
+        sender=TriggerSubject,
+        instance=subject,
+        using="default",
+    )
+
+
 def test_disabled_event_trigger_does_not_start_run(
     workflow_trigger_tables: None,
     no_workflow_queue: None,
@@ -192,6 +237,46 @@ def test_event_trigger_cooldown_and_hourly_cap_are_locked_facts(
     TriggerSubject.objects.create(name="capped-2", state="capped")
 
     assert _run_count() == 2
+
+
+def test_event_trigger_bad_condition_is_logged_and_skipped(
+    workflow_trigger_tables: None,
+    no_workflow_queue: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """One invalid event condition never breaks the host model save."""
+
+    del workflow_trigger_tables, no_workflow_queue
+    _event_trigger(condition={"missing_field": "ready"})
+
+    TriggerSubject.objects.create(name="invalid-condition", state="ready")
+
+    assert _run_count() == 0
+    assert "condition" in caplog.text
+
+
+def test_event_trigger_start_error_is_logged_and_does_not_break_save(
+    workflow_trigger_tables: None,
+    no_workflow_queue: None,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Engine start failures are isolated to the trigger dispatch path."""
+
+    del workflow_trigger_tables, no_workflow_queue
+    workflow_triggers = importlib.import_module("angee.workflows.triggers")
+    _event_trigger(condition={"state": "ready"})
+
+    def fail_start(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise RuntimeError("start failed")
+
+    monkeypatch.setattr(engine, "start", fail_start)
+    monkeypatch.setattr(workflow_triggers.transaction, "on_commit", lambda callback: callback())
+
+    TriggerSubject.objects.create(name="start-error", state="ready")
+
+    assert "start failed" in caplog.text
 
 
 def test_bridge_sync_marked_saves_are_skipped_but_live_saves_fire(
@@ -260,6 +345,68 @@ def test_schedule_trigger_primes_missing_next_fire_with_injected_timestamp(
 
     assert _run_count() == 0
     assert trigger.next_fire_at == now + timedelta(hours=1)
+
+
+def test_schedule_trigger_validation_requires_cron_xor_interval(
+    workflow_trigger_tables: None,
+) -> None:
+    """Schedule triggers declare exactly one valid scheduling primitive."""
+
+    del workflow_trigger_tables
+    with pytest.raises(ValidationError, match="cron or interval"):
+        _schedule_trigger(config={}, next_fire_at=None)
+    with pytest.raises(ValidationError, match="cron or interval"):
+        _schedule_trigger(config={"cron": "* * * * *", "interval_seconds": 60}, next_fire_at=None)
+    with pytest.raises(ValidationError, match="cron"):
+        _schedule_trigger(config={"cron": "not a cron"}, next_fire_at=None)
+
+
+def test_schedule_cron_catch_up_uses_one_base_at_max_after_now(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cron catch-up asks croniter once from max(after, now), not once per missed tick."""
+
+    workflow_triggers = importlib.import_module("angee.workflows.triggers")
+    bases: list[Any] = []
+    after = timezone.now().replace(microsecond=0)
+    now = after + timedelta(days=30)
+
+    class FakeCroniter:
+        def __init__(self, cron: str, base: Any) -> None:
+            del cron
+            bases.append(base)
+
+        def get_next(self, result_type: type[Any]) -> Any:
+            del result_type
+            return bases[-1] + timedelta(days=1)
+
+    monkeypatch.setattr(workflow_triggers, "croniter", FakeCroniter)
+
+    assert workflow_triggers.next_schedule_fire_at({"cron": "0 0 * * *"}, after=after, now=now) == now + timedelta(
+        days=1
+    )
+    assert bases == [now]
+
+
+def test_bad_schedule_row_is_logged_and_does_not_stop_scan(
+    workflow_trigger_tables: None,
+    no_workflow_queue: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Legacy bad schedule config skips that row while valid schedules keep firing."""
+
+    del workflow_trigger_tables, no_workflow_queue
+    workflow_triggers = importlib.import_module("angee.workflows.triggers")
+    now = timezone.now().replace(microsecond=0)
+    bad = _schedule_trigger(config={"interval_seconds": 3600}, next_fire_at=now)
+    good = _schedule_trigger(config={"interval_seconds": 3600}, next_fire_at=now)
+    with system_context(reason="test workflows invalid schedule row"):
+        Trigger.objects.filter(pk=bad.pk).update(config={"cron": "not a cron"})
+
+    assert workflow_triggers.run_due_schedule_triggers(now=now) == {"triggers": 2, "fired": 1, "skipped": 1}
+    good.refresh_from_db()
+    assert good.next_fire_at == now + timedelta(hours=1)
+    assert "schedule trigger" in caplog.text
 
 
 @pytest.mark.parametrize(

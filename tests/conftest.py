@@ -644,6 +644,10 @@ def _clear_model_tables(test_models: tuple[type[models.Model], ...]) -> None:
         if table_name not in existing_tables:
             continue
         table_names.append(table_name)
+        for field in model._meta.many_to_many:
+            through_table_name = field.remote_field.through._meta.db_table
+            if through_table_name in existing_tables:
+                table_names.append(through_table_name)
 
     if not table_names:
         return
@@ -705,7 +709,7 @@ def make_addon(
     tmp = Path(tempfile.mkdtemp())
     module = ModuleType(name)
     module.__file__ = str(tmp / "apps.py")
-    module.__path__ = [str(tmp)]  # type: ignore[attr-defined]
+    setattr(module, "__path__", [str(tmp)])
     sys.modules[name] = module
 
     body = ["[addon]", f'name = "{name}"']
@@ -713,7 +717,7 @@ def make_addon(
         body.append("depends_on = [" + ", ".join(f'"{dep}"' for dep in depends_on) + "]")
     if schemas is not None:
         schema_module = ModuleType(f"{name}.schema")
-        schema_module.schemas = schemas  # type: ignore[attr-defined]
+        setattr(schema_module, "schemas", schemas)
         sys.modules[f"{name}.schema"] = schema_module
         body.append('schemas = "schema.schemas"')
     (tmp / "addon.toml").write_text("\n".join(body) + "\n")

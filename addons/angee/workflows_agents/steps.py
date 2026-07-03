@@ -22,7 +22,7 @@ from django.template import Context, Engine
 from rebac import system_context
 
 from angee.agents.backends import InferenceRequest, InferenceResponse
-from angee.workflows.steps import StepImpl, StepResult
+from angee.workflows.steps import StepImpl, StepResult, TransientStepError
 
 AGENT_STEP_JOURNAL_MAX_BYTES = 4096
 """Maximum UTF-8 JSON bytes stored in one agent step-run output journal."""
@@ -107,7 +107,11 @@ class AgentStepImpl(StepImpl):
                 output=_bounded_summary(_success_summary(target=target, request=request, response=response)),
                 outcome="completed",
             )
+        except TransientStepError:
+            raise
         except Exception as error:  # noqa: BLE001 - backend/config failure is a workflow outcome.
+            if _is_retryable_provider_error(error):
+                raise TransientStepError(str(error)) from error
             return StepResult.done(
                 output=_bounded_summary(_failure_summary(request=request, error=error)),
                 outcome="failed",
@@ -236,7 +240,7 @@ def _debit_budget(run: Any, delta: Mapping[str, int]) -> None:
         return
     run_model = apps.get_model("workflows", "WorkflowRun")
     with system_context(reason="workflows_agents.agent_step.budget"), transaction.atomic():
-        locked = run_model.objects.select_for_update().get(pk=run.pk)
+        locked = run_model.objects.lock_if_supported().get(pk=run.pk)
         spent = dict(locked.budget_spent or {})
         for key, value in delta.items():
             spent[key] = int(spent.get(key, 0) or 0) + int(value)
@@ -308,6 +312,28 @@ def _failure_summary(request: InferenceRequest | None, *, error: Exception) -> d
             "message": str(error),
         },
     }
+
+
+def _is_retryable_provider_error(error: Exception) -> bool:
+    """Return whether an SDK/provider exception represents a transient failure."""
+
+    status = getattr(error, "status_code", None)
+    if status in {408, 409, 425, 429, 500, 502, 503, 504, 529}:
+        return True
+    error_type = type(error).__name__.lower()
+    message = str(error).lower()
+    retryable_terms = (
+        "ratelimit",
+        "rate_limit",
+        "rate limit",
+        "overload",
+        "overloaded",
+        "temporarily unavailable",
+        "timeout",
+        "timed out",
+        "try again",
+    )
+    return any(term in error_type or term in message for term in retryable_terms)
 
 
 def _request_summary(request: InferenceRequest) -> dict[str, Any]:

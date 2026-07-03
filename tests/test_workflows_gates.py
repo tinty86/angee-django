@@ -376,6 +376,23 @@ def test_public_schema_exposes_decision_resource_decide_mutation_and_subscriptio
     assert "decisionChanged" in sdl
 
 
+def test_public_schema_decision_projection_excludes_step_run_journal(
+    workflow_gate_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Public decisions expose denormalized labels, not the console StepRun graph."""
+
+    del workflow_gate_tables, no_workflow_queue
+    sdl = _schema("public").as_str()
+
+    assert "type DecisionType" in sdl
+    decision_section = sdl.split("type DecisionType", 1)[1].split("type ", 1)[0]
+    assert "step_run" not in decision_section
+    assert "workflow_name" in decision_section
+    assert "step_name" in decision_section
+    assert "StepRunType" not in sdl
+
+
 def test_public_decide_mutation_uses_actor_scoped_act_permission(
     workflow_gate_tables: None,
     no_workflow_queue: None,

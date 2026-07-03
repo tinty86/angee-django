@@ -76,3 +76,4 @@ Thumbs.db
 *.tsbuildinfo
 
 /.copier-answers.yml
+/.copier-answers.stack.yml

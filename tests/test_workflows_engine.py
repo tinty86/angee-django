@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models.deletion import ProtectedError
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from procrastinate import jobs
 from procrastinate import retry as procrastinate_retry
 from rebac import system_context
 
+from angee.workflows import engine
 from angee.workflows import models as workflow_models
 from angee.workflows import steps as workflow_steps
 from angee.workflows.steps import HandlerStep, StepResult
 from tests.conftest import _clear_model_tables, _create_missing_tables
 from tests.test_workflows import Edge, Step, Trigger, Workflow
+
+User = get_user_model()
 
 
 class WorkflowRun(workflow_models.WorkflowRun):
@@ -723,6 +729,9 @@ def test_transient_step_error_uses_configured_retry_backoff(
         )
         is None
     )
+    step_run.refresh_from_db()
+    assert step_run.status == step_run_status.FAILED
+    assert "try again" in step_run.error
     assert (
         tasks.execute_workflow_step.get_retry_exception(
             RuntimeError("hard failure"),
@@ -950,6 +959,170 @@ def test_error_workflow_fires_once_with_failed_run_subject(
     child = children[0]
     assert child.workflow == error_version
     assert child.subject == run
+
+
+@pytest.mark.django_db(transaction=True)
+def test_error_workflow_run_does_not_start_another_error_workflow(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+    handler_calls: list[dict[str, Any]],
+) -> None:
+    """A failing run already launched as error handling does not recurse."""
+
+    del workflow_engine_tables, no_workflow_queue, handler_calls
+    error_version = workflow_with_steps(
+        name="Self error workflow",
+        steps=({"key": "recover", "config": {"mode": "error", "error": "recovery failed"}},),
+        edges=(),
+    )
+    with system_context(reason="test workflows cyclic error workflow definition"):
+        error_draft = error_version.published_from
+        error_draft.error_workflow = error_draft
+        error_draft.save(update_fields={"error_workflow", "updated_at"})
+        primary = Workflow.objects.create(name="Primary cyclic", error_workflow=error_draft)
+        Step.objects.create(
+            workflow=primary,
+            key="explode",
+            name="Explode",
+            config={"mode": "error", "error": "boom"},
+            is_entry=True,
+        )
+        workflow = primary.publish()
+
+    run = run_to_terminal(start_run(workflow))
+    failed = step_run_for(run, "explode")
+    with system_context(reason="test workflows first error workflow child"):
+        child = WorkflowRun.objects.get(parent_step_run=failed)
+
+    run_to_terminal(child)
+
+    with system_context(reason="test workflows cyclic error workflow children"):
+        assert WorkflowRun.objects.filter(parent_step_run__run=child).count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_override_run_reuses_existing_terminal_step_run(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Overriding to a failed step reschedules its existing journal row."""
+
+    del workflow_engine_tables, no_workflow_queue
+    admin = User.objects.create_user(username="workflow-override-rerun")
+    workflow = workflow_with_steps(
+        steps=(
+            {"key": "active", "config": {"outcome": "done"}},
+            {"key": "retry", "config": {"outcome": "done"}, "is_entry": False},
+        ),
+        edges=(),
+    )
+    active = step_for(workflow, "active")
+    retry = step_for(workflow, "retry")
+    with system_context(reason="test workflows override rerun setup"):
+        run = WorkflowRun.objects.create(workflow=workflow, status=workflow_models.RunStatus.RUNNING)
+        StepRun.objects.create(run=run, step=active, status=workflow_models.StepRunStatus.STARTED)
+        failed = StepRun.objects.create(
+            run=run,
+            step=retry,
+            status=workflow_models.StepRunStatus.FAILED,
+            error="previous failure",
+            outcome="failed",
+        )
+
+    override = engine.override_run(run, [retry], actor=admin)
+
+    failed.refresh_from_db()
+    assert failed.status == workflow_models.StepRunStatus.SCHEDULED
+    assert failed.error == ""
+    assert failed.outcome == ""
+    with system_context(reason="test workflows override rerun previous"):
+        assert list(failed.previous.all()) == [override]
+        assert StepRun.objects.filter(run=run, step=retry, map_index=-1).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_workflow_run_save_uses_loaded_dedup_key_without_extra_select(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Loaded dedup keys are compared from ``from_db`` state, not a save-time SELECT."""
+
+    del workflow_engine_tables, no_workflow_queue
+    workflow = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    with system_context(reason="test workflows dedup setup"):
+        run = WorkflowRun.objects.create(workflow=workflow, dedup_key="dedup:one")
+        loaded = WorkflowRun.objects.get(pk=run.pk)
+
+    loaded.error = "updated"
+    with CaptureQueriesContext(connection) as queries:
+        with system_context(reason="test workflows dedup save"):
+            loaded.save(update_fields={"error", "updated_at"})
+
+    sql = "\n".join(query["sql"] for query in queries.captured_queries)
+    assert "SELECT" not in sql.upper()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_event_wait_surface_is_not_accepted(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Timer waits remain; event-only waits are an explicit future seam."""
+
+    del workflow_engine_tables, no_workflow_queue
+    with pytest.raises(TypeError, match="event"):
+        workflow_steps.StepResult.wait(event="message")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError, match="until"):
+        workflow_steps.WaitStep.validate_config({"event": "message"})
+
+
+@pytest.mark.skipif(
+    os.environ.get("DATABASE_URL", "").split(":", 1)[0] not in {"postgres", "postgresql"},
+    reason="requires DATABASE_URL backed by PostgreSQL",
+)
+@pytest.mark.django_db(transaction=True)
+def test_postgres_lock_sql_scopes_joined_engine_queries_to_self(
+    workflow_engine_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """Joined engine lock queries compile as FOR UPDATE OF the base table only."""
+
+    del workflow_engine_tables, no_workflow_queue
+    if connection.vendor != "postgresql":
+        pytest.skip("active Django connection is not PostgreSQL")
+
+    workflow = workflow_with_steps(
+        steps=({"key": "start", "config": {"outcome": "done"}},),
+        edges=(),
+    )
+    run = start_run(workflow)
+    with system_context(reason="test workflows postgres lock setup"):
+        step_run = StepRun.objects.get(run=run)
+        decision = Decision.objects.create(step_run=step_run, action="approve")
+
+    with transaction.atomic():
+        advance_sql = str(
+            WorkflowRun.objects.lock_if_supported()
+            .select_related("workflow")
+            .filter(pk=run.pk)
+            .query
+        )
+        decision_sql = str(
+            Decision.objects.lock_if_supported()
+            .select_related("step_run", "step_run__run", "step_run__step")
+            .filter(pk=decision.pk)
+            .query
+        )
+
+    assert "FOR UPDATE OF" in advance_sql
+    assert "FOR UPDATE OF" in decision_sql
+    assert "test_workflows_workflow_run" in advance_sql
+    assert "test_workflows_decision" in decision_sql
+    assert "test_workflows_workflow\"" not in advance_sql.split("FOR UPDATE OF", 1)[1]
+    assert "test_workflows_step_run\"" not in decision_sql.split("FOR UPDATE OF", 1)[1]
 
 
 @pytest.mark.django_db(transaction=True)

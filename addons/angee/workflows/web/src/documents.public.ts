@@ -17,30 +17,10 @@ export const PendingWorkflowDecisionsDocument = graphql(`
       max_attempts
       expires_at
       escalate_at
+      workflow_name
+      step_name
       created_at
       updated_at
-      step_run {
-        id
-        status
-        outcome
-        step {
-          id
-          key
-          name
-          workflow {
-            id
-            name
-          }
-        }
-        run {
-          id
-          status
-          workflow {
-            id
-            name
-          }
-        }
-      }
     }
   }
 `);

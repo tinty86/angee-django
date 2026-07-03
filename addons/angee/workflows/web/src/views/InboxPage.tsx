@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useAuthoredMutation, useAuthoredQuery } from "@angee/refine";
 import {
   Badge,
   Button,
@@ -11,8 +12,6 @@ import {
   LoadingPanel,
   RowsListView,
   Textarea,
-  useAuthoredMutation,
-  useAuthoredQuery,
   type ListColumn,
 } from "@angee/ui";
 
@@ -51,10 +50,6 @@ export function InboxPage(): React.ReactElement {
   );
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
-  React.useEffect(() => {
-    if (selectedId && rows.some((row) => row.id === selectedId)) return;
-    setSelectedId(rows[0]?.id ?? null);
-  }, [rows, selectedId]);
   const columns = React.useMemo<readonly ListColumn<DecisionRow>[]>(
     () => [
       { field: "workflow", header: "Workflow" },
@@ -84,7 +79,7 @@ export function InboxPage(): React.ReactElement {
         fetching={decisionsQuery.fetching}
         error={decisionsQuery.error}
         onRowClick={(row) => setSelectedId(row.id)}
-        emptyState={{
+        emptyContent={{
           icon: "workflow-inbox",
           title: t("workflows.inbox.emptyTitle"),
           description: t("workflows.inbox.emptyDescription"),
@@ -92,11 +87,9 @@ export function InboxPage(): React.ReactElement {
         className="border-r border-border-subtle"
       />
       <DecisionResolutionPanel
+        key={selected?.id ?? "empty"}
         decision={selected?.raw ?? null}
-        onResolved={() => {
-          decisionsQuery.refetch();
-          setSelectedId(null);
-        }}
+        onResolved={() => setSelectedId(null)}
       />
     </div>
   );
@@ -153,10 +146,8 @@ function DecisionResolutionPanel({
     }
   }
 
-  const title = decision.step_run.step?.name ?? decision.action;
-  const workflow =
-    decision.step_run.step?.workflow.name ??
-    decision.step_run.run.workflow.name;
+  const title = decision.step_name || decision.action;
+  const workflow = decision.workflow_name;
 
   return (
     <aside className="min-h-0 overflow-auto bg-sheet-1 p-4">
@@ -223,10 +214,8 @@ function decisionRows(
 ): DecisionRow[] {
   return decisions.map((decision) => ({
     id: decision.id,
-    workflow:
-      decision.step_run.step?.workflow.name ??
-      decision.step_run.run.workflow.name,
-    step: decision.step_run.step?.name ?? decision.step_run.id,
+    workflow: decision.workflow_name,
+    step: decision.step_name,
     action: decision.action,
     priority: decision.priority,
     verdict: decision.verdict,

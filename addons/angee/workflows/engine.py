@@ -124,7 +124,7 @@ def advance(run_id: int, *, now: datetime | None = None) -> dict[str, int]:
     claimed_ids: list[int] = []
 
     with system_context(reason="workflows.engine.advance"), transaction.atomic():
-        run = run_model.objects.select_for_update().select_related("workflow").get(pk=run_id)
+        run = run_model.objects.lock_if_supported().select_related("workflow").get(pk=run_id)
         if run.status in RUN_TERMINAL:
             return {"claimed": 0}
 
@@ -158,7 +158,7 @@ def execute(step_run_id: int, *, now: datetime | None = None) -> dict[str, int]:
         impl_class = step_run.step.resolve_impl("step_class", default="handler")
         setattr(step_run, "_engine_now", timestamp)
     with system_context(reason="workflows.engine.execute.attempt"), transaction.atomic():
-        locked = step_run_model.objects.select_for_update().select_related("run").get(pk=step_run_id)
+        locked = step_run_model.objects.lock_if_supported().select_related("run").get(pk=step_run_id)
         if locked.status != StepRunStatus.STARTED or locked.run.status in RUN_TERMINAL:
             return {"executed": 0}
         locked.record_attempt(heartbeat_at=timestamp)
@@ -179,7 +179,7 @@ def execute(step_run_id: int, *, now: datetime | None = None) -> dict[str, int]:
     wait_until: datetime | None = None
     run_id: int | None = None
     with system_context(reason="workflows.engine.execute.persist"), transaction.atomic():
-        locked = step_run_model.objects.select_for_update().select_related("run").get(pk=step_run_id)
+        locked = step_run_model.objects.lock_if_supported().select_related("run").get(pk=step_run_id)
         run_id = locked.run_id
         if locked.status != StepRunStatus.STARTED or locked.run.status in RUN_TERMINAL:
             return {"executed": 0}
@@ -190,7 +190,7 @@ def execute(step_run_id: int, *, now: datetime | None = None) -> dict[str, int]:
         elif result.kind == "done":
             locked.mark_succeeded(output=result.output, outcome=result.outcome)
         elif result.kind == "wait":
-            locked.mark_waiting(until=result.until, event=result.event, resume_state=result.resume_state)
+            locked.mark_waiting(until=result.until, resume_state=result.resume_state)
             wait_until = result.until
         elif result.kind == "suspend":
             _suspend_step_run(locked, result)
@@ -213,13 +213,13 @@ def cancel(run: Any) -> None:
     run_id = run.pk if hasattr(run, "pk") else int(run)
     child_ids: list[int] = []
     with system_context(reason="workflows.engine.cancel"), transaction.atomic():
-        locked = run_model.objects.select_for_update().get(pk=run_id)
+        locked = run_model.objects.lock_if_supported().get(pk=run_id)
         if locked.status in RUN_TERMINAL:
             return
         child_ids = list(
             run_model.objects.filter(parent_step_run__run=locked).values_list("pk", flat=True).order_by("pk")
         )
-        for step_run in step_run_model.objects.select_for_update().filter(run=locked).order_by("pk"):
+        for step_run in step_run_model.objects.lock_if_supported().filter(run=locked).order_by("pk"):
             if step_run.status == StepRunStatus.SCHEDULED:
                 step_run.mark_canceled()
             elif step_run.status == StepRunStatus.WAITING:
@@ -263,7 +263,7 @@ def reap(*, now: datetime | None = None) -> dict[str, int]:
     run_ids: list[int] = []
     with system_context(reason="workflows.engine.reap"), transaction.atomic():
         stale_rows = list(
-            step_run_model.objects.select_for_update()
+            step_run_model.objects.lock_if_supported()
             .filter(status=StepRunStatus.STARTED, heartbeat_at__lt=deadline)
             .order_by("pk")
         )
@@ -292,7 +292,7 @@ def decide(decision: Any, verdict: str, *, payload: Any = None, actor: Any = Non
     run_id: int | None = None
     with system_context(reason="workflows.engine.decide"), transaction.atomic():
         locked = (
-            decision_model.objects.select_for_update()
+            decision_model.objects.lock_if_supported()
             .select_related("step_run", "step_run__run", "step_run__step")
             .get(pk=decision_id)
         )
@@ -347,8 +347,8 @@ def override_run(run: Any, next_steps: Iterable[Any], *, actor: Any) -> Any:
     step_ids = [step.pk if hasattr(step, "pk") else int(step) for step in next_steps]
 
     with system_context(reason="workflows.engine.override"), transaction.atomic():
-        locked = run_model.objects.select_for_update().get(pk=run_id)
-        for step_run in step_run_model.objects.select_for_update().filter(run=locked, status__in=list(STEP_ACTIVE)):
+        locked = run_model.objects.lock_if_supported().get(pk=run_id)
+        for step_run in step_run_model.objects.lock_if_supported().filter(run=locked, status__in=list(STEP_ACTIVE)):
             step_run.mark_canceled()
         override = step_run_model.objects.create(
             run=locked,
@@ -361,13 +361,17 @@ def override_run(run: Any, next_steps: Iterable[Any], *, actor: Any) -> Any:
             updated_by_id=actor_id,
         )
         for step_id in step_ids:
-            row = step_run_model.objects.create(
-                run=locked,
-                step_id=step_id,
-                map_index=-1,
-                status=StepRunStatus.SCHEDULED,
-                input={},
-            )
+            row = step_run_model.objects.filter(run=locked, step_id=step_id, map_index=-1).first()
+            if row is None:
+                row = step_run_model.objects.create(
+                    run=locked,
+                    step_id=step_id,
+                    map_index=-1,
+                    status=StepRunStatus.SCHEDULED,
+                    input={},
+                )
+            elif row.status in STEP_TERMINAL:
+                row.reschedule_for_override(input={})
             row.previous.set([override])
         if locked.status == RunStatus.WAITING:
             locked.resume()
@@ -770,7 +774,7 @@ def _resolve_timed_decision(
     decision_model = _model("Decision")
     with system_context(reason="workflows.engine.decision_timer"), transaction.atomic():
         decision = (
-            decision_model.objects.select_for_update()
+            decision_model.objects.lock_if_supported()
             .select_related("step_run", "step_run__run", "step_run__step")
             .filter(pk=decision_id)
             .first()
@@ -803,7 +807,7 @@ def _expire_pending_decisions(step_run: Any, *, resolved_by: str) -> None:
     """Expire pending decisions attached to a canceled waiting step-run."""
 
     decision_model = _model("Decision")
-    pending = decision_model.objects.select_for_update().filter(
+    pending = decision_model.objects.lock_if_supported().filter(
         step_run=step_run, verdict=VERDICT_PENDING
     )
     for decision in pending:
@@ -849,7 +853,7 @@ def _terminal_step_runs(run: Any) -> Iterable[Any]:
 
 def _process_map_steps(run: Any, *, timestamp: datetime) -> None:
     map_rows = list(
-        run.step_runs.select_for_update()
+        run.step_runs.lock_if_supported()
         .select_related("step")
         .filter(step__step_class="map", map_index=-1, status__in=[StepRunStatus.SCHEDULED, StepRunStatus.WAITING])
         .order_by("pk")
@@ -899,7 +903,7 @@ def _complete_map_step_if_ready(run: Any, step_run: Any) -> None:
         return
     target = _model("Step").objects.get(pk=target_id)
     children = list(
-        run.step_runs.select_for_update()
+        run.step_runs.lock_if_supported()
         .filter(step=target, map_index__gte=0)
         .order_by("map_index")
     )
@@ -1157,7 +1161,7 @@ def _same_step_run(left: Any | None, right: Any | None) -> bool:
 
 def _claim_due_steps(run: Any, *, timestamp: datetime) -> list[int]:
     due = list(
-        run.step_runs.select_for_update()
+        run.step_runs.lock_if_supported()
         .filter(
             models.Q(status=StepRunStatus.SCHEDULED)
             | models.Q(status=StepRunStatus.WAITING, wait_until__isnull=False, wait_until__lte=timestamp)
@@ -1299,10 +1303,19 @@ def _fail_run(run: Any, error: str, *, failed_step_run: Any) -> None:
 def _start_error_workflow(run: Any, *, failed_step_run: Any) -> None:
     """Start the pinned workflow's error workflow for ``failed_step_run``."""
 
+    if _is_error_workflow_run(run):
+        return
     lineage = getattr(run.workflow, "error_workflow", None)
     if lineage is None:
         return
     start(lineage, subject=run, actor=None, parent_step_run=failed_step_run)
+
+
+def _is_error_workflow_run(run: Any) -> bool:
+    """Return whether ``run`` was started by an error-workflow failure path."""
+
+    parent = getattr(run, "parent_step_run", None)
+    return parent is not None
 
 
 def _object_ref(value: Any) -> tuple[Any | None, Any | None]:

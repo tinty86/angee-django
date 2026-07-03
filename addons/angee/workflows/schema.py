@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import strawberry
 import strawberry_django
@@ -121,7 +121,6 @@ class StepRunType(AngeeNode):
     outcome: auto
     attempt: auto
     wait_until: auto
-    wait_event: auto
     heartbeat_at: auto
     error: auto
     stacktrace: auto
@@ -131,7 +130,7 @@ class StepRunType(AngeeNode):
 
 @strawberry_django.type(Decision)
 class DecisionType(AngeeNode):
-    """Public projection of one awaited workflow decision."""
+    """Admin projection of one awaited workflow decision."""
 
     step_run: StepRunType
     priority: auto
@@ -146,6 +145,44 @@ class DecisionType(AngeeNode):
     escalate_at: auto
     created_at: auto
     updated_at: auto
+
+
+@strawberry_django.type(Decision, name="DecisionType")
+class PublicDecisionType(AngeeNode):
+    """Public projection of one awaited workflow decision."""
+
+    priority: auto
+    action: auto
+    payload: JSON
+    verdict: auto
+    resolution: JSON
+    resolved_by: auto
+    attempts: auto
+    max_attempts: auto
+    expires_at: auto
+    escalate_at: auto
+    created_at: auto
+    updated_at: auto
+
+    @strawberry.field
+    def workflow_name(self) -> str:
+        """Return the workflow display name without exposing the StepRun journal."""
+
+        with system_context(reason="workflows.graphql.public_decision.workflow_name"):
+            step_run = cast(Any, self).step_run
+            if step_run.step_id is not None:
+                return str(step_run.step.workflow.name)
+            return str(step_run.run.workflow.name)
+
+    @strawberry.field
+    def step_name(self) -> str:
+        """Return the step display name without exposing the StepRun journal."""
+
+        with system_context(reason="workflows.graphql.public_decision.step_name"):
+            step_run = cast(Any, self).step_run
+            if step_run.step_id is not None:
+                return str(step_run.step.name or step_run.step.key)
+            return str(step_run.system_kind or step_run.pk)
 
 
 @strawberry.input
@@ -298,6 +335,34 @@ _DECISION_RESOURCE = hasura_model_resource(
     delete=False,
     field_id_decode={"step_run": public_pk_decoder(StepRun)},
 )
+_PUBLIC_DECISION_RESOURCE = hasura_model_resource(
+    PublicDecisionType,
+    model=Decision,
+    name="workflow_decisions",
+    filterable=[
+        "id",
+        "priority",
+        "action",
+        "verdict",
+        "expires_at",
+        "escalate_at",
+        "updated_at",
+    ],
+    sortable=[
+        "priority",
+        "action",
+        "verdict",
+        "expires_at",
+        "escalate_at",
+        "created_at",
+        "updated_at",
+    ],
+    aggregatable=["id", "priority", "attempts"],
+    groupable=["action", "verdict", "updated_at"],
+    insert=False,
+    update=False,
+    delete=False,
+)
 
 
 @strawberry.type
@@ -317,8 +382,27 @@ class WorkflowActionMutation:
 
 
 @strawberry.type
-class DecisionMutation:
+class PublicDecisionMutation:
     """Public decision resolution mutation."""
+
+    @strawberry.mutation
+    def decide(
+        self,
+        info: strawberry.Info,
+        decision: PublicID,
+        verdict: str,
+        payload: JSON | None = None,
+    ) -> PublicDecisionType:
+        """Resolve one pending decision as the signed-in session actor."""
+
+        actor = session_user(info)
+        target = resolve_action_target(Decision, decision, reason="workflows.graphql.decide")
+        return cast(PublicDecisionType, engine.decide(target, verdict, payload=payload, actor=actor))
+
+
+@strawberry.type
+class ConsoleDecisionMutation:
+    """Console decision resolution mutation."""
 
     @strawberry.mutation
     def decide(
@@ -421,14 +505,14 @@ _CONSOLE_TYPES: list[object] = [
 ]
 
 _PUBLIC_TYPES: list[object] = [
-    DecisionType,
-    *_DECISION_RESOURCE.types,
+    PublicDecisionType,
+    *_PUBLIC_DECISION_RESOURCE.types,
 ]
 
 schemas = {
     "public": {
-        "query": [_DECISION_RESOURCE.query],
-        "mutation": [DecisionMutation],
+        "query": [_PUBLIC_DECISION_RESOURCE.query],
+        "mutation": [PublicDecisionMutation],
         "subscription": [changes(Decision, field="decisionChanged")],
         "types": _PUBLIC_TYPES,
     },
@@ -450,7 +534,7 @@ schemas = {
             WorkflowActionMutation,
             WorkflowRunActionMutation,
             TriggerActionMutation,
-            DecisionMutation,
+            ConsoleDecisionMutation,
         ],
         "subscription": [
             changes(WorkflowRun, field="workflowRunChanged"),

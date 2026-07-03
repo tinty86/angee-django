@@ -549,12 +549,12 @@ importers:
       '@angee/app':
         specifier: workspace:*
         version: link:../../../../angee/web/app
+      '@angee/metadata':
+        specifier: workspace:*
+        version: link:../../../../angee/web/metadata
       '@angee/refine':
         specifier: workspace:*
         version: link:../../../../angee/web/refine
-      '@angee/resources':
-        specifier: workspace:*
-        version: link:../../../../angee/web/resources
       '@angee/ui':
         specifier: workspace:*
         version: link:../../../../angee/web/ui

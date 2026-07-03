@@ -20,6 +20,7 @@ from rebac import system_context
 from angee.agents.backends import InferenceRequest, InferenceResponse
 from angee.workflows import engine
 from angee.workflows import models as workflow_models
+from angee.workflows.steps import TransientStepError
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
@@ -286,6 +287,46 @@ def test_backend_error_routes_failed_outcome(
     assert agent_row.outcome == "failed"
     assert agent_row.output["error"]["message"] == "backend unavailable"
     assert failed_row.status == workflow_models.StepRunStatus.STARTED
+
+
+def test_agent_step_reraises_transient_backend_errors(
+    workflows_agents_tables: None,
+    no_workflow_queue: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retryable provider errors stay transient for the workflow task strategy."""
+
+    del workflows_agents_tables, no_workflow_queue
+    model = _inference_model("stub-transient")
+
+    def chat(self: StubInferenceBackend, request: InferenceRequest) -> InferenceResponse:
+        del self, request
+        raise TransientStepError("rate limited")
+
+    monkeypatch.setattr(StubInferenceBackend, "chat", chat)
+    workflow = _published_workflow(
+        steps=(
+            {
+                "key": "agent",
+                "step_class": "agent",
+                "config": {
+                    "provider": model.provider.sqid,
+                    "model": model.name,
+                    "prompt_template": "Retry later.",
+                    "retry": {"max_attempts": 2},
+                },
+            },
+        ),
+        edges=(),
+    )
+    run = _start_run(workflow)
+    step_run = advance_once(run)[0]
+
+    with pytest.raises(TransientStepError, match="rate limited"):
+        engine.execute(step_run.pk)
+
+    step_run.refresh_from_db()
+    assert step_run.status == workflow_models.StepRunStatus.STARTED
 
 
 def _inference_model(slug: str) -> InferenceModel:

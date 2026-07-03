@@ -48,7 +48,7 @@ export function workflowGraphNodes(
 ): GraphViewNode<WorkflowGraphNodeKind, { step: WorkflowGraphStep }>[] {
   return steps.map((step) => {
     const stepRun = statusByStep.get(step.id);
-    const kind = (stepRun?.status ?? step.step_class) as WorkflowGraphNodeKind;
+    const kind = workflowNodeKind(stepRun?.status ?? step.step_class);
     return {
       id: step.id,
       kind,
@@ -75,6 +75,14 @@ export function workflowGraphEdges(
     label: edge.condition || undefined,
     meta: { edge },
   }));
+}
+
+function workflowNodeKind(value: string): WorkflowGraphNodeKind {
+  const normalized = value.toUpperCase();
+  if (normalized in workflowNodeStyles) {
+    return normalized as WorkflowGraphNodeKind;
+  }
+  return "HANDLER";
 }
 
 export function latestStepRunByStep(

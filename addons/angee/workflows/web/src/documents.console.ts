@@ -144,7 +144,6 @@ export const WorkflowRunDetailDocument = graphql(`
       outcome
       attempt
       wait_until
-      wait_event
       error
       stacktrace
       created_at
