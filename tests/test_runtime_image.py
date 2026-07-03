@@ -18,5 +18,8 @@ def test_runtime_image_prepares_bind_mount_outputs_before_dropping_privileges() 
     assert "COPY docker/runtime-entrypoint.sh /usr/local/bin/angee-django-entrypoint" in dockerfile
     assert 'ENTRYPOINT ["tini", "--", "/usr/local/bin/angee-django-entrypoint"]' in dockerfile
     assert "mkdir -p /app/runtime /app/.angee/data" in entrypoint
-    assert "chown -R angee:angee /app/runtime /app/.angee/data" in entrypoint
+    assert "chown -R angee:angee /app/runtime" in entrypoint
+    assert "chown angee:angee /app/.angee/data" in entrypoint
+    assert "! -name pgdata -exec chown -R angee:angee" in entrypoint
+    assert "chown -R angee:angee /app/runtime /app/.angee/data" not in entrypoint
     assert 'exec gosu angee "$@"' in entrypoint
