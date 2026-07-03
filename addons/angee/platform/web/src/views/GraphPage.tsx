@@ -31,13 +31,13 @@ export function GraphPage(): ReactElement {
   }
 
   return (
-    <div className="h-full min-h-0 bg-sheet">
+    <div className="console-route-viewport bg-sheet">
       <GraphView
         nodes={nodes}
         edges={edges}
         nodeStyles={NODE_STYLES}
         layout={{ rankdir: "LR" }}
-        className="h-full"
+        className="console-route-canvas"
         onNodeClick={(node: GraphViewNode<"model">) =>
           navigate({ to: modelDetailPath(node.id) })
         }
