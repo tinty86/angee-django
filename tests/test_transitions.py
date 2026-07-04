@@ -6,10 +6,14 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, models
+from django.test import override_settings
 
 from angee.base.fields import StateField
 from angee.base.transitions import StateTransitions, TransitionNotAllowed, save_state, transition
+
+POLICY_SETTING = "ANGEE_TEST_TRANSITION_POLICY"
 
 
 def is_ready(instance: Any) -> bool:
@@ -180,3 +184,117 @@ def test_transition_not_allowed_message_names_field_source_and_target(transition
     assert "state" in message
     assert "done" in message
     assert "running" in message
+
+
+class PolicyTask(models.Model):
+    """Throwaway model exercising the settings-backed transition policy overlay."""
+
+    class State(models.TextChoices):
+        """Finite states for the policy-overlay tests."""
+
+        DRAFT = "draft", "Draft"
+        POSTED = "posted", "Posted"
+        CANCELLED = "cancelled", "Cancelled"
+
+    state = StateField(choices_enum=State, default=State.DRAFT)
+
+    state_transitions = StateTransitions(
+        state,
+        {State.DRAFT: [State.POSTED, State.CANCELLED]},
+        policy_setting=POLICY_SETTING,
+    )
+
+    class Meta:
+        """Model options for the policy test model."""
+
+        app_label = "tests"
+
+    @transition(state, source=State.DRAFT, target=State.POSTED)
+    def post(self) -> None:
+        """Post a draft row — a declared edge."""
+
+    @transition(state, source=State.DRAFT, target=State.CANCELLED)
+    def cancel(self) -> None:
+        """Cancel a draft row — a declared edge a deny overlay can disable."""
+
+    @transition(state, source=State.POSTED, target=State.DRAFT, policy="posted->draft")
+    def reopen(self) -> None:
+        """Reopen a posted row — a policy edge, absent from the declared graph."""
+
+
+@pytest.fixture
+def policy_task_table() -> Iterator[None]:
+    """Create the throwaway policy table for one test."""
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(PolicyTask)
+    try:
+        yield
+    finally:
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(PolicyTask)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_policy_absent_uses_declared_graph(policy_task_table: None) -> None:
+    """With no overlay set, declared edges run and the policy edge stays disabled."""
+
+    task = PolicyTask.objects.create()
+    task.post()
+    assert task.state == PolicyTask.State.POSTED
+
+    with pytest.raises(TransitionNotAllowed):
+        task.reopen()
+    assert task.state == PolicyTask.State.POSTED
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: {"allow": [["posted", "draft"]]}})
+def test_policy_allow_enables_edge_forbidden_by_graph(policy_task_table: None) -> None:
+    """An ``allow`` overlay enables a transition the declared graph omits."""
+
+    task = PolicyTask.objects.create(state=PolicyTask.State.POSTED)
+    task.reopen()
+    assert task.state == PolicyTask.State.DRAFT
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: {"deny": [["draft", "cancelled"]]}})
+def test_policy_deny_disables_declared_edge(policy_task_table: None) -> None:
+    """A ``deny`` overlay disables a transition the declared graph allows."""
+
+    task = PolicyTask.objects.create()
+    with pytest.raises(TransitionNotAllowed):
+        task.cancel()
+    assert task.state == PolicyTask.State.DRAFT
+
+    # A declared edge the overlay leaves untouched still runs.
+    task.post()
+    assert task.state == PolicyTask.State.POSTED
+
+
+def test_policy_marker_requires_a_policy_setting() -> None:
+    """A ``policy`` transition on a declaration without ``policy_setting`` fails fast."""
+
+    with pytest.raises(ImproperlyConfigured):
+
+        class Unresolvable(models.Model):
+            """Model whose policy edge has no settings key to resolve it."""
+
+            class State(models.TextChoices):
+                """States for the misconfigured policy model."""
+
+                DRAFT = "draft", "Draft"
+                POSTED = "posted", "Posted"
+
+            state = StateField(choices_enum=State, default=State.DRAFT)
+            state_transitions = StateTransitions(state, {State.DRAFT: [State.POSTED]})
+
+            class Meta:
+                """Model options for the misconfigured policy model."""
+
+                app_label = "tests"
+
+            @transition(state, source=State.POSTED, target=State.DRAFT, policy="posted->draft")
+            def reopen(self) -> None:
+                """A policy edge with no ``policy_setting`` to govern it."""
