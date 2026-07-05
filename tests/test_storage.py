@@ -521,14 +521,16 @@ def test_create_drive_gates_on_the_rebac_create_rule(drive: Any) -> None:
     """The ``storage/drive`` ``create`` rule authorizes admins and denies others.
 
     The de-elevated drive Hasura insert carries no GraphQL gate and no elevated write:
-    the id-less insert is authorized by ``create = admin->member + manager``
-    (mirroring ``storage/backend``) against the request actor. Tested at the model
-    owner so the create rule is isolated from FK-read redaction: the const-arrow
-    ``admin->member`` resolves without a per-object tuple, so a platform admin
-    creates while an unprivileged actor is denied with ``PermissionDenied`` and an
-    anonymous request resolves no actor. (The ``manager`` arm needs a per-object
-    ``manager`` tuple an id-less insert cannot carry — the same admin-only outcome
-    ``storage/backend`` already relies on.)
+    the id-less insert is authorized by
+    ``create = admin->member + manager->effective_member`` (mirroring
+    ``storage/backend``) against the request actor. Tested at the model owner so the
+    create rule is isolated from FK-read redaction: both arms are const-backed and
+    resolve without a per-object tuple, so a platform admin creates while an
+    unprivileged actor — a member of neither ``angee/role:admin`` nor
+    ``storage/role:storage_admin`` — is denied with ``PermissionDenied`` and an
+    anonymous request resolves no actor. (The storage_admin reach of the ``manager``
+    arm is probed tuple-free in
+    ``test_storage_admin_role_reaches_manager_gated_rows_tuple_free``.)
     """
 
     admin = get_user_model().objects.create_superuser(
@@ -549,6 +551,43 @@ def test_create_drive_gates_on_the_rebac_create_rule(drive: Any) -> None:
         Drive._default_manager.create(backend=drive.backend, slug="anon-drive", name="Anon Drive")
     with system_context(reason="test drive create denial"):
         assert not Drive._base_manager.filter(slug__in=["bob-drive", "anon-drive"]).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_storage_admin_role_reaches_manager_gated_rows_tuple_free(drive: Any) -> None:
+    """A ``storage_admin`` grant opens the const-backed ``manager`` arm tuple-free.
+
+    ``storage/backend`` and ``storage/drive`` reach every effective member of
+    ``storage/role:storage_admin`` through ``manager->effective_member`` (the F-g
+    const canon). The role grant is the *only* row written — no per-object
+    ``manager`` tuple — so the reach flips on membership alone, and a
+    non-owning/non-admin actor is denied until granted.
+    """
+
+    from rebac.models import active_relationship_model
+
+    manager_user = get_user_model().objects.create_user(
+        username="storage-manager", email="storage-manager@example.com"
+    )
+
+    with actor_context(manager_user):
+        assert not drive.backend.has_access("read")
+        assert not drive.has_access("read")
+
+    grant(actor=manager_user, role="storage/role:storage_admin")
+
+    with actor_context(manager_user):
+        for action in ("read", "write", "delete"):
+            assert drive.backend.has_access(action), f"backend {action}"
+            assert drive.has_access(action), f"drive {action}"
+
+    # Tuple-free: the grant wrote a role membership, never a backend/drive tuple.
+    with system_context(reason="probe manager reach is tuple-free"):
+        assert not (
+            active_relationship_model()
+            .objects.filter(resource_type__in=["storage/backend", "storage/drive"])
+            .exists()
+        )
 
 
 @pytest.mark.django_db(transaction=True)

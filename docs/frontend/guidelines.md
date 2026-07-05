@@ -440,6 +440,16 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **A new web package needs `pnpm install` + a Vite restart** (Vite snapshots
   workspace packages at start) plus registration in the host `main.tsx` addons and
   `package.json`.
+- **Prebundled `@angee/*` source edits are cache-busted by source signature, not
+  a manual wipe.** A project that consumes `@angee/*` as installed packages
+  (`prebundleAngeePackages: true`) prebundles them; Vite's optimizer hash comes
+  from the lockfile + manifests, never package source, so a workspace edit to a
+  linked `@angee/*` package (same version) would otherwise be served stale (the
+  slice-1 live-verify trap). `defineAngeeWebViteConfig` (`@angee/app/vite`) hashes
+  each package's on-disk source mtimes and sets `optimizeDeps.force` when it
+  changed vs a persisted marker — a source edit re-optimizes, an unchanged tree
+  stays cached. The in-repo example excludes `@angee/*` (linked source, HMR) so
+  this never applies there.
 - **Start new addon web packages from `templates/addons/web`.** The Copier template
   owns the current ceremony: `defineBaseAddon`, `resourcePageRoutes`, lazy routed
   pages, `createNamespaceT`, `expectValidBaseAddon`, and package/test wiring.

@@ -355,6 +355,20 @@ data through REBAC, never a queryset bypass.
   with a `managed=False` abstract anchor model (passes `rebac.E009`, emits no
   table) plus that const admin, and keep an `| angee/role:admin#member` arm in
   `member` or `rebac.W004` fires.
+- **Const-backing is the one canon for tuple-free role reach.** A resource that
+  grants a *named* role (e.g. `storage_admin`, `accounting_admin`) declares a
+  const-backed relation to the role namespace and arrows through
+  `effective_member`: `relation manager: storage/role // rebac:const=storage_admin`
+  with `permission … = manager->effective_member` (mirror of `admin->member`).
+  Never a pinned-id userset allowed subject
+  (`storage/role:storage_admin#effective_member`): nobody writes the per-row tuple
+  it needs and the local backend never synthesises one — the subject-set walk
+  scans relations only, so a permission-typed `#effective_member` userset denies.
+  The const *target* role namespace needs its own `definition` + `managed=False`
+  anchor model (like the resource's const admin), because a **non-member** check
+  walks the arrow into `<ns>/role#admin`; without the anchor that const cannot
+  resolve and the evaluator raises instead of returning a clean deny. Bump the
+  package `@rebac_schema_revision` when migrating a def to the const shape.
 - There is no `rebac_roles` command — grant roles with `rebac.roles.grant`. A
   superuser created without a real `save()` (bulk_create, loaddata, or skipped as
   unchanged) is never in `angee/role:admin#member`, so const-admin reach fails
