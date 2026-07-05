@@ -405,6 +405,10 @@ class ThreadAttachmentManager(AngeeManager):
                     "subject_normalized": normalize_subject(subject or str(record)),
                     "modality": thread_model.Modality.GROUP,
                     "visibility": thread_model.Visibility.PRIVATE,
+                    # The host owns whether its record chatter streams over changes();
+                    # stamp its opt-in onto the thread so broadcasts_changes() is O(1)
+                    # at publish time and never re-resolves the polymorphic target.
+                    "host_broadcasts_changes": bool(getattr(record, "thread_broadcasts_changes", False)),
                 },
             )
             attachment, _created = self.model._base_manager.get_or_create(
@@ -1461,9 +1465,7 @@ class MessageManager(AngeeManager.from_queryset(MessageQuerySet)):  # type: igno
                 owner_id=owner_id,
                 recipient_user_ids=recipient_user_ids,
             )
-            self._bump_thread(type(thread), thread.pk, sent_at)
-        thread.message_count = (thread.message_count or 0) + 1
-        thread.last_message_at = sent_at
+            self._advance_thread(thread, sent_at)
         return message
 
     def set_reaction(self, message: Any, *, reaction: str, action: str = "toggle", user: Any) -> Any:
@@ -1575,28 +1577,68 @@ class MessageManager(AngeeManager.from_queryset(MessageQuerySet)):  # type: igno
         thread.last_message_at = summary["last_sent_at"]
         thread.save(update_fields=("message_count", "last_message_at", "updated_at"))
 
-    def _bump_thread(self, thread_model: Any, thread_id: Any, sent_at: Any) -> None:
-        """Increment a thread's message count and monotonically advance its last-message time.
+    def _thread_advance_values(self, sent_at: Any) -> dict[str, Any]:
+        """Return the monotonic counter advances shared by the post and ingest bumps.
 
         ``message_count`` rides an ``F()`` delta (never read-modify-write) and
         ``last_message_at`` advances via ``Greatest``/``Coalesce`` so out-of-order
-        ingest never regresses it. ``updated_at`` is stamped to the current time
-        because an ``.update()`` bypasses the ``auto_now`` save hook — the same
-        stamp :meth:`_recount_thread` applies via ``save`` — so the row's modified
-        time never lags the counters it just changed. It is the *current* time, never
-        the (possibly null, possibly backfilled) ``sent_at``. Shared by a freshly
-        created message and by the thread that *gains* a re-threaded one.
+        ingest never regresses it. The advances are save-time expressions, so the
+        same values drive an instance ``save`` and a queryset ``.update()``.
         """
 
-        updates: dict[str, Any] = {
-            "message_count": models.F("message_count") + 1,
-            "updated_at": timezone.now(),
-        }
+        values: dict[str, Any] = {"message_count": models.F("message_count") + 1}
         if sent_at is not None:
-            updates["last_message_at"] = Greatest(
+            values["last_message_at"] = Greatest(
                 Coalesce(models.F("last_message_at"), sent_at),
                 sent_at,
             )
+        return values
+
+    def _advance_thread(self, thread: Any, sent_at: Any) -> None:
+        """Advance the posted-to thread via an instance ``save`` so ``post_save`` fires.
+
+        The ingest path bumps a thread by id with a queryset ``.update()``
+        (:meth:`_bump_thread`), which fires no ``post_save`` — so a record-attached
+        thread never reached the ``changes`` publisher on a new post. A fresh comment
+        already holds the loaded thread, so it saves the instance instead: ``post_save``
+        fires once and a host whose :meth:`~angee.messaging.models.Thread.broadcasts_changes`
+        is ``True`` streams one ``threadChanged`` event (a silent thread still emits
+        nothing — the publisher short-circuits on ``broadcasts_changes()``).
+
+        The counter advance is a system denormalisation, not an actor write on the
+        thread row: a poster holds the record's *post* access, not the thread's
+        ``write``, so the save runs under ``system_context`` — the same elevation the
+        queryset ``.update()`` bypassed the write gate to get, and the pattern the
+        activity verbs already use for bookkeeping writes. ``updated_at`` rides the
+        ``auto_now`` save hook. Concrete counter values are restored on the instance
+        afterward for callers that reuse it, because a saved ``F()`` expression leaves a
+        deferred value on the attribute.
+        """
+
+        prior_count = thread.message_count or 0
+        values = self._thread_advance_values(sent_at)
+        for field, expression in values.items():
+            setattr(thread, field, expression)
+        with system_context(reason="messaging.thread.bump"):
+            thread.save(update_fields=tuple(values))
+        thread.message_count = prior_count + 1
+        if sent_at is not None:
+            thread.last_message_at = sent_at
+
+    def _bump_thread(self, thread_model: Any, thread_id: Any, sent_at: Any) -> None:
+        """Advance a thread's counters by id with a queryset ``.update()`` (the ingest path).
+
+        ``updated_at`` is stamped to the current time because an ``.update()`` bypasses
+        the ``auto_now`` save hook — the same stamp :meth:`_recount_thread` applies via
+        ``save`` — so the row's modified time never lags the counters it just changed.
+        It is the *current* time, never the (possibly null, possibly backfilled)
+        ``sent_at``. Used by the ingest write path, which resolves the thread that
+        *gains* a re-threaded message by id and does not stream chatter; a fresh comment
+        advances its loaded thread through :meth:`_advance_thread` so ``post_save`` fires.
+        """
+
+        updates = self._thread_advance_values(sent_at)
+        updates["updated_at"] = timezone.now()
         thread_model._base_manager.filter(pk=thread_id).update(**updates)
 
     def ingest(

@@ -80,6 +80,17 @@ class ThreadedModelMixin(models.Model):
     thread_post_access: ClassVar[str] = "write"
     """Record permission required to post a chatter message."""
 
+    thread_broadcasts_changes: ClassVar[bool] = False
+    """Whether this host streams its record-attached chatter over ``changes(Thread)``.
+
+    Default ``False`` keeps record chatter isolated to the record-scoped
+    ``record_thread`` surface: a threaded record stays silent on the generic
+    ``changes`` subscription (F-v). A host that opts in (a chat room) stamps the flag
+    onto its chatter thread at attachment (``host_broadcasts_changes``), so its
+    members — holding ``messaging/thread.reader`` — receive member-gated
+    ``threadChanged`` events while every other record's chatter stays isolated.
+    """
+
     thread_read_access: ClassVar[str] = "read"
     """Record permission required to read/react to personal chatter state."""
 
@@ -832,6 +843,14 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
     message_count = models.PositiveIntegerField(default=0, db_index=True)
     last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
     metadata = models.JSONField(blank=True, default=dict)
+    host_broadcasts_changes = models.BooleanField(default=False)
+    """Whether the attached host opted this record thread into ``changes`` broadcast.
+
+    Stamped from the host's :attr:`ThreadedModelMixin.thread_broadcasts_changes` at
+    attachment. A composition fact, not a client-writable column: it never enters the
+    thread resource's write surface. Default ``False`` keeps record chatter isolated
+    (F-v); a host that opts in flips :meth:`broadcasts_changes` on for its thread only.
+    """
 
     objects = ThreadManager()
 
@@ -856,15 +875,22 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
         return self.subject or f"thread:{self.public_id}"
 
     def broadcasts_changes(self) -> bool:
-        """Keep record-attached chatter off the generic ``changes`` subscription.
+        """Whether this thread's changes reach the generic ``changes`` subscription.
 
         A thread bound to a record through a ``ThreadAttachment`` is chatter,
         reachable only through the record-scoped ``record_thread`` payload (gated on
         the parent record's read); its own ``owner``/``admin`` read would otherwise
         deliver its change events to a subject who cannot read the record — the same
         isolation ``ThreadQuerySet.inbox()`` gives the query surface. See F-v part 2.
+
+        A host opts back in per model (a chat room): ``host_broadcasts_changes``,
+        stamped from :attr:`ThreadedModelMixin.thread_broadcasts_changes` at
+        attachment, streams the thread's changes to its members (who hold
+        ``messaging/thread.reader``) while every non-opted record thread stays silent.
         """
 
+        if self.host_broadcasts_changes:
+            return True
         attachment_model = apps.get_model("messaging", "ThreadAttachment")
         return not attachment_model._base_manager.filter(thread_id=self.pk).exists()
 
@@ -1401,20 +1427,19 @@ class Message(SqidMixin, AuditMixin, AngeeModel, HistoryMixin):
         return self.subject or self.preview or f"message:{self.public_id}"
 
     def broadcasts_changes(self) -> bool:
-        """Keep record-attached chatter off the generic ``changes`` subscription.
+        """Whether this message's changes reach the generic ``changes`` subscription.
 
-        A message whose thread carries a ``ThreadAttachment`` is record chatter,
-        reachable only through ``record_thread`` (gated on the parent record's
-        read); its own ``owner``/``admin`` read would otherwise deliver its change
-        events to a subject who cannot read the record. A message with no thread (an
-        ingest whose thread merged away) is not record-attached and still broadcasts
-        — the emission mirror of ``MessageQuerySet.inbox()``. See F-v part 2.
+        A message mirrors its thread, the owner of the broadcast decision: record
+        chatter (a thread carrying a ``ThreadAttachment``, not opted in) stays off the
+        generic surface — reachable only through ``record_thread`` (gated on the
+        parent record's read) — while a message on an opted-in host thread, or one
+        with no thread (an ingest whose thread merged away), broadcasts. The emission
+        mirror of ``MessageQuerySet.inbox()``. See F-v part 2.
         """
 
         if self.thread_id is None:
             return True
-        attachment_model = apps.get_model("messaging", "ThreadAttachment")
-        return not attachment_model._base_manager.filter(thread_id=self.thread_id).exists()
+        return self.thread.broadcasts_changes()
 
 
 class ThreadNotification(SqidMixin, AuditMixin, AngeeModel):

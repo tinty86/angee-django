@@ -10,6 +10,7 @@ direction.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db import connection, models
+from django.db.models.signals import post_save
 from django.test.utils import CaptureQueriesContext
 from rebac import (
     PermissionDenied,
@@ -34,6 +36,9 @@ from rebac import (
 
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
+from angee.graphql import publishing
+from angee.graphql.access import ChangeReadGate
+from angee.graphql.events import ChangePayload
 from angee.messaging.backends import ParsedHandle, ParsedMessage, ParsedPart, ParsedRecipient
 from angee.messaging.managers import normalize_subject, strip_null_bytes
 from angee.messaging.models import Fragment as AbstractFragment
@@ -353,6 +358,32 @@ class ThreadedTicket(SqidMixin, AuditMixin, ThreadedModelMixin, AngeeModel):
         return self.title
 
 
+class BroadcastRoom(SqidMixin, AuditMixin, ThreadedModelMixin, AngeeModel):
+    """A threaded host that opts its chatter into the ``changes(Thread)`` stream.
+
+    Stands in for a chat room: ``thread_broadcasts_changes = True`` flips the F-stream
+    opt-in, so a post on this host's thread emits a member-gated ``threadChanged``
+    while every non-opted record thread (``ThreadedTicket``) stays silent.
+    """
+
+    sqid_prefix = "brm_"
+    thread_broadcasts_changes = True
+
+    title = models.CharField(max_length=160)
+
+    class Meta:
+        """Django model options for the broadcasting threaded test record."""
+
+        abstract = False
+        app_label = "messaging"
+        db_table = "test_messaging_broadcast_room"
+
+    def __str__(self) -> str:
+        """Return the room title for thread subjects."""
+
+        return self.title
+
+
 # Parents before children so the on-demand table creation satisfies FK targets.
 MESSAGING_TEST_MODELS = (
     *STORAGE_TEST_MODELS,
@@ -378,6 +409,7 @@ MESSAGING_TEST_MODELS = (
     MessageEdge,
     Participant,
     ThreadedTicket,
+    BroadcastRoom,
     ChatterDoc,
     TrackedRecordParent,
     TrackedRecordChild,
@@ -1726,3 +1758,120 @@ def test_user_authored_post_still_denied_without_post_access(messaging_tables: N
             doc.message_post("Hello")
         with pytest.raises(PermissionDenied):
             doc.message_log("A note")
+
+
+@contextlib.contextmanager
+def _collecting_thread_broadcasts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[list[tuple[Any, dict[str, Any]]]]:
+    """Yield the change payloads broadcast for ``Thread`` while its publisher is wired.
+
+    Runs ``_broadcast`` and ``on_commit`` inline so a post's broadcast is observable
+    now, and connects only the ``Thread`` save publisher (leaving a globally wired one
+    untouched) so the collected list is exactly the ``threadChanged`` stream.
+    """
+
+    sent: list[tuple[Any, dict[str, Any]]] = []
+    monkeypatch.setattr(publishing, "_broadcast", lambda model, payload: sent.append((model, payload)))
+    monkeypatch.setattr(publishing.transaction, "on_commit", lambda callback: callback())
+    save_uid = f"angee-changes-{Thread._meta.label}-save"
+    already_wired = any(receiver[0][0] == save_uid for receiver in post_save.receivers)
+    post_save.connect(publishing._on_save, sender=Thread, dispatch_uid=save_uid)
+    try:
+        yield sent
+    finally:
+        if not already_wired:
+            post_save.disconnect(sender=Thread, dispatch_uid=save_uid)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_post_bumps_thread_through_an_instance_save(messaging_tables: None) -> None:
+    """A post advances the thread with an instance ``save``, so ``post_save`` fires once.
+
+    F-stream part B: the bump moved off the publisher-invisible queryset ``.update()``
+    onto ``save(update_fields=…)``, so the ``changes`` publisher (``post_save``) sees a
+    new post at all. The denormalised counters land exactly as the queryset bump left
+    them — the regression guard.
+    """
+
+    del messaging_tables
+    saves: list[dict[str, Any]] = []
+
+    def _record(sender: Any, instance: Any, created: bool, update_fields: Any = None, **kwargs: Any) -> None:
+        del sender, instance, kwargs
+        saves.append({"created": created, "update_fields": set(update_fields or ())})
+
+    post_save.connect(_record, sender=Thread, dispatch_uid="test-thread-bump-probe")
+    try:
+        with system_context(reason="test thread bump fires post_save"):
+            ticket = ThreadedTicket.objects.create(title="Bump case")
+            message = ticket.message_post("First post.")
+    finally:
+        post_save.disconnect(sender=Thread, dispatch_uid="test-thread-bump-probe")
+
+    # One thread INSERT (the lazy get_or_create) and exactly one bump UPDATE for the post.
+    bumps = [row for row in saves if not row["created"]]
+    assert len(bumps) == 1
+    assert {"message_count", "last_message_at"} <= bumps[0]["update_fields"]
+
+    thread = Thread._base_manager.get()
+    assert thread.message_count == 1
+    assert thread.last_message_at == message.sent_at
+
+
+@pytest.mark.django_db(transaction=True)
+def test_post_on_opted_in_host_emits_one_member_gated_thread_changed(
+    messaging_tables: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A post on an opted-in host emits one ``threadChanged``, gated to thread readers.
+
+    F-stream end to end: ``BroadcastRoom`` opts in (``thread_broadcasts_changes = True``),
+    so a post fires ``post_save`` (part B) and ``_publish`` broadcasts one ``threadChanged``
+    (part A). The event passes ``ChangeReadGate`` for a member holding ``thread.reader``
+    and is dropped for a non-member — no existence or activity leak on the socket.
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test opted-in room seed"):
+        member = user_model.objects.create_user(username="room-member", email="room-member@example.com")
+        stranger = user_model.objects.create_user(username="room-stranger", email="room-stranger@example.com")
+        room = BroadcastRoom.objects.create(title="general")
+        thread = room.message_thread(create=True)
+    _grant(thread, "reader", member)
+
+    with _collecting_thread_broadcasts(monkeypatch) as sent:
+        with system_context(reason="test opted-in room post"):
+            room.message_post("Live to the room.")
+
+    events = [payload for model, payload in sent if model is Thread]
+    assert len(events) == 1
+    assert events[0]["model"] == "messaging.Thread"
+    assert events[0]["action"] == "update"
+
+    change = ChangePayload.from_mapping(events[0])
+    assert ChangeReadGate(Thread, to_subject_ref(member)).filter(change) is not None
+    assert ChangeReadGate(Thread, to_subject_ref(stranger)).filter(change) is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_record_chatter_host_stays_silent_on_a_post(
+    messaging_tables: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-opted threaded host streams nothing on a post — F-v isolation intact.
+
+    The F-stream default is ``thread_broadcasts_changes = False``, so a record-chatter
+    thread (``ThreadedTicket``) never broadcasts: the bump-save change is inert for a
+    silent thread because ``_publish`` short-circuits on ``broadcasts_changes()``.
+    """
+
+    del messaging_tables
+    with system_context(reason="test record chatter silent seed"):
+        ticket = ThreadedTicket.objects.create(title="Silent case")
+        ticket.message_thread(create=True)
+
+    with _collecting_thread_broadcasts(monkeypatch) as sent:
+        with system_context(reason="test record chatter silent post"):
+            ticket.message_post("No one should stream this.")
+
+    assert [payload for model, payload in sent if model is Thread] == []
