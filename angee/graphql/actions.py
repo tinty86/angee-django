@@ -9,6 +9,7 @@ from typing import TypeVar, cast
 import strawberry
 from django.db import models
 from rebac import system_context
+from strawberry.scalars import JSON
 
 from angee.graphql.ids import PublicID, instance_for_id, public_id_value
 
@@ -19,12 +20,21 @@ _ActionTarget = TypeVar("_ActionTarget", bound=models.Model)
 class ActionResult:
     """Outcome of a console domain action: a success flag and a human message.
 
-    Returned by non-CRUD action mutations (sync, test, discover, …) so the client
-    can surface a toast and refresh the affected record.
+    Returned by non-CRUD action mutations (sync, test, discover, register-payment,
+    …) so the client can surface a toast and refresh the affected record.
+
+    On a *domain* failure the action returns ``ok=False`` and may populate
+    ``validation_errors`` — a field → messages map keyed by the argument names the
+    form binds to (its arg descriptor ``name``s) — which a typed-args action form
+    binds to its inputs, keeping the dialog open until ``ok=True``. Keys that match
+    no argument surface at form level. This is the in-band path; a *non-domain*
+    failure still raises a GraphQL error carrying the ``validationErrors``
+    extension instead.
     """
 
     ok: bool
     message: str
+    validation_errors: JSON | None = None
 
 
 def resolve_action_target(

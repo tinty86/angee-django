@@ -7,7 +7,24 @@ from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 
 import angee.graphql.actions as actions_module
-from angee.graphql.actions import action_target, resolve_action_target
+from angee.graphql.actions import ActionResult, action_target, resolve_action_target
+
+
+def test_action_result_carries_in_band_validation_errors() -> None:
+    """``ActionResult`` exposes the additive in-band ``validation_errors`` map.
+
+    A plain success omits it (default ``None``); a domain failure may return a
+    field → messages map a typed-args action form binds to its inputs.
+    """
+
+    assert ActionResult(ok=True, message="ok").validation_errors is None
+
+    failure = ActionResult(
+        ok=False,
+        message="Fix the amount.",
+        validation_errors={"amount": ["Amount exceeds the balance."]},
+    )
+    assert failure.validation_errors == {"amount": ["Amount exceeds the balance."]}
 
 
 @pytest.mark.django_db
