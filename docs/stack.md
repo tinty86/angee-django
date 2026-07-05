@@ -139,8 +139,19 @@ domain presentation over refine state. The active frontend owners are
 | react-json-view-lite | JSON value tree rendering | JSON widget read tree and debug JSON panels |
 | @xyflow/react | node/edge graph canvas | `@angee/ui` `GraphView` canvas |
 | @dagrejs/dagre | directed-graph layout | `@angee/ui` `GraphView` node placement |
+| FullCalendar (Standard: `@fullcalendar/react` + `@fullcalendar/daygrid` + `@fullcalendar/timegrid` + `@fullcalendar/interaction`) | Month/week/day event calendar, drag/resize/select | `@angee/ui` `CalendarView` renders server-expanded occurrences and wires interactions to auto-CRUD; code-split behind a lazy import and themed through the token set |
 | @dnd-kit | Drag and drop | Board and rail interactions |
 | Native browser drag/drop | File drag enter/leave/drop events and `DataTransfer.files` | `@angee/ui` upload drop target primitive |
+
+Event-calendar library choice: FullCalendar Standard (all four packages MIT)
+owns the month/week/day event surface. `@schedule-x` was evaluated and rejected
+because its drag-and-drop and drag-to-create plugins — exactly the two
+interactions a framework calendar primitive requires — are premium/paid, a
+license cliff on code every consumer inherits (revisit only if it relicenses).
+FullCalendar's commercial `@fullcalendar/resource-*` views stay out, a separate
+license decision at the W4/W5 resource calendars. Distinct from `react-day-picker`
+above, which owns the date-picker day grid behind date widgets, not an event
+calendar.
 
 ## Tooling
 
