@@ -11,7 +11,7 @@ direction.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -763,6 +763,96 @@ def test_threaded_record_bulk_delete_tears_down_chatter_graph(messaging_tables: 
     assert survivor_thread is not None
     assert Message._base_manager.filter(pk=survivor_message.pk).exists()
     assert Thread._base_manager.filter(pk=survivor_thread.pk).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_activity_agenda_lists_assignee_activities_across_records(messaging_tables: None) -> None:
+    """The actor's assigned activities across records, ordered by due date, windowed (F-act).
+
+    The agenda rides the ``messaging/thread_activity.read`` ``user`` (assignee) arm: the
+    activities are scheduled elevated (``created_by`` is not the assignee), so the actor
+    reaches its own rows through the assignee arm alone, with no parent-record grant. The
+    window is the whole bound — ``window_start`` inclusive, ``window_end`` exclusive — and
+    another actor's assignment, plus a company-B actor with no assignments, see nothing of
+    it. Each row carries its parent pointer (label + sqid + model_label) through the
+    attachment's owning model, computed without loading the target row.
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    window_start, window_end = date(2026, 3, 1), date(2026, 4, 1)
+    with system_context(reason="agenda across-records setup"):
+        assignee = user_model.objects.create_user(username="agenda-assignee", email="agenda-assignee@example.com")
+        other = user_model.objects.create_user(username="agenda-other", email="agenda-other@example.com")
+        company_b = user_model.objects.create_user(username="agenda-company-b", email="agenda-company-b@example.com")
+        alpha = ThreadedTicket.objects.create(title="Alpha")
+        beta = ThreadedTicket.objects.create(title="Beta")
+        # Assignee's activities across two records, out of due-date order.
+        beta.activity_schedule(user=assignee, summary="Call Beta", due_date=date(2026, 3, 10))
+        alpha.activity_schedule(user=assignee, summary="Email Alpha", due_date=date(2026, 3, 5))
+        # Window boundaries: start is inclusive, end is exclusive.
+        alpha.activity_schedule(user=assignee, summary="Kickoff", due_date=window_start)
+        alpha.activity_schedule(user=assignee, summary="Boundary", due_date=window_end)
+        # Out of window, another assignee, and an unassigned company-B actor — all absent.
+        alpha.activity_schedule(user=assignee, summary="Later", due_date=date(2026, 4, 15))
+        alpha.activity_schedule(user=other, summary="Other task", due_date=date(2026, 3, 7))
+
+    with actor_context(assignee):
+        rows = list(ThreadActivity.objects.agenda(assignee, window_start, window_end))
+        empty = list(ThreadActivity.objects.agenda(company_b, window_start, window_end))
+
+    assert [row.summary for row in rows] == ["Kickoff", "Email Alpha", "Call Beta"]
+    assert {row.attachment.object_id for row in rows} == {alpha.pk, beta.pk}
+    assert empty == []
+
+    email_alpha = next(row for row in rows if row.summary == "Email Alpha")
+    assert email_alpha.attachment.label == "Alpha"
+    assert email_alpha.attachment.target_model_label == "messaging.ThreadedTicket"
+    assert email_alpha.attachment.target_public_id == alpha.public_id
+
+
+@pytest.mark.django_db(transaction=True)
+def test_activity_agenda_excludes_done_unless_included(messaging_tables: None) -> None:
+    """Done/canceled rows drop out of the agenda by default and return under include_done (F-act)."""
+
+    del messaging_tables
+    user_model = get_user_model()
+    window_start, window_end = date(2026, 5, 1), date(2026, 6, 1)
+    with system_context(reason="agenda done-filter setup"):
+        assignee = user_model.objects.create_user(username="agenda-done", email="agenda-done@example.com")
+        ticket = ThreadedTicket.objects.create(title="Case")
+        ticket.activity_schedule(user=assignee, summary="Open task", due_date=date(2026, 5, 10))
+        done = ticket.activity_schedule(user=assignee, summary="Done task", due_date=date(2026, 5, 12))
+        ThreadActivity.objects.complete(done, post_message=False)
+
+    with actor_context(assignee):
+        default_summaries = [row.summary for row in ThreadActivity.objects.agenda(assignee, window_start, window_end)]
+        with_done_summaries = [
+            row.summary
+            for row in ThreadActivity.objects.agenda(assignee, window_start, window_end, include_done=True)
+        ]
+
+    assert default_summaries == ["Open task"]
+    assert with_done_summaries == ["Open task", "Done task"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_activity_agenda_row_reports_overdue_state_without_stored_flag(messaging_tables: None) -> None:
+    """An overdue agenda row derives ``state == "overdue"`` from its due date, storing no flag (F-act)."""
+
+    del messaging_tables
+    user_model = get_user_model()
+    window_start, window_end = date(2019, 1, 1), date(2021, 1, 1)
+    with system_context(reason="agenda overdue setup"):
+        assignee = user_model.objects.create_user(username="agenda-overdue", email="agenda-overdue@example.com")
+        ticket = ThreadedTicket.objects.create(title="Escalation")
+        ticket.activity_schedule(user=assignee, summary="Chase", due_date=date(2020, 6, 1))
+
+    with actor_context(assignee):
+        (row,) = list(ThreadActivity.objects.agenda(assignee, window_start, window_end))
+
+    assert row.status == ThreadActivity.ActivityStatus.TODO
+    assert row.activity_state == "overdue"
 
 
 @pytest.mark.django_db(transaction=True)

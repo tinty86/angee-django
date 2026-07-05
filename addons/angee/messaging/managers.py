@@ -833,6 +833,28 @@ class ThreadActivityQuerySet(AngeeQuerySet[Any]):
 
         return cast(ThreadActivityQuerySet, self.filter(status=self.model.ActivityStatus.TODO))
 
+    def agenda(
+        self,
+        user: Any,
+        window_start: Any,
+        window_end: Any,
+        *,
+        include_done: bool = False,
+    ) -> ThreadActivityQuerySet:
+        """Return ``user``'s activities due within ``[window_start, window_end)``, by due date.
+
+        The actor's own agenda across records: the window is the whole bound (no
+        pagination), ``window_start`` inclusive and ``window_end`` exclusive. Done and
+        canceled rows are excluded unless ``include_done``. Overdue is neither stored
+        nor filtered here — it rides each row's :attr:`ThreadActivity.activity_state`
+        derivation, so the agenda inherits ``state`` unchanged.
+        """
+
+        queryset = self.filter(user=user, due_date__gte=window_start, due_date__lt=window_end)
+        if not include_done:
+            queryset = queryset.open()
+        return cast(ThreadActivityQuerySet, queryset.order_by("due_date", "sqid"))
+
 
 class ThreadActivityManager(AngeeManager.from_queryset(ThreadActivityQuerySet)):  # type: ignore[misc]
     """Owns scheduled activities attached to model chatter threads."""

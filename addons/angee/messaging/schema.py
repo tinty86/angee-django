@@ -236,6 +236,22 @@ class ThreadAttachmentType(AngeeNode):
     created_at: auto
     updated_at: auto
 
+    @strawberry.field(name="model_label")
+    def model_label(self) -> str:
+        """Return the attached target's model label (``app_label.ModelName``)."""
+
+        return cast(Any, self).target_model_label
+
+    @strawberry.field(name="record_id")
+    def record_id(self) -> str:
+        """Return the attached target's stable public id (its sqid).
+
+        The agenda's parent pointer back to the record; navigating it re-gates through
+        the target's own record read (an assignee not granted the record may 404).
+        """
+
+        return cast(Any, self).target_public_id
+
 
 @strawberry_django.type(ThreadFollower)
 class ThreadFollowerType(AngeeNode):
@@ -604,7 +620,7 @@ class RecordActivityPayload:
 
 @strawberry.type
 class MessagingQuery:
-    """Record-backed chatter queries."""
+    """Record- and actor-scoped chatter queries."""
 
     @strawberry.field(name="record_thread")
     def record_thread(self, info: strawberry.Info, input: RecordThreadInput) -> RecordThreadPayload:
@@ -625,6 +641,39 @@ class MessagingQuery:
             before=input.before,
             after=input.after,
             around=input.around,
+        )
+
+    @strawberry.field(name="activity_agenda")
+    def activity_agenda(
+        self,
+        info: strawberry.Info,
+        window_start: date,
+        window_end: date,
+        include_done: bool = False,
+    ) -> list[ThreadActivityType]:
+        """Return the current actor's assigned activities due within the window.
+
+        The actor's own agenda across records: ``ThreadActivity`` rows assigned to the
+        actor (``user``), due within ``[window_start, window_end)``, ordered by due date.
+        The window is the whole bound — no pagination. Done and canceled are excluded
+        unless ``include_done``. Overdue is neither stored nor filtered; it rides each
+        row's ``state`` derivation.
+
+        Authorization rides the existing ``messaging/thread_activity.read`` ``user``
+        (assignee) arm — an assignment is itself the grant — so the read needs no
+        parent-record re-gate and no record-read fan-out.
+        """
+
+        user = _request_user(info)
+        if user is None:
+            return []
+        return list(
+            ThreadActivity.objects.agenda(
+                user,
+                window_start,
+                window_end,
+                include_done=include_done,
+            ).select_related("user")
         )
 
 

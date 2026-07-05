@@ -35,7 +35,7 @@ from rebac.managers import RebacManager
 from angee.base.actors import actor_user_id
 from angee.base.fields import ImplClassField, SqidField, StateField
 from angee.base.mixins import AuditMixin, HistoryMixin, SqidMixin
-from angee.base.models import AngeeModel
+from angee.base.models import AngeeModel, public_id_for
 from angee.integrate.models import Bridge
 from angee.messaging.backends import ChannelBackend
 from angee.messaging.managers import (
@@ -908,6 +908,27 @@ class ThreadAttachment(SqidMixin, AuditMixin, AngeeModel):
             ),
         )
         indexes = (models.Index(fields=("content_type", "object_id", "role")),)
+
+    @property
+    def target_model_label(self) -> str:
+        """Return the ``app_label.ModelName`` label of the attached target's model."""
+
+        model_class = self.content_type.model_class()
+        return model_class._meta.label if model_class is not None else ""
+
+    @property
+    def target_public_id(self) -> str:
+        """Return the attached target's stable public id (its sqid).
+
+        Encoded from the stored ``content_type``/``object_id`` alone, so the parent
+        pointer resolves without loading — or re-gating — the target row; navigating
+        the pointer re-gates through the target's own record read.
+        """
+
+        model_class = self.content_type.model_class()
+        if model_class is None:
+            return ""
+        return public_id_for(model_class, self.object_id)
 
     def __str__(self) -> str:
         """Return a readable attachment label."""
