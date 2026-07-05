@@ -154,3 +154,6 @@ export const enMessagingMessages: Record<string, string> = {
 // runtime's merged i18n first, then falls back to the bundled English. Thin alias
 // over the shared `createNamespaceT` owner, so the copy still renders provider-less.
 export const useMessagingT = createNamespaceT("messaging", enMessagingMessages);
+
+/** The bound `messaging` translator — shared by every component in the package. */
+export type MessagingT = ReturnType<typeof useMessagingT>;
