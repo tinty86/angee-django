@@ -848,14 +848,21 @@ class IAMMutation:
         """Authenticate credentials and bind the user to the session."""
 
         request = _request(info)
-        user = authenticate(
-            request,
-            username=username,
-            password=password,
-        )
-        if user is None:
-            return LoginPayload(ok=False)
+        # Elevate the whole credential-verification flow: Django upgrades a
+        # stale password hash inside ``check_password`` by saving the row
+        # (``must_update`` — an iteration bump, salt-entropy policy, or algorithm
+        # change), a system maintenance write the login itself sanctions. An
+        # anonymous request has no actor, so under REBAC fail-closed that save
+        # would raise, ``authenticate`` would swallow it as a backend refusal,
+        # and a user with valid credentials would be denied.
         with system_context(reason="iam.login"):
+            user = authenticate(
+                request,
+                username=username,
+                password=password,
+            )
+            if user is None:
+                return LoginPayload(ok=False)
             auth_login(request, user)
         return LoginPayload(ok=True, user=cast(UserType, user))
 

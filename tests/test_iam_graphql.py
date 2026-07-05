@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from django.apps import apps
 from django.contrib.auth import BACKEND_SESSION_KEY, SESSION_KEY, get_user_model
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
@@ -366,6 +367,73 @@ def test_login_complete_returns_oidc_flow_error_payload(
         "error": "bad token",
         "error_code": "invalid_id_token",
     }
+
+
+@override_settings(AUTHENTICATION_BACKENDS=("angee.iam.auth.ModelBackend",))
+def test_login_upgrades_a_stale_password_hash_for_valid_credentials(
+    iam_connection_tables: None,
+) -> None:
+    """A must_update hash is rehashed on password login though the request is anonymous.
+
+    Django upgrades a stale password hash inside ``check_password`` by saving the
+    row (``must_update`` — an iteration bump, salt-entropy policy, or algorithm
+    change). Under REBAC fail-closed that save needs an actor the anonymous login
+    request does not have, so before ``login`` elevated the credential check the
+    save raised ``PermissionDenied``, ``authenticate`` swallowed it as a backend
+    refusal, and a user with *valid* credentials was denied. The rehash is a
+    system maintenance write the login sanctions, so it must succeed and persist.
+    """
+
+    hasher = PBKDF2PasswordHasher()
+    raw_password = "correct-horse-battery"
+    stale_hash = hasher.encode(raw_password, hasher.salt(), iterations=1000)
+    assert hasher.must_update(stale_hash)  # low iterations force an upgrade
+
+    user = _user_with_password_hash("rehash-user", stale_hash)
+
+    data = _data(
+        _execute(
+            _schema("public"),
+            _LOGIN_MUTATION,
+            {"username": "rehash-user", "password": raw_password},
+            request=_request(AnonymousUser()),
+        )
+    )
+
+    assert data["login"] == {"ok": True, "user": {"username": "rehash-user"}}
+    with system_context(reason="test.iam.login.assert_upgrade"):
+        user.refresh_from_db()
+    # The stored hash was rehashed to the current policy and still verifies the
+    # same credential.
+    assert user.password != stale_hash
+    assert not hasher.must_update(user.password)
+    assert hasher.decode(user.password)["iterations"] == hasher.iterations
+    assert hasher.verify(raw_password, user.password)
+
+
+@override_settings(AUTHENTICATION_BACKENDS=("angee.iam.auth.ModelBackend",))
+def test_login_with_wrong_password_fails_and_writes_no_hash_upgrade(
+    iam_connection_tables: None,
+) -> None:
+    """A wrong password is refused and never triggers the rehash write."""
+
+    hasher = PBKDF2PasswordHasher()
+    stale_hash = hasher.encode("right-password", hasher.salt(), iterations=1000)
+    user = _user_with_password_hash("no-rehash-user", stale_hash)
+
+    data = _data(
+        _execute(
+            _schema("public"),
+            _LOGIN_MUTATION,
+            {"username": "no-rehash-user", "password": "wrong-password"},
+            request=_request(AnonymousUser()),
+        )
+    )
+
+    assert data["login"] == {"ok": False, "user": None}
+    with system_context(reason="test.iam.login.assert_no_upgrade"):
+        user.refresh_from_db()
+    assert user.password == stale_hash
 
 
 def test_link_account_complete_returns_account_claims_intent_and_coerced_next(
@@ -1708,6 +1776,26 @@ def _request(user: Any) -> Any:
     request.user = user
     request.session = _Session()
     return request
+
+
+_LOGIN_MUTATION = """
+    mutation Login($username: String!, $password: String!) {
+      login(username: $username, password: $password) {
+        ok
+        user { username }
+      }
+    }
+"""
+
+
+def _user_with_password_hash(username: str, password_hash: str) -> Any:
+    """Create a user whose stored password is exactly ``password_hash``."""
+
+    user = User.objects.create_user(username=username, email=f"{username}@example.com")
+    with system_context(reason="test.iam.login.seed_hash"):
+        user.password = password_hash
+        user.save(update_fields=["password"])
+    return user
 
 
 def _platform_admin(username: str) -> Any:
