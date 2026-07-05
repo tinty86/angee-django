@@ -7,9 +7,11 @@ from contextlib import contextmanager
 from typing import TypeVar, cast
 
 import strawberry
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import models
 from rebac import system_context
 from strawberry.scalars import JSON
+from strawberry.utils.str_converters import to_camel_case
 
 from angee.graphql.ids import PublicID, instance_for_id, public_id_value
 
@@ -35,6 +37,27 @@ class ActionResult:
     ok: bool
     message: str
     validation_errors: JSON | None = None
+
+    @classmethod
+    def from_error(cls, error: Exception, summary: str) -> ActionResult:
+        """Return a failed result from a caught exception.
+
+        A Django ``ValidationError`` carrying per-field messages (``error_dict``)
+        becomes the in-band ``validation_errors`` map a typed-args action form binds
+        to its inputs: field names are camel-cased to match the GraphQL argument
+        names the form binds to, and ``NON_FIELD_ERRORS`` (or any key that matches
+        no argument) surfaces at form level. Any other exception — or a
+        ``ValidationError`` with only non-field messages — yields a message-only
+        failure. ``summary`` is the human banner shown either way.
+        """
+
+        if isinstance(error, ValidationError) and hasattr(error, "error_dict"):
+            field_errors: dict[str, list[str]] = {}
+            for field, messages in error.message_dict.items():
+                key = field if field == NON_FIELD_ERRORS else to_camel_case(field)
+                field_errors[key] = list(messages)
+            return cls(ok=False, message=summary, validation_errors=cast(JSON, field_errors))
+        return cls(ok=False, message=summary)
 
 
 def resolve_action_target(

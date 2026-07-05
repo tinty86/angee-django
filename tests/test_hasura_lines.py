@@ -600,6 +600,35 @@ def test_lines_require_a_lines_aware_write_backend():
         )
 
 
+def test_lines_writable_relation_requires_a_public_id_decode():
+    """A writable child relation with no ``public_id_fields`` fails fast at build.
+
+    Without a declared decode the ``product`` FK would be written raw, bypassing the
+    actor-scoped write owner — the caller-invisible-target escalation the two-phase
+    diff closes. The build rejects it rather than shipping the hole.
+    """
+
+    unguarded = HasuraLines(
+        field="lines",
+        model=SaleLine,
+        node=SaleLineType,
+        writable=("label", "quantity", "position", "product"),
+        # public_id_fields omits "product" — the missing decode the guard catches.
+    )
+    with pytest.raises(ImproperlyConfigured, match="product"):
+        hasura_model_resource(
+            SaleDocType,
+            model=SaleDoc,
+            name="sale_docs_unguarded",
+            filterable=["id", "title"],
+            sortable=["title"],
+            aggregatable=["id"],
+            writable=["title", "note"],
+            lines=unguarded,
+            id_column="sqid",
+        )
+
+
 def test_lines_resource_metadata_is_emitted():
     """The resource advertises the editable-lines contract + the save root."""
 

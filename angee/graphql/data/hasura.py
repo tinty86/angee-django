@@ -613,6 +613,23 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
     if id_decode is None and id_column == "pk":
         id_decode = public_pk_decoder(model)
     active_write_backend = write_backend or AngeeHasuraWriteBackend(model, lines=lines)
+    declared_writable = [seq for seq in (writable, insertable, updatable) if seq is not None]
+    _check_writable_relations_decoded(
+        model,
+        writable=[name for seq in declared_writable for name in seq] if declared_writable else None,
+        id_column=id_column,
+        declared={*(field_id_decode or {}), *getattr(active_write_backend, "public_id_fields", {})},
+        surface=f"resource {resource_name!r}",
+    )
+    if lines is not None:
+        _check_writable_relations_decoded(
+            lines.model,
+            writable=lines.writable,
+            id_column=PUBLIC_ID_FIELD_NAME,
+            declared=lines.public_id_fields,
+            exclude=(_child_back_fk(model, lines.field),),
+            surface=f"resource {resource_name!r} lines",
+        )
     resource = build_hasura_resource(
         node,
         model=model,
@@ -655,6 +672,62 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
         public_id_field=public_id_field,
         row_model=row_model,
     )
+
+
+def _is_writable_relation(field: Any) -> bool:
+    """Return whether a writable column is a forward relation (FK / one-to-one / M2M)."""
+
+    if not isinstance(field, models.Field):
+        return False  # a reverse accessor is never a client-settable column
+    if not (is_to_one_relation(field) or getattr(field, "many_to_many", False)):
+        return False
+    return bool(getattr(field, "many_to_many", False) or getattr(field, "editable", False))
+
+
+def _check_writable_relations_decoded(
+    model: type[models.Model],
+    *,
+    writable: Sequence[str] | None,
+    id_column: str,
+    declared: Iterable[str],
+    exclude: Iterable[str] = (),
+    surface: str,
+) -> None:
+    """Reject an *explicitly* writable relation column that declares no public-id decode.
+
+    A relation column (FK / M2M) written raw bypasses the actor-scoped public-id
+    decode (``_write_public_instance`` → ``write_queryset``), so a caller could set
+    the relation to a target it cannot read — an escalation the §3.4 child-lines
+    elevation would then persist under the parent's authority. Every relation a
+    surface declares writable must name a decode (the parent's ``field_id_decode`` /
+    write-backend public-id fields, a child's ``public_id_fields``) so the write
+    resolves the target through the visible write owner. Fails the build, not the
+    first write.
+
+    ``writable is None`` means the surface exposes the framework's default editable
+    set (server-managed audit relations like ``created_by`` included); that default
+    is the framework's convention, not a per-surface declaration, so it is left to
+    its owner rather than swept in here — only a *declared* writable column is
+    guarded.
+    """
+
+    if writable is None:
+        return
+    known = set(declared)
+    skip = {id_column, *exclude}
+    for name in writable:
+        if name in skip:
+            continue
+        try:
+            field = model._meta.get_field(name)
+        except FieldDoesNotExist:
+            continue
+        if _is_writable_relation(field) and name not in known:
+            raise ImproperlyConfigured(
+                f"{surface} exposes writable relation column {name!r} on {model._meta.label} "
+                "without a public-id decode; declare it (field_id_decode / public_id_fields) so the "
+                "write resolves the target through the actor-scoped write owner."
+            )
 
 
 def _nested_inserts(lines: HasuraLines) -> list[NestedInsert]:

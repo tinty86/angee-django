@@ -962,6 +962,190 @@ def test_runtime_dedupes_shared_after_resource_load_function(tmp_path: Path) -> 
     assert "def after_resource_load(" not in source
 
 
+def test_runtime_child_aggregates_parent_donor_and_own_hook(tmp_path: Path) -> None:
+    """A materialized child runs a parent-side donor's hook and its own, each once.
+
+    Regression for the parent modelled via its abstract source alone: the parent's
+    hook lives on a donor, not the source, so the old code dropped it and the child
+    silently lost either the parent's hook or its own. The fix models the parent as
+    its whole composed set (the concrete parent's own ``after_resource_load``), so
+    the child aggregates the parent (which runs the donor's hook) then its own.
+    """
+
+    def parent_donor_hook(cls: type, instances: object, **kwargs: object) -> None:
+        del cls, instances, kwargs
+
+    def child_hook(cls: type, instances: object, **kwargs: object) -> None:
+        del cls, instances, kwargs
+
+    parent_module = ModuleType("tests.hookparent.models")
+    donor_module = ModuleType("tests.hookdonor.models")
+    child_module = ModuleType("tests.hookchild.models")
+    _source_model(parent_module, "HookParent", "hookparent", runtime=True)
+    _source_model(
+        donor_module,
+        "HookParentDonor",
+        "hookdonor",
+        extends="hookparent.HookParent",
+        after_resource_load=classmethod(parent_donor_hook),
+    )
+    _source_model(
+        child_module,
+        "HookChild",
+        "hookchild",
+        runtime=True,
+        extends="hookparent.HookParent",
+        after_resource_load=classmethod(child_hook),
+    )
+
+    runtime = Runtime(
+        (
+            _addon_config("hookparent", parent_module),
+            _addon_config("hookdonor", donor_module),
+            _addon_config("hookchild", child_module),
+        ),
+        runtime_dir=tmp_path / "runtime",
+    )
+    sources = runtime.render_sources()
+
+    # The parent runs its single donor natively — no parent aggregator emitted.
+    assert "def after_resource_load(" not in sources[Path("hookparent/models.py")]
+    # The child aggregates the whole parent (its donor's hook) then its own, in order.
+    child_source = sources[Path("hookchild/models.py")]
+    assert "def after_resource_load(cls, *args: object, **kwargs: object) -> None:" in child_source
+    parent_call = "HookParent.after_resource_load.__func__(cls, *args, **kwargs)"
+    child_call = "AbstractHookChild.after_resource_load.__func__(cls, *args, **kwargs)"
+    assert child_source.index(parent_call) < child_source.index(child_call)
+
+
+def test_runtime_child_dedupes_hook_shared_with_a_parent_donor(tmp_path: Path) -> None:
+    """A hook shared by a parent donor and a child donor runs once — via the parent.
+
+    The child dedups its own contributors against the parent's *whole* composed set,
+    so a function the parent already runs (through its donor) is not called again by
+    the child's donor. The child aggregator calls the parent and the child's own
+    hook, but never the child donor's copy of the shared function.
+    """
+
+    def shared_hook(cls: type, instances: object, **kwargs: object) -> None:
+        del cls, instances, kwargs
+
+    def child_hook(cls: type, instances: object, **kwargs: object) -> None:
+        del cls, instances, kwargs
+
+    parent_module = ModuleType("tests.sharedparent.models")
+    parent_donor_module = ModuleType("tests.sharedpdonor.models")
+    child_module = ModuleType("tests.sharedchild.models")
+    child_donor_module = ModuleType("tests.sharedcdonor.models")
+    _source_model(parent_module, "SharedParent", "sharedparent", runtime=True)
+    _source_model(
+        parent_donor_module,
+        "SharedParentDonor",
+        "sharedpdonor",
+        extends="sharedparent.SharedParent",
+        after_resource_load=classmethod(shared_hook),
+    )
+    _source_model(
+        child_module,
+        "SharedChild",
+        "sharedchild",
+        runtime=True,
+        extends="sharedparent.SharedParent",
+        after_resource_load=classmethod(child_hook),
+    )
+    _source_model(
+        child_donor_module,
+        "SharedChildDonor",
+        "sharedcdonor",
+        extends="sharedchild.SharedChild",
+        after_resource_load=classmethod(shared_hook),  # the SAME function the parent donor runs
+    )
+
+    runtime = Runtime(
+        (
+            _addon_config("sharedparent", parent_module),
+            _addon_config("sharedpdonor", parent_donor_module),
+            _addon_config("sharedchild", child_module),
+            _addon_config("sharedcdonor", child_donor_module),
+        ),
+        runtime_dir=tmp_path / "runtime",
+    )
+    child_source = runtime.render_sources()[Path("sharedchild/models.py")]
+
+    assert "def after_resource_load(cls, *args: object, **kwargs: object) -> None:" in child_source
+    assert "SharedParent.after_resource_load.__func__(cls, *args, **kwargs)" in child_source
+    assert "AbstractSharedChild.after_resource_load.__func__(cls, *args, **kwargs)" in child_source
+    # The child donor's own copy of the shared hook is NOT called — it deduped
+    # against the parent's set, so the shared function runs exactly once.
+    assert "SharedChildExtension1.after_resource_load" not in child_source
+
+
+def test_child_override_removed_fields_rejects_divergent_same_name_field(tmp_path: Path) -> None:
+    """A child that redefines an inherited parent-shared field fails the build (finding #2).
+
+    ``_child_override_removed_fields`` shadows a parent-shared inherited field with
+    ``None`` so the child inherits the parent's column. That is only sound when the
+    two are the *same* field; a deliberate same-name override with a different
+    definition would vanish behind the shadow, so the composer rejects it instead of
+    silently dropping the override.
+    """
+
+    narrow = type(
+        "NarrowLabel",
+        (AngeeModel,),
+        {
+            "__module__": "tests.divparent.models",
+            "label": models.CharField(max_length=10),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "divparent"}),
+        },
+    )
+    wide = type(
+        "WideLabel",
+        (AngeeModel,),
+        {
+            "__module__": "tests.divchild.models",
+            "label": models.CharField(max_length=99),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "divchild"}),
+        },
+    )
+    parent_module = ModuleType("tests.divparent.models")
+    child_module = ModuleType("tests.divchild.models")
+    DivParent = type(
+        "DivParent",
+        (narrow, AngeeModel),
+        {
+            "__module__": parent_module.__name__,
+            "runtime": True,
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "divparent"}),
+        },
+    )
+    # A materialized child that inherits a *different* ``label`` (max_length 99) than
+    # the parent's (max_length 10) — the deliberate same-name override.
+    DivChild = type(
+        "DivChild",
+        (wide, AngeeModel),
+        {
+            "__module__": child_module.__name__,
+            "runtime": True,
+            "extends": "divparent.DivParent",
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "divchild"}),
+        },
+    )
+    parent_module.DivParent = DivParent
+    child_module.DivChild = DivChild
+
+    runtime = Runtime(
+        (
+            _addon_config("divparent", parent_module),
+            _addon_config("divchild", child_module),
+        ),
+        runtime_dir=tmp_path / "runtime",
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="different column of the same name"):
+        runtime._child_override_removed_fields(cast(type[AngeeModel], DivChild))
+
+
 def test_runtime_clean_requires_generated_sentinel(tmp_path: Path) -> None:
     """Clean refuses to delete a non-generated configured runtime dir."""
 

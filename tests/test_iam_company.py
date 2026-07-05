@@ -10,6 +10,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, models
+from django.test import override_settings
 from rebac import (
     RelationshipTuple,
     actor_context,
@@ -183,40 +184,75 @@ def test_company_scoped_role_grant_is_isolated_to_that_company(django_user_model
         assert not company_model.objects.filter(pk=company_b.pk).exists()
 
 
+# The membership read routes through ``active_relationship_model`` (denormalized
+# default, or the FK-backed registry) — run the defaulting over both storage modes
+# so the ``values_list("resource_id")`` projection is proven backend-agnostic.
+_STORAGE_MODES = ["denormalized", "registry"]
+
+
 @pytest.mark.django_db
-def test_company_scoped_save_defaults_company_from_sole_membership(django_user_model: Any) -> None:
+@pytest.mark.parametrize("storage", _STORAGE_MODES)
+def test_company_scoped_save_defaults_company_from_sole_membership(
+    django_user_model: Any, storage: str
+) -> None:
     """A single-membership actor's scoped row defaults ``company`` on insert (§3.7)."""
 
-    call_command("rebac", "sync", verbosity=0)
-    company_model = apps.get_model("iam", "Company")
-    scoped_model = apps.get_model("iam", "CompanyScopedDoc")
-    member = django_user_model.objects.create_user(username="sole-member")
-    with system_context(reason="test scoped default setup"):
-        company = company_model.objects.create(name="Sole Co")
-    _grant(company, "direct_member", member)
+    with override_settings(REBAC_LOCAL_BACKEND_STORAGE=storage):
+        call_command("rebac", "sync", verbosity=0)
+        company_model = apps.get_model("iam", "Company")
+        scoped_model = apps.get_model("iam", "CompanyScopedDoc")
+        member = django_user_model.objects.create_user(username="sole-member")
+        with system_context(reason="test scoped default setup"):
+            company = company_model.objects.create(name="Sole Co")
+        _grant(company, "direct_member", member)
 
-    with actor_context(member):
-        doc = scoped_model.objects.create(title="Defaulted")
+        with actor_context(member):
+            doc = scoped_model.objects.create(title="Defaulted")
 
     assert doc.company_id == company.pk
 
 
 @pytest.mark.django_db
-def test_company_scoped_save_rejects_ambiguous_membership(django_user_model: Any) -> None:
+@pytest.mark.parametrize("storage", _STORAGE_MODES)
+def test_company_scoped_save_rejects_ambiguous_membership(django_user_model: Any, storage: str) -> None:
     """Several direct memberships make the default ambiguous — raise naming company."""
+
+    with override_settings(REBAC_LOCAL_BACKEND_STORAGE=storage):
+        call_command("rebac", "sync", verbosity=0)
+        company_model = apps.get_model("iam", "Company")
+        scoped_model = apps.get_model("iam", "CompanyScopedDoc")
+        member = django_user_model.objects.create_user(username="multi-member")
+        with system_context(reason="test scoped ambiguous setup"):
+            company_a = company_model.objects.create(name="Co A")
+            company_b = company_model.objects.create(name="Co B")
+        _grant(company_a, "direct_member", member)
+        _grant(company_b, "direct_member", member)
+
+        with actor_context(member), pytest.raises(ValidationError) as excinfo:
+            scoped_model.objects.create(title="Ambiguous")
+
+    assert "company" in excinfo.value.message_dict
+
+
+@pytest.mark.django_db
+def test_company_scoped_save_ignores_archived_membership(django_user_model: Any) -> None:
+    """An archived company the actor is a member of is not a defaulting candidate.
+
+    ``direct_memberships_of`` filters ``unarchived()``, so a sole membership on an
+    archived company defaults nothing — the write fails naming ``company`` rather
+    than seating a row under a retired company.
+    """
 
     call_command("rebac", "sync", verbosity=0)
     company_model = apps.get_model("iam", "Company")
     scoped_model = apps.get_model("iam", "CompanyScopedDoc")
-    member = django_user_model.objects.create_user(username="multi-member")
-    with system_context(reason="test scoped ambiguous setup"):
-        company_a = company_model.objects.create(name="Co A")
-        company_b = company_model.objects.create(name="Co B")
-    _grant(company_a, "direct_member", member)
-    _grant(company_b, "direct_member", member)
+    member = django_user_model.objects.create_user(username="archived-member")
+    with system_context(reason="test archived membership setup"):
+        company = company_model.objects.create(name="Retired Co", is_archived=True)
+    _grant(company, "direct_member", member)
 
     with actor_context(member), pytest.raises(ValidationError) as excinfo:
-        scoped_model.objects.create(title="Ambiguous")
+        scoped_model.objects.create(title="Archived default")
 
     assert "company" in excinfo.value.message_dict
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 
 import angee.graphql.actions as actions_module
 from angee.graphql.actions import ActionResult, action_target, resolve_action_target
@@ -25,6 +26,44 @@ def test_action_result_carries_in_band_validation_errors() -> None:
         validation_errors={"amount": ["Amount exceeds the balance."]},
     )
     assert failure.validation_errors == {"amount": ["Amount exceeds the balance."]}
+
+
+def test_action_result_from_error_maps_field_validation_errors() -> None:
+    """A per-field ``ValidationError`` becomes the in-band camel-cased field map."""
+
+    error = ValidationError({"unit_price": ["Must be positive."], "quantity": ["Required."]})
+    result = ActionResult.from_error(error, "Fix the line.")
+
+    assert result.ok is False
+    assert result.message == "Fix the line."
+    # Keys are camel-cased to match the GraphQL argument names the form binds to.
+    assert result.validation_errors == {
+        "unitPrice": ["Must be positive."],
+        "quantity": ["Required."],
+    }
+
+
+def test_action_result_from_error_keeps_non_field_errors_at_form_level() -> None:
+    """A ``NON_FIELD_ERRORS`` key is preserved so it surfaces at form level, not mangled."""
+
+    error = ValidationError({NON_FIELD_ERRORS: ["The document is out of balance."]})
+    result = ActionResult.from_error(error, "Cannot post.")
+
+    assert result.validation_errors == {NON_FIELD_ERRORS: ["The document is out of balance."]}
+
+
+def test_action_result_from_error_falls_back_to_message_only() -> None:
+    """A non-field ``ValidationError`` and any other exception yield a message-only result."""
+
+    non_field = ActionResult.from_error(ValidationError("Whole thing is wrong."), "Bad request.")
+    assert non_field.ok is False
+    assert non_field.message == "Bad request."
+    assert non_field.validation_errors is None
+
+    other = ActionResult.from_error(RuntimeError("boom"), "Sync failed.")
+    assert other.ok is False
+    assert other.message == "Sync failed."
+    assert other.validation_errors is None
 
 
 @pytest.mark.django_db

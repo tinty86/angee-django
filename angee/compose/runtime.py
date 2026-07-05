@@ -332,14 +332,7 @@ class Runtime:
                 runtime_parent_import = self._runtime_parent_import(label, model_class, runtime_parent_alias)
                 if runtime_parent_import is not None:
                     imports.append(runtime_parent_import)
-            extension_bases = tuple(
-                base
-                for extension in self.extensions.get(
-                    model_class._meta.label_lower,
-                    (),
-                )
-                for base in extension.get_extension_bases()
-            )
+            extension_bases = self._extension_bases(model_class)
             aliased_extensions: list[tuple[type[models.Model], str]] = []
             for index, extension_base in enumerate(extension_bases, start=1):
                 alias = f"{model_class.__name__}Extension{index}"
@@ -436,42 +429,90 @@ class Runtime:
         The resource loader resolves the hook once per composed model
         (``angee.resources.managers``) — so ``getattr(model, "after_resource_load")``
         picks only the first contributor its MRO reaches and shadows the rest.
-        When two or more composed bases contribute *distinct* implementations the
+        When two or more composed contributors run *distinct* implementations the
         composer emits an aggregating classmethod (``_after_resource_load_source``)
         that runs every one once; this returns the aliases it calls, in the same
-        order as the emitted base tuple (extension donors in dependency order,
-        then the materialized parent, then the source), so the aggregator walks
-        the exact order the single-dispatch MRO would — first donor first.
+        order as the emitted base tuple (extension donors first, then parent/source
+        per the flip), so the aggregator walks the exact order the single-dispatch
+        MRO would — first donor first.
 
-        A single donor (or the same function inherited by several bases) returns
-        an empty tuple: one implementation resolves natively through the MRO and
-        the runtime stays byte-identical. ``child_overrides_parent`` mirrors the
-        base-tuple flip (source before parent) so the aggregator still walks the
-        exact order the single-dispatch MRO would.
+        A materialized child's runtime parent is one contributor: its concrete
+        emitted class already runs its *whole* composed set through its own
+        ``after_resource_load`` (the parent's own aggregator, or the single func
+        its MRO resolves — donors and the parent's parent included, recursively).
+        So the child dedups its own donors and source against that whole set
+        (``_resource_load_hook_funcs``): a function shared with any parent
+        contributor runs once, via the parent, and the parent alias is emitted
+        whenever the parent contributes anything. Modelling the parent by its
+        *abstract source* alone would miss the parent-side donors and silently
+        drop or double-run their hooks.
+
+        Returns an empty tuple when at most one contributor survives dedup: one
+        implementation resolves natively through the concrete MRO (the parent's
+        aggregator, a lone donor, or the source) and the runtime stays
+        byte-identical. ``child_overrides_parent`` mirrors the base-tuple flip
+        (source before parent).
         """
 
-        contributors: list[tuple[str, type[models.Model]]] = [(alias, base) for base, alias in extension_aliases]
-        parent_contributor: tuple[str, type[models.Model]] | None = None
-        if runtime_parent_alias is not None:
-            target = cast(str, model_class.get_extension_target())
-            parent_contributor = (runtime_parent_alias, self.source_models_by_composition_label[target])
-        source_contributor = (source_alias, model_class)
-        if child_overrides_parent and parent_contributor is not None:
-            contributors.extend((source_contributor, parent_contributor))
-        else:
-            if parent_contributor is not None:
-                contributors.append(parent_contributor)
-            contributors.append(source_contributor)
-
-        aliases: list[str] = []
-        seen: set[Any] = set()
-        for alias, base in contributors:
+        parent = self._runtime_parent_source(model_class) if runtime_parent_alias is not None else None
+        parent_funcs = self._resource_load_hook_funcs(parent) if parent is not None else set()
+        seen: set[Any] = set(parent_funcs)
+        donor_aliases: list[str] = []
+        for base, alias in extension_aliases:
             func = getattr(getattr(base, _RESOURCE_LOAD_HOOK, None), "__func__", None)
             if func is None or func in seen:
                 continue
             seen.add(func)
-            aliases.append(alias)
+            donor_aliases.append(alias)
+        source_func = getattr(getattr(model_class, _RESOURCE_LOAD_HOOK, None), "__func__", None)
+        source = source_alias if (source_func is not None and source_func not in seen) else None
+        parent_alias = runtime_parent_alias if parent_funcs else None
+        tail = (source, parent_alias) if child_overrides_parent else (parent_alias, source)
+        aliases = [*donor_aliases, *(alias for alias in tail if alias is not None)]
         return tuple(aliases) if len(aliases) > 1 else ()
+
+    def _extension_bases(self, model_class: type[AngeeModel]) -> tuple[type[models.Model], ...]:
+        """Return the abstract bases same-row extensions contribute to ``model_class``."""
+
+        return tuple(
+            base
+            for extension in self.extensions.get(model_class._meta.label_lower, ())
+            for base in extension.get_extension_bases()
+        )
+
+    def _runtime_parent_source(self, model_class: type[AngeeModel]) -> type[AngeeModel] | None:
+        """Return the abstract parent source a materialized child extends, or ``None``."""
+
+        target = model_class.get_extension_target()
+        if target is None or not model_class.is_runtime_model():
+            return None
+        return self.source_models_by_composition_label[target]
+
+    def _resource_load_contributor_bases(self, model_class: type[AngeeModel]) -> tuple[type[models.Model], ...]:
+        """Return the composed bases a model's ``after_resource_load`` runs, in emitted-MRO order.
+
+        Flattens a materialized child's runtime parent into the parent's own full
+        contributor set (its extension donors, its parent recursively, then its
+        source), so a child sees everything the concrete parent already runs — the
+        parent's composed aggregator, not just its abstract source.
+        """
+
+        donors = self._extension_bases(model_class)
+        parent = self._runtime_parent_source(model_class)
+        parent_bases = self._resource_load_contributor_bases(parent) if parent is not None else ()
+        if parent is not None and model_class.overrides_runtime_parent():
+            return (*donors, model_class, *parent_bases)
+        return (*donors, *parent_bases, model_class)
+
+    def _resource_load_hook_funcs(self, model_class: type[AngeeModel]) -> set[Any]:
+        """Return the distinct ``after_resource_load`` funcs a model's emitted class runs."""
+
+        funcs: set[Any] = set()
+        for base in self._resource_load_contributor_bases(model_class):
+            func = getattr(getattr(base, _RESOURCE_LOAD_HOOK, None), "__func__", None)
+            if func is not None:
+                funcs.add(func)
+        return funcs
 
     def _after_resource_load_source(self, aliases: tuple[str, ...]) -> list[str]:
         """Return the aggregating ``after_resource_load`` classmethod body lines.
@@ -690,10 +731,7 @@ class Runtime:
             for model_class in source_models:
                 label = model_class._meta.label_lower
                 owners: dict[str, type[models.Model]] = {}
-                bases = (
-                    *(base for extension in self.extensions.get(label, ()) for base in extension.get_extension_bases()),
-                    model_class,
-                )
+                bases = (*self._extension_bases(model_class), model_class)
                 for base in bases:
                     for field_name in self._declared_fields(base):
                         previous = owners.setdefault(field_name, base)
@@ -747,14 +785,16 @@ class Runtime:
         """Return an abstract probe modeling the child-first emitted base order.
 
         The probe reorders the abstract sources exactly as ``_models_source`` will
-        reorder the concrete bases (``source`` before ``parent``), so Django's own
-        manager resolution and the transition checks read the flipped MRO. It is
-        abstract, so it never registers in the app registry and is safe to rebuild.
+        order the concrete bases under the flip — extension donors first, then the
+        source, then the parent (``[donors] → source → parent``) — so Django's own
+        manager resolution and the transition checks read the exact emitted MRO. It
+        is abstract, so it never registers in the app registry and is safe to
+        rebuild.
         """
 
         return type(
             f"_{child_class.__name__}ChildOverrideProbe",
-            (child_class, parent_class),
+            (*self._extension_bases(child_class), child_class, parent_class),
             {
                 "__module__": f"{self.runtime_module}._child_override_probe",
                 "Meta": type("Meta", (), {"abstract": True, "app_label": parent_class._meta.app_label}),
@@ -770,6 +810,12 @@ class Runtime:
         emitted class shadows each with ``None`` to inherit the parent's column
         instead. Only fields the child inherited from an abstract base *and* the
         parent also owns are dropped — the child's own new fields stay.
+
+        Shadowing is only sound when the child's copy and the parent's column are
+        the *same* field: a same-name field the child deliberately redefined would
+        vanish behind the ``None`` shadow, silently dropping the override. Each
+        dropped field is proven identical by ``deconstruct()`` first, so a genuine
+        divergence fails the build loudly rather than disappearing.
         """
 
         target = cast(str, child_class.get_extension_target())
@@ -780,7 +826,19 @@ class Runtime:
         # reverse-relation tree, which needs a ready app registry that render (run
         # during app population) does not have.
         parent_fields = {field.name for field in (*parent_class._meta.fields, *parent_class._meta.many_to_many)}
-        return tuple(sorted(inherited & parent_fields))
+        removed = tuple(sorted(inherited & parent_fields))
+        for name in removed:
+            child_field = child_class._meta.get_field(name)
+            parent_field = parent_class._meta.get_field(name)
+            if child_field.deconstruct()[1:] != parent_field.deconstruct()[1:]:
+                raise ImproperlyConfigured(
+                    f"{child_class._meta.label} sets child_overrides_parent and redefines "
+                    f"inherited field {name!r}, but the parent {parent_class._meta.label} owns a "
+                    "different column of the same name; the child-first flip would drop the "
+                    "override behind a None shadow. Rename the child field or align its definition "
+                    "with the parent's."
+                )
+        return removed
 
     def _check_child_override_manager(
         self,

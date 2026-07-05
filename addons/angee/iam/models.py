@@ -256,25 +256,37 @@ class CompanyManager(AngeeManager.from_queryset(CompanyQuerySet)):  # type: igno
         permission store rather than an ORM join. The ``parent->member`` reach
         that lets an ancestor-company member act in a subsidiary is deliberately
         excluded — this is the direct grant, the fact
-        :class:`CompanyScopedMixin` defaults a new row's company from. The
+        :class:`CompanyScopedMixin` defaults a new row's company from. Archived
+        companies are excluded (``unarchived()``): a defaulted company must be one
+        the row can actually operate under, and an archived company is retired. The
         matched rows are returned scope-free (the membership tuple is itself the
         authorization), the same posture :meth:`Company.clean` uses for its
-        integrity read.
+        integrity read; that scope-free read is expressed as a real
+        :class:`CompanyQuerySet` in ``system_context`` rather than a plain base
+        manager, so the archive vocabulary and company API stay in reach. The
+        membership rows are read through :func:`active_relationship_model` and
+        projected with ``values_list("resource_id")`` so the id column resolves in
+        either backend storage mode (the registry translates it to its FK side).
         """
 
         subject = to_subject_ref(actor)
         id_attr = str(getattr(self.model._meta, "rebac_id_attr", None) or app_settings.REBAC_RESOURCE_ID_ATTR)
-        company_ids = [
-            row.resource_id
-            for row in active_relationship_model().objects.filter(
+        company_ids = list(
+            active_relationship_model()
+            .objects.filter(
                 resource_type=model_resource_type(self.model),
                 relation=COMPANY_MEMBER_RELATION,
                 subject_type=subject.subject_type,
                 subject_id=subject.subject_id,
                 optional_subject_relation=subject.optional_relation,
             )
-        ]
-        return cast(CompanyQuerySet, self.model._base_manager.filter(**{f"{id_attr}__in": company_ids}))
+            .values_list("resource_id", flat=True)
+        )
+        scope_free = cast(
+            CompanyQuerySet,
+            self.get_queryset().system_context(reason="direct company membership is itself the authorization"),
+        )
+        return scope_free.unarchived().filter(**{f"{id_attr}__in": company_ids})
 
 
 class Company(AngeeDataModel, ArchiveMixin):

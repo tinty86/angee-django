@@ -192,6 +192,17 @@ class StateTransitions:
         the flipped MRO is proven to still satisfy the same class-build checks —
         every reachable ``@transition`` method still guards a declared or policy
         edge. It validates without mutating ``cls`` (no descriptor install).
+
+        Deliberately stricter than runtime dispatch: at call time a decorated
+        method runs under its *own* bound declaration (``spec.declaration``), but
+        here every reachable spec that matches this declaration's field is checked
+        against *this* declaration's graph — including one bound to another
+        declaration for the same field. This over-approximation is what gives the
+        flip guard teeth: it rejects a reorder that brings a transition method and
+        a narrower same-field declaration together, at build time, rather than
+        trusting the emitted MRO to dispatch it to a graph that happens to allow
+        it. With the usual single declaration per field the two are equivalent (a
+        field's specs are all bound to the one declaration that guards it).
         """
 
         self._declared = self._normalize_graph()
