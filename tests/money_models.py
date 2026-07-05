@@ -61,3 +61,20 @@ class MoneyLine(models.Model):
         """Register under the ``money`` app label."""
 
         app_label = "money"
+
+
+class MoneyStatement(models.Model):
+    """A statement whose currency lives one hop away through a OneToOne parent link.
+
+    ``order`` is a ``OneToOneField`` (a legitimate parent link), so the one-hop
+    ``order.currency`` path must resolve — a ``OneToOneField`` is a foreign-key
+    subclass, not a non-relation.
+    """
+
+    order = models.OneToOneField(MoneyOrder, on_delete=models.CASCADE)
+    total = MoneyField(currency_field="order.currency")
+
+    class Meta:
+        """Register under the ``money`` app label."""
+
+        app_label = "money"

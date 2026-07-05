@@ -16,10 +16,13 @@ from typing import Any
 import pytest
 import strawberry
 import strawberry_django
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rebac import (
     RelationshipTuple,
+    actor_context,
     system_context,
     to_object_ref,
     to_subject_ref,
@@ -31,7 +34,7 @@ from angee.graphql.data.hasura import HasuraLines, hasura_model_resource
 from angee.graphql.data.metadata import data_resource_metadata, merge_data_resources
 from angee.graphql.node import AngeeNode
 from tests.conftest import create_user, execute_schema, result_data
-from tests.linesdemo.models import SaleDoc, SaleLine
+from tests.linesdemo.models import Product, SaleDoc, SaleLine
 
 
 @strawberry_django.type(SaleLine)
@@ -80,13 +83,41 @@ _SCHEMA = strawberry.Schema(
     types=[SaleDocType, SaleLineType, *_RESOURCE.types],
 )
 
+# A second resource whose lines expose the ``product`` relation as a public id, so
+# the write must decode it under the caller's actor (the finding #5 handle).
+_LINES_WITH_PRODUCT = HasuraLines(
+    field="lines",
+    model=SaleLine,
+    node=SaleLineType,
+    writable=("label", "quantity", "position", "product"),
+    public_id_fields=("product",),
+)
+
+_RESOURCE_WITH_PRODUCT = hasura_model_resource(
+    SaleDocType,
+    model=SaleDoc,
+    name="sale_docs_prod",
+    filterable=["id", "title"],
+    sortable=["title"],
+    aggregatable=["id"],
+    writable=["title", "note"],
+    lines=_LINES_WITH_PRODUCT,
+    id_column="sqid",
+)
+
+_SCHEMA_WITH_PRODUCT = strawberry.Schema(
+    query=_RESOURCE_WITH_PRODUCT.query,
+    mutation=_RESOURCE_WITH_PRODUCT.mutation,
+    types=[SaleDocType, SaleLineType, *_RESOURCE_WITH_PRODUCT.types],
+)
+
 
 @pytest.fixture()
 def linesdemo_tables(transactional_db: Any):
     """Ensure the demo tables exist and the REBAC schema is synced."""
 
     existing = set(connection.introspection.table_names())
-    created = [m for m in (SaleDoc, SaleLine) if m._meta.db_table not in existing]
+    created = [m for m in (SaleDoc, Product, SaleLine) if m._meta.db_table not in existing]
     if created:
         with connection.schema_editor() as editor:
             for model in created:
@@ -96,22 +127,28 @@ def linesdemo_tables(transactional_db: Any):
         yield
     finally:
         with connection.cursor() as cursor:
-            for model in (SaleLine, SaleDoc):
+            for model in (SaleLine, Product, SaleDoc):
                 cursor.execute(f"DELETE FROM {connection.ops.quote_name(model._meta.db_table)}")
 
 
-def _grant_owner(document: SaleDoc, user: Any) -> None:
-    """Write the ``owner`` relationship that grants write on a document."""
+def _grant(document: SaleDoc, relation: str, user: Any) -> None:
+    """Write one direct relationship tuple for ``user`` on ``document``."""
 
     write_relationships(
         [
             RelationshipTuple(
                 resource=to_object_ref(document),
-                relation="owner",
+                relation=relation,
                 subject=to_subject_ref(user),
             )
         ]
     )
+
+
+def _grant_owner(document: SaleDoc, user: Any) -> None:
+    """Write the ``owner`` relationship that grants write on a document."""
+
+    _grant(document, "owner", user)
 
 
 _INSERT = """
@@ -272,6 +309,246 @@ def test_save_denies_actor_without_write_on_parent(linesdemo_tables):
         line.refresh_from_db()
     assert doc.title == "Order"
     assert line.label == "Line" and line.quantity == 1
+
+
+def test_save_denies_reader_without_write_even_with_empty_patch(linesdemo_tables):
+    """A reader (read, no write) is denied a lines-only save — the write-gate hole.
+
+    The ``reader`` grant makes ``read`` and ``write`` diverge, so the parent row
+    loads (read scope passes) yet the actor lacks write. An empty patch skips the
+    update resolver's write signal, so only the unconditional ``has_access`` gate
+    stops the child elevation; without it a read-only actor could rewrite lines.
+    """
+
+    owner = create_user("owner")
+    reader = create_user("reader")
+    with system_context(reason="seed"):
+        doc = SaleDoc.objects.create(title="Order")
+        line = SaleLine.objects.create(document=doc, label="Line", quantity=1, position=0)
+    _grant_owner(doc, owner)
+    _grant(doc, "reader", reader)
+
+    # The reader can load the parent — proving the denial is the write gate, not
+    # the read scope failing to find the row.
+    with actor_context(reader):
+        assert SaleDoc.objects.filter(pk=doc.pk).exists()
+
+    result = execute_schema(
+        _SCHEMA,
+        _SAVE,
+        {
+            "pk": doc.public_id,
+            "lines": [
+                {"id": line.public_id, "label": "Tampered", "quantity": 99, "position": 0},
+                {"label": "Injected", "quantity": 1, "position": 1},
+            ],
+        },
+        user=reader,
+    )
+    assert result.errors is not None
+    with system_context(reason="test read"):
+        line.refresh_from_db()
+        assert line.label == "Line" and line.quantity == 1
+        assert doc.lines.count() == 1
+
+
+def test_save_rejects_line_ids_not_on_the_parent(linesdemo_tables):
+    """A line id absent from the parent's stored set is rejected wholesale.
+
+    Enforces the completeness contract server-side: a stale/foreign/truncated
+    baseline (here a line belonging to another document) fails with a clear error
+    instead of being silently mis-applied.
+    """
+
+    owner = create_user("owner")
+    with system_context(reason="seed"):
+        doc = SaleDoc.objects.create(title="Order")
+        mine = SaleLine.objects.create(document=doc, label="Mine", quantity=1, position=0)
+        other_doc = SaleDoc.objects.create(title="Other")
+        foreign = SaleLine.objects.create(document=other_doc, label="Foreign", quantity=1, position=0)
+    _grant_owner(doc, owner)
+
+    result = execute_schema(
+        _SCHEMA,
+        _SAVE,
+        {
+            "pk": doc.public_id,
+            "lines": [
+                {"id": mine.public_id, "label": "Mine", "quantity": 2, "position": 0},
+                {"id": foreign.public_id, "label": "Hijack", "quantity": 9, "position": 1},
+            ],
+        },
+        user=owner,
+    )
+    assert result.errors is not None
+    with system_context(reason="test read"):
+        mine.refresh_from_db()
+        foreign.refresh_from_db()
+    # The whole diff rolled back: the legitimate update did not apply either.
+    assert mine.quantity == 1
+    assert foreign.label == "Foreign"
+
+
+def test_save_fetches_kept_lines_without_per_row_growth(linesdemo_tables):
+    """The kept-child fetch is batched: its query cost does not grow per row (no N+1)."""
+
+    owner = create_user("owner")
+    table = connection.ops.quote_name(SaleLine._meta.db_table)
+
+    def child_selects_for(line_count: int) -> int:
+        with system_context(reason="seed"):
+            doc = SaleDoc.objects.create(title="Order")
+            kept = [
+                SaleLine.objects.create(document=doc, label=f"L{index}", quantity=1, position=index)
+                for index in range(line_count)
+            ]
+        _grant_owner(doc, owner)
+        lines = [
+            {"id": line.public_id, "label": line.label, "quantity": 2, "position": index}
+            for index, line in enumerate(kept)
+        ]
+        with CaptureQueriesContext(connection) as captured:
+            result = execute_schema(_SCHEMA, _SAVE, {"pk": doc.public_id, "lines": lines}, user=owner)
+        result_data(result)
+        return sum(
+            1
+            for query in captured.captured_queries
+            if query["sql"].lstrip().upper().startswith("SELECT") and table in query["sql"]
+        )
+
+    # A per-row fetch (the old N+1) would make the 5-line save cost strictly more
+    # child SELECTs than the 2-line save; the batched fetch keeps them equal.
+    assert child_selects_for(2) == child_selects_for(5)
+
+
+def test_save_locks_the_parent_row_before_diffing_lines(linesdemo_tables, monkeypatch):
+    """The child diff runs under a parent-row lock (serializes concurrent saves).
+
+    A true cross-delete race needs two Postgres connections; on the SQLite floor
+    ``lock_if_supported`` is a no-op, so this pins the seam: the diff acquires the
+    lock through the base helper, targeting the parent model, before touching the
+    child set.
+    """
+
+    from angee.base.models import AngeeQuerySet
+
+    locked_models: list[type] = []
+    original = AngeeQuerySet.lock_if_supported
+
+    def spy(self: Any, **kwargs: Any) -> Any:
+        locked_models.append(self.model)
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(AngeeQuerySet, "lock_if_supported", spy)
+
+    owner = create_user("owner")
+    with system_context(reason="seed"):
+        doc = SaleDoc.objects.create(title="Order")
+        line = SaleLine.objects.create(document=doc, label="Line", quantity=1, position=0)
+    _grant_owner(doc, owner)
+
+    result = execute_schema(
+        _SCHEMA,
+        _SAVE,
+        {"pk": doc.public_id, "lines": [{"id": line.public_id, "label": "Line", "quantity": 2, "position": 0}]},
+        user=owner,
+    )
+    result_data(result)
+    assert SaleDoc in locked_models
+
+
+def test_save_decodes_line_relation_under_the_callers_actor(linesdemo_tables):
+    """A line referencing a product the caller cannot read is rejected before elevation.
+
+    The relation decode runs under the caller's actor (phase 1), so an invisible
+    product is not resolved by the §3.4 child elevation; a visible one goes through.
+    """
+
+    owner = create_user("owner")
+    with system_context(reason="seed"):
+        doc = SaleDoc.objects.create(title="Order")
+        visible = Product.objects.create(name="Visible")
+        hidden = Product.objects.create(name="Hidden")
+    _grant_owner(doc, owner)
+    _grant(visible, "owner", owner)  # the caller may read `visible`, not `hidden`
+
+    _SAVE_PROD = """
+    mutation($pk: ID!, $lines: [sale_docs_prod_lines_insert_input!]) {
+      sale_docs_prod_save(pk: $pk, lines: $lines) {
+        id
+        lines { id label quantity position }
+      }
+    }
+    """
+
+    denied = execute_schema(
+        _SCHEMA_WITH_PRODUCT,
+        _SAVE_PROD,
+        {
+            "pk": doc.public_id,
+            "lines": [{"label": "L", "quantity": 1, "position": 0, "product": hidden.public_id}],
+        },
+        user=owner,
+    )
+    assert denied.errors is not None
+    with system_context(reason="test read"):
+        assert doc.lines.count() == 0
+
+    ok = execute_schema(
+        _SCHEMA_WITH_PRODUCT,
+        _SAVE_PROD,
+        {
+            "pk": doc.public_id,
+            "lines": [{"label": "L", "quantity": 1, "position": 0, "product": visible.public_id}],
+        },
+        user=owner,
+    )
+    result_data(ok)
+    with system_context(reason="test read"):
+        assert doc.lines.get().product_id == visible.pk
+
+
+def test_lines_require_the_parent_update_surface():
+    """Declaring lines with ``update=False`` fails fast at build, not at first save."""
+
+    with pytest.raises(ImproperlyConfigured, match="update=False"):
+        hasura_model_resource(
+            SaleDocType,
+            model=SaleDoc,
+            name="sale_docs_readonly",
+            filterable=["id", "title"],
+            sortable=["title"],
+            aggregatable=["id"],
+            writable=["title", "note"],
+            lines=_LINES,
+            update=False,
+            id_column="sqid",
+        )
+
+
+def test_lines_require_a_lines_aware_write_backend():
+    """A custom write backend without ``save`` is rejected at build, not at mutation."""
+
+    class BareBackend:
+        """A WriteBackend that never learned the authored ``save`` verb."""
+
+        def create(self, info: Any, data: dict[str, Any]) -> Any: ...
+        def update(self, info: Any, pk: str, data: dict[str, Any]) -> Any: ...
+        def delete(self, info: Any, pk: str) -> Any: ...
+
+    with pytest.raises(ImproperlyConfigured, match="lines-aware"):
+        hasura_model_resource(
+            SaleDocType,
+            model=SaleDoc,
+            name="sale_docs_bare",
+            filterable=["id", "title"],
+            sortable=["title"],
+            aggregatable=["id"],
+            writable=["title", "note"],
+            lines=_LINES,
+            write_backend=BareBackend(),
+            id_column="sqid",
+        )
 
 
 def test_lines_resource_metadata_is_emitted():

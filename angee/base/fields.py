@@ -517,14 +517,16 @@ class MoneyField(models.DecimalField):
     independently of where the currency addon is hosted (label-based coupling, no
     import of the sibling addon).
 
-    ``currency_field`` is a semantic declaration, not a database fact:
-    :meth:`deconstruct` drops it — exactly like :meth:`ImplClassField.deconstruct`
-    drops its runtime-composed choices — so the field keeps its own class path and
-    the decimal column kwargs while the currency path rides through ``deepcopy``
-    inheritance onto the live field. Changing ``currency_field`` therefore never
-    writes a migration. Rendering the amount with its currency (resolved through
-    the metadata's currency path) is the ``"money"`` widget's job, registered by
-    the currency addon's web package; the field only owns the backend vocabulary.
+    ``currency_field`` is a semantic declaration, not a database fact: Django's
+    ``Field.deconstruct`` serializes only the tracked column kwargs (the field's
+    class path plus ``max_digits`` / ``decimal_places``) and never a custom
+    constructor attribute, so ``currency_field`` stays out of migration state on
+    its own — no ``deconstruct`` override — while the currency path rides through
+    ``deepcopy`` inheritance onto the live field. Changing ``currency_field``
+    therefore never writes a migration. Rendering the amount with its currency
+    (resolved through the metadata's currency path) is the ``"money"`` widget's
+    job, registered by the currency addon's web package; the field only owns the
+    backend vocabulary.
     """
 
     CURRENCY_MODEL_LABEL = "money.Currency"
@@ -536,20 +538,6 @@ class MoneyField(models.DecimalField):
         kwargs.setdefault("max_digits", 18)
         kwargs.setdefault("decimal_places", 6)
         super().__init__(*args, **kwargs)
-
-    def deconstruct(self) -> tuple[str | None, str, list[Any], dict[str, Any]]:
-        """Emit the decimal column; drop the semantic ``currency_field`` kwarg.
-
-        The currency path is resolved at ``check``/metadata time, not stored, so —
-        like :meth:`ImplClassField.deconstruct` — it is dropped from the migration
-        state and only the field's own class path plus ``max_digits`` /
-        ``decimal_places`` ride through. Adding or changing ``currency_field``
-        therefore never churns a migration.
-        """
-
-        name, path, args, kwargs = super().deconstruct()
-        kwargs.pop("currency_field", None)
-        return name, path, args, kwargs
 
     def check(self, **kwargs: Any) -> list[checks.CheckMessage]:
         """Validate that ``currency_field`` resolves to a ``money.Currency`` FK.
@@ -612,7 +600,9 @@ class MoneyField(models.DecimalField):
 
         ``None`` means the segment names a relation Django has not resolved yet
         (the target model is not installed); the caller defers to Django's own
-        relation checks rather than double-reporting.
+        relation checks rather than double-reporting. A ``ForeignKey`` (``many_to_one``)
+        and a ``OneToOneField`` (``one_to_one``, e.g. a parent-link hop) are both
+        single-valued forward relations that resolve a currency, so both are accepted.
         """
 
         try:
@@ -624,7 +614,7 @@ class MoneyField(models.DecimalField):
                 obj=self,
                 id="angee.E011",
             )
-        if not getattr(field, "many_to_one", False):
+        if not (getattr(field, "many_to_one", False) or getattr(field, "one_to_one", False)):
             return checks.Error(
                 f"MoneyField currency_field={self.currency_field!r}: "
                 f"{model._meta.label}.{field_name} is not a foreign key.",

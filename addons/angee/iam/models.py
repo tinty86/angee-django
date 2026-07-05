@@ -47,6 +47,7 @@ from typing import Any
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import UnicodeUsernameValidator
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 from rebac import app_settings, current_actor, system_context
@@ -265,11 +266,42 @@ class Company(AngeeDataModel, ArchiveMixin):
         ordering = ("name", "sqid")
         rebac_resource_type = "iam/company"
         rebac_id_attr = "sqid"
+        constraints = (
+            models.CheckConstraint(
+                condition=~models.Q(parent=models.F("id")),
+                name="iam_company_parent_not_self",
+            ),
+        )
 
     def __str__(self) -> str:
         """Return the company's display name for Django displays."""
 
         return self.name
+
+    def clean(self) -> None:
+        """Reject a parent that is the company itself or forms an ancestor cycle.
+
+        The ``parent`` hierarchy grants an ancestor-company member reach over every
+        descendant, so a self-parent or a cycle would either brick the subtree with
+        ``PermissionDepthExceeded`` on every check or loop the reach walk. The DB
+        ``CheckConstraint`` owns the self case; this walk owns multi-hop cycles and
+        runs on the write path (``full_clean``), so a schema-decoded ``parent`` edit
+        that would close a loop fails with a clear ``ValidationError`` instead.
+        """
+
+        super().clean()
+        if not self.parent_id:
+            return
+        if self.parent_id == self.pk:
+            raise ValidationError({"parent": "A company cannot be its own parent."})
+        manager = type(self)._base_manager
+        seen: set[Any] = {self.pk} if self.pk is not None else set()
+        ancestor_id: Any = self.parent_id
+        while ancestor_id is not None:
+            if ancestor_id in seen:
+                raise ValidationError({"parent": "A company cannot be an ancestor of itself."})
+            seen.add(ancestor_id)
+            ancestor_id = manager.filter(pk=ancestor_id).values_list("parent_id", flat=True).first()
 
 
 class CompanyScopedMixin(models.Model):

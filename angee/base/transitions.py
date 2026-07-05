@@ -47,7 +47,7 @@ idempotent field normalization, and the primitive's own target write, so existin
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, cast
@@ -57,7 +57,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models.query_utils import DeferredAttribute
 
-from angee.base.fields import StateField
+from angee.base.fields import StateField, enum_member_for
 
 Condition = Callable[[models.Model], bool]
 SuccessHook = Callable[[models.Model, Any, Any], None]
@@ -258,7 +258,14 @@ class StateTransitions:
         return effective
 
     def _policy_overlay(self) -> Mapping[str, Any]:
-        """Return the composed ``{allow, deny}`` overlay, or empty when unset."""
+        """Return the composed ``{allow, deny}`` overlay, validated, or empty when unset.
+
+        The overlay is settings-supplied, so its shape is validated here — before
+        ``_effective_allowed`` unpacks it mid-transition — and every edge value is
+        checked against the guarded field's enum, so a malformed pair or an unknown
+        state fails fast with an ``ImproperlyConfigured`` that names the setting
+        rather than raising an opaque error while a transition is running.
+        """
 
         if not self.policy_setting:
             return {}
@@ -270,7 +277,29 @@ class StateTransitions:
                 f"settings.{self.policy_setting} must be a mapping with 'allow'/'deny' "
                 "edge lists, one [source, target] pair each."
             )
+        for verb in ("allow", "deny"):
+            self._validate_overlay_edges(verb, overlay.get(verb, ()))
         return overlay
+
+    def _validate_overlay_edges(self, verb: str, edges: Any) -> None:
+        """Validate one overlay edge list: a sequence of ``[source, target]`` enum pairs."""
+
+        if isinstance(edges, str) or not isinstance(edges, Sequence):
+            raise ImproperlyConfigured(
+                f"settings.{self.policy_setting}[{verb!r}] must be a list of [source, target] pairs."
+            )
+        choices_enum = self.field.choices_enum
+        for edge in edges:
+            if isinstance(edge, str) or not isinstance(edge, Sequence) or len(edge) != 2:
+                raise ImproperlyConfigured(
+                    f"settings.{self.policy_setting}[{verb!r}] edge {edge!r} must be a [source, target] pair."
+                )
+            for value in edge:
+                if enum_member_for(choices_enum, value) is None:
+                    raise ImproperlyConfigured(
+                        f"settings.{self.policy_setting}[{verb!r}] edge {edge!r} names unknown state "
+                        f"{value!r} for {self.field.name}."
+                    )
 
     def _method_map_for_class(self, cls: type[models.Model]) -> dict[str, _TransitionSpec]:
         existing = cast(dict[str, _TransitionSpec], getattr(cls, "_angee_transition_specs", {}))

@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import strawberry
-from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured, ValidationError
 from django.db import models, transaction
-from rebac import system_context
+from rebac import PermissionDenied, system_context
 from strawberry_django.mutations import resolvers as mutation_resolvers
 from strawberry_django_aggregates import default_operators_for, group_by_alias
 from strawberry_django_aggregates.granularity import NumberGranularity, TimeGranularity
@@ -94,6 +94,17 @@ class HasuraLines:
     (decoded on write). ``node`` is the child GraphQL node, used only to name the
     child field metadata the frontend line cells render. ``position_field`` names
     the integer order column (advertised so the composer maintains it).
+
+    Completeness contract: ``<res>_save(lines=…)`` takes the **full desired child
+    set** — deletion is by omission, so an id absent from the set is deleted. The
+    caller must therefore send back every stored line (each kept row carrying its
+    public id); a partial read that omits stored lines would ask to delete them.
+    The write enforces the enforceable half of this contract server-side: every
+    public id the caller sends must address a currently stored line of this parent
+    (a stale, foreign, or truncated baseline is rejected wholesale with a
+    ``ValidationError`` rather than silently mis-applied). The full desired set is
+    resolved under a parent-row lock so concurrent saves cannot cross-delete each
+    other's lines.
     """
 
     field: str
@@ -165,14 +176,18 @@ class AngeeHasuraWriteBackend:
     ) -> Any:
         """Patch one parent and diff-apply its child lines in one transaction.
 
-        REBAC preflight is on the parent: the row is loaded through the
-        write-scoped queryset (an actor without write on it is denied wholesale —
-        the row is never found), and the parent patch runs the model's write
-        gate. Only after that do the children ride the §3.4 elevation — created,
-        updated, and deleted under ``system_context``, authorized by the parent
-        write, not per child row. ``line_rows`` is the full desired child set:
-        ``None`` leaves the lines untouched (a parent-only save), an empty list
-        clears them.
+        REBAC preflight is on the parent, unconditionally: the row is loaded
+        through the write-scoped queryset (field-read redaction off, REBAC row
+        scope still evaluating ``read``), so an actor who may read but not write
+        the parent still resolves the row — the explicit ``has_access("write")``
+        gate below is what denies them. That gate must run even when ``patch`` is
+        empty: a lines-only edit (``patch={}``, the FormView shape) skips the
+        update resolver's write signal, so without the preflight the §3.4 child
+        elevation would run unauthorized. Only after the parent write is verified
+        do the children ride the elevation — created, updated, and deleted under
+        ``system_context``, authorized by the parent write, not per child row.
+        ``line_rows`` is the full desired child set: ``None`` leaves the lines
+        untouched (a parent-only save), an empty list clears them.
         """
 
         if self.lines is None:
@@ -183,8 +198,8 @@ class AngeeHasuraWriteBackend:
                 pk,
                 queryset=write_queryset(self.model),
             )
-            if instance is None:
-                raise ValueError(f"{self.model._meta.object_name} {pk!r} was not found")
+            if not instance.has_access("write"):
+                raise PermissionDenied(f"Denied: cannot write {self.model._meta.label} {pk!r}")
             if patch:
                 instance = mutation_resolvers.update(
                     info,
@@ -253,46 +268,61 @@ class AngeeHasuraWriteBackend:
 
         A row with an ``id`` addresses an existing child (update); a row without
         one is a new child (create); an existing child no row keeps is deleted.
-        Every write runs under ``system_context`` — the parent write is the gate
-        (§3.4). The child FK back to the parent is set here, never sent by the
-        client.
+        The child FK back to the parent is set here, never sent by the client.
+
+        Two phases with two authorities. Relation public ids on the incoming
+        rows are decoded first, under the **caller's** actor, so a referenced row
+        the caller cannot see is rejected (never resolved by the elevation that
+        follows). Only then do the child writes run under ``system_context`` —
+        the parent write is their gate (§3.4). Reached by both ``save`` and the
+        nested ``create`` path; the parent row is locked before its child set is
+        read so concurrent saves cannot cross-delete each other's lines.
         """
 
         assert self.lines is not None
         child_model = self.lines.model
+        back_fk_id = f"{self._line_back_fk}_id"
+        # Phase 1 — decode line relation ids under the caller's actor, before any
+        # elevation. Each entry is ``(public id | None, decoded child payload)``.
+        prepared: list[tuple[str | None, dict[str, Any]]] = []
+        for row in rows:
+            payload = dict(row)
+            public_id = payload.pop("id", None)
+            decoded = self._decode_public_id_fields(payload, self._line_public_id_fields)
+            prepared.append((str(public_id) if public_id else None, decoded))
+        # Phase 2 — child writes elevated, under a parent-row lock.
         with system_context(reason="graphql.hasura.save.lines"):
+            self.model._default_manager.lock_if_supported().filter(pk=parent.pk).first()
             children = child_model._base_manager.filter(**{self._line_back_fk: parent})
-            existing_pks = set(children.values_list("pk", flat=True))
+            existing = children.in_bulk()
+            by_public_id = {child.public_id: child for child in existing.values()}
+            unknown = sorted({pid for pid, _ in prepared if pid is not None and pid not in by_public_id})
+            if unknown:
+                raise ValidationError(
+                    f"{child_model._meta.object_name} lines {unknown!r} are not part of "
+                    f"{self.model._meta.object_name} {parent.public_id!r}; reload and retry."
+                )
             kept_pks: set[Any] = set()
-            for row in rows:
-                payload = dict(row)
-                public_id = payload.pop("id", None)
-                if public_id:
-                    child = require_instance_for_id(child_model, str(public_id), queryset=children)
-                    if child is None:
-                        raise ValueError(f"{child_model._meta.object_name} {public_id!r} was not found")
+            for public_id, decoded in prepared:
+                if public_id is not None:
+                    child = by_public_id[public_id]
                     kept_pks.add(child.pk)
                     mutation_resolvers.update(
                         info,
                         child,
-                        self._decode_public_id_fields(payload, self._line_public_id_fields),
-                        key_attr=PUBLIC_ID_FIELD_NAME,
-                        full_clean=True,
-                    )
-                else:
-                    decoded, _relationships = self._decode_public_id_fields_with_relationships(
-                        payload,
-                        self._line_public_id_fields,
-                    )
-                    decoded[f"{self._line_back_fk}_id"] = parent.pk
-                    mutation_resolvers.create(
-                        info,
-                        child_model,
                         decoded,
                         key_attr=PUBLIC_ID_FIELD_NAME,
                         full_clean=True,
                     )
-            removed = existing_pks - kept_pks
+                else:
+                    mutation_resolvers.create(
+                        info,
+                        child_model,
+                        {**decoded, back_fk_id: parent.pk},
+                        key_attr=PUBLIC_ID_FIELD_NAME,
+                        full_clean=True,
+                    )
+            removed = set(existing) - kept_pks
             if removed:
                 child_model._base_manager.filter(pk__in=removed).delete()
 
@@ -662,8 +692,18 @@ def _attach_lines_save(
     line_input = resource.nested_input_types.get(lines.field)
     if line_input is None:
         raise ImproperlyConfigured(f"{res} declares lines but built no nested line input.")
-    save_root = f"{res}_save"
+    if not callable(getattr(write_backend, "save", None)):
+        raise ImproperlyConfigured(
+            f"{res} declares lines but its write_backend {type(write_backend).__name__} is not "
+            "lines-aware (it must expose save(info, pk, patch, lines))."
+        )
     patch_type = resource.set_input_type
+    if patch_type is None:
+        raise ImproperlyConfigured(
+            f"{res} declares lines but exposes no parent set-input (update=False); a document "
+            "save patches the parent, so lines require the update surface."
+        )
+    save_root = f"{res}_save"
 
     def resolve_save(
         self: Any,
@@ -677,8 +717,7 @@ def _attach_lines_save(
         return write_backend.save(info, str(pk), patch_data, rows)
 
     annotations: dict[str, Any] = {"self": Any, "info": strawberry.Info, "pk": PublicID}
-    if patch_type is not None:
-        annotations["patch"] = patch_type | None
+    annotations["patch"] = patch_type | None
     annotations["lines"] = _types.GenericAlias(list, (line_input,)) | None
     annotations["return"] = node
     resolve_save.__annotations__ = annotations

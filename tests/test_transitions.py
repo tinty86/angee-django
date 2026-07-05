@@ -273,6 +273,46 @@ def test_policy_deny_disables_declared_edge(policy_task_table: None) -> None:
     assert task.state == PolicyTask.State.POSTED
 
 
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: [["posted", "draft"]]})
+def test_policy_overlay_must_be_a_mapping(policy_task_table: None) -> None:
+    """A non-mapping overlay fails fast, naming the setting, not mid-transition."""
+
+    task = PolicyTask.objects.create()
+    with pytest.raises(ImproperlyConfigured, match=POLICY_SETTING):
+        task.post()
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: {"allow": "posted->draft"}})
+def test_policy_overlay_edge_list_must_be_a_list(policy_task_table: None) -> None:
+    """A string where an edge list is expected is rejected, not iterated char-wise."""
+
+    task = PolicyTask.objects.create()
+    with pytest.raises(ImproperlyConfigured, match="allow"):
+        task.post()
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: {"allow": [["posted", "draft", "extra"]]}})
+def test_policy_overlay_edge_must_be_a_pair(policy_task_table: None) -> None:
+    """A malformed edge (not a [source, target] pair) is rejected with a clear error."""
+
+    task = PolicyTask.objects.create()
+    with pytest.raises(ImproperlyConfigured, match="pair"):
+        task.post()
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(**{POLICY_SETTING: {"deny": [["draft", "bogus"]]}})
+def test_policy_overlay_rejects_unknown_state(policy_task_table: None) -> None:
+    """An edge naming a state outside the field's enum is rejected by name."""
+
+    task = PolicyTask.objects.create()
+    with pytest.raises(ImproperlyConfigured, match="unknown state"):
+        task.post()
+
+
 def test_policy_marker_requires_a_policy_setting() -> None:
     """A ``policy`` transition on a declaration without ``policy_setting`` fails fast."""
 

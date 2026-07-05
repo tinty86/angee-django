@@ -6,8 +6,9 @@ from typing import Any
 
 import pytest
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import models
+from django.db import IntegrityError, models
 from rebac import (
     RelationshipTuple,
     actor_context,
@@ -123,6 +124,45 @@ def test_parent_company_member_reaches_subsidiary(django_user_model: Any) -> Non
 
     with actor_context(outsider):
         assert not company_model.objects.filter(pk=child.pk).exists()
+
+
+@pytest.mark.django_db
+def test_company_clean_rejects_self_parent() -> None:
+    """A company naming itself as parent fails ``full_clean`` — the write path."""
+
+    company_model = apps.get_model("iam", "Company")
+    with system_context(reason="test company self-parent"):
+        company = company_model.objects.create(name="Solo")
+        company.parent = company
+        with pytest.raises(ValidationError):
+            company.full_clean()
+
+
+@pytest.mark.django_db
+def test_company_check_constraint_rejects_self_parent() -> None:
+    """The DB check constraint refuses a self-parent even on a bare save."""
+
+    company_model = apps.get_model("iam", "Company")
+    with system_context(reason="test company self-parent db"):
+        company = company_model.objects.create(name="Solo")
+        company.parent_id = company.pk
+        with pytest.raises(IntegrityError):
+            company.save(update_fields=["parent"])
+
+
+@pytest.mark.django_db
+def test_company_clean_rejects_ancestor_cycle() -> None:
+    """Re-parenting a company under its own descendant (a cycle) is rejected."""
+
+    company_model = apps.get_model("iam", "Company")
+    with system_context(reason="test company cycle"):
+        top = company_model.objects.create(name="Top")
+        middle = company_model.objects.create(name="Middle", parent=top)
+        bottom = company_model.objects.create(name="Bottom", parent=middle)
+        # Close the loop Top -> Bottom -> Middle -> Top.
+        top.parent = bottom
+        with pytest.raises(ValidationError):
+            top.full_clean()
 
 
 @pytest.mark.django_db

@@ -35,6 +35,29 @@ class SaleDoc(AngeeDataModel):
         rebac_id_attr = "sqid"
 
 
+class Product(AngeeDataModel):
+    """An owner-gated catalogue row a line may reference (visibility target).
+
+    Its own REBAC policy is what a line's ``product`` public-id decode is scoped
+    to: a line may only reference a product the caller can read, so a decode that
+    ran under the §3.4 child elevation (sudo) instead of the caller's actor would
+    leak invisible rows — the hole the two-phase diff closes.
+    """
+
+    sqid_prefix = "prd_"
+
+    name = models.CharField(max_length=200)
+
+    class Meta(AngeeDataModel.Meta):
+        """Concrete owner-gated product model for line-relation visibility tests."""
+
+        abstract = False
+        app_label = "linesdemo"
+        db_table = "test_linesdemo_product"
+        rebac_resource_type = "linesdemo/product"
+        rebac_id_attr = "sqid"
+
+
 class SaleLine(AngeeDataModel):
     """One ordered child line of a :class:`SaleDoc` (no row policy of its own)."""
 
@@ -44,6 +67,13 @@ class SaleLine(AngeeDataModel):
         SaleDoc,
         on_delete=models.CASCADE,
         related_name="lines",
+    )
+    product = models.ForeignKey(
+        Product,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
     )
     label = models.CharField(max_length=200)
     quantity = models.IntegerField(default=1)

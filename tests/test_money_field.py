@@ -29,7 +29,7 @@ from angee.graphql.data.metadata import (
 )
 from angee.graphql.data.resource_fields import model_resource_fields
 from angee.graphql.field_types import register_field_types
-from tests.money_models import MoneyDocument, MoneyLine
+from tests.money_models import MoneyDocument, MoneyLine, MoneyStatement
 
 
 def test_check_passes_for_a_sibling_currency_fk() -> None:
@@ -42,6 +42,12 @@ def test_check_passes_for_a_one_hop_currency_path() -> None:
     """A one-hop ``order.currency`` path resolving through a parent FK is valid."""
 
     assert MoneyLine._meta.get_field("price").check() == []
+
+
+def test_check_passes_for_a_one_hop_path_through_a_one_to_one() -> None:
+    """A one-hop path whose first segment is a ``OneToOneField`` parent link is valid."""
+
+    assert MoneyStatement._meta.get_field("total").check() == []
 
 
 def test_check_reports_a_missing_currency_field() -> None:
