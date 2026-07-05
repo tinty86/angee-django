@@ -171,6 +171,21 @@ class AngeeModel(TimestampMixin, RebacMixin):
     Extensions use ``extends`` instead of this flag.
     """
 
+    child_overrides_parent: bool = False
+    """Whether a materialized child's own methods override its concrete parent's.
+
+    A materialized child (``runtime = True`` + ``extends``) is emitted
+    ``class Child(ConcreteParent, AbstractChild)`` — concrete parent first — so the
+    parent wins the MRO and the child cannot override the parent's methods
+    natively. Declaring ``child_overrides_parent = True`` flips this one child's
+    base order to ``class Child(AbstractChild, ConcreteParent)`` so the child's own
+    methods win. Read non-inherited (like ``runtime``); the default preserves the
+    safe parent-first status quo, so ``parties.Person``/``Organization`` (which
+    declare a different default manager than ``Party``) stay parent-first and
+    byte-for-byte unchanged. The composer enforces the flip's manager/transition
+    guards (see ``angee.compose.runtime``).
+    """
+
     class Meta:
         """Django model options for Angee's abstract model base."""
 
@@ -181,6 +196,12 @@ class AngeeModel(TimestampMixin, RebacMixin):
         """Return whether this model class declares itself as a runtime model."""
 
         return cls.__dict__.get("runtime", False)
+
+    @classmethod
+    def overrides_runtime_parent(cls) -> bool:
+        """Return whether this materialized child opts into child-first emission."""
+
+        return bool(cls.__dict__.get("child_overrides_parent", False))
 
     @classmethod
     def impl_key_for(cls, field_name: str, value: Any, *, default: str | None = None) -> str:

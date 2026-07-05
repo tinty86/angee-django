@@ -16,8 +16,10 @@ from django.db import models
 
 import angee.compose as compose_package
 import angee.compose.runtime as runtime_module
+from angee.base.fields import StateField
 from angee.base.mixins import HistoryMixin, RevisionMixin
-from angee.base.models import AngeeModel
+from angee.base.models import AngeeManager, AngeeModel
+from angee.base.transitions import StateTransitions, save_state, transition
 from angee.compose.appgraph import AppGraph
 from angee.compose.apps import ComposeConfig
 from angee.compose.management.commands.angee import Command
@@ -466,6 +468,203 @@ def test_runtime_renders_materialized_child_extension_across_apps(tmp_path: Path
     assert "from tests.child.models import RuntimeChild as AbstractRuntimeChild" in child_source
     assert "class RuntimeChild(TargetRuntime, AbstractRuntimeChild):" in child_source
     assert "class TargetRuntime(AbstractTargetRuntime):" in sources[Path("target/models.py")]
+
+
+class _ProbeParentManager(AngeeManager):  # type: ignore[misc]
+    """Distinct manager standing in for a materialized parent's default manager."""
+
+
+class _ProbeMixinManager(AngeeManager):  # type: ignore[misc]
+    """Distinct manager a source-side mixin would inject under a child-first flip."""
+
+
+def test_runtime_child_override_flips_base_order(tmp_path: Path) -> None:
+    """``child_overrides_parent`` emits the abstract source before the concrete parent (F-e)."""
+
+    class OverrideChild(AngeeModel):
+        runtime = True
+        extends = "tests.DecoratedRevisionThing"
+        child_overrides_parent = True
+        child_value = models.CharField(max_length=16)
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    app_config = SimpleNamespace(
+        label="tests",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(
+            DecoratedRevisionThing=DecoratedRevisionThing,
+            OverrideChild=OverrideChild,
+        ),
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("tests/models.py")]
+
+    assert "class DecoratedRevisionThing(AbstractDecoratedRevisionThing):" in source
+    # Flipped: source before parent (vs the parent-first status quo).
+    assert "class OverrideChild(AbstractOverrideChild, DecoratedRevisionThing):" in source
+    assert "class OverrideChild(DecoratedRevisionThing, AbstractOverrideChild):" not in source
+    # The flip re-declares the parent-shared framework fields as None so the child
+    # inherits the parent's columns instead of duplicating them.
+    child_body = source[source.index("class OverrideChild") :]
+    assert "created_at = None" in child_body
+    assert "updated_at = None" in child_body
+
+
+def test_runtime_parties_children_stay_parent_first(tmp_path: Path) -> None:
+    """Guard (a): parties children never opt in — parent-first order is byte-preserved (F-e)."""
+
+    runtime = Runtime(
+        tuple(apps.get_app_config(label) for label in ("resources", "iam", "integrate", "storage", "parties")),
+        runtime_dir=tmp_path / "runtime",
+    )
+
+    source = runtime.render_sources()[Path("parties/models.py")]
+
+    assert "class Person(Party, AbstractPerson):" in source
+    assert "class Organization(Party, AbstractOrganization):" in source
+    assert "AbstractPerson, Party" not in source
+    assert "AbstractOrganization, Party" not in source
+    # No opt-in → no field-removal shadows anywhere in the parties runtime.
+    assert "created_at = None" not in source
+
+
+def test_runtime_child_override_rejects_silent_manager_swap(tmp_path: Path) -> None:
+    """Guard (b): a flip that would swap the default manager without an explicit one fails (F-e)."""
+
+    class ParentWithManager(AngeeModel):
+        runtime = True
+        objects = _ProbeParentManager()
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    class ManagerMixin(AngeeModel):
+        objects = _ProbeMixinManager()
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    class SwapChild(ManagerMixin):
+        runtime = True
+        extends = "tests.ParentWithManager"
+        child_overrides_parent = True
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    app_config = SimpleNamespace(
+        label="tests",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(ParentWithManager=ParentWithManager, SwapChild=SwapChild),
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="default manager"):
+        Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+
+
+def test_runtime_child_override_allows_explicit_own_manager(tmp_path: Path) -> None:
+    """Guard (b): the same swap is allowed when the child declares its own manager (F-e)."""
+
+    class ParentWithManager(AngeeModel):
+        runtime = True
+        objects = _ProbeParentManager()
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    class ExplicitChild(AngeeModel):
+        runtime = True
+        extends = "tests.ParentWithManager"
+        child_overrides_parent = True
+        objects = _ProbeMixinManager()
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    app_config = SimpleNamespace(
+        label="tests",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(ParentWithManager=ParentWithManager, ExplicitChild=ExplicitChild),
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("tests/models.py")]
+
+    assert "class ExplicitChild(AbstractExplicitChild, ParentWithManager):" in source
+
+
+def test_runtime_child_override_rejects_non_child_optin(tmp_path: Path) -> None:
+    """The opt-in is meaningless off a materialized child, so the composer rejects it (F-e)."""
+
+    class NotAChild(AngeeModel):
+        runtime = True
+        child_overrides_parent = True
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    app_config = SimpleNamespace(
+        label="tests",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(NotAChild=NotAChild),
+    )
+
+    with pytest.raises(ImproperlyConfigured, match="not a materialized child"):
+        Runtime((app_config,), runtime_dir=tmp_path / "runtime")
+
+
+def test_runtime_child_override_revalidates_transition_metadata(tmp_path: Path) -> None:
+    """Guard (c): an opting child's inherited transition metadata re-validates on the flip (F-e)."""
+
+    class Lifecycle(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        DONE = "done", "Done"
+
+    class TxnParent(AngeeModel):
+        runtime = True
+        status = StateField(choices_enum=Lifecycle, default=Lifecycle.DRAFT)
+        status_transitions = StateTransitions(status, {Lifecycle.DRAFT: [Lifecycle.DONE]})
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+        @transition(status, source=Lifecycle.DRAFT, target=Lifecycle.DONE, on_success=save_state)
+        def finish(self) -> None:
+            """Move draft to done."""
+
+    class TxnChild(AngeeModel):
+        runtime = True
+        extends = "tests.TxnParent"
+        child_overrides_parent = True
+        note = models.CharField(max_length=16, blank=True, default="")
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    app_config = SimpleNamespace(
+        label="tests",
+        name=__name__,
+        module=sys.modules[__name__],
+        models_module=SimpleNamespace(TxnParent=TxnParent, TxnChild=TxnChild),
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("tests/models.py")]
+
+    assert "class TxnChild(AbstractTxnChild, TxnParent):" in source
 
 
 def test_runtime_rejects_mismatched_runtime_model_label(tmp_path: Path) -> None:

@@ -25,6 +25,7 @@ from django.utils.module_loading import module_has_submodule
 
 from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.models import AngeeModel
+from angee.base.transitions import revalidate_transition_metadata
 from angee.compose.web import WebRuntime
 from angee.fs import GENERATED_SENTINEL, write_atomic
 
@@ -54,6 +55,26 @@ class RuntimeModelRenderPlan:
     model_class: type[AngeeModel]
     source_alias: str
     runtime_parent_alias: str | None
+    child_overrides_parent: bool
+    """Whether this materialized child emits its abstract source before its concrete parent.
+
+    ``True`` only for a child declaring ``child_overrides_parent`` (F-e); it flips
+    the base tuple to ``[donors] → source → parent`` so the source's methods win
+    the MRO natively. ``False`` keeps the parent-first status quo.
+    """
+
+    override_removed_fields: tuple[str, ...]
+    """Parent-shared abstract fields the flipped child re-declares as ``None``.
+
+    Empty unless ``child_overrides_parent``. Child-first emission lists the source
+    before the concrete parent, so Django copies the source's fields — including
+    the framework fields it flattened from shared abstract ancestors
+    (``created_at``/``updated_at``) — as *local* before the MTI parent link would
+    dedup them, duplicating the parent's columns. Re-declaring each as ``None``
+    drops the copy so the child inherits the parent's column and the emitted schema
+    matches the parent-first order.
+    """
+
     extension_bases: tuple[type[models.Model], ...]
     extension_aliases: tuple[tuple[type[models.Model], str], ...]
     decorators: tuple[ModelDecorator, ...]
@@ -103,6 +124,7 @@ class Runtime:
         self._check_runtime_parent_targets()
         self.extensions = self._extensions_for()
         self._check_field_collisions()
+        self._check_child_overrides()
         self.labels = tuple(sorted(self.sources_by_label))
 
     @classmethod
@@ -327,11 +349,16 @@ class Runtime:
             attributes = self._model_attributes(label, model_class, extension_bases)
             imports.extend(self._model_decorator_imports(decorators))
             imports.extend(self._model_attribute_imports(attributes))
+            child_overrides_parent = runtime_parent_alias is not None and model_class.overrides_runtime_parent()
             render_plans.append(
                 RuntimeModelRenderPlan(
                     model_class=model_class,
                     source_alias=source_alias,
                     runtime_parent_alias=runtime_parent_alias,
+                    child_overrides_parent=child_overrides_parent,
+                    override_removed_fields=(
+                        self._child_override_removed_fields(model_class) if child_overrides_parent else ()
+                    ),
                     extension_bases=extension_bases,
                     extension_aliases=tuple(aliased_extensions),
                     decorators=decorators,
@@ -341,6 +368,7 @@ class Runtime:
                         source_alias=source_alias,
                         runtime_parent_alias=runtime_parent_alias,
                         extension_aliases=tuple(aliased_extensions),
+                        child_overrides_parent=child_overrides_parent,
                     ),
                 )
             )
@@ -350,17 +378,25 @@ class Runtime:
         for plan in render_plans:
             meta_name = f"_{plan.model_class.__name__}Meta"
             base_names = [alias for _extension, alias in plan.extension_aliases]
-            if plan.runtime_parent_alias is not None:
-                base_names.append(plan.runtime_parent_alias)
-            base_names.append(plan.source_alias)
+            if plan.runtime_parent_alias is None:
+                base_names.append(plan.source_alias)
+            elif plan.child_overrides_parent:
+                # F-e: the abstract source before the concrete parent, so the
+                # child's own methods win the MRO natively.
+                base_names.extend([plan.source_alias, plan.runtime_parent_alias])
+            else:
+                base_names.extend([plan.runtime_parent_alias, plan.source_alias])
             meta_lines = [
                 "        abstract = False",
                 f"        app_label = {label!r}",
             ]
             meta_lines.extend(self._rebac_meta_source(plan.model_class))
             body_lines = [
-                line for attribute in plan.attributes for line in (*self._model_attribute_source(attribute), "")
+                line for name in plan.override_removed_fields for line in (f"    {name} = None", "")
             ]
+            body_lines.extend(
+                line for attribute in plan.attributes for line in (*self._model_attribute_source(attribute), "")
+            )
             decorator_lines = [
                 self._model_decorator_source(
                     plan.model_class,
@@ -393,6 +429,7 @@ class Runtime:
         source_alias: str,
         runtime_parent_alias: str | None,
         extension_aliases: tuple[tuple[type[models.Model], str], ...],
+        child_overrides_parent: bool = False,
     ) -> tuple[str, ...]:
         """Return composed-base aliases whose ``after_resource_load`` must aggregate.
 
@@ -408,14 +445,23 @@ class Runtime:
 
         A single donor (or the same function inherited by several bases) returns
         an empty tuple: one implementation resolves natively through the MRO and
-        the runtime stays byte-identical.
+        the runtime stays byte-identical. ``child_overrides_parent`` mirrors the
+        base-tuple flip (source before parent) so the aggregator still walks the
+        exact order the single-dispatch MRO would.
         """
 
         contributors: list[tuple[str, type[models.Model]]] = [(alias, base) for base, alias in extension_aliases]
+        parent_contributor: tuple[str, type[models.Model]] | None = None
         if runtime_parent_alias is not None:
             target = cast(str, model_class.get_extension_target())
-            contributors.append((runtime_parent_alias, self.source_models_by_composition_label[target]))
-        contributors.append((source_alias, model_class))
+            parent_contributor = (runtime_parent_alias, self.source_models_by_composition_label[target])
+        source_contributor = (source_alias, model_class)
+        if child_overrides_parent and parent_contributor is not None:
+            contributors.extend((source_contributor, parent_contributor))
+        else:
+            if parent_contributor is not None:
+                contributors.append(parent_contributor)
+            contributors.append(source_contributor)
 
         aliases: list[str] = []
         seen: set[Any] = set()
@@ -658,6 +704,104 @@ class Runtime:
                             f"both {previous._meta.label} and "
                             f"{base._meta.label}"
                         )
+
+    def _check_child_overrides(self) -> None:
+        """Enforce the materialized-child override opt-in's build-time guards (F-e).
+
+        A child that declares ``child_overrides_parent`` has its base tuple flipped
+        so its own methods win the MRO (``_models_source``). The flip is only safe
+        when it changes nothing else, so this asserts, against a child-first probe
+        built from the abstract sources (so the composer fails before emitting an
+        unsafe runtime):
+
+        - the opt-in is on a genuine materialized child (``runtime`` + ``extends``);
+        - the reorder does not silently swap the child's default manager — it must
+          inherit the parent's concrete default manager or declare its own
+          explicitly (``parties.Person`` declares a different manager, so a global
+          flip is unsafe and only a per-child opt-in is offered);
+        - the child's guarded-transition metadata still validates on the flipped
+          MRO (``StateTransitions``/``@transition`` class-build checks hold).
+        """
+
+        for source_models in self.sources_by_label.values():
+            for model_class in source_models:
+                if not model_class.overrides_runtime_parent():
+                    continue
+                target = model_class.get_extension_target()
+                if target is None or not model_class.is_runtime_model():
+                    raise ImproperlyConfigured(
+                        f"{model_class.__module__}.{model_class.__name__} sets "
+                        "child_overrides_parent but is not a materialized child "
+                        "(it needs runtime = True and extends = '<app>.<Model>')."
+                    )
+                parent = self.source_models_by_composition_label[target]
+                probe = self._child_override_probe(model_class, parent)
+                self._check_child_override_manager(model_class, parent, probe)
+                revalidate_transition_metadata(probe)
+
+    def _child_override_probe(
+        self,
+        child_class: type[AngeeModel],
+        parent_class: type[AngeeModel],
+    ) -> type[models.Model]:
+        """Return an abstract probe modeling the child-first emitted base order.
+
+        The probe reorders the abstract sources exactly as ``_models_source`` will
+        reorder the concrete bases (``source`` before ``parent``), so Django's own
+        manager resolution and the transition checks read the flipped MRO. It is
+        abstract, so it never registers in the app registry and is safe to rebuild.
+        """
+
+        return type(
+            f"_{child_class.__name__}ChildOverrideProbe",
+            (child_class, parent_class),
+            {
+                "__module__": f"{self.runtime_module}._child_override_probe",
+                "Meta": type("Meta", (), {"abstract": True, "app_label": parent_class._meta.app_label}),
+            },
+        )
+
+    def _child_override_removed_fields(self, child_class: type[AngeeModel]) -> tuple[str, ...]:
+        """Return the parent-shared abstract fields a flipped child must drop (F-e).
+
+        A child that flips to child-first re-contributes the fields it flattened
+        from shared abstract ancestors (``created_at``/``updated_at``) as local,
+        duplicating the concrete parent's columns (``RuntimeModelRenderPlan``). The
+        emitted class shadows each with ``None`` to inherit the parent's column
+        instead. Only fields the child inherited from an abstract base *and* the
+        parent also owns are dropped — the child's own new fields stay.
+        """
+
+        target = cast(str, child_class.get_extension_target())
+        parent_class = self.source_models_by_composition_label[target]
+        local = {field.name for field in (*child_class._meta.local_fields, *child_class._meta.local_many_to_many)}
+        inherited = local - set(self._declared_fields(child_class))
+        # Forward fields only (``fields``/``many_to_many``) — ``get_fields`` builds the
+        # reverse-relation tree, which needs a ready app registry that render (run
+        # during app population) does not have.
+        parent_fields = {field.name for field in (*parent_class._meta.fields, *parent_class._meta.many_to_many)}
+        return tuple(sorted(inherited & parent_fields))
+
+    def _check_child_override_manager(
+        self,
+        child_class: type[AngeeModel],
+        parent_class: type[AngeeModel],
+        probe: type[models.Model],
+    ) -> None:
+        """Assert the child-first flip does not silently swap the default manager."""
+
+        parent_default = type(parent_class._meta.default_manager)
+        child_default = type(probe._meta.default_manager)
+        if child_default is parent_default:
+            return  # inherits the parent's concrete default manager
+        if child_class._meta.local_managers:
+            return  # declares its own default manager explicitly
+        raise ImproperlyConfigured(
+            f"{child_class._meta.label} sets child_overrides_parent but the child-first "
+            f"base order resolves its default manager to {child_default.__name__} instead "
+            f"of the parent's {parent_default.__name__}; declare the manager explicitly on "
+            "the child or let it inherit the parent's."
+        )
 
     def _sources_by_label(self) -> dict[str, tuple[type[AngeeModel], ...]]:
         """Return source models grouped by emitted runtime app label."""

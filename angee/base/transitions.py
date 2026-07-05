@@ -183,6 +183,29 @@ class StateTransitions:
             self._validate_declared_transition(spec)
             method_map[method_name] = spec
 
+    def revalidate_for(self, cls: type[models.Model]) -> None:
+        """Re-run this declaration's class-build validation against ``cls``'s MRO.
+
+        ``contribute_to_class`` validates only the *declaring* class's own methods
+        and installs the guarded descriptor. The composer calls this instead after
+        it reorders a materialized child's bases (``child_overrides_parent``), so
+        the flipped MRO is proven to still satisfy the same class-build checks —
+        every reachable ``@transition`` method still guards a declared or policy
+        edge. It validates without mutating ``cls`` (no descriptor install).
+        """
+
+        self._declared = self._normalize_graph()
+        seen: set[str] = set()
+        for klass in cls.__mro__:
+            for method_name, value in vars(klass).items():
+                if method_name in seen:
+                    continue
+                spec = cast(_TransitionSpec | None, getattr(value, "_angee_transition_spec", None))
+                if spec is None or not self._matches_field(spec.field):
+                    continue
+                seen.add(method_name)
+                self._validate_declared_transition(spec)
+
     def run(
         self,
         instance: models.Model,
@@ -387,6 +410,24 @@ def save_state(instance: models.Model, source: Any, target: Any) -> None:
     finally:
         if hasattr(instance, "_transition_fields"):
             delattr(instance, "_transition_fields")
+
+
+def revalidate_transition_metadata(cls: type[models.Model]) -> None:
+    """Re-validate every ``StateTransitions`` declaration reachable on ``cls``.
+
+    The composer calls this for a materialized child whose base order it flipped
+    (``child_overrides_parent``): each declaration was validated when the class
+    that *declared* it was built, but the reordered MRO must still satisfy the
+    same class-build checks. Raises ``ImproperlyConfigured`` (via the declaration)
+    when the reorder leaves a transition method guarding an undeclared edge.
+    """
+
+    seen: set[int] = set()
+    for klass in cls.__mro__:
+        for value in vars(klass).values():
+            if isinstance(value, StateTransitions) and id(value) not in seen:
+                seen.add(id(value))
+                value.revalidate_for(cls)
 
 
 def _state_key(field: StateField, value: Any) -> str:
