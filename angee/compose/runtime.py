@@ -27,6 +27,7 @@ from django.utils.module_loading import module_has_submodule
 from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.models import AngeeModel
 from angee.base.transitions import revalidate_transition_metadata
+from angee.compose.permissions import extension_source_map
 from angee.compose.web import WebRuntime
 from angee.fs import GENERATED_SENTINEL, write_atomic
 
@@ -160,7 +161,9 @@ class Runtime:
         ``runtime_dir`` → file text) is the single source of truth that
         ``emit`` writes and ``_drift`` compares against disk. It contains the
         generated package ``__init__`` plus, per label, an empty app/migrations
-        ``__init__`` and a ``models.py``.
+        ``__init__`` and a ``models.py``, plus (when a consumer addon contributes
+        through a ``permissions.extends.zed``) the merged effective zed under
+        ``permissions/<package>.zed`` — see ``angee.compose.permissions``.
         Migrations themselves are never rendered here — Django's
         ``makemigrations`` owns
         ``runtime/<label>/migrations/`` (redirected via
@@ -183,6 +186,7 @@ class Runtime:
                 source_models,
             )
         sources.update(WebRuntime(self.addons).render_sources())
+        sources.update(extension_source_map(self.addons))
         return sources
 
     def emit(self) -> None:

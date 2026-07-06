@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "tests.linesdemo",
     "tests.chatterdemo",
     "tests.scopedemo",
+    "tests.extcontrib.apps.ExtContribConfig",
     "tests.mtidemo",
     "tests.hierdemo",
 ]

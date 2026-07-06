@@ -371,6 +371,28 @@ data through REBAC, never a queryset bypass.
   walks the arrow into `<ns>/role#admin`; without the anchor that const cannot
   resolve and the evaluator raises instead of returning a clean deny. Bump the
   package `@rebac_schema_revision` when migrating a def to the const shape.
+- **A consumer addon contributes domain relations to a framework definition
+  additively — never by editing the framework zed.** The owning addon's
+  `permissions.zed` declares the *seam* (e.g. `iam/company`); a consumer addon
+  that needs a company-scoped role adds it from its own **`permissions.extends.zed`**
+  (sibling to `permissions.zed`), owned by `angee.compose.permissions`. Each
+  `definition <target> { … }` block in the fragment names an existing definition
+  and lists the relations it contributes and the permission arms it unions in
+  (`permission read = <term>` merges to `read = (<base>) + (<term>)`). The
+  composer merges every fragment into its target's owning package at build time,
+  emits the merged effective zed to `runtime/permissions/<package>.zed`, and
+  repoints that package's `AppConfig.rebac_schema` at it, so `rebac sync` /
+  `rebac check` / `reconcile_permissions` all read the additive superset with no
+  library change. The merge fails fast on a relation-name collision (base or two
+  contributors), an arm whose permission the base does not declare, and a target
+  no installed package declares; contributors merge in sorted package order.
+  Functional drift is caught by `rebac sync` (content hash) and `angee build
+  --check` (the emitted file); the contribution is revisioned by the contributing
+  addon (`@rebac_schema_revision` in its fragment, echoed into the merged file's
+  `@rebac_extended_by`), so the base addon does **not** bump its revision for an
+  additive extension. **Editing a framework/base-addon `permissions.zed` to name
+  a domain role (`accountant`, `salesperson`, …) is a bug** — the vocabulary
+  belongs in the consumer addon that owns the concern.
 - There is no `rebac_roles` command — grant roles with `rebac.roles.grant`. A
   superuser created without a real `save()` (bulk_create, loaddata, or skipped as
   unchanged) is never in `angee/role:admin#member`, so const-admin reach fails
