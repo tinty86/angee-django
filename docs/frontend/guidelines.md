@@ -248,6 +248,13 @@ TanStack apply the URL-owned filter object to in-memory rows.
   action controls or hooks, but they do not own table mechanics, duplicate route
   params, cache state, bespoke loading/error surfaces, or local copies of shared
   resource-view state.
+- **Two-collection settings pages are a sanctioned family, not a double toolbar.**
+  A `SettingsShell` may stack several `SettingsSection`s, each wrapping its own
+  `ResourceList`/`DrawerResourceList` (integrate Templates: template sources +
+  templates; storage settings: drives + backends). Each section is a *distinct*
+  collection and owns its own data-controls/toolbar row — that is correct
+  uniformity, not the double-toolbar defect. The defect is *two* chrome rows
+  stacked over the *same* collection; one collection gets exactly one controls row.
 - **The data view's client/server boundary is a row-model choice, not a fork.**
   Where list operations (filter/sort/paginate/group) resolve follows the
   established data-grid pattern — AG Grid's named *row models*, TanStack's
