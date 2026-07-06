@@ -141,11 +141,12 @@ def test_multi_membership_create_without_company_raises_field_validation() -> No
 
 @pytest.mark.django_db
 def test_supplied_cross_company_create_is_denied_by_the_gate() -> None:
-    """A supplied company the actor may read but is not a member of is denied.
+    """A supplied company the actor is not a member of is denied by the gate.
 
-    The actor is granted ``accountant`` (read) on the other company, so the id
-    decodes, yet ``create = company->member`` walks membership and denies — the
-    supplied id rides the gate exactly as any other, with no default-path bypass.
+    The company id decodes through the identity owner (``field_id_decode``), yet
+    ``create = company->member`` walks membership and denies — the supplied id
+    rides the gate exactly as any other, with no bypass through the
+    membership-default path.
     """
 
     call_command("rebac", "sync", verbosity=0)
@@ -154,7 +155,6 @@ def test_supplied_cross_company_create_is_denied_by_the_gate() -> None:
         home = Company.objects.create(name="Home Co")
         other = Company.objects.create(name="Other Co")
     _grant(home, "direct_member", member)
-    _grant(other, "accountant", member)
 
     result = execute_schema(
         _SCHEMA,

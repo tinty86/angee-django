@@ -33,11 +33,14 @@ own ``permissions.zed`` definition, so isolation is enforced from day one::
         permission delete = company->member + admin->member
     }
 
-Company-scoped role bindings are relations *on the company* (``accountant``,
-``salesperson``), so a scoped resource reads ``company->accountant`` — an
-accountant *of company A*, never a global accountant. Subsidiaries inherit reach
-through ``parent`` (``permission member = direct_member + parent->member``): an
-ancestor-company member reaches every descendant scope.
+Company-scoped role bindings are relations *on the company*, so a scoped resource
+reads ``company-><role>`` — a role *of company A*, never a global role. The base
+``iam/company`` definition names no such role: a consumer addon contributes each
+one additively through the ``permissions.extends.zed`` seam
+(``angee.compose.permissions``), keeping its domain vocabulary in the addon that
+owns the concern. Subsidiaries inherit reach through ``parent``
+(``permission member = direct_member + parent->member``): an ancestor-company
+member reaches every descendant scope.
 """
 
 from __future__ import annotations
@@ -325,10 +328,12 @@ class Company(AngeeDataModel, ArchiveMixin):
     customer/vendor is a ``parties.Organization``). Companies form a hierarchy
     through ``parent``, and REBAC lets an ancestor-company member reach every
     descendant scope (see ``permissions.zed`` ``iam/company``). Company-scoped
-    role bindings (accountant, salesperson) live on the company row, so a role is
-    always *of a company*, never global. Carries no fiscal fields and no party
-    FK — see the module docstring for the party/fiscal faces contributed
-    downstream and the scope convention.
+    role bindings live on the company row — a role is always *of a company*, never
+    global — and are contributed additively by the consumer addon that owns each
+    role (the ``permissions.extends.zed`` seam), so this framework model names no
+    domain role. Carries no fiscal fields and no party FK — see the module
+    docstring for the party/fiscal faces contributed downstream and the scope
+    convention.
     """
 
     runtime = True
