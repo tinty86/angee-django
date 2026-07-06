@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, connection, models
 from import_export.results import Result, RowResult
@@ -24,6 +25,7 @@ from angee.resources.tiers import ResourceTier
 from angee.resources.widgets import (
     XrefForeignKeyWidget,
     XrefManyToManyWidget,
+    resolve_ledger_xref,
     resolve_xref,
 )
 
@@ -465,6 +467,77 @@ def test_resolve_xref_reports_ambiguous_source_rows() -> None:
                 ResolveAmbiguousLedger,
                 {"tests.resource_addon": "tests.resource_addon"},
             )
+    finally:
+        with connection.schema_editor() as schema_editor:
+            for model in reversed(models_to_create):
+                schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resolve_ledger_xref_binds_ledger_and_app_registry_aliases(monkeypatch) -> None:
+    """The loader owns persona lookup: ledger + app-registry aliases in one call.
+
+    A demo-seed hook resolves ``<addon>.<xref>`` by the same alias convention the
+    loader builds per addon — the installed app's canonical name resolves from both
+    its dotted name and its short label — so the persona-lookup logic lives once
+    here, not copied byte-for-byte into every ``after_resource_load`` donor.
+    """
+
+    class LedgerXrefTarget(models.Model):
+        """Target row a ledger xref points at."""
+
+        name = models.CharField(max_length=40)
+
+        class Meta:
+            """Django model options for the test target model."""
+
+            app_label = "base"
+
+    class LedgerXrefLedger(models.Model):
+        """Ledger model without the production uniqueness constraint."""
+
+        source_addon = models.CharField(max_length=200)
+        xref = models.CharField(max_length=160)
+        target_model = models.CharField(max_length=120)
+        target_id = models.CharField(max_length=120, blank=True, default="")
+
+        class Meta:
+            """Django model options for the test ledger."""
+
+            app_label = "base"
+
+    models_to_create: tuple[type[models.Model], ...] = (LedgerXrefTarget, LedgerXrefLedger)
+    with connection.schema_editor() as schema_editor:
+        for model in models_to_create:
+            schema_editor.create_model(model)
+    # No concrete ``resources.Resource`` exists under bare test settings (the composer
+    # is not run), so stand the ledger model in for the helper's own ledger lookup only;
+    # every other ``get_model`` (the target-model resolution inside ``resolve_xref``)
+    # delegates to the real registry, and the addon-alias map is built from the real
+    # installed apps.
+    real_get_model = apps.get_model
+
+    def fake_get_model(app_label: str, model_name: str, *args: Any, **kwargs: Any) -> Any:
+        if (app_label, model_name) == ("resources", "Resource"):
+            return LedgerXrefLedger
+        return real_get_model(app_label, model_name, *args, **kwargs)
+
+    monkeypatch.setattr(apps, "get_model", fake_get_model)
+    try:
+        target = LedgerXrefTarget.objects.create(name="alice")
+        LedgerXrefLedger.objects.create(
+            source_addon="angee.resources",
+            xref="user_alice",
+            target_model="base.LedgerXrefTarget",
+            target_id=str(target.pk),
+        )
+
+        # ``resources`` is the short label of the ``angee.resources`` app, so the
+        # app-registry alias map resolves the label form to the canonical addon name.
+        assert resolve_ledger_xref("resources.user_alice") == target
+        # An unresolved handle is a graceful ``None``, never a raise.
+        assert resolve_ledger_xref("resources.user_missing") is None
+        assert resolve_ledger_xref("no_such_addon.user_alice") is None
     finally:
         with connection.schema_editor() as schema_editor:
             for model in reversed(models_to_create):
