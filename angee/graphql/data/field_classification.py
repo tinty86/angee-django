@@ -44,10 +44,12 @@ def resource_field_kind(
 
     if is_list or (field is not None and is_to_many_relation(field)):
         return "list"
+    if field is not None and field.is_relation and projected_as_scalar:
+        return "scalar"
     if is_object or has_relation_axis:
         return "relation"
     if field is not None and field.is_relation:
-        return "scalar" if projected_as_scalar else "relation"
+        return "relation"
     if is_enum or (field is not None and getattr(field, "choices", None)):
         return "enum"
     if field is not None and getattr(field, "many_to_many", False):

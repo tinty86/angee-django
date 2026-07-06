@@ -1358,6 +1358,21 @@ def test_scalar_id_to_one_relation_classifies_as_leaf() -> None:
     assert resource_field_widget(oauth_client_fk, scalar_kind) == "select"
 
 
+def test_scalar_id_relation_axis_classifies_as_leaf() -> None:
+    """A scalar-id FK stays a leaf even when it also contributes a group axis."""
+
+    oauth_client_fk = ExternalAccount._meta.get_field("oauth_client")
+
+    kind = resource_field_kind(
+        oauth_client_fk,
+        has_relation_axis=True,
+        projected_as_scalar=True,
+    )
+
+    assert kind == "scalar"
+    assert resource_field_widget(oauth_client_fk, kind) == "select"
+
+
 def test_console_schema_exposes_user_change_subscription(
     iam_connection_tables: None,
 ) -> None:
