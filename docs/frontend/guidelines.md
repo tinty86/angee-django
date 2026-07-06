@@ -141,6 +141,13 @@ TanStack apply the URL-owned filter object to in-memory rows.
   missing-record handling, success hooks).
   Don't hand-author these as `graphql()` documents or page-local
   `ctx.record.id → mutate → refresh` callbacks.
+- **`ActionResult` verbs settle through `useActionResultRun`** (`@angee/ui`) —
+  it fires the verb, toasts the outcome (danger with the in-band non-field
+  reasons; success with the message), and deep-links to a created record via
+  `linkTo` + the routed resource page when the outcome carries an `id`. It
+  serves authored verbs (extract the outcome field inside `fire`) and derived
+  verbs (`useActionMutation`'s mutate resolves the full `ActionOutcome`)
+  alike; never hand-roll the fire → toast → navigate ceremony in a chrome.
 - React does not own business logic, permissions, models, or persistence.
 - **React state has one owner.** Keep canonical facts in the smallest owner:
   route/search facts in TanStack Router/nuqs, server facts in refine data hooks
@@ -405,7 +412,12 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   The F6 lines composer applies the same rule per cell but at the *diff boundary*,
   not with `createOnly`: `editable-lines.ts`'s `lineFieldValue` lower-cases an enum
   line cell's write (the child line input types the choices column as `String`), so
-  even an untouched UPPERCASE read serializes as the lowercase model value.
+  even an untouched UPPERCASE read serializes as the lowercase model value. The
+  same boundary owns the blank-cell rule (`lineToInput`): a blank non-String cell
+  (`""` seed or widget-cleared `null`) is omitted on a created row so input/model
+  defaults apply — Strawberry rejects `""` for Decimal/Int/Date — and ships `null`
+  on an existing row (the honest "cleared" value); only a String-scalar cell's
+  `""` is a real wire value and ships verbatim.
 - **An M2M line cell is a relation multi-select, not a `tagInput`** — a `kind:"list"`
   child field that carries a relation target (an M2M, e.g. a line's `taxes`) renders
   through `relationListFieldInfo` + `RelationMultiFieldWidget` (fetched options,
@@ -464,6 +476,17 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
 - **A new web package needs `pnpm install` + a Vite restart** (Vite snapshots
   workspace packages at start) plus registration in the host `main.tsx` addons and
   `package.json`.
+- **A sibling repo's `pnpm install` can stomp this repo's per-package
+  `node_modules`.** A downstream checkout that links `@angee/*` by path (e.g.
+  arpee) rewrites `angee/web/<pkg>/node_modules` symlinks into *its own*
+  `.pnpm` store; TS then loads two `vite`/`vitest` type identities and every
+  package typecheck fails with `Excessive stack depth comparing types
+  'UserConfig' and 'UserConfig'` in `vitest.shared.ts` — nothing in this repo's
+  diff is at fault. Fix the environment, not the types: remove the stomped
+  per-package `node_modules` dirs and re-run `pnpm install` here (a plain or
+  `--force` install alone does not re-link them). Diagnose with
+  `readlink angee/web/app/node_modules/vitest` — it must not point into the
+  sibling repo.
 - **Prebundled `@angee/*` source edits are cache-busted by source signature, not
   a manual wipe.** A project that consumes `@angee/*` as installed packages
   (`prebundleAngeePackages: true`) prebundles them; Vite's optimizer hash comes
