@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "tests.chatterdemo",
     "tests.scopedemo",
     "tests.mtidemo",
+    "tests.hierdemo",
 ]
 DATABASES = {
     "default": {

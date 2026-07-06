@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, ClassVar, Self, TypeVar, cast
 
 import reversion
 from django.conf import settings
-from django.db import models
+from django.core.exceptions import FieldDoesNotExist, ValidationError
+from django.db import connections, models, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Replace
 from rebac import current_actor
 
 from angee.base.actors import actor_user_id
@@ -14,6 +18,7 @@ from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.fields import SqidField
 
 _ArchiveModelT = TypeVar("_ArchiveModelT", bound=models.Model)
+_HierarchyModelT = TypeVar("_HierarchyModelT", bound="HierarchyMixin")
 
 ARCHIVE_FLAG_FIELD = "is_archived"
 """The one archive-flag column name — the single archive vocabulary word.
@@ -291,3 +296,319 @@ class RevisionMixin(models.Model):
         with reversion.create_revision():
             self.save(update_fields=update_fields_with_auto_now(self, reverted))
             reversion.set_comment(f"Reverted to revision {version.revision_id}.")
+
+
+class PatternOpsIndex(models.Index):
+    """A btree index carrying a text-pattern operator class, auto-named per model.
+
+    PostgreSQL will not use a default btree index to serve a prefix
+    ``LIKE 'x%'`` under a non-C collation; a ``varchar_pattern_ops`` /
+    ``text_pattern_ops`` operator-class index is required, and it rides into the
+    migration through :meth:`~django.db.models.Index.deconstruct`. Django forbids
+    ``opclasses`` on an :class:`~django.db.models.Index` without an explicit
+    ``name``, but an abstract mixin cannot name one index that several concrete
+    models each build (the name would collide). This withholds ``opclasses``
+    from ``Index.__init__`` so Django auto-names one index per concrete table
+    (``set_name_with_model``), then restores the operator class. Backends without
+    operator classes (SQLite) drop it and index the column plainly, so the prefix
+    query stays correct on every backend — only the plan differs.
+    """
+
+    def __init__(self, *args: Any, opclasses: Sequence[str] = (), **kwargs: Any) -> None:
+        """Build the index withholding ``opclasses`` from the name-required guard."""
+
+        super().__init__(*args, **kwargs)
+        self.opclasses = tuple(opclasses)
+
+
+class HierarchyQuerySet(models.QuerySet[_HierarchyModelT]):
+    """Subtree read scopes for models composing :class:`HierarchyMixin`.
+
+    Compose alongside the model's base queryset (e.g.
+    ``class LocationQuerySet(HierarchyQuerySet[Location], AngeeQuerySet[Location])``)
+    so the subtree vocabulary — :meth:`subtree_of` / :meth:`ancestors_of` — reads
+    as chainable predicates over the maintained ``path`` column, served by the
+    prefix index rather than a client-side ``parent`` walk.
+    """
+
+    def subtree_of(self, node: HierarchyMixin) -> Self:
+        """Return ``node`` and every descendant (INCLUSIVE), by path prefix.
+
+        A node's own ``path`` is the prefix of every descendant's path and of
+        itself, so a single ``LIKE 'path%'`` covers the whole subtree. An
+        unmaterialized ``node`` (empty ``path``) matches nothing rather than the
+        whole table.
+        """
+
+        if not node.path:
+            return cast(Self, self.none())
+        return cast(Self, self.filter(path__startswith=node.path))
+
+    def ancestors_of(self, node: HierarchyMixin) -> Self:
+        """Return every proper ancestor of ``node`` (EXCLUSIVE of ``node``)."""
+
+        return cast(Self, self.filter(path__in=node.ancestor_paths()))
+
+
+class HierarchyMixin(models.Model):
+    """Materialized-path tree membership for a self-parented model.
+
+    Adds a ``parent`` self-FK and a maintained ``path`` column of zero-padded,
+    delimiter-terminated primary-key segments (``/0000000012/0000000045/``), so
+    subtree membership is a prefix test the database serves from an index rather
+    than a fact each addon re-derives by walking ``parent`` in the client. The
+    terminal delimiter is the correctness guarantee — a ``path`` is a string
+    prefix of another exactly when the first node is an ancestor-or-self of the
+    second — and the zero-padding (see :attr:`path_segment_width`) keeps segments
+    lexically ordered.
+
+    Compose it on a self-parented model, pair it with :class:`HierarchyQuerySet`
+    for the ``subtree_of`` / ``ancestors_of`` read scopes, and **inherit its
+    ``Meta``** so the concrete table carries the prefix index::
+
+        class Location(HierarchyMixin, CompanyScopedMixin, AngeeDataModel):
+            ...
+
+            class Meta(HierarchyMixin.Meta):
+                abstract = False
+                app_label = "inventory"
+                rebac_resource_type = "inventory/location"
+
+    (Django propagates ``Meta.indexes`` only through ``Meta``-class inheritance,
+    not across sibling abstract bases, so a consumer that needs other indexes
+    lists ``*HierarchyMixin.Meta.indexes`` alongside its own.)
+
+    :meth:`save` maintains the path: derived from the parent on create, and on
+    reparent it rejects a cycle (a new parent inside the node's own subtree) and
+    a cross-company parent (when the model carries a ``company`` field), then
+    rewrites the whole subtree's paths in one bulk ``UPDATE``. It owns no REBAC of
+    its own; path maintenance runs unscoped so a reparent reaches descendants the
+    acting user cannot read.
+    """
+
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
+    """The parent node, or ``NULL`` for a root; PROTECT keeps a subtree whole."""
+
+    path = models.CharField(max_length=255, default="", editable=False)
+    """Maintained root-to-self path of padded pk segments; server-owned.
+
+    ``editable=False`` keeps it out of forms and the auto-CRUD write surface —
+    the mixin is its only writer. The column width bounds tree depth: at
+    :attr:`path_segment_width` = 12 each segment costs 13 characters, so
+    ``max_length=255`` holds ~19 levels — deeper than any ERP location/category
+    tree, but a consumer expecting deeper nesting must widen the column.
+    Maintenance writes go through queryset ``update()`` (the one-UPDATE cascade),
+    so ``path`` changes bypass ``post_save`` — a ``HistoryMixin`` consumer's
+    historical rows do not track ``path``, a derivable server-owned value.
+    """
+
+    path_segment_width: ClassVar[int] = 12
+    """Zero-pad width for one pk segment.
+
+    Governs lexical ordering only; correctness rests on the terminal delimiter,
+    so a primary key wider than this stays correct (it just sorts by raw digits
+    within its level). Twelve digits order rows up to a trillion per table.
+    """
+
+    PATH_DELIMITER: ClassVar[str] = "/"
+    """Segment delimiter; safe because a padded pk segment is digits only."""
+
+    class Meta:
+        """Abstract options carrying the prefix-serving ``path`` index."""
+
+        abstract = True
+        indexes = (PatternOpsIndex(fields=["path"], opclasses=["varchar_pattern_ops"]),)
+
+    @classmethod
+    def from_db(cls, db: Any, field_names: Sequence[str], values: Sequence[Any]) -> Self:
+        """Record the loaded ``parent`` so :meth:`save` can detect a reparent.
+
+        Only when ``parent`` was actually loaded: seeding the baseline off a
+        deferred field (``.only(...)``/``.defer(...)`` excluding ``parent``)
+        would trigger one extra query per row. :meth:`_hierarchy_needs_repath`
+        falls back to the live ``parent_id`` when the baseline is absent, so a
+        deferred load simply stays lazy.
+        """
+
+        instance = super().from_db(db, field_names, values)
+        if "parent_id" in field_names:
+            instance._hierarchy_saved_parent_id = instance.parent_id
+        return instance
+
+    def refresh_from_db(
+        self,
+        using: str | None = None,
+        fields: Sequence[str] | None = None,
+        from_queryset: models.QuerySet[Any] | None = None,
+    ) -> None:
+        """Reload the row, re-syncing the reparent baseline to the loaded ``parent``.
+
+        Without the re-sync a refresh after an external ``parent`` change leaves
+        the baseline stale, and the next unrelated ``save()`` would be
+        misclassified as a reparent.
+        """
+
+        super().refresh_from_db(using=using, fields=fields, from_queryset=from_queryset)
+        if fields is None or "parent" in fields or "parent_id" in fields:
+            self._hierarchy_saved_parent_id = self.parent_id
+
+    def ancestor_paths(self) -> list[str]:
+        """Return the paths of this node's proper ancestors, root-first.
+
+        Decomposes this node's own ``path`` into the cumulative prefixes at each
+        delimiter boundary, dropping the last (the node itself) — so a root node
+        yields an empty list.
+        """
+
+        delimiter = self.PATH_DELIMITER
+        segments = [segment for segment in self.path.split(delimiter) if segment]
+        prefix = delimiter
+        paths: list[str] = []
+        for segment in segments[:-1]:
+            prefix += segment + delimiter
+            paths.append(prefix)
+        return paths
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Persist the row, maintaining ``path`` on create and reparent."""
+
+        if self._state.adding:
+            self._save_created(*args, **kwargs)
+        elif self._hierarchy_needs_repath():
+            self._save_reparented(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
+        self._hierarchy_saved_parent_id = self.parent_id
+
+    def _save_created(self, *args: Any, **kwargs: Any) -> None:
+        """Insert the row, then derive and persist its ``path`` from the parent."""
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            parent = self._hierarchy_parent()
+            self._reject_cross_company_parent(parent)
+            new_path = self._hierarchy_path(parent)
+            if new_path != self.path:
+                self._hierarchy_writer().filter(pk=self.pk).update(path=new_path)
+                self.path = new_path
+
+    def _save_reparented(self, *args: Any, **kwargs: Any) -> None:
+        """Validate the move under lock, then rewrite the subtree in one UPDATE."""
+
+        # A reparent is defined by the moved ``parent``, so persist it (and the
+        # derived ``path``) even under a partial ``update_fields`` that named
+        # neither — otherwise the FK and the cascaded paths would diverge.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"parent", "path"}
+        with transaction.atomic():
+            old_path = self._lock_moved_paths()
+            parent = self._hierarchy_parent()
+            self._reject_cycle(parent)
+            self._reject_cross_company_parent(parent)
+            new_path = self._hierarchy_path(parent)
+            self.path = new_path
+            super().save(*args, **kwargs)
+            if old_path:
+                # One bulk UPDATE rewrites the old prefix on every row still
+                # under it (descendants only — the save above already repathed
+                # self) — never a per-row walk. The prefix is unique to this
+                # root-to-self chain, so a whole-string REPLACE only touches the
+                # head. An empty old path (an unmaterialized row) skips the
+                # cascade: it has nothing under it, and ``LIKE '%'`` would
+                # rewrite the whole table.
+                self._hierarchy_writer().filter(path__startswith=old_path).update(
+                    path=Replace(F("path"), Value(old_path), Value(new_path))
+                )
+
+    def _lock_moved_paths(self) -> str:
+        """Row-lock this node and its new parent, refreshing committed paths.
+
+        Two overlapping reparents interleaving on stale in-memory paths is the
+        classic materialized-path hazard, so on backends with row locks the
+        moved node and its new parent are read ``FOR UPDATE`` and their
+        committed paths replace the in-memory ones before validation and the
+        cascade prefix derive from them (feature-gated like the storage
+        ``Folder`` ancestor walk; SQLite has no row locks and stays on the
+        in-memory values). Returns this row's committed (old) path.
+        """
+
+        writer = self._hierarchy_writer()
+        if not connections[writer.db].features.has_select_for_update:
+            return self.path
+        pks = [self.pk] if self.parent_id is None else [self.pk, self.parent_id]
+        fresh: dict[Any, str] = dict(writer.select_for_update().filter(pk__in=pks).values_list("pk", "path"))
+        self.path = fresh.get(self.pk, self.path)
+        if self.parent_id is not None and self.parent_id in fresh:
+            parent = self._hierarchy_parent()
+            if parent is not None:
+                parent.path = fresh[self.parent_id]
+        return self.path
+
+    def _hierarchy_needs_repath(self) -> bool:
+        """Return whether an existing row's ``parent`` moved (or its path is unset)."""
+
+        if not self.path:
+            return True
+        loaded = getattr(self, "_hierarchy_saved_parent_id", self.parent_id)
+        return loaded != self.parent_id
+
+    def _hierarchy_parent(self) -> HierarchyMixin | None:
+        """Return the parent instance (cached when assigned), or ``None`` for a root."""
+
+        if self.parent_id is None:
+            return None
+        return cast("HierarchyMixin", self.parent)
+
+    def _hierarchy_path(self, parent: HierarchyMixin | None) -> str:
+        """Return this node's derived path under ``parent`` (a root when ``None``)."""
+
+        prefix = parent.path if parent is not None else self.PATH_DELIMITER
+        return prefix + f"{self.pk:0{self.path_segment_width}d}{self.PATH_DELIMITER}"
+
+    def _reject_cycle(self, parent: HierarchyMixin | None) -> None:
+        """Reject a reparent whose new parent is this node or one of its descendants."""
+
+        if parent is None or not self.path:
+            return
+        if parent.path.startswith(self.path):
+            raise ValidationError({"parent": "A node cannot be moved under itself or a descendant."})
+
+    def _reject_cross_company_parent(self, parent: HierarchyMixin | None) -> None:
+        """Reject a parent in another company when the model is company-scoped."""
+
+        if parent is None or not self._is_company_scoped():
+            return
+        if self.company_id != parent.company_id:
+            raise ValidationError({"parent": "Parent must belong to the same company."})
+
+    def _hierarchy_writer(self) -> models.QuerySet[Self]:
+        """Return an unscoped queryset for the mixin's own path maintenance.
+
+        Path maintenance is a system fact, not an actor read: a reparent must
+        rewrite every descendant even where the acting user's REBAC scope hides
+        some, so the write elevates when the manager supports it. This assumes
+        ``_base_manager`` is unscoped-or-sudo (the framework default); a
+        consumer must not repoint ``Meta.base_manager_name`` at an actor-scoped
+        manager, or descendant rewrites would silently REBAC-scope.
+        """
+
+        queryset = type(self)._base_manager.all()
+        sudo = getattr(queryset, "sudo", None)
+        return cast("models.QuerySet[Self]", sudo() if callable(sudo) else queryset)
+
+    @classmethod
+    def _is_company_scoped(cls) -> bool:
+        """Return whether the concrete model carries a ``company`` field."""
+
+        try:
+            cls._meta.get_field("company")
+        except FieldDoesNotExist:
+            return False
+        return True
