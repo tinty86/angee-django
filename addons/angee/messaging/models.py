@@ -23,13 +23,23 @@ from typing import Any, ClassVar, cast
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
 from django.utils import timezone
 from django.utils.text import capfirst
-from rebac import PermissionDenied, current_actor
+from rebac import (
+    PermissionDenied,
+    RelationshipTuple,
+    SubjectRef,
+    current_actor,
+    delete_relationship,
+    to_object_ref,
+    to_subject_ref,
+    write_relationships,
+)
 from rebac.managers import RebacManager
 
 from angee.base.actors import actor_user_id
@@ -66,6 +76,21 @@ def _owner_user_id(instance: models.Model) -> Any | None:
     return actor_user_id(actor)
 
 
+def _user_subject_ref(*, user: Any = None, user_id: Any = None) -> SubjectRef:
+    """Return the REBAC subject ref for a user instance or a bare user id.
+
+    The user model owns its subject identity (its ``rebac_id_attr`` sqid, not the raw
+    pk), so a bare ``user_id`` is loaded and resolved through :func:`to_subject_ref`
+    rather than assembling an ``auth/user:<pk>`` ref by hand.
+    """
+
+    if user is not None:
+        return to_subject_ref(user)
+    if user_id is None:
+        raise ValueError("A user or user_id is required to build a subject reference.")
+    return to_subject_ref(get_user_model()._base_manager.get(pk=user_id))
+
+
 class ThreadedModelMixin(models.Model):
     """Add Odoo-style chatter thread behavior to a model row.
 
@@ -85,7 +110,7 @@ class ThreadedModelMixin(models.Model):
 
     Default ``False`` keeps record chatter isolated to the record-scoped
     ``record_thread`` surface: a threaded record stays silent on the generic
-    ``changes`` subscription (F-v). A host that opts in (a chat room) stamps the flag
+    ``changes`` subscription. A host that opts in (a chat room) stamps the flag
     onto its chatter thread at attachment (``host_broadcasts_changes``), so its
     members — holding ``messaging/thread.reader`` — receive member-gated
     ``threadChanged`` events while every other record's chatter stays isolated.
@@ -452,10 +477,18 @@ class ThreadedModelMixin(models.Model):
         self,
         *,
         user: models.Model | None = None,
-        notification_policy: str = "inbox",
-        subtype_keys: tuple[str, ...] = (),
+        notification_policy: str | None = None,
+        subtype_keys: tuple[str, ...] | None = None,
+        grant_read: bool = False,
     ) -> models.Model:
-        """Subscribe a user to this row's chatter thread."""
+        """Subscribe a user to this row's chatter thread.
+
+        ``notification_policy`` / ``subtype_keys`` seed a first subscribe and default to
+        an inbox follow with no subtype filter; a re-subscribe preserves an existing
+        follower's state unless a value is passed. ``grant_read`` also grants the user
+        ``reader`` on the thread in the same write (a chat-room membership) — a consumer
+        that manages room membership composes this rather than writing the tuple itself.
+        """
 
         follower_model = apps.get_model("messaging", "ThreadFollower")
         return follower_model.objects.subscribe(
@@ -464,13 +497,23 @@ class ThreadedModelMixin(models.Model):
             role=self.thread_attachment_role,
             notification_policy=notification_policy,
             subtype_keys=subtype_keys,
+            grant_read=grant_read,
         )
 
-    def message_unsubscribe(self, *, user: models.Model | None = None) -> bool:
-        """Unsubscribe a user from this row's chatter thread."""
+    def message_unsubscribe(self, *, user: models.Model | None = None, revoke_read: bool = False) -> bool:
+        """Unsubscribe a user from this row's chatter thread.
+
+        ``revoke_read`` also revokes the user's thread ``reader`` grant (the mirror of
+        :meth:`message_subscribe`'s ``grant_read``) — expelling a chat-room member drops
+        the follow and the read that kept the member's ``threadChanged`` socket live.
+        """
 
         follower_model = apps.get_model("messaging", "ThreadFollower")
-        return bool(follower_model.objects.unsubscribe(self, user=user, role=self.thread_attachment_role))
+        return bool(
+            follower_model.objects.unsubscribe(
+                self, user=user, role=self.thread_attachment_role, revoke_read=revoke_read
+            )
+        )
 
     def message_is_follower(self, *, user: models.Model | None = None) -> bool:
         """Return whether a user follows this row's chatter thread."""
@@ -848,8 +891,8 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
 
     Stamped from the host's :attr:`ThreadedModelMixin.thread_broadcasts_changes` at
     attachment. A composition fact, not a client-writable column: it never enters the
-    thread resource's write surface. Default ``False`` keeps record chatter isolated
-    (F-v); a host that opts in flips :meth:`broadcasts_changes` on for its thread only.
+    thread resource's write surface. Default ``False`` keeps record chatter isolated; a
+    host that opts in flips :meth:`broadcasts_changes` on for its thread only.
     """
 
     objects = ThreadManager()
@@ -874,25 +917,62 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
 
         return self.subject or f"thread:{self.public_id}"
 
+    def is_record_attached(self) -> bool:
+        """Whether this thread is bound to a model row through a ``ThreadAttachment``.
+
+        The one owner of the record-attachment fact, used by both the thread's and the
+        message's ``broadcasts_changes`` gates: a record-attached thread is chatter,
+        reachable only through the record-scoped ``record_thread`` payload (gated on the
+        parent record's read) — the emission mirror of ``ThreadQuerySet.inbox()``.
+        """
+
+        attachment_model = apps.get_model("messaging", "ThreadAttachment")
+        return attachment_model._base_manager.filter(thread_id=self.pk).exists()
+
     def broadcasts_changes(self) -> bool:
         """Whether this thread's changes reach the generic ``changes`` subscription.
 
-        A thread bound to a record through a ``ThreadAttachment`` is chatter,
-        reachable only through the record-scoped ``record_thread`` payload (gated on
-        the parent record's read); its own ``owner``/``admin`` read would otherwise
-        deliver its change events to a subject who cannot read the record — the same
-        isolation ``ThreadQuerySet.inbox()`` gives the query surface. See F-v part 2.
-
-        A host opts back in per model (a chat room): ``host_broadcasts_changes``,
-        stamped from :attr:`ThreadedModelMixin.thread_broadcasts_changes` at
-        attachment, streams the thread's changes to its members (who hold
-        ``messaging/thread.reader``) while every non-opted record thread stays silent.
+        Record chatter stays off the generic surface: its own ``owner``/``admin`` read
+        would otherwise deliver change events to a subject who cannot read the record.
+        A host opts back in per model (a chat room): ``host_broadcasts_changes``, stamped
+        from :attr:`ThreadedModelMixin.thread_broadcasts_changes` at attachment, streams
+        the thread's changes to its members (who hold ``messaging/thread.reader``) while
+        every non-opted record thread stays silent.
         """
 
-        if self.host_broadcasts_changes:
-            return True
-        attachment_model = apps.get_model("messaging", "ThreadAttachment")
-        return not attachment_model._base_manager.filter(thread_id=self.pk).exists()
+        return self.host_broadcasts_changes or not self.is_record_attached()
+
+    def grant_reader(self, *, user: models.Model | None = None, user_id: Any = None) -> None:
+        """Grant a user direct ``reader`` access to this thread.
+
+        The one owner of the ``messaging/thread#reader`` write: the relation name and
+        the tuple shape live here beside ``permissions.zed``, so a consumer that manages
+        room membership composes this instead of hand-writing the tuple with a literal
+        relation name. :meth:`revoke_reader` is the mirror, and
+        :meth:`~angee.messaging.managers.ThreadFollowerManager.subscribe` with
+        ``grant_read`` writes it atomically with the follower row.
+        """
+
+        write_relationships(
+            [
+                RelationshipTuple(
+                    resource=to_object_ref(self),
+                    relation="reader",
+                    subject=_user_subject_ref(user=user, user_id=user_id),
+                )
+            ]
+        )
+
+    def revoke_reader(self, *, user: models.Model | None = None, user_id: Any = None) -> None:
+        """Revoke a user's direct ``reader`` access to this thread (mirror of :meth:`grant_reader`)."""
+
+        delete_relationship(
+            RelationshipTuple(
+                resource=to_object_ref(self),
+                relation="reader",
+                subject=_user_subject_ref(user=user, user_id=user_id),
+            )
+        )
 
 
 class ThreadAttachment(SqidMixin, AuditMixin, AngeeModel):
@@ -1429,17 +1509,18 @@ class Message(SqidMixin, AuditMixin, AngeeModel, HistoryMixin):
     def broadcasts_changes(self) -> bool:
         """Whether this message's changes reach the generic ``changes`` subscription.
 
-        A message mirrors its thread, the owner of the broadcast decision: record
-        chatter (a thread carrying a ``ThreadAttachment``, not opted in) stays off the
-        generic surface — reachable only through ``record_thread`` (gated on the
-        parent record's read) — while a message on an opted-in host thread, or one
-        with no thread (an ingest whose thread merged away), broadcasts. The emission
-        mirror of ``MessageQuerySet.inbox()``. See F-v part 2.
+        A message on a record-attached thread stays off the generic ``messageChanged``
+        surface, whether or not the host opted in: the members of an opted-in room hold
+        ``messaging/thread.reader``, not ``message.read``, so ``ChangeReadGate`` drops
+        every per-message event for them — the live contract for a room is the thread's
+        ``threadChanged`` (see :meth:`Thread.broadcasts_changes`). Only a message on a
+        generic (non-record) thread, or one whose thread merged away, broadcasts — the
+        emission mirror of ``MessageQuerySet.inbox()``.
         """
 
         if self.thread_id is None:
             return True
-        return self.thread.broadcasts_changes()
+        return not self.thread.is_record_attached()
 
 
 class ThreadNotification(SqidMixin, AuditMixin, AngeeModel):

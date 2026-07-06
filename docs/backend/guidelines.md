@@ -527,6 +527,14 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   owning queryset/manager's feature-gated helper; SQLite is a supported backend
   and Django 6 silently drops plain `FOR UPDATE` there, so the helper is the
   greppable contract that keeps lock intent explicit and backend-gated.
+- **Django 6 refreshes `F()`/expression fields back onto the instance via
+  `UPDATE ... RETURNING` before `post_save`.** A `save(update_fields=…)` whose
+  fields hold expressions (`F("count") + 1`, `Greatest(…)`) leaves the instance
+  carrying the DB-true resolved values, not the expression objects — the
+  `post_save` receiver (and any `changes` publisher) sees the true row. Never
+  "restore" a locally recomputed value (`prior + 1`) after such a save: it stomps
+  the RETURNING value and undercounts whenever a concurrent write advanced the
+  column further.
 - **A gated factory that uses `sudo()` must restore the actor before returning.**
   Elevated writes may be necessary to create the row, but callers continue under
   the original actor. Capture `current_actor()` before the elevated block and

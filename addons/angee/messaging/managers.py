@@ -267,8 +267,7 @@ class ThreadQuerySet(AngeeQuerySet[Any]):
         A thread bound to a model row through a ``ThreadAttachment`` is record
         chatter; it is reachable only through the record-scoped ``record_thread``
         payload (gated on the parent record's read) and must never surface in the
-        owner-scoped generic ``threads`` list, aggregate, or by-pk lookup. See F-v
-        part 2.
+        owner-scoped generic ``threads`` list, aggregate, or by-pk lookup.
         """
 
         return cast(ThreadQuerySet, self.filter(attachments__isnull=True))
@@ -396,6 +395,10 @@ class ThreadAttachmentManager(AngeeManager):
         content_type = self._content_type(record)
         external_id = f"record:{content_type.app_label}.{content_type.model}:{record.pk}:{role}"
         thread_model = self.model._meta.get_field("thread").related_model
+        # The host owns whether its record chatter streams over changes(); stamp its
+        # opt-in onto the thread so broadcasts_changes() is O(1) at publish time and
+        # never re-resolves the polymorphic target.
+        host_broadcasts = bool(getattr(record, "thread_broadcasts_changes", False))
         with transaction.atomic():
             thread, _created = thread_model._base_manager.get_or_create(
                 platform=thread_model._meta.get_field("platform").choices_enum.OTHER,
@@ -405,12 +408,10 @@ class ThreadAttachmentManager(AngeeManager):
                     "subject_normalized": normalize_subject(subject or str(record)),
                     "modality": thread_model.Modality.GROUP,
                     "visibility": thread_model.Visibility.PRIVATE,
-                    # The host owns whether its record chatter streams over changes();
-                    # stamp its opt-in onto the thread so broadcasts_changes() is O(1)
-                    # at publish time and never re-resolves the polymorphic target.
-                    "host_broadcasts_changes": bool(getattr(record, "thread_broadcasts_changes", False)),
+                    "host_broadcasts_changes": host_broadcasts,
                 },
             )
+            self._reconcile_broadcast_state(thread, host_broadcasts=host_broadcasts)
             attachment, _created = self.model._base_manager.get_or_create(
                 content_type=content_type,
                 object_id=record.pk,
@@ -425,6 +426,33 @@ class ThreadAttachmentManager(AngeeManager):
             # prime the FK cache to keep the select_related the callers relied on.
             attachment.thread = thread
             return attachment
+
+    @staticmethod
+    def _reconcile_broadcast_state(thread: Any, *, host_broadcasts: bool) -> None:
+        """Heal a record thread's broadcast state to match its host, in place.
+
+        The host's ``thread_broadcasts_changes`` is stamped onto the thread only in the
+        ``get_or_create`` defaults, so a pre-existing thread — one minted before the host
+        flipped the flag — would keep the stale value; re-stamping it here reconciles it
+        on the next activity. A broadcasting host's thread is also minted system-owned
+        (``created_by`` cleared): membership (``reader``) + admin are then the only live
+        change gate, so an expelled member — even the one who first minted the thread —
+        goes dark instead of keeping ``thread.read`` through the field-backed ``owner``
+        arm. Non-broadcasting record chatter keeps its ``owner`` arm untouched. The update
+        runs only on real drift, so a steady-state post writes nothing here.
+        """
+
+        updates: dict[str, Any] = {}
+        if thread.host_broadcasts_changes != host_broadcasts:
+            updates["host_broadcasts_changes"] = host_broadcasts
+        if host_broadcasts and thread.created_by_id is not None:
+            updates["created_by"] = None
+        if not updates:
+            return
+        type(thread)._base_manager.filter(pk=thread.pk).update(**updates)
+        thread.host_broadcasts_changes = host_broadcasts
+        if "created_by" in updates:
+            thread.created_by_id = None
 
     def teardown_for_record(self, record: Any) -> None:
         """Delete every chatter thread attached to ``record`` and its whole subtree.
@@ -492,10 +520,22 @@ class ThreadFollowerManager(AngeeManager.from_queryset(ThreadFollowerQuerySet)):
         user: Any = None,
         user_id: Any = None,
         role: str = "chatter",
-        notification_policy: str = "inbox",
-        subtype_keys: tuple[str, ...] = (),
+        notification_policy: str | None = None,
+        subtype_keys: tuple[str, ...] | None = None,
+        grant_read: bool = False,
     ) -> Any:
-        """Ensure ``user`` follows ``record``'s chatter thread."""
+        """Ensure ``user`` follows ``record``'s chatter thread.
+
+        ``notification_policy`` / ``subtype_keys`` are create-time defaults: the first
+        subscribe seeds them (``inbox`` / no subtype filter), but a re-subscribe — an
+        autofollow on a later post, say — leaves an existing follower's state untouched,
+        so a muted follower stays muted. Passing an explicit value still updates it.
+
+        ``grant_read`` also grants the user ``reader`` on the thread in the same write as
+        the follower row, so a chat-room membership (follow + read) is one atomic verb
+        (see :meth:`~angee.messaging.models.Thread.grant_reader`); :meth:`unsubscribe`
+        with ``revoke_read`` is the mirror.
+        """
 
         resolved_user_id = _resolve_user_id(user=user, user_id=user_id)
         if resolved_user_id is None:
@@ -505,25 +545,49 @@ class ThreadFollowerManager(AngeeManager.from_queryset(ThreadFollowerQuerySet)):
             role=role,
             subject=_record_thread_subject(record),
         )
-        follower, created = self.get_or_create(
-            attachment=attachment,
-            user_id=resolved_user_id,
-            defaults={
-                "thread": attachment.thread,
-                "notification_policy": notification_policy,
-                "subtype_keys": list(subtype_keys),
-                "created_by_id": resolved_user_id,
-            },
-        )
-        if not created:
-            follower.thread = attachment.thread
-            follower.notification_policy = notification_policy
-            follower.subtype_keys = list(subtype_keys)
-            follower.save(update_fields=("thread", "notification_policy", "subtype_keys", "updated_at"))
+        with transaction.atomic():
+            follower, created = self.get_or_create(
+                attachment=attachment,
+                user_id=resolved_user_id,
+                defaults={
+                    "thread": attachment.thread,
+                    "notification_policy": "inbox" if notification_policy is None else notification_policy,
+                    "subtype_keys": [] if subtype_keys is None else list(subtype_keys),
+                    "created_by_id": resolved_user_id,
+                },
+            )
+            if not created:
+                # The thread FK is deterministic from the attachment and re-primed on
+                # every follow (it tracks a thread merge); policy/subtype_keys are
+                # create-time state, updated only when the caller passes them.
+                updates: dict[str, Any] = {"thread": attachment.thread}
+                if notification_policy is not None:
+                    updates["notification_policy"] = notification_policy
+                if subtype_keys is not None:
+                    updates["subtype_keys"] = list(subtype_keys)
+                for field, value in updates.items():
+                    setattr(follower, field, value)
+                follower.save(update_fields=(*updates, "updated_at"))
+            if grant_read:
+                attachment.thread.grant_reader(user_id=resolved_user_id)
         return follower
 
-    def unsubscribe(self, record: Any, *, user: Any = None, user_id: Any = None, role: str = "chatter") -> int:
-        """Remove ``user`` from ``record``'s chatter followers."""
+    def unsubscribe(
+        self,
+        record: Any,
+        *,
+        user: Any = None,
+        user_id: Any = None,
+        role: str = "chatter",
+        revoke_read: bool = False,
+    ) -> int:
+        """Remove ``user`` from ``record``'s chatter followers.
+
+        ``revoke_read`` also revokes the user's thread ``reader`` grant in the same
+        write (the mirror of :meth:`subscribe`'s ``grant_read``), so expelling a
+        chat-room member drops the follow and the read that kept the member's
+        ``threadChanged`` socket live.
+        """
 
         resolved_user_id = _resolve_user_id(user=user, user_id=user_id)
         if resolved_user_id is None:
@@ -531,7 +595,12 @@ class ThreadFollowerManager(AngeeManager.from_queryset(ThreadFollowerQuerySet)):
         attachment = _record_attachment(record, role=role)
         if attachment is None:
             return 0
-        deleted, _details = self.model._base_manager.filter(attachment=attachment, user_id=resolved_user_id).delete()
+        with transaction.atomic():
+            deleted, _details = self.model._base_manager.filter(
+                attachment=attachment, user_id=resolved_user_id
+            ).delete()
+            if revoke_read:
+                attachment.thread.revoke_reader(user_id=resolved_user_id)
         return deleted
 
 
@@ -952,7 +1021,7 @@ class ThreadActivityManager(AngeeManager.from_queryset(ThreadActivityQuerySet)):
         # record before this manager runs (ThreadedModelMixin.activity_feedback);
         # the activity's own write (assignee/thread-owner) would deny a record
         # writer who is neither, so the save rides the record preflight under
-        # system_context, the §3.4 line-write elevation pattern.
+        # system_context, the shared bookkeeping-write elevation pattern.
         with system_context(reason="messaging.activity.complete"):
             activity.save(update_fields=("status", "completed_at", "feedback", "updated_at"))
         if post_message:
@@ -981,7 +1050,7 @@ class ThreadActivityManager(AngeeManager.from_queryset(ThreadActivityQuerySet)):
         activity.status = self.model.ActivityStatus.CANCELED
         activity.completed_at = timezone.now()
         # Authority rides the record's thread_activity_access (checked on the record
-        # before this runs); elevate the activity's own write like complete(). §3.4.
+        # before this runs); elevate the activity's own write like complete().
         with system_context(reason="messaging.activity.cancel"):
             activity.save(update_fields=("status", "completed_at", "updated_at"))
         return activity
@@ -1281,7 +1350,7 @@ class MessageQuerySet(AngeeQuerySet[Any]):
         the parent record's read); it must never surface in the owner-scoped generic
         ``messages`` list, aggregate, or by-pk lookup. A message with no thread (an
         ingested mail whose thread was merged away) is not record-attached and stays
-        in the inbox. See F-v part 2.
+        in the inbox.
         """
 
         return cast(MessageQuerySet, self.filter(thread__attachments__isnull=True))
@@ -1610,20 +1679,18 @@ class MessageManager(AngeeManager.from_queryset(MessageQuerySet)):  # type: igno
         ``write``, so the save runs under ``system_context`` — the same elevation the
         queryset ``.update()`` bypassed the write gate to get, and the pattern the
         activity verbs already use for bookkeeping writes. ``updated_at`` rides the
-        ``auto_now`` save hook. Concrete counter values are restored on the instance
-        afterward for callers that reuse it, because a saved ``F()`` expression leaves a
-        deferred value on the attribute.
+        ``auto_now`` save hook. The ``F()``/``Greatest`` advances are resolved back onto
+        the instance by Django 6's ``UPDATE ... RETURNING`` before ``post_save`` fires,
+        so the row carries its DB-true counters into the publisher with no manual restore
+        — one that recomputed ``prior_count + 1`` would stomp the true value whenever a
+        concurrent post advanced it further.
         """
 
-        prior_count = thread.message_count or 0
         values = self._thread_advance_values(sent_at)
         for field, expression in values.items():
             setattr(thread, field, expression)
         with system_context(reason="messaging.thread.bump"):
             thread.save(update_fields=tuple(values))
-        thread.message_count = prior_count + 1
-        if sent_at is not None:
-            thread.last_message_at = sent_at
 
     def _bump_thread(self, thread_model: Any, thread_id: Any, sent_at: Any) -> None:
         """Advance a thread's counters by id with a queryset ``.update()`` (the ingest path).

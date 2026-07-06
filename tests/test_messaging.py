@@ -1761,27 +1761,40 @@ def test_user_authored_post_still_denied_without_post_access(messaging_tables: N
 
 
 @contextlib.contextmanager
-def _collecting_thread_broadcasts(
+def _collecting_broadcasts(
     monkeypatch: pytest.MonkeyPatch,
+    *models: type[models.Model],
 ) -> Iterator[list[tuple[Any, dict[str, Any]]]]:
-    """Yield the change payloads broadcast for ``Thread`` while its publisher is wired.
+    """Yield the change payloads broadcast for ``models`` while their publishers are wired.
 
     Runs ``_broadcast`` and ``on_commit`` inline so a post's broadcast is observable
-    now, and connects only the ``Thread`` save publisher (leaving a globally wired one
-    untouched) so the collected list is exactly the ``threadChanged`` stream.
+    now, and restores each model's prior publisher wiring on exit through the public
+    ``connect_publishers`` / ``disconnect_publishers`` seam.
     """
 
     sent: list[tuple[Any, dict[str, Any]]] = []
     monkeypatch.setattr(publishing, "_broadcast", lambda model, payload: sent.append((model, payload)))
     monkeypatch.setattr(publishing.transaction, "on_commit", lambda callback: callback())
-    save_uid = f"angee-changes-{Thread._meta.label}-save"
-    already_wired = any(receiver[0][0] == save_uid for receiver in post_save.receivers)
-    post_save.connect(publishing._on_save, sender=Thread, dispatch_uid=save_uid)
+    already_wired = {model: publishing.disconnect_publishers(model) for model in models}
+    for model in models:
+        publishing.connect_publishers(model)
     try:
         yield sent
     finally:
-        if not already_wired:
-            post_save.disconnect(sender=Thread, dispatch_uid=save_uid)
+        for model in models:
+            publishing.disconnect_publishers(model)
+            if already_wired[model]:
+                publishing.connect_publishers(model)
+
+
+@contextlib.contextmanager
+def _collecting_thread_broadcasts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[list[tuple[Any, dict[str, Any]]]]:
+    """Yield the ``Thread`` change payloads broadcast while its publisher is wired."""
+
+    with _collecting_broadcasts(monkeypatch, Thread) as sent:
+        yield sent
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1875,3 +1888,125 @@ def test_record_chatter_host_stays_silent_on_a_post(
             ticket.message_post("No one should stream this.")
 
     assert [payload for model, payload in sent if model is Thread] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_room_post_emits_no_message_changed(messaging_tables: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A post on an opted-in room streams ``threadChanged`` only, never ``messageChanged``.
+
+    Room members hold ``messaging/thread.reader``, not ``message.read``, so every
+    per-message event would be dropped by ``ChangeReadGate`` — pure gated noise. A
+    message on any record-attached thread therefore stays off the generic message
+    surface (``Message.broadcasts_changes`` is ``False``); the thread's ``threadChanged``
+    is the live contract.
+    """
+
+    del messaging_tables
+    with system_context(reason="test room message-silence seed"):
+        room = BroadcastRoom.objects.create(title="general")
+        room.message_thread(create=True)
+
+    with _collecting_broadcasts(monkeypatch, Thread, Message) as sent:
+        with system_context(reason="test room message-silence post"):
+            message = room.message_post("Live to the room.")
+
+    assert message.broadcasts_changes() is False
+    assert [payload for model, payload in sent if model is Message] == []
+    assert [payload for model, payload in sent if model is Thread] != []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resubscribe_preserves_follower_policy(messaging_tables: None) -> None:
+    """A re-subscribe leaves an existing follower's create-time state untouched.
+
+    ``notification_policy`` / ``subtype_keys`` are create-time defaults: a bare
+    re-subscribe (e.g. autofollow on a later post) must not reset a muted follower
+    back to ``inbox``. An explicit value still wins.
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test resubscribe seed"):
+        watcher = user_model.objects.create_user(username="resub-watcher", email="resub-watcher@example.com")
+        ticket = ThreadedTicket.objects.create(title="Resub case")
+        first = ticket.message_subscribe(user=watcher, notification_policy="muted", subtype_keys=("comment",))
+        assert first.notification_policy == "muted"
+
+        # A bare re-subscribe preserves the muted policy and subtype filter.
+        again = ticket.message_subscribe(user=watcher)
+        again.refresh_from_db()
+        assert again.pk == first.pk
+        assert again.notification_policy == "muted"
+        assert again.subtype_keys == ["comment"]
+
+        # An explicit value still updates it.
+        changed = ticket.message_subscribe(user=watcher, notification_policy="email")
+        changed.refresh_from_db()
+        assert changed.notification_policy == "email"
+        assert changed.subtype_keys == ["comment"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_stale_broadcast_flag_heals_on_next_activity(messaging_tables: None) -> None:
+    """A record thread minted before its host opted in heals its broadcast flag on next post.
+
+    ``host_broadcasts_changes`` is stamped only in the ``get_or_create`` defaults, so a
+    thread created while the host was silent would keep the stale ``False``;
+    ``ensure_for_record`` re-stamps it from the host on the next activity.
+    """
+
+    del messaging_tables
+    with system_context(reason="test broadcast-flag heal seed"):
+        room = BroadcastRoom.objects.create(title="stale-room")
+        thread = room.message_thread(create=True)
+        # Simulate a thread minted before the host opted in.
+        Thread._base_manager.filter(pk=thread.pk).update(host_broadcasts_changes=False)
+        thread.refresh_from_db()
+        assert thread.host_broadcasts_changes is False
+
+        room.message_post("First post after opt-in.")
+        thread.refresh_from_db()
+
+    assert thread.host_broadcasts_changes is True
+    assert thread.broadcasts_changes() is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_broadcasting_room_creator_socket_gated_by_membership(messaging_tables: None) -> None:
+    """A broadcasting room's thread is system-owned, so membership is the only live gate.
+
+    A member who *created* the room thread would otherwise keep ``thread.read`` forever
+    through the field-backed ``owner`` (``created_by``) arm, so an expelled creator's
+    ``threadChanged`` socket would never go dark. Minting a broadcasting host's thread
+    system-owned (``created_by=None``) makes ``reader`` + admin the live gate.
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test expelled-creator seed"):
+        creator = user_model.objects.create_user(username="room-creator", email="room-creator@example.com")
+        room = BroadcastRoom.objects.create(title="creator-room")
+
+    # The creator mints the thread under their own actor, so the audit stamp would set
+    # created_by=creator; minting a broadcasting host's thread system-owned clears it.
+    with actor_context(creator):
+        thread = room.message_thread(create=True)
+    assert thread.created_by_id is None
+
+    with system_context(reason="test expelled-creator read"):
+        thread.refresh_from_db()
+        assert thread.created_by_id is None
+
+        change = ChangePayload.from_instance(thread, action="update", update_fields=None)
+        creator_subject = to_subject_ref(creator)
+
+        # Not a member: the socket is dark despite having created the room.
+        assert ChangeReadGate(Thread, creator_subject).filter(change) is None
+
+        # Granted membership through the atomic subscribe verb: the socket is live.
+        room.message_subscribe(user=creator, grant_read=True)
+        assert ChangeReadGate(Thread, creator_subject).filter(change) is not None
+
+        # Expelled through the mirror revoke verb: the socket goes dark again.
+        room.message_unsubscribe(user=creator, revoke_read=True)
+        assert ChangeReadGate(Thread, creator_subject).filter(change) is None

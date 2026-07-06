@@ -39,6 +39,20 @@ def connect_publishers(model: type[models.Model]) -> None:
     )
 
 
+def disconnect_publishers(model: type[models.Model]) -> bool:
+    """Disconnect ``model``'s save and delete publishers; return whether any were wired.
+
+    The public inverse of :func:`connect_publishers` — a test that wires a lone
+    publisher to observe a broadcast restores prior state through this seam instead of
+    re-deriving the private dispatch-uid format or probing receiver tuples.
+    """
+
+    dispatch_uid = f"angee-changes-{model._meta.label}"
+    disconnected = post_save.disconnect(sender=model, dispatch_uid=f"{dispatch_uid}-save")
+    disconnected = post_delete.disconnect(sender=model, dispatch_uid=f"{dispatch_uid}-delete") or disconnected
+    return disconnected
+
+
 def change_channel_layer() -> Any:
     """Return the configured channel layer after validating deployment safety."""
 

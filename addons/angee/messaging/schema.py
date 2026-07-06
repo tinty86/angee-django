@@ -301,7 +301,7 @@ class RecordPointerType:
     the three facts a cross-record agenda needs to link back, each computed from the
     owning ``ThreadAttachment`` row alone (no target load, no parent-record read).
     Navigating the link re-gates through the record's own read (an assignee not granted
-    the record may 404). See F-act / §3.8.
+    the record may 404).
     """
 
     label: str
@@ -320,7 +320,7 @@ class AgendaActivityType(AngeeNode):
     identity (``user`` — always the actor, by the agenda filter), and the minimal record
     pointer (``attachment`` → :class:`RecordPointerType`); it deliberately drops the parent
     ``thread`` and the attachment's ``metadata``, which a to-one traversal would resolve
-    unguarded and so leak to a bare assignee through the agenda (§3.8). The record-scoped
+    unguarded and so leak to a bare assignee through the agenda. The record-scoped
     ``record_thread`` surface projects the full :class:`ThreadActivityType` for a user who
     can already read the parent record.
     """
@@ -732,8 +732,8 @@ class MessagingQuery:
         (assignee) arm — an assignment is itself the grant — so the read needs no
         parent-record re-gate and no record-read fan-out. Each row is projected as
         :class:`AgendaActivityType`: the activity's own fields, the actor's own identity,
-        and the minimal record pointer — never the parent thread or attachment metadata
-        (§3.8), which a to-one traversal would otherwise resolve unguarded. The assignee
+        and the minimal record pointer — never the parent thread or attachment metadata,
+        which a to-one traversal would otherwise resolve unguarded. The assignee
         FK is the request actor by construction, and the pointer ``attachment`` is primed
         elevated and by id on the queryset, so the projection needs no REBAC-guarded
         ``select_related`` (the pitfall) and no per-row pointer fan-out.
@@ -1155,7 +1155,7 @@ def _thread_inbox_queryset(info: strawberry.Info) -> Any:
 
     Record-attached chatter is reachable only through ``record_thread`` — the parent
     record's read is the one gate — so it is excluded from this owner-scoped inbox
-    list, aggregate, and by-pk lookup. See F-v part 2.
+    list, aggregate, and by-pk lookup.
     """
 
     del info
@@ -1167,7 +1167,7 @@ def _message_inbox_queryset(info: strawberry.Info) -> Any:
 
     Record chatter surfaces only through ``record_thread`` (gated on the parent
     record's read); it is excluded from this owner-scoped inbox list, aggregate, and
-    by-pk lookup. See F-v part 2.
+    by-pk lookup.
     """
 
     del info
@@ -1184,8 +1184,7 @@ class _InboxWriteBackend(AngeeHasuraWriteBackend):
     Narrowing the write-target queryset to ``.inbox()`` makes the by-pk lookup miss
     a record-attached row, so the generic mutation reports it as not found while the
     inbox rows keep their update/delete surfaces. The ``.inbox()`` verb resolves
-    polymorphically on each model's queryset, so one backend serves both. See F-v
-    part 2.
+    polymorphically on each model's queryset, so one backend serves both.
     """
 
     def write_target_queryset(self) -> Any:
@@ -1593,7 +1592,7 @@ def _thread_activity(activity_id: strawberry.ID) -> Any:
     for reaching (and acting on) a record activity rides its parent record's read —
     the ``record_thread`` gate applied by :func:`_readable_record` in the complete
     and cancel resolvers — not the activity's own messaging permission. So the decode
-    only resolves the public id; the record read is the gate. See F-v part 3.
+    only resolves the public id; the record read is the gate.
     """
 
     try:
@@ -1612,12 +1611,12 @@ def _thread_activity(activity_id: strawberry.ID) -> Any:
 def _readable_record(record: Any) -> Any | None:
     """Return ``record`` re-resolved under the request actor's read scope, else None.
 
-    The ``record_thread`` finding-12 gate: record chatter — its thread, messages, and
+    The ``record_thread`` gate: record chatter — its thread, messages, and
     activities — is reachable only when the actor can read the parent record, so an
     activity reached elevated (see :func:`_thread_activity`) is authorized *through*
     the record's read. Re-resolving on the actor-scoped default manager (the exact
     scope :func:`_threaded_record` uses) yields ``None`` when the record is unreadable,
-    which the caller surfaces as ``NOT_FOUND``. See F-v part 3.
+    which the caller surfaces as ``NOT_FOUND``.
     """
 
     return type(record)._default_manager.filter(pk=record.pk).first()
