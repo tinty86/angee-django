@@ -17,4 +17,14 @@ describe("messaging_integrate_imap addon manifest", () => {
     });
     expect(messagingIntegrateImap.i18n?.messaging?.["channel.connect.button"]).toBe("Connect IMAP");
   });
+
+  test("contributes an IMAP-labelled menu entry under Messaging", () => {
+    expect(messagingIntegrateImap.menus?.[0]).toMatchObject({
+      id: "messaging.imap",
+      label: "IMAP",
+      to: "/messaging/channels",
+      parentId: "messaging",
+      description: "Connect IMAP mailbox channels",
+    });
+  });
 });
