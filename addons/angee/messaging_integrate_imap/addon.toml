@@ -6,3 +6,6 @@ description = "IMAP email sync — pulls mailbox accounts into messaging threads
 keywords = ["imap", "email", "sync"]
 category = "Integration"
 depends_on = ["angee.messaging", "angee.integrate", "angee.parties"]
+
+[resources]
+master = [{ path = "resources/master/010_integrate.vendor.yaml", adopt = "slug" }]

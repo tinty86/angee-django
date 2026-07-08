@@ -18,6 +18,7 @@
     "@angee/integrate": "workspace:*",
     "@angee/knowledge": "workspace:*",
     "@angee/messaging": "workspace:*",
+    "@angee/messaging-integrate-imap": "workspace:*",
     "@angee/operator": "workspace:*",
     "@angee/parties": "workspace:*",
     "@angee/platform": "workspace:*",

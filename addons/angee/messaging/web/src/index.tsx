@@ -1,11 +1,13 @@
 import { defineBaseAddon, resourcePageRoutes } from "@angee/app";
 import { type BaseMenuItem } from "@angee/ui";
 import { lazyRouteComponent } from "@tanstack/react-router";
-import { Inbox, MessagesSquare, Send } from "lucide-react";
+import { Inbox, Mail, MessagesSquare, Send } from "lucide-react";
 
 import { enMessagingMessages } from "./i18n";
 import { RecordActivityPane } from "./RecordActivityPane";
 import { RecordChatterPane } from "./RecordChatterPane";
+
+export { MESSAGING_CHANNEL_TOOLBAR_SLOT } from "./slots";
 
 // The reusable record-thread conversation owner (transcript + composer + mark-read
 // + live refetch): the record-chatter pane composes it below, and a discuss room
@@ -24,6 +26,7 @@ const messagingMenu: readonly BaseMenuItem[] = [
     children: [
       { id: "messaging.inbox", label: "Inbox", route: "messaging.inbox", icon: "inbox" },
       { id: "messaging.threads", label: "Threads", route: "messaging.threads", icon: "threads" },
+      { id: "messaging.channels", label: "Channels", route: "messaging.channels", icon: "channel" },
     ],
   },
 ];
@@ -33,9 +36,10 @@ const messaging = defineBaseAddon({
   routes: [
     ...resourcePageRoutes("messaging.inbox", "/messaging/inbox", lazyRouteComponent(() => import("./MessagesPage"), "MessagesPage"), "messaging.Message"),
     ...resourcePageRoutes("messaging.threads", "/messaging/threads", lazyRouteComponent(() => import("./ThreadsPage"), "ThreadsPage"), "messaging.Thread"),
+    ...resourcePageRoutes("messaging.channels", "/messaging/channels", lazyRouteComponent(() => import("./ChannelsPage"), "ChannelsPage"), "messaging.Channel"),
   ],
   menus: messagingMenu,
-  icons: { inbox: Inbox, threads: MessagesSquare, send: Send },
+  icons: { inbox: Inbox, threads: MessagesSquare, send: Send, channel: Mail },
   i18n: { messaging: enMessagingMessages },
   chatter: [
     {

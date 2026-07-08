@@ -117,6 +117,11 @@ export const enMessagingMessages: Record<string, string> = {
   "threads.makePublic": "Make public",
   "threads.makeRestricted": "Make restricted",
 
+  // ChannelsPage — connected message channels.
+  "channel.name": "Channel",
+  "channel.group.lastSync": "Last sync",
+  "channel.action.sync": "Sync now",
+
   // MessagesPage — the inbox list + detail.
   "messages.channel": "Channel",
   "messages.sender": "Sender",

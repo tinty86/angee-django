@@ -370,6 +370,27 @@ def test_integrate_config_installs_agentic_vendor_resources() -> None:
     assert rows_by_xref["grok"].values["website_url"] == "https://x.ai/grok"
 
 
+def test_messaging_imap_config_contributes_schema_web_and_vendor_resource() -> None:
+    """The optional IMAP bridge owns its schema, web action, and vendor row."""
+
+    config = AppConfig(
+        "angee.messaging_integrate_imap",
+        import_module("angee.messaging_integrate_imap"),
+    )
+    contract = addon_contract(config)
+    manifest = resource_manifest_for(config)
+
+    assert contract is not None
+    assert contract.schemas == "schema.schemas"
+    assert contract.web == "@angee/messaging-integrate-imap"
+    assert manifest["master"] == (
+        {"path": "resources/master/010_integrate.vendor.yaml", "adopt": "slug"},
+    )
+    rows = _resource_rows(config, "master", "resources/master/010_integrate.vendor.yaml")
+    assert rows["imap"]["slug"] == "imap"
+    assert rows["imap"]["display_name"] == "IMAP"
+
+
 def test_storage_install_resources_adopt_unique_slugs() -> None:
     """Storage install seeds use their slug natural keys for idempotent reloads."""
 

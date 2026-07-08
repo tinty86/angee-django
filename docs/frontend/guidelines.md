@@ -459,6 +459,9 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   *through the router* (`createApp`/`RouterProvider`) must await the lazy boundary
   (`findBy*`); a test that imports the page component directly is unaffected, and a
   manifest assertion (`component` is a function) still holds for a lazy component.
+  Project TypeScript configs must allow importing `.ts`/`.tsx` extensions because
+  the generated runtime imports addon index source files by their package export
+  paths.
 - **Generate the operator console's types from the Go daemon's introspected SDL**
   (`operator_schema` → codegen), never by hand; daemon actions return
   `MutationResult{status}`, not `{ok}`.

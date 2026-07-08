@@ -18,6 +18,13 @@ describe("messaging addon manifest", () => {
       "messaging.inbox.record",
       "messaging.threads",
       "messaging.threads.record",
+      "messaging.channels",
+      "messaging.channels.record",
+    ]);
+    expect(messaging.menus?.[0]?.children?.map((item) => item.id)).toEqual([
+      "messaging.inbox",
+      "messaging.threads",
+      "messaging.channels",
     ]);
   });
 });

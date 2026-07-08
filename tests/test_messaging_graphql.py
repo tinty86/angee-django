@@ -184,6 +184,12 @@ def test_console_resource_metadata_declares_thread_and_channel_surfaces() -> Non
     assert channel.capabilities == ("list", "detail", "aggregate", "groups")
 
 
+def test_messaging_schema_does_not_expose_optional_imap_connect() -> None:
+    """Base messaging stays transport-neutral; IMAP contributes its own mutation."""
+
+    assert "connect_imap_channel" not in _schema().as_str()
+
+
 def test_message_and_thread_hasura_writes(messaging_graphql_tables: None) -> None:
     """Message and thread human edits use generated Hasura mutation roots."""
 
