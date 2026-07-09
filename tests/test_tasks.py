@@ -43,14 +43,27 @@ def test_enqueue_task_sends_named_task(monkeypatch: Any) -> None:
     assert calls == [("workflows.advance", {"run_id": 1}, eta, "default")]
 
 
-def test_task_autoconfig_declares_periodic_celery_schedule() -> None:
-    """Celery beat owns the framework's static periodic ticks."""
+def test_task_autoconfig_declares_celery_defaults_only() -> None:
+    """The framework task app owns Celery defaults, not addon task schedules."""
 
     from angee.tasks.autoconfig import SETTINGS
 
-    schedule = SETTINGS["CELERY_BEAT_SCHEDULE"]
+    assert "CELERY_BEAT_SCHEDULE" not in SETTINGS
+    assert "CELERY_BEAT_SCHEDULE:append" not in SETTINGS
+    assert SETTINGS["CELERY_TASK_IGNORE_RESULT"] is True
 
-    assert schedule["integrate.sync_due_bridges"]["task"] == "integrate.sync_due_bridges"
-    assert schedule["workflows.sweep"]["task"] == "workflows.sweep"
-    assert schedule["workflows.reap"]["task"] == "workflows.reap"
-    assert schedule["workflows.schedule_triggers"]["task"] == "workflows.schedule_triggers"
+
+def test_addons_own_their_periodic_celery_schedules() -> None:
+    """Each addon contributes the beat entries for its own task names."""
+
+    from angee.integrate.autoconfig import SETTINGS as INTEGRATE_SETTINGS
+    from angee.workflows.autoconfig import SETTINGS as WORKFLOW_SETTINGS
+
+    integrate_schedule = INTEGRATE_SETTINGS["CELERY_BEAT_SCHEDULE:append"]
+    workflow_schedule = WORKFLOW_SETTINGS["CELERY_BEAT_SCHEDULE:append"]
+
+    assert integrate_schedule["integrate.sync_due_bridges"]["task"] == "integrate.sync_due_bridges"
+    assert workflow_schedule["workflows.decisions"]["task"] == "workflows.decisions"
+    assert workflow_schedule["workflows.sweep"]["task"] == "workflows.sweep"
+    assert workflow_schedule["workflows.reap"]["task"] == "workflows.reap"
+    assert workflow_schedule["workflows.schedule_triggers"]["task"] == "workflows.schedule_triggers"

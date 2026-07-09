@@ -282,6 +282,47 @@ def test_expiry_timeout_routes_expired(
     assert gate.outcome == "expired"
 
 
+def test_decision_sweep_resolves_due_durable_timers(
+    workflow_gate_tables: None,
+    no_workflow_queue: None,
+) -> None:
+    """The periodic DB sweep resolves decision timers even if ETA tasks are lost."""
+
+    del workflow_gate_tables, no_workflow_queue
+    assignee = User.objects.create_user(username="wdc-sweep-assignee")
+    manager = User.objects.create_user(username="wdc-sweep-manager")
+    now = timezone.now()
+    escalate_workflow = _workflow_with_gate_routes(
+        name="Escalate sweep",
+        policy="one_done",
+        assignees=[assignee],
+        escalation=[manager],
+        escalate_at=now - timedelta(minutes=5),
+    )
+    expire_workflow = _workflow_with_gate_routes(
+        name="Expire sweep",
+        policy="one_done",
+        assignees=[assignee],
+        expires_at=now - timedelta(minutes=5),
+    )
+    future_workflow = _workflow_with_gate_routes(
+        name="Future sweep",
+        policy="one_done",
+        assignees=[assignee],
+        expires_at=now + timedelta(minutes=5),
+    )
+    escalate_run = _open_gate_run(escalate_workflow, now=now)
+    expire_run = _open_gate_run(expire_workflow, now=now)
+    future_run = _open_gate_run(future_workflow, now=now)
+
+    result = engine.sweep_decisions(now=now)
+
+    assert result == {"expired": 1, "escalated": 1}
+    assert _decision_for(escalate_run, "gate").verdict == workflow_models.Verdict.ESCALATED
+    assert _decision_for(expire_run, "gate").verdict == workflow_models.Verdict.EXPIRED
+    assert _decision_for(future_run, "gate").verdict == workflow_models.Verdict.PENDING
+
+
 def test_override_run_cancels_active_steps_and_injects_synthetic_step_run(
     workflow_gate_tables: None,
     no_workflow_queue: None,
@@ -380,6 +421,7 @@ def test_public_decide_mutation_uses_actor_scoped_act_permission(
 
 def _workflow_with_gate_routes(
     *,
+    name: str = "Gate workflow",
     policy: str,
     assignees: list[Any],
     priorities: list[int] | None = None,
@@ -409,7 +451,7 @@ def _workflow_with_gate_routes(
         ("gate", "escalated", "escalated"),
         ("gate", "expired", "expired"),
     )
-    return workflow_with_steps(name="Gate workflow", steps=steps, edges=edges)
+    return workflow_with_steps(name=name, steps=steps, edges=edges)
 
 
 def _gate_config(

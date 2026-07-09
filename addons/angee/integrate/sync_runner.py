@@ -14,13 +14,21 @@ from angee.integrate.locks import bridge_advisory_lock
 from angee.integrate.models import Bridge
 
 
-def run_bridge_sync_job(model_label: str, pk: int, timestamp: str | datetime | None = None) -> dict[str, Any]:
+def run_bridge_sync_job(
+    model_label: str,
+    pk: int,
+    timestamp: str | datetime | None = None,
+    *,
+    require_queue_token: bool = False,
+) -> dict[str, Any]:
     """Run one concrete bridge sync job through the shared lock/lifecycle path."""
 
     now = _parse_timestamp(timestamp)
     model = _bridge_model(model_label)
     with system_context(reason="integrate.bridge_sync_job"):
         bridge = model._default_manager.get(pk=pk)
+        if require_queue_token and not bridge.sync_queue_token_matches(now):
+            return {"ok": True, "items": 0, "skipped": True, "stale": True}
         with bridge_advisory_lock(bridge) as acquired:
             if not acquired:
                 return {"ok": True, "items": 0, "skipped": True}

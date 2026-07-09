@@ -1582,6 +1582,31 @@ class Bridge(AngeeModel):
         with transaction.atomic():
             self.save(update_fields=["next_sync_at", "updated_at"])
 
+    def mark_sync_queued(self, *, now: datetime) -> None:
+        """Persist that a worker task has been queued for this bridge."""
+
+        self.sync_stage = self.SyncStage.QUEUED
+        self.sync_error = ""
+        self.sync_progress = {"stage": self.SyncStage.QUEUED, "queued_at": now.isoformat()}
+        with transaction.atomic():
+            self.save(update_fields=["sync_error", "sync_progress", "sync_stage", "updated_at"])
+
+    def reset_sync_queue(self, *, now: datetime) -> None:
+        """Make a failed queue dispatch due again for the next scheduler pass."""
+
+        self.next_sync_at = now
+        self.sync_stage = self.SyncStage.IDLE
+        self.sync_progress = {}
+        with transaction.atomic():
+            self.save(update_fields=["next_sync_at", "sync_progress", "sync_stage", "updated_at"])
+
+    def sync_queue_token_matches(self, timestamp: datetime) -> bool:
+        """Return whether a queued task payload still matches this bridge row."""
+
+        if self.sync_stage != self.SyncStage.QUEUED or not isinstance(self.sync_progress, Mapping):
+            return False
+        return self.sync_progress.get("queued_at") == timestamp.isoformat()
+
     def record_sync(self, result: int, *, now: datetime) -> None:
         """Persist one successful scheduler sync result and healthy status report."""
 

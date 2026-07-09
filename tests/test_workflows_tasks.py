@@ -53,6 +53,20 @@ def test_periodic_schedule_trigger_task_accepts_timestamp_keyword(
     assert workflow_tasks.run_workflow_schedule_triggers.name == "workflows.schedule_triggers"
 
 
+def test_periodic_decision_task_accepts_timestamp_keyword(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The decision timer scan uses the injected ``timestamp`` when provided."""
+
+    calls: list[datetime] = []
+    monkeypatch.setattr(workflow_tasks.engine, "sweep_decisions", lambda *, now: calls.append(now))
+
+    workflow_tasks.sweep_workflow_decisions(timestamp=0)
+
+    assert calls == [datetime.fromtimestamp(0, tz=timezone.get_current_timezone())]
+    assert workflow_tasks.sweep_workflow_decisions.name == "workflows.decisions"
+
+
 def test_retry_countdown_matches_step_policy() -> None:
     """Celery retry countdown mirrors the static step retry policy."""
 

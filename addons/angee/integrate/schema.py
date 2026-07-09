@@ -49,8 +49,8 @@ from angee.integrate.models import Bridge, IntegrationStatus
 from angee.integrate.oauth import flow, state
 from angee.integrate.oauth.client import OAuthClientProtocol
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, INVALID_STATE, OAuthFlowError
+from angee.integrate.queue import queue_bridge_sync
 from angee.integrate.registry import bridge_models
-from angee.integrate.tasks import queue_bridge_sync
 
 Vendor = apps.get_model("integrate", "Vendor")
 Integration = apps.get_model("integrate", "Integration")

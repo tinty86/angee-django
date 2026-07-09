@@ -84,6 +84,20 @@ def expire_workflow_decision(self: Any, decision_id: int, attempt: int) -> None:
 
 @shared_task(
     bind=True,
+    name="workflows.decisions",
+    autoretry_for=(Exception,),
+    retry_backoff=30,
+    retry_kwargs={"max_retries": 3},
+)
+def sweep_workflow_decisions(self: Any, timestamp: int | None = None) -> None:
+    """Resolve workflow decisions whose durable deadlines are due."""
+
+    del self
+    engine.sweep_decisions(now=_periodic_timestamp(timestamp))
+
+
+@shared_task(
+    bind=True,
     name="workflows.sweep",
     autoretry_for=(Exception,),
     retry_backoff=30,

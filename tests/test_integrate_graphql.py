@@ -27,7 +27,7 @@ from rebac import app_settings, system_context
 from rebac.roles import grant
 
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
-from angee.integrate import tasks as integrate_tasks
+from angee.integrate import queue as integrate_queue
 from angee.integrate.credentials import CredentialKind
 from angee.integrate.events import EventKind
 from angee.integrate.webhooks import WebhookDeliveryError
@@ -785,7 +785,7 @@ def test_sync_integration_queues_bridge_for_an_admin(
         queued_bridge.sync_progress = {"stage": queued_bridge.SyncStage.QUEUED, "queued_at": now.isoformat()}
         queued_bridge.save(update_fields=["sync_error", "sync_progress", "sync_stage", "updated_at"])
 
-    monkeypatch.setattr(integrate_tasks, "queue_bridge_sync", fake_queue_bridge_sync)
+    monkeypatch.setattr(integrate_queue, "queue_bridge_sync", fake_queue_bridge_sync)
     monkeypatch.setattr("angee.integrate.schema.queue_bridge_sync", fake_queue_bridge_sync)
 
     result = _data(

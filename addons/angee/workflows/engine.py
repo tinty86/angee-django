@@ -321,6 +321,28 @@ def expire_decision(decision_id: int, attempt: int, *, now: datetime | None = No
     )
 
 
+def sweep_decisions(*, now: datetime | None = None) -> dict[str, int]:
+    """Resolve pending decisions whose durable deadlines are due."""
+
+    timestamp = now or timezone.now()
+    decision_model = _model("Decision")
+    with system_context(reason="workflows.engine.decision_sweep"):
+        expired = list(
+            decision_model.objects.filter(verdict=VERDICT_PENDING, expires_at__lte=timestamp)
+            .order_by("pk")
+            .values_list("pk", "attempts")
+        )
+        escalated = list(
+            decision_model.objects.filter(verdict=VERDICT_PENDING, escalate_at__lte=timestamp)
+            .filter(models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=timestamp))
+            .order_by("pk")
+            .values_list("pk", "attempts")
+        )
+    expired_count = sum(expire_decision(pk, attempt, now=timestamp)["resolved"] for pk, attempt in expired)
+    escalated_count = sum(escalate_decision(pk, attempt, now=timestamp)["resolved"] for pk, attempt in escalated)
+    return {"expired": expired_count, "escalated": escalated_count}
+
+
 def override_run(run: Any, next_steps: Iterable[Any], *, actor: Any) -> Any:
     """Cancel active rows, insert an override journal row, and schedule next steps."""
 

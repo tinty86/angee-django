@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -11,6 +11,7 @@ from django.db import connection, transaction
 from django.utils import timezone
 from rebac import system_context
 
+from angee.integrate import queue as integrate_queue
 from angee.integrate import scheduler as integrate_scheduler
 from angee.integrate import tasks as integrate_tasks
 from angee.integrate.locks import bridge_advisory_lock
@@ -345,11 +346,11 @@ def test_queue_bridge_sync_marks_queued_and_defers_task(
         assert options == {}
         enqueued.append((task_name, kwargs))
 
-    monkeypatch.setattr(integrate_tasks, "enqueue_task", fake_enqueue_task)
+    monkeypatch.setattr(integrate_queue, "enqueue_task", fake_enqueue_task)
     with system_context(reason="test integrate scheduler setup"):
         bridge = make_integration("queued-bridge", model=SchedulerBridge)
 
-    integrate_tasks.queue_bridge_sync(bridge, now=now)
+    integrate_queue.queue_bridge_sync(bridge, now=now)
 
     assert enqueued == [
         (
@@ -378,20 +379,50 @@ def test_queue_bridge_sync_can_enqueue_duplicate_requests(
     now = timezone.now()
     enqueued: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        integrate_tasks,
+        integrate_queue,
         "enqueue_task",
         lambda _task_name, *, kwargs, **_options: enqueued.append(kwargs),
     )
     with system_context(reason="test integrate scheduler setup"):
         bridge = make_integration("queued-duplicate", model=SchedulerBridge)
 
-    integrate_tasks.queue_bridge_sync(bridge, now=now)
-    integrate_tasks.queue_bridge_sync(bridge, now=now)
+    integrate_queue.queue_bridge_sync(bridge, now=now)
+    integrate_queue.queue_bridge_sync(bridge, now=now)
 
     assert len(enqueued) == 2
     bridge.refresh_from_db()
     assert bridge.sync_stage == Bridge.SyncStage.QUEUED
     assert bridge.sync_progress == {"stage": Bridge.SyncStage.QUEUED, "queued_at": now.isoformat()}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_stale_bridge_sync_task_payload_is_skipped(
+    scheduler_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A duplicate task that no longer matches queued state cannot sync again later."""
+
+    del scheduler_tables
+    first = timezone.now()
+    second = first + timedelta(seconds=5)
+    monkeypatch.setattr(
+        integrate_queue,
+        "enqueue_task",
+        lambda _task_name, *, kwargs, **_options: None,
+    )
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("queued-stale", model=SchedulerBridge, config={"items": 9})
+
+    integrate_queue.queue_bridge_sync(bridge, now=first)
+    integrate_queue.queue_bridge_sync(bridge, now=second)
+
+    stale = integrate_tasks.sync_bridge_now(SchedulerBridge._meta.label_lower, bridge.pk, first.isoformat())
+
+    assert stale == {"ok": True, "items": 0, "skipped": True, "stale": True}
+    bridge.refresh_from_db()
+    assert bridge.cursor == {}
+    assert bridge.sync_stage == Bridge.SyncStage.QUEUED
+    assert bridge.sync_progress == {"stage": Bridge.SyncStage.QUEUED, "queued_at": second.isoformat()}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -405,7 +436,7 @@ def test_queue_bridge_sync_inside_outer_transaction_preserves_caller(
     now = timezone.now()
     enqueued: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        integrate_tasks,
+        integrate_queue,
         "enqueue_task",
         lambda _task_name, *, kwargs, **_options: enqueued.append(kwargs),
     )
@@ -413,7 +444,7 @@ def test_queue_bridge_sync_inside_outer_transaction_preserves_caller(
         bridge = make_integration("queued-db-duplicate", model=SchedulerBridge)
 
     with transaction.atomic():
-        integrate_tasks.queue_bridge_sync(bridge, now=now)
+        integrate_queue.queue_bridge_sync(bridge, now=now)
         assert SchedulerBridge._base_manager.filter(pk=bridge.pk).exists()
 
     assert len(enqueued) == 1
@@ -457,10 +488,16 @@ def test_enqueue_due_bridges_claims_and_queues_rows(
     now = timezone.now()
     enqueued: list[tuple[int, datetime | None]] = []
 
-    def fake_queue_bridge_sync(bridge: SchedulerBridge, *, now: datetime | None = None) -> None:
+    def fake_queue_bridge_sync(
+        bridge: SchedulerBridge,
+        *,
+        now: datetime | None = None,
+        persist: bool = True,
+    ) -> None:
+        assert persist is False
         enqueued.append((bridge.pk, now))
 
-    monkeypatch.setattr(integrate_tasks, "queue_bridge_sync", fake_queue_bridge_sync)
+    monkeypatch.setattr(integrate_scheduler, "queue_bridge_sync", fake_queue_bridge_sync)
     with system_context(reason="test integrate scheduler setup"):
         due = make_integration(
             "queued-due",
@@ -482,6 +519,37 @@ def test_enqueue_due_bridges_claims_and_queues_rows(
     future.refresh_from_db()
     assert due.next_sync_at == now + timedelta(seconds=120)
     assert future.next_sync_at == now + timedelta(seconds=1)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_enqueue_due_bridges_resets_claim_when_dispatch_fails(
+    scheduler_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broker failure after DB claim makes the bridge due again."""
+
+    del scheduler_tables
+    now = timezone.now()
+
+    def fail_queue_bridge_sync(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(integrate_scheduler, "queue_bridge_sync", fail_queue_bridge_sync)
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration(
+            "queued-failure",
+            model=SchedulerBridge,
+            poll_interval=120,
+            next_sync_at=now - timedelta(seconds=1),
+        )
+
+    with pytest.raises(RuntimeError, match="broker down"):
+        enqueue_due_bridges(now=now)
+
+    bridge.refresh_from_db()
+    assert bridge.next_sync_at == now
+    assert bridge.sync_stage == Bridge.SyncStage.IDLE
+    assert bridge.sync_progress == {}
 
 
 @pytest.mark.django_db(transaction=True)

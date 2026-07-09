@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 SETTINGS = {
+    "CELERY_BEAT_SCHEDULE:append": {
+        "integrate.sync_due_bridges": {
+            "task": "integrate.sync_due_bridges",
+            "schedule": 60.0,
+        },
+    },
     # OAuth connection substrate. Host-provided OAuth client registrations (secrets
     # included) are declared here and synced by ``manage.py oauth_clients``; the
     # public catalogue is seeded from install-tier resources instead. The TTL bounds
