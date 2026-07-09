@@ -10,17 +10,16 @@ from rebac import system_context
 
 from angee.integrate.models import Bridge
 from angee.integrate.registry import bridge_models
+from angee.integrate.sync_runner import run_bridge_sync_job
 
 
 def run_due_bridges(*, now: datetime | None = None) -> dict[str, int]:
     """Run every bridge row due at ``now`` and return scheduler counters.
 
     Each due row is re-read and claimed under a row lock (``Bridge.claim_sync``
-    pushes its ``next_sync_at`` one interval out) before its sync runs, so
-    overlapping scans — a backfill outliving the tick cadence, or two workers —
-    skip an in-flight bridge instead of double-syncing it. The eager
-    ``syncIntegration`` mutation bypasses the schedule by design; ingest
-    idempotency keeps that rarer race convergent.
+    pushes its ``next_sync_at`` one interval out) before the shared bridge runner
+    handles locking and lifecycle telemetry. Manual syncs use the same runner
+    through the queued ``sync_bridge_now`` task.
     """
 
     timestamp = now or timezone.now()
@@ -40,10 +39,13 @@ def run_due_bridges(*, now: datetime | None = None) -> dict[str, int]:
                     if bridge is None:
                         continue  # a concurrent scan already claimed it
                     bridge.claim_sync(now=timestamp)
-                ran += 1
                 try:
-                    bridge.run_sync(now=timestamp)
+                    sync_result = run_bridge_sync_job(model._meta.label_lower, pk, timestamp)
                 except Exception:  # noqa: BLE001 — run_sync recorded the bridge failure as telemetry.
+                    ran += 1
                     errors += 1
+                else:
+                    if not sync_result.get("skipped"):
+                        ran += 1
 
     return {"ran": ran, "errors": errors}

@@ -25,7 +25,7 @@ from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
 from angee.iam.permissions import request_from_info
 from angee.iam.schema import UserType
-from angee.integrate.schema import IntegrationLabelMixin
+from angee.integrate.schema import BridgeSyncStatusMixin, IntegrationLabelMixin
 from angee.messaging.managers import message_subtype_options
 from angee.messaging.models import ThreadedModelMixin
 from angee.parties.schema import HandleType
@@ -52,7 +52,7 @@ MessageStar = apps.get_model("messaging", "MessageStar")
 
 
 @strawberry_django.type(Channel)
-class ChannelType(IntegrationLabelMixin, AngeeNode):
+class ChannelType(IntegrationLabelMixin, BridgeSyncStatusMixin, AngeeNode):
     """GraphQL projection of a connected message channel (e.g. an email account)."""
 
     backend_class: auto
@@ -61,6 +61,10 @@ class ChannelType(IntegrationLabelMixin, AngeeNode):
     last_sync_status: auto
     last_sync_completed_at: auto
     last_sync_items: auto
+    last_sync_summary: strawberry.scalars.JSON
+    sync_stage: auto
+    sync_error: auto
+    sync_progress: strawberry.scalars.JSON
     created_at: auto
     updated_at: auto
 
@@ -1203,12 +1207,13 @@ _CHANNEL_RESOURCE = hasura_model_resource(
         "backend_class",
         "status",
         "last_sync_status",
+        "sync_stage",
         "last_sync_completed_at",
         "updated_at",
     ],
     sortable=["display_name", "backend_class", "status", "last_sync_completed_at", "updated_at"],
     aggregatable=["id", "last_sync_items"],
-    groupable=["backend_class", "status", "last_sync_status"],
+    groupable=["backend_class", "status", "last_sync_status", "sync_stage"],
     insert=False,
     update=False,
     delete=False,
@@ -1332,6 +1337,7 @@ schemas = {
     "console": {
         **_MESSAGING_SCHEMA_BUCKET,
         "subscription": [
+            changes(Channel, field="channelChanged"),
             changes(Message, field="messageChanged"),
             changes(Thread, field="threadChanged"),
             changes(ThreadActivity, field="threadActivityChanged"),

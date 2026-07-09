@@ -58,11 +58,12 @@ from angee.integrate import registry
 from angee.integrate.credentials import CredentialKind, handler_for
 from angee.integrate.events import EventKind
 from angee.integrate.impl import IntegrationImpl
+from angee.integrate.locks import bridge_is_locked
 from angee.integrate.net import validate_public_url
 from angee.integrate.oauth.discovery import discovery_document
 from angee.integrate.oauth.errors import OAuthFlowError
 from angee.integrate.oauth.providers import OAuthProviderType
-from angee.integrate.sync import bridge_sync_context
+from angee.integrate.sync import bridge_progress_context, bridge_sync_context
 from angee.integrate.vcs.backend import VCSBackend
 from angee.integrate.vcs.templates import parse_template_meta
 from angee.integrate.webhooks import PinnedWebhookClient, WebhookDeliveryError
@@ -1498,6 +1499,16 @@ class Bridge(AngeeModel):
     on the child.
     """
 
+    class SyncStage(models.TextChoices):
+        """Generic lifecycle stage for bridge sync jobs."""
+
+        IDLE = "idle", "Idle"
+        QUEUED = "queued", "Queued"
+        DISCOVERING = "discovering", "Discovering"
+        SYNCING = "syncing", "Syncing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
     config = models.JSONField(default=dict, blank=True)
     """Bridge-scoped settings interpreted by the selected backend."""
     cursor = models.JSONField(default=dict, blank=True)
@@ -1508,6 +1519,15 @@ class Bridge(AngeeModel):
     last_sync_completed_at = models.DateTimeField(null=True, blank=True)
     last_sync_status = models.CharField(max_length=64, blank=True)
     last_sync_items = models.PositiveIntegerField(default=0)
+    sync_stage = models.CharField(
+        max_length=32,
+        choices=SyncStage.choices,
+        default=SyncStage.IDLE,
+        db_index=True,
+    )
+    sync_error = models.TextField(blank=True, default="")
+    sync_progress = models.JSONField(default=dict, blank=True)
+    last_sync_summary = models.JSONField(default=dict, blank=True)
     next_sync_at = models.DateTimeField(null=True, blank=True, db_index=True)
     """Next scheduler poll. NULL means unscheduled: a bridge enters the poll loop
     when its first (eager) sync records a result; the scheduler claims a due row
@@ -1518,12 +1538,29 @@ class Bridge(AngeeModel):
 
         abstract = True
 
+    @property
+    def is_syncing(self) -> bool:
+        """Return whether a worker currently holds this bridge's live sync lock."""
+
+        return bridge_is_locked(self)
+
     def mark_sync_started(self, *, now: datetime) -> None:
         """Persist the start timestamp for one scheduler sync attempt."""
 
         self.last_sync_started_at = now
+        self.sync_stage = self.SyncStage.SYNCING
+        self.sync_error = ""
+        self.sync_progress = {"stage": self.SyncStage.SYNCING, "started_at": now.isoformat()}
         with transaction.atomic():
-            self.save(update_fields=["last_sync_started_at", "updated_at"])
+            self.save(
+                update_fields=[
+                    "last_sync_started_at",
+                    "sync_error",
+                    "sync_progress",
+                    "sync_stage",
+                    "updated_at",
+                ]
+            )
 
     def claim_sync(self, *, now: datetime) -> None:
         """Push the next poll one interval out as an in-flight claim.
@@ -1545,16 +1582,36 @@ class Bridge(AngeeModel):
         self.last_sync_completed_at = now
         self.last_sync_status = "ok"
         self.last_sync_items = result
+        self.sync_stage = self.SyncStage.COMPLETED
+        self.sync_error = ""
+        progress = dict(self.sync_progress) if isinstance(self.sync_progress, Mapping) else {}
+        progress.update(
+            {
+                "stage": self.SyncStage.COMPLETED,
+                "items": result,
+                "completed_at": now.isoformat(),
+            }
+        )
+        self.sync_progress = progress
+        self.last_sync_summary = {
+            "status": "ok",
+            "items": result,
+            "completed_at": now.isoformat(),
+        }
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
             cast(Any, self).report_status(status=IntegrationStatus.ACTIVE)
             self.save(
                 update_fields=[
                     "cursor",
+                    "last_sync_summary",
                     "last_sync_completed_at",
                     "last_sync_items",
                     "last_sync_status",
                     "next_sync_at",
+                    "sync_error",
+                    "sync_progress",
+                    "sync_stage",
                     "updated_at",
                 ]
             )
@@ -1564,6 +1621,11 @@ class Bridge(AngeeModel):
 
         error_message = f"{type(error).__name__}: {error}"[:500]
         self.last_sync_status = "error"
+        self.sync_stage = self.SyncStage.FAILED
+        self.sync_error = error_message
+        progress = dict(self.sync_progress) if isinstance(self.sync_progress, Mapping) else {}
+        progress.update({"stage": self.SyncStage.FAILED, "error": error_message})
+        self.sync_progress = progress
         self.next_sync_at = self._next_sync_at(now=now)
         with transaction.atomic():
             cast(Any, self).report_status(status=IntegrationStatus.ERROR, error=error_message)
@@ -1571,6 +1633,9 @@ class Bridge(AngeeModel):
                 update_fields=[
                     "last_sync_status",
                     "next_sync_at",
+                    "sync_error",
+                    "sync_progress",
+                    "sync_stage",
                     "updated_at",
                 ]
             )
@@ -1580,7 +1645,7 @@ class Bridge(AngeeModel):
 
         self.mark_sync_started(now=now)
         try:
-            with bridge_sync_context():
+            with bridge_sync_context(), bridge_progress_context(self):
                 result = self.sync()
             self.record_sync(result, now=now)
         except Exception as error:  # noqa: BLE001 — sync failure is telemetry, then caller policy.

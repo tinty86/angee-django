@@ -1,6 +1,6 @@
 import * as React from "react";
 import { runActionResult, useAuthoredMutation } from "@angee/refine";
-import { Action, Column, Facet, Field, Form, List, ResourceList, useEnumOptions, useImplPrefill, useRecordAction, useRecordActionMutation } from "@angee/ui";
+import { Action, Column, Facet, Field, Form, Group, List, ResourceList, useEnumOptions, useImplPrefill, useRecordAction, useRecordActionMutation } from "@angee/ui";
 import type { ActionFieldName } from "@angee/gql/console/actions";
 
 import { useIntegrateT } from "../i18n";
@@ -38,6 +38,7 @@ export function VcsBridgesPage(): React.ReactElement {
           header={t("col.status")}
           widget="statusBadge"
         />
+        <Column field="sync_stage" />
         <Column field="last_sync_completed_at" />
       </List>
       <Form resource={MODEL}>
@@ -52,6 +53,15 @@ export function VcsBridgesPage(): React.ReactElement {
         <Field name="credential" />
         <Field name="status" widget="statusbar" />
         <Field name="config" widget="json" />
+        <Group label={t("bridge.group.sync")} columns={2}>
+          <Field name="is_syncing" readOnly />
+          <Field name="sync_stage" readOnly />
+          <Field name="sync_error" readOnly />
+          <Field name="sync_progress" widget="json" readOnly />
+          <Field name="last_sync_summary" widget="json" readOnly />
+          <Field name="last_sync_items" readOnly />
+          <Field name="last_sync_completed_at" readOnly />
+        </Group>
         <Field name="last_sync_status" readOnly />
         {/* Write-only signing secret — set on create, never read back. */}
         <Field name="webhookSecret" widget="text" kind="string" createOnly />

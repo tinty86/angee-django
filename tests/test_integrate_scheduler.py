@@ -9,14 +9,17 @@ from typing import Any
 import pytest
 from django.db import connection
 from django.utils import timezone
+from procrastinate import exceptions as procrastinate_exceptions
 from procrastinate.contrib.django import app as procrastinate_app
 from rebac import system_context
 
 from angee.integrate import scheduler as integrate_scheduler
 from angee.integrate import tasks as integrate_tasks
+from angee.integrate.locks import bridge_advisory_lock
 from angee.integrate.models import Bridge, IntegrationStatus
 from angee.integrate.registry import bridge_models
 from angee.integrate.scheduler import run_due_bridges
+from angee.integrate.sync import current_bridge_progress
 from tests.conftest import (
     IAM_CONNECTION_TEST_MODELS,
     INTEGRATE_TEST_MODELS,
@@ -44,6 +47,16 @@ class SchedulerBridge(Integration, Bridge):
         if self.config.get("mode") == "error":
             raise RuntimeError("vendor unavailable")
         items = int(self.config.get("items", 1))
+        if self.config.get("assert_locked"):
+            assert self.is_syncing is True
+        if self.config.get("progress"):
+            reporter = current_bridge_progress()
+            assert reporter is not None
+            reporter.report(
+                "discovering",
+                message="Scanning vendor rows",
+                details={"items": items, "source": "fixture"},
+            )
         self.cursor = {"seen": items}
         return items
 
@@ -166,6 +179,11 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
     assert bridge.last_sync_completed_at == now
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 7
+    assert bridge.sync_stage == Bridge.SyncStage.COMPLETED
+    assert bridge.sync_error == ""
+    assert bridge.sync_progress["stage"] == Bridge.SyncStage.COMPLETED
+    assert bridge.sync_progress["items"] == 7
+    assert bridge.last_sync_summary["items"] == 7
     assert bridge.cursor == {"seen": 7}
     assert bridge.next_sync_at == now + timedelta(seconds=42)
     assert integration.status == IntegrationStatus.ACTIVE
@@ -195,6 +213,10 @@ def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: 
     integration.refresh_from_db()
     assert bridge.last_sync_started_at == now
     assert bridge.last_sync_status == "error"
+    assert bridge.sync_stage == Bridge.SyncStage.FAILED
+    assert bridge.sync_error == "RuntimeError: vendor unavailable"
+    assert bridge.sync_progress["stage"] == Bridge.SyncStage.FAILED
+    assert bridge.sync_progress["error"] == "RuntimeError: vendor unavailable"
     assert bridge.next_sync_at == now + timedelta(seconds=17)
     assert integration.status == IntegrationStatus.ERROR
     assert integration.last_used_status == "error"
@@ -244,6 +266,146 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
     assert integration.last_used_status == "active"
     assert integration.last_error == ""
     assert integration.last_error_at is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_bridge_progress_reporter_persists_progress_payload(scheduler_tables: None) -> None:
+    """Bridge.sync can publish generic progress without knowing the storage fields."""
+
+    del scheduler_tables
+    now = timezone.now()
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration(
+            "progress-payload",
+            model=SchedulerBridge,
+            config={"items": 3, "progress": True},
+            next_sync_at=now,
+        )
+
+    result = run_due_bridges(now=now)
+
+    assert result == {"ran": 1, "errors": 0}
+    bridge.refresh_from_db()
+    assert bridge.sync_stage == Bridge.SyncStage.COMPLETED
+    assert bridge.sync_progress["stage"] == Bridge.SyncStage.COMPLETED
+    assert bridge.sync_progress["details"] == {"items": 3, "source": "fixture"}
+    assert bridge.sync_progress["message"] == "Scanning vendor rows"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_bridge_is_syncing_uses_live_lock_state(scheduler_tables: None) -> None:
+    """The live lock is separate from durable stage telemetry."""
+
+    del scheduler_tables
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("live-lock", model=SchedulerBridge)
+
+    assert bridge.is_syncing is False
+
+    with bridge_advisory_lock(bridge) as acquired:
+        assert acquired is True
+        assert bridge.is_syncing is True
+        with bridge_advisory_lock(bridge) as second_acquired:
+            assert second_acquired is False
+
+    assert bridge.is_syncing is False
+
+
+@pytest.mark.django_db(transaction=True)
+def test_run_bridge_sync_job_holds_the_live_lock(scheduler_tables: None) -> None:
+    """The queued task runner owns the live lock while a bridge sync runs."""
+
+    del scheduler_tables
+    now = timezone.now()
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration(
+            "runner-lock",
+            model=SchedulerBridge,
+            config={"items": 6, "assert_locked": True},
+        )
+
+    result = integrate_tasks.run_bridge_sync_job(SchedulerBridge._meta.label_lower, bridge.pk, now.isoformat())
+
+    assert result == {"ok": True, "items": 6, "skipped": False}
+    bridge.refresh_from_db()
+    assert bridge.cursor == {"seen": 6}
+    assert bridge.sync_stage == Bridge.SyncStage.COMPLETED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_queue_bridge_sync_marks_queued_and_defers_task(
+    scheduler_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Queueing persists visible state before the worker picks up the task."""
+
+    del scheduler_tables
+    now = timezone.now()
+    configured: list[tuple[str, dict[str, Any]]] = []
+    deferred: list[dict[str, Any]] = []
+
+    class ConfiguredTask:
+        def defer(self, **kwargs: Any) -> None:
+            deferred.append(kwargs)
+
+    def fake_configure_task(task_name: str, **options: Any) -> ConfiguredTask:
+        configured.append((task_name, options))
+        return ConfiguredTask()
+
+    monkeypatch.setattr(integrate_tasks.app, "configure_task", fake_configure_task)
+    monkeypatch.setattr(
+        integrate_tasks.sync_bridge_now,
+        "defer",
+        lambda **kwargs: pytest.fail(f"queue_bridge_sync bypassed the queue owner: {kwargs}"),
+    )
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("queued-bridge", model=SchedulerBridge)
+
+    integrate_tasks.queue_bridge_sync(bridge, now=now)
+
+    assert configured == [
+        (
+            "integrate.sync_bridge_now",
+            {"queueing_lock": f"integrate.sync_bridge_now:{SchedulerBridge._meta.label_lower}:{bridge.pk}"},
+        )
+    ]
+    assert deferred == [
+        {
+            "model_label": SchedulerBridge._meta.label_lower,
+            "pk": bridge.pk,
+            "timestamp": now.isoformat(),
+        }
+    ]
+    bridge.refresh_from_db()
+    assert bridge.sync_stage == Bridge.SyncStage.QUEUED
+    assert bridge.sync_error == ""
+    assert bridge.sync_progress == {"stage": Bridge.SyncStage.QUEUED, "queued_at": now.isoformat()}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_queue_bridge_sync_ignores_duplicate_enqueue(
+    scheduler_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated queue requests leave the visible queued state without raising."""
+
+    del scheduler_tables
+    now = timezone.now()
+
+    class ConfiguredTask:
+        def defer(self, **kwargs: Any) -> None:
+            del kwargs
+            raise procrastinate_exceptions.AlreadyEnqueued("duplicate bridge sync")
+
+    monkeypatch.setattr(integrate_tasks.app, "configure_task", lambda *args, **kwargs: ConfiguredTask())
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("queued-duplicate", model=SchedulerBridge)
+
+    integrate_tasks.queue_bridge_sync(bridge, now=now)
+
+    bridge.refresh_from_db()
+    assert bridge.sync_stage == Bridge.SyncStage.QUEUED
+    assert bridge.sync_progress == {"stage": Bridge.SyncStage.QUEUED, "queued_at": now.isoformat()}
 
 
 @pytest.mark.django_db(transaction=True)

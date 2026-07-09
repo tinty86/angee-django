@@ -27,6 +27,7 @@ from rebac import app_settings, system_context
 from rebac.roles import grant
 
 from angee.graphql.schema import SCHEMA_PART_KEYS, GraphQLSchemas
+from angee.integrate import tasks as integrate_tasks
 from angee.integrate.credentials import CredentialKind
 from angee.integrate.events import EventKind
 from angee.integrate.webhooks import WebhookDeliveryError
@@ -748,7 +749,7 @@ def test_connect_integration_rejects_child_backend_key(integrate_console_tables:
 def test_sync_integration_runs_for_an_admin(
     integrate_console_tables: None,
 ) -> None:
-    """An admin can eagerly sync an integration; with no bridges it is a no-op."""
+    """An admin can queue an integration sync; with no bridges it is a no-op."""
 
     console_schema = _schema()
     admin = _platform_admin("sync-admin")
@@ -761,9 +762,81 @@ def test_sync_integration_runs_for_an_admin(
             user=admin,
         )
     )["sync_integration"]
-    # No bridge rows exist, so the eager sync finds nothing to run and reports success.
+    # No bridge rows exist, so the queue request finds nothing to run and reports success.
     assert result["ok"] is True
     assert "bridge" in result["message"].lower()
+
+
+def test_sync_integration_queues_bridge_for_an_admin(
+    integrate_console_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A manual integration sync records queued state and defers bridge work."""
+
+    console_schema = _schema()
+    admin = _platform_admin("sync-queue-admin")
+    bridge = make_integration("sync-queue", backend_class="stub", model=VcsBridge)
+    configured: list[tuple[str, dict[str, Any]]] = []
+    deferred: list[dict[str, Any]] = []
+
+    class ConfiguredTask:
+        def defer(self, **kwargs: Any) -> None:
+            deferred.append(kwargs)
+
+    def fake_configure_task(task_name: str, **options: Any) -> ConfiguredTask:
+        configured.append((task_name, options))
+        return ConfiguredTask()
+
+    monkeypatch.setattr(integrate_tasks.app, "configure_task", fake_configure_task)
+
+    result = _data(
+        _execute(
+            console_schema,
+            "mutation($id: ID!){ sync_integration(id: $id){ ok message } }",
+            {"id": _public_id(bridge)},
+            user=admin,
+        )
+    )["sync_integration"]
+
+    assert result["ok"] is True
+    assert result["message"] == "Queued 1 bridge sync(s)."
+    assert configured == [
+        (
+            "integrate.sync_bridge_now",
+            {"queueing_lock": f"integrate.sync_bridge_now:{VcsBridge._meta.label_lower}:{bridge.pk}"},
+        )
+    ]
+    assert len(deferred) == 1
+    assert deferred[0]["model_label"] == VcsBridge._meta.label_lower
+    assert deferred[0]["pk"] == bridge.pk
+    bridge.refresh_from_db()
+    assert bridge.sync_stage == VcsBridge.SyncStage.QUEUED
+
+    projected = _data(
+        _execute(
+            console_schema,
+            """
+            query BridgeSyncState($id: String!) {
+              vcs_bridges_by_pk(id: $id) {
+                sync_stage
+                sync_error
+                sync_progress
+                last_sync_summary
+                is_syncing
+              }
+            }
+            """,
+            {"id": _public_id(bridge)},
+            user=admin,
+        )
+    )["vcs_bridges_by_pk"]
+    assert projected == {
+        "sync_stage": "queued",
+        "sync_error": "",
+        "sync_progress": bridge.sync_progress,
+        "last_sync_summary": {},
+        "is_syncing": False,
+    }
 
 
 def test_rotate_webhook_secret_changes_the_stored_secret(

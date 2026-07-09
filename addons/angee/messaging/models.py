@@ -47,6 +47,7 @@ from angee.base.fields import ImplClassField, SqidField, StateField
 from angee.base.mixins import AuditMixin, HistoryMixin, SqidMixin
 from angee.base.models import AngeeModel, public_id_for
 from angee.integrate.models import Bridge
+from angee.integrate.sync import current_bridge_progress
 from angee.messaging.backends import ChannelBackend
 from angee.messaging.managers import (
     FragmentManager,
@@ -825,6 +826,13 @@ class Channel(Bridge):
         backend = self.backend
         landed = 0
         previous: tuple[tuple[str, ...], Any] | None = None
+        reporter = current_bridge_progress()
+        if reporter is not None:
+            reporter.report(
+                str(self.SyncStage.SYNCING),
+                message="Starting channel sync",
+                details={"backend": type(backend).__name__, "landed": landed},
+            )
         try:
             while batch := backend.fetch_messages():
                 current = (tuple(parsed.external_id for parsed in batch), deepcopy(self.cursor))
@@ -834,6 +842,22 @@ class Channel(Bridge):
                     )
                 previous = current
                 landed += len(message_model.objects.ingest(batch, channel=self))
+                if reporter is not None:
+                    previous_details = {}
+                    if isinstance(self.sync_progress, dict):
+                        previous_details = dict(self.sync_progress.get("details") or {})
+                    previous_details.update(
+                        {
+                            "backend": type(backend).__name__,
+                            "batch_size": len(batch),
+                            "landed": landed,
+                        }
+                    )
+                    reporter.report(
+                        str(self.SyncStage.SYNCING),
+                        message="Ingested message batch",
+                        details=previous_details,
+                    )
         finally:
             backend.close()
         return landed

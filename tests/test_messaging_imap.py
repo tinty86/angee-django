@@ -1017,6 +1017,13 @@ def test_channel_sync_lands_threads_parts_and_attachments(
     assert channel.cursor["mailboxes"]["INBOX"] == {"uidvalidity": 100, "last_uid": 3}
     assert channel.last_sync_status == "ok"
     assert channel.last_sync_items == 3
+    assert channel.sync_stage == Channel.SyncStage.COMPLETED
+    assert channel.sync_progress["stage"] == Channel.SyncStage.COMPLETED
+    assert channel.sync_progress["message"] == "Ingested message batch"
+    assert channel.sync_progress["details"]["backend"] == "ImapChannelBackend"
+    assert channel.sync_progress["details"]["mailbox"] == "INBOX"
+    assert channel.sync_progress["details"]["batch_size"] == 1
+    assert channel.sync_progress["details"]["landed"] == 3
     assert channel.next_sync_at is not None
 
 
@@ -1086,3 +1093,8 @@ def test_failed_run_never_persists_the_cursor(
     channel.refresh_from_db()
     assert channel.cursor == {}  # in-memory advance was never persisted
     assert channel.last_sync_status == "error"
+    assert channel.sync_stage == Channel.SyncStage.FAILED
+    assert channel.sync_error == "RuntimeError: ingest died"
+    assert channel.sync_progress["stage"] == Channel.SyncStage.FAILED
+    assert channel.sync_progress["details"]["backend"] == "imap"
+    assert channel.sync_progress["details"]["mailbox"] == "INBOX"

@@ -17,7 +17,7 @@ from strawberry import auto
 from angee.graphql.data import hasura_model_resource, public_pk_decoder
 from angee.graphql.node import AngeeNode
 from angee.graphql.subscriptions import changes
-from angee.integrate.schema import IntegrationLabelMixin
+from angee.integrate.schema import BridgeSyncStatusMixin, IntegrationLabelMixin
 from angee.parties.schema import HandleType
 
 Handle = apps.get_model("parties", "Handle")
@@ -26,7 +26,7 @@ FeedFollow = apps.get_model("social", "FeedFollow")
 
 
 @strawberry_django.type(Feed)
-class FeedType(IntegrationLabelMixin, AngeeNode):
+class FeedType(IntegrationLabelMixin, BridgeSyncStatusMixin, AngeeNode):
     """GraphQL projection of a connected public-content feed."""
 
     backend_class: auto
@@ -36,6 +36,10 @@ class FeedType(IntegrationLabelMixin, AngeeNode):
     last_sync_status: auto
     last_sync_completed_at: auto
     last_sync_items: auto
+    last_sync_summary: strawberry.scalars.JSON
+    sync_stage: auto
+    sync_error: auto
+    sync_progress: strawberry.scalars.JSON
     handle: HandleType | None
     created_at: auto
     updated_at: auto
@@ -63,12 +67,13 @@ _FEED_RESOURCE = hasura_model_resource(
         "backend_class",
         "status",
         "last_sync_status",
+        "sync_stage",
         "last_sync_completed_at",
         "updated_at",
     ],
     sortable=["display_name", "status", "last_sync_completed_at", "updated_at"],
     aggregatable=["id", "last_sync_items"],
-    groupable=["backend_class", "status", "last_sync_status"],
+    groupable=["backend_class", "status", "last_sync_status", "sync_stage"],
     insert=False,
     update=False,
     delete=False,
