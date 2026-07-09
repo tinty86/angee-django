@@ -842,6 +842,7 @@ class Channel(Bridge):
                     )
                 previous = current
                 landed += len(message_model.objects.ingest(batch, channel=self))
+                self.save(update_fields=["cursor", "updated_at"])
                 if reporter is not None:
                     previous_details = {}
                     if isinstance(self.sync_progress, dict):

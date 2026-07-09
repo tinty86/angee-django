@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from procrastinate import RetryStrategy
 from procrastinate import exceptions as procrastinate_exceptions
@@ -28,15 +28,16 @@ def queue_bridge_sync(bridge: Any, *, now: datetime | None = None) -> None:
     with system_context(reason="integrate.queue_bridge_sync"), transaction.atomic():
         bridge.save(update_fields=["sync_error", "sync_progress", "sync_stage", "updated_at"])
     try:
-        app.configure_task(
-            "integrate.sync_bridge_now",
-            queueing_lock=f"integrate.sync_bridge_now:{bridge._meta.label_lower}:{bridge.pk}",
-        ).defer(
-            model_label=bridge._meta.label_lower,
-            pk=bridge.pk,
-            timestamp=timestamp.isoformat(),
-        )
-    except procrastinate_exceptions.AlreadyEnqueued:
+        with transaction.atomic():
+            app.configure_task(
+                "integrate.sync_bridge_now",
+                queueing_lock=f"integrate.sync_bridge_now:{bridge._meta.label_lower}:{bridge.pk}",
+            ).defer(
+                model_label=bridge._meta.label_lower,
+                pk=bridge.pk,
+                timestamp=timestamp.isoformat(),
+            )
+    except (procrastinate_exceptions.AlreadyEnqueued, IntegrityError):
         return
 
 

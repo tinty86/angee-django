@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from django.db import connection
+from django.db import connection, transaction
 from django.utils import timezone
 from procrastinate import exceptions as procrastinate_exceptions
 from procrastinate.contrib.django import app as procrastinate_app
@@ -402,6 +402,38 @@ def test_queue_bridge_sync_ignores_duplicate_enqueue(
         bridge = make_integration("queued-duplicate", model=SchedulerBridge)
 
     integrate_tasks.queue_bridge_sync(bridge, now=now)
+
+    bridge.refresh_from_db()
+    assert bridge.sync_stage == Bridge.SyncStage.QUEUED
+    assert bridge.sync_progress == {"stage": Bridge.SyncStage.QUEUED, "queued_at": now.isoformat()}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_queue_bridge_sync_ignores_database_duplicate_enqueue_inside_outer_transaction(
+    scheduler_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A queueing-lock IntegrityError must not poison the caller's transaction."""
+
+    del scheduler_tables
+    now = timezone.now()
+    with connection.cursor() as cursor:
+        cursor.execute("CREATE TEMP TABLE duplicate_enqueue_probe (value integer UNIQUE)")
+        cursor.execute("INSERT INTO duplicate_enqueue_probe (value) VALUES (1)")
+
+    class ConfiguredTask:
+        def defer(self, **kwargs: Any) -> None:
+            del kwargs
+            with connection.cursor() as cursor:
+                cursor.execute("INSERT INTO duplicate_enqueue_probe (value) VALUES (1)")
+
+    monkeypatch.setattr(integrate_tasks.app, "configure_task", lambda *args, **kwargs: ConfiguredTask())
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("queued-db-duplicate", model=SchedulerBridge)
+
+    with transaction.atomic():
+        integrate_tasks.queue_bridge_sync(bridge, now=now)
+        assert SchedulerBridge._base_manager.filter(pk=bridge.pk).exists()
 
     bridge.refresh_from_db()
     assert bridge.sync_stage == Bridge.SyncStage.QUEUED
