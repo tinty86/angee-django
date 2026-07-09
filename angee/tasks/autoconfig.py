@@ -1,10 +1,13 @@
-"""Settings fragments required by Angee's queue seam."""
+"""Settings fragments required by Angee's task seam."""
 
 from __future__ import annotations
 
 SETTINGS = {
-    "PROCRASTINATE_AUTODISCOVER_MODULE_NAME": "tasks",
-    "PROCRASTINATE_DATABASE_ALIAS": "default",
+    "CELERY_BROKER_URL": "redis://redis:6379/1",
+    "CELERY_TASK_IGNORE_RESULT": True,
+    "CELERY_TASK_SOFT_TIME_LIMIT": 840,
+    "CELERY_TASK_TIME_LIMIT": 900,
+    "CELERY_TASK_TRACK_STARTED": True,
+    "CELERY_TIMEZONE": "UTC",
 }
-"""Django settings contributed when the framework queue seam is installed."""
-
+"""Django settings contributed when the framework task seam is installed."""

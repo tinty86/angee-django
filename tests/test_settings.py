@@ -189,8 +189,7 @@ def test_notes_app_order_is_stable(tmp_path: Path) -> None:
         "django.contrib.sessions.apps.SessionsConfig",
         "angee.iam.apps.IAMConfig",
         # integrate depends on angee.tasks (its periodic bridge tick), pulling the
-        # queue seam ahead of every integration addon.
-        "procrastinate.contrib.django.apps.ProcrastinateConfig",
+        # task seam ahead of every integration addon.
         "angee.tasks",
         "angee.integrate.apps.IntegrateConfig",
         "angee.mcp",

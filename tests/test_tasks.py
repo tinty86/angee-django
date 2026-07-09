@@ -1,30 +1,43 @@
-"""Smoke tests for the framework queue seam."""
+"""Smoke tests for the framework task seam."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import Any
+
 from django.apps import apps
-from procrastinate import testing
-from procrastinate.contrib.django import DjangoApp
 
 
-def test_tasks_app_installs_procrastinate_and_registers_in_memory_task() -> None:
-    """The framework queue app installs Procrastinate without requiring Postgres in unit tests."""
+def test_tasks_app_exports_celery_app() -> None:
+    """The framework task seam exposes one configured Celery application."""
+
+    from angee.tasks.celery import app
 
     assert apps.is_installed("angee.tasks")
-    assert apps.is_installed("procrastinate.contrib.django")
+    assert app.main == "angee"
+    assert app.conf.task_ignore_result is True
 
-    connector = testing.InMemoryConnector()
-    task_app = DjangoApp(connector=connector)
-    results: list[int] = []
 
-    @task_app.task(name="tests.tasks.smoke")
-    def smoke(value: int) -> None:
-        results.append(value)
+def test_enqueue_task_sends_named_task(monkeypatch: Any) -> None:
+    """Callers enqueue by stable task name through the Angee seam."""
 
-    smoke.defer(value=42)
+    calls: list[tuple[str, dict[str, Any] | None, datetime | None, str | None]] = []
 
-    assert len(connector.jobs) == 1
+    def fake_send_task(
+        name: str,
+        *,
+        kwargs: dict[str, Any] | None = None,
+        eta: datetime | None = None,
+        queue: str | None = None,
+    ) -> None:
+        calls.append((name, kwargs, eta, queue))
 
-    task_app.run_worker(wait=False)
+    monkeypatch.setattr("angee.tasks.enqueue.celery_app.send_task", fake_send_task)
 
-    assert results == [42]
+    from angee.tasks.enqueue import enqueue_task
+
+    eta = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+
+    enqueue_task("workflows.advance", kwargs={"run_id": 1}, eta=eta, queue="default")
+
+    assert calls == [("workflows.advance", {"run_id": 1}, eta, "default")]
