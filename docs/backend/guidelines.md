@@ -555,6 +555,11 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   there, so the helper is the greppable contract that keeps lock intent explicit and
   backend-gated. `HierarchyMixin` path maintenance and `save_state`'s transition
   guard both route their lock through it.
+- **Task locks are advisory, row locks are authoritative.** Celery task bodies may
+  use `angee.tasks.locks.task_lock()` to prevent duplicate workers from doing the
+  same external work, but persisted state transitions still use model/queryset row
+  locks, constraints, and idempotent managers. Do not hold row locks during network
+  IO.
 - **A `HierarchyMixin` consumer declares its scope fields — the mixin never probes
   by column name.** A subtree that must stay inside a scope (a company, a tenant)
   declares `hierarchy_scope_fields = ("company",)` (a `ClassVar` tuple; FKs compare
