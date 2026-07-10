@@ -1561,3 +1561,37 @@ def test_appgraph_rejects_duplicate_dependencies(stub_contracts: None) -> None:
 
     with pytest.raises(ImproperlyConfigured, match="duplicate dependency 'angee.base'"):
         AppGraph().resolve([config])
+
+
+def test_project_env_file_loads_without_overriding_process_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The project-root .env seeds env vars for host runs; real process env wins.
+
+    The stack's gitignored `.env` (secrets plus derived DATABASE_URL) is what lets
+    a bare `uv run manage.py …` talk to the stack database; operator-managed
+    services set their env explicitly, so read_env must never overwrite it.
+    """
+
+    from angee.compose.project import ProjectContract
+
+    (tmp_path / ".env").write_text(
+        'DATABASE_URL="postgres://angee:pw@127.0.0.1:5433/angee"\nYAMLCONF_SECRET_KEY="from-env-file"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("YAMLCONF_SECRET_KEY", "from-process-env")
+
+    ProjectContract({})._read_project_env(tmp_path)
+
+    import os
+
+    assert os.environ["DATABASE_URL"] == "postgres://angee:pw@127.0.0.1:5433/angee"
+    assert os.environ["YAMLCONF_SECRET_KEY"] == "from-process-env"
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+
+def test_project_env_file_is_optional(tmp_path: Path) -> None:
+    """A project without .env composes exactly as before — silent no-op."""
+
+    from angee.compose.project import ProjectContract
+
+    ProjectContract({})._read_project_env(tmp_path)
