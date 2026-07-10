@@ -442,6 +442,9 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   null that overwrites the model default (e.g. `status`/`config`), and
   `full_clean` then rejects the null. Mirror this for any new
   `hasura_model_resource` input.
+- **A `strawberry_django.field(only=[...])` hint must list every column the resolver dereferences.**
+  Include columns read by shared properties the resolver delegates to; otherwise
+  selecting that field alone can defer-load the missing column per row.
 - **`uv run` tool shebangs are stale** — run Python tools by module:
   `uv run python -m pytest`, `uv run python -m mypy angee addons`,
   `uv run python -m ruff check .`. Bare `uv run pytest`/`mypy` fail to spawn.

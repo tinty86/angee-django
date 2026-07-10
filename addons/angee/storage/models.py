@@ -67,6 +67,7 @@ from angee.base.fields import StateField
 from angee.base.impl import ImplClassField
 from angee.base.mixins import ArchiveMixin, ArchiveQuerySet, AuditMixin, SqidMixin
 from angee.base.models import AngeeManager, AngeeModel, AngeeQuerySet, role_anchor
+from angee.base.refs import RecordRefMixin
 from angee.storage import exceptions
 from angee.storage.backends import DOWNLOAD_URL_TTL_SECONDS, StorageBackend
 from angee.storage.signals import file_finalized
@@ -1156,7 +1157,7 @@ class File(SqidMixin, AuditMixin, AngeeModel):
         )
 
 
-class FileAttachment(SqidMixin, AuditMixin, AngeeModel):
+class FileAttachment(SqidMixin, AuditMixin, RecordRefMixin, AngeeModel):
     """Polymorphic edge attaching one :class:`File` to any model row.
 
     Consumers attach explicitly (create a row against the concrete model) or

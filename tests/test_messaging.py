@@ -920,8 +920,8 @@ def test_activity_agenda_lists_assignee_activities_across_records(messaging_tabl
 
     email_alpha = next(row for row in rows if row.summary == "Email Alpha")
     assert email_alpha.attachment.label == "Alpha"
-    assert email_alpha.attachment.target_model_label == "messaging.ThreadedTicket"
-    assert email_alpha.attachment.target_public_id == alpha.public_id
+    assert email_alpha.attachment.record_model_label == "messaging.ThreadedTicket"
+    assert email_alpha.attachment.record_public_id == alpha.public_id
 
 
 @pytest.mark.django_db(transaction=True)
@@ -992,7 +992,7 @@ def test_activity_agenda_record_pointer_batches_without_per_row_fanout(messaging
         with system_context(reason="agenda n+1 measure"), CaptureQueriesContext(connection) as captured:
             rows = ThreadActivity.objects.agenda(assignee, window_start, window_end).with_record_pointers()
             for row in rows:
-                _ = (row.attachment.label, row.attachment.target_model_label, row.attachment.target_public_id)
+                _ = (row.attachment.label, row.attachment.record_model_label, row.attachment.record_public_id)
         return len(rows), len(captured.captured_queries)
 
     # Warm the process-cached ContentType so the flat comparison isolates the attachment batch.

@@ -27,6 +27,7 @@ from angee.base.fields import StateField
 from angee.base.impl import ImplClassField, ImplDefaultsMixin
 from angee.base.mixins import AuditMixin
 from angee.base.models import AngeeDataModel, AngeeManager
+from angee.base.refs import RecordRefMixin
 from angee.base.transitions import StateTransitions, save_state, transition
 from angee.workflows.steps import (
     StepImpl,
@@ -772,10 +773,12 @@ class Trigger(AuditMixin, AngeeDataModel):
         self.event_model_label = str(self.config.get("model") or self.config.get("model_label") or "").lower()
 
 
-class WorkflowRun(AuditMixin, AngeeDataModel):
+class WorkflowRun(AuditMixin, RecordRefMixin, AngeeDataModel):
     """One execution of a pinned published workflow version."""
 
     runtime = True
+
+    record_ref_field_prefix = "subject"
 
     sqid_prefix = "wfr_"
     workflow = models.ForeignKey("workflows.Workflow", on_delete=models.PROTECT, related_name="runs")

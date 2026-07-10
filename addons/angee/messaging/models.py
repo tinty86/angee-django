@@ -47,7 +47,8 @@ from angee.base.actors import actor_user_id
 from angee.base.fields import SqidField, StateField
 from angee.base.impl import ImplClassField
 from angee.base.mixins import AuditMixin, HistoryMixin, SqidMixin
-from angee.base.models import AngeeModel, public_id_for
+from angee.base.models import AngeeModel
+from angee.base.refs import RecordRefMixin
 from angee.integrate.models import Bridge
 from angee.integrate.sync import current_bridge_progress
 from angee.messaging.backends import ChannelBackend
@@ -1020,7 +1021,7 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
         )
 
 
-class ThreadAttachment(SqidMixin, AuditMixin, AngeeModel):
+class ThreadAttachment(SqidMixin, AuditMixin, RecordRefMixin, AngeeModel):
     """Polymorphic edge attaching one chatter thread to one model row."""
 
     runtime = True
@@ -1059,33 +1060,6 @@ class ThreadAttachment(SqidMixin, AuditMixin, AngeeModel):
             ),
         )
         indexes = (models.Index(fields=("content_type", "object_id", "role")),)
-
-    @property
-    def target_model_label(self) -> str:
-        """Return the ``app_label.ModelName`` label of the attached target's model.
-
-        Resolves the model from the process-cached ``ContentType`` by id
-        (``ContentType.objects.get_for_id``), so a list of rows projects the pointer
-        without a per-row ``content_type`` join.
-        """
-
-        model_class = ContentType.objects.get_for_id(self.content_type_id).model_class()
-        return model_class._meta.label if model_class is not None else ""
-
-    @property
-    def target_public_id(self) -> str:
-        """Return the attached target's stable public id (its sqid).
-
-        Encoded from the stored ``content_type``/``object_id`` alone — via the
-        process-cached ``ContentType.objects.get_for_id`` — so the parent pointer
-        resolves without loading (or re-gating, or per-row joining) the target row;
-        navigating the pointer re-gates through the target's own record read.
-        """
-
-        model_class = ContentType.objects.get_for_id(self.content_type_id).model_class()
-        if model_class is None:
-            return ""
-        return public_id_for(model_class, self.object_id)
 
     def __str__(self) -> str:
         """Return a readable attachment label."""
