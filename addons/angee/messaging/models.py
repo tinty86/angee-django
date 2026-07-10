@@ -43,7 +43,8 @@ from rebac import (
 from rebac.managers import RebacManager
 
 from angee.base.actors import actor_user_id
-from angee.base.fields import ImplClassField, SqidField, StateField
+from angee.base.fields import SqidField, StateField
+from angee.base.impl import ImplClassField
 from angee.base.mixins import AuditMixin, HistoryMixin, SqidMixin
 from angee.base.models import AngeeModel, public_id_for
 from angee.integrate.models import Bridge

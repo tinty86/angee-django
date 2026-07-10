@@ -23,8 +23,8 @@ from rebac import system_context
 from angee.agents.backends import InferenceBackend, InferenceRequest, InferenceResponse
 from angee.agents.runtimes import AgentRuntime, operator_secret_ref
 from angee.agents.skills import parse_skill_meta
-from angee.base.fields import ImplClassField, StateField
-from angee.base.impl import ImplDefaultsMixin
+from angee.base.fields import StateField
+from angee.base.impl import ImplClassField, ImplDefaultsMixin
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeManager, AngeeModel
 

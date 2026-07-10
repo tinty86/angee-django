@@ -21,7 +21,8 @@ from rebac.managers import RebacManager, RebacQuerySet
 from rebac.resources import model_resource_type
 from sqids import Sqids
 
-from angee.base.fields import ImplClassField, SqidField, canonical_sqid_prefix, encode_public_id
+from angee.base.fields import SqidField, canonical_sqid_prefix, encode_public_id
+from angee.base.impl import ImplClassField
 from angee.base.mixins import SqidMixin, TimestampMixin
 
 _ModelT = TypeVar("_ModelT", bound=models.Model)
@@ -209,7 +210,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
     def impl_key_for(cls, field_name: str, value: Any, *, default: str | None = None) -> str:
         """Return the canonical registry key for one ``ImplClassField`` value."""
 
-        field = cls._impl_field(field_name)
+        field = cls.impl_field(field_name)
         if value is None:
             if default is None:
                 raise ValueError(f"{cls.__name__}.{field_name} requires an impl key.")
@@ -224,13 +225,17 @@ class AngeeModel(TimestampMixin, RebacMixin):
     def resolve_impl_class(cls, field_name: str, value: Any, *, default: str | None = None) -> type:
         """Return the impl class bound to one supplied impl-field value."""
 
-        field = cls._impl_field(field_name)
+        field = cls.impl_field(field_name)
         key = cls.impl_key_for(field_name, value, default=default)
         return field.resolve_class(key)
 
     @classmethod
-    def _impl_field(cls, field_name: str) -> Any:
-        """Return the named impl field or raise when the field is not impl-owned."""
+    def impl_field(cls, field_name: str) -> Any:
+        """Return the declared ``ImplClassField`` named by ``field_name``.
+
+        This is the model-owned accessor for callers that need the impl field's
+        declared API without reaching through Django's raw ``_meta`` shape.
+        """
 
         field = cls._meta.get_field(field_name)
         if not isinstance(field, ImplClassField):
@@ -240,7 +245,7 @@ class AngeeModel(TimestampMixin, RebacMixin):
     def resolve_impl(self, field_name: str, *, default: str | None = None) -> type:
         """Return the impl class selected by ``field_name`` on this instance."""
 
-        field = type(self)._impl_field(field_name)
+        field = type(self).impl_field(field_name)
         value = getattr(self, field.attname)
         if not value and default is not None:
             return field.resolve_class(default)

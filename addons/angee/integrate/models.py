@@ -50,8 +50,8 @@ from rebac import (
 from rebac.models import active_relationship_model
 from strawberry_django.descriptors import model_property
 
-from angee.base.fields import EncryptedField, ImplClassField, StateField
-from angee.base.impl import ImplDefaultsMixin
+from angee.base.fields import EncryptedField, StateField
+from angee.base.impl import ImplClassField, ImplDefaultsMixin
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeManager, AngeeModel, AngeeQuerySet
 from angee.integrate import registry

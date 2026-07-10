@@ -253,7 +253,7 @@ Rules that follow from the layering:
     `integrate.OAuthClient` are the canonical shape.
   - *Only behaviour differs, open set (addons contribute impls) while persisted
     fields stay the same* → **one concrete model +
-    `angee.base.fields.ImplClassField`** naming a non-model
+    `angee.base.impl.ImplClassField`** naming a non-model
     strategy/client/backend class. Name the field by the role it plays
     (`backend_class`, `provider_type`), not by a generic "implementation" label.
     One table (unified list/reconcile, no field duplication); the impl is an
@@ -454,6 +454,10 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   returns 200; check `runtime/schemas/` before chasing app/test regressions. (The
   dev server regenerates it for you — see the `runserver` pitfall — but a manual
   `angee build` outside `angee dev` still needs the explicit `schema` step.)
+- **Moving a custom field between modules changes its migration `deconstruct()` path.**
+  Reconcile every on-disk migration in the same change: source migrations get the
+  schema-identical dotted-path edit; generated runtime migrations are regenerated
+  from source, and downstream consumers must regenerate their own runtime output.
 - **Agent runtime auth is a `(runtime × provider × credential-kind)` fact, not provider-only.**
   The `AgentRuntime` an agent's `runtime_class` selects (`angee.agents.runtimes`) owns how a
   credential becomes container env *and* the synced secret payload (`auth_env` /

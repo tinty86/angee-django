@@ -63,7 +63,8 @@ from rebac.backends import backend as rebac_backend
 from rebac.managers import RebacManager
 
 from angee.base.actors import actor_user_id
-from angee.base.fields import ImplClassField, StateField
+from angee.base.fields import StateField
+from angee.base.impl import ImplClassField
 from angee.base.mixins import ArchiveMixin, ArchiveQuerySet, AuditMixin, SqidMixin
 from angee.base.models import AngeeManager, AngeeModel, AngeeQuerySet, role_anchor
 from angee.storage import exceptions

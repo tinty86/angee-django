@@ -23,8 +23,8 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models, transaction
 from rebac import system_context
 
-from angee.base.fields import ImplClassField, StateField
-from angee.base.impl import ImplDefaultsMixin
+from angee.base.fields import StateField
+from angee.base.impl import ImplClassField, ImplDefaultsMixin
 from angee.base.mixins import AuditMixin
 from angee.base.models import AngeeDataModel, AngeeManager
 from angee.base.transitions import StateTransitions, save_state, transition
