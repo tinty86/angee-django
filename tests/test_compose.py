@@ -16,6 +16,7 @@ from django.db import models
 
 import angee.compose as compose_package
 import angee.compose.runtime as runtime_module
+from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.fields import StateField
 from angee.base.mixins import HistoryMixin, RevisionMixin
 from angee.base.models import AngeeManager, AngeeModel, role_anchor
@@ -422,6 +423,110 @@ def test_runtime_renders_model_attributes_from_mixins(tmp_path: Path) -> None:
     assert "import simple_history.models" in source
     assert "history = simple_history.models.HistoricalRecords(app='tests')" in source
     assert source.index("history = simple_history") < source.index("class Meta(_DecoratedHistoryThingMeta)")
+
+
+def test_runtime_walks_declared_emission_seams_for_history_and_revision(tmp_path: Path) -> None:
+    """History and revision mixins both ride declared emission seams."""
+
+    module = ModuleType("tests.declared_emission.models")
+    DeclaredEmissionThing = type(
+        "DeclaredEmissionThing",
+        (HistoryMixin, RevisionMixin, AngeeModel),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "revisioned_fields": ("body",),
+            "body": models.TextField(),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "declared"}),
+        },
+    )
+    module.DeclaredEmissionThing = DeclaredEmissionThing
+    app_config = SimpleNamespace(
+        label="declared",
+        name="tests.declared_emission",
+        module=ModuleType("tests.declared_emission"),
+        models_module=module,
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("declared/models.py")]
+
+    assert (
+        source.index("@reversion.register")
+        < source.index("class DeclaredEmissionThing")
+        < source.index("history = simple_history")
+        < source.index("class Meta(_DeclaredEmissionThingMeta)")
+    )
+
+
+def test_runtime_walks_synthetic_declared_emission_seams(tmp_path: Path) -> None:
+    """Unknown mixins emit through the same declared attribute/decorator seams."""
+
+    class SyntheticEmissionMixin(models.Model):
+        angee_model_decorators = (
+            ModelDecorator(
+                import_path="tests.synthetic_emission_decorators.marker_decorator",
+                args=("decorated",),
+            ),
+        )
+
+        @classmethod
+        def angee_model_attributes(
+            cls,
+            *,
+            app_label: str,
+            model_class: type[models.Model],
+            extension_bases: tuple[type[models.Model], ...],
+        ) -> tuple[ModelClassAttribute, ...]:
+            return (
+                ModelClassAttribute(
+                    name="synthetic_marker",
+                    import_path="tests.synthetic_emission_attributes.MarkerAttribute",
+                    args=(model_class.__name__,),
+                    kwargs=(("app_label", app_label), ("extension_count", len(extension_bases))),
+                ),
+            )
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    module = ModuleType("tests.synthetic_emission.models")
+    SyntheticEmissionThing = type(
+        "SyntheticEmissionThing",
+        (SyntheticEmissionMixin, AngeeModel),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "synthetic"}),
+        },
+    )
+    module.SyntheticEmissionThing = SyntheticEmissionThing
+    app_config = SimpleNamespace(
+        label="synthetic",
+        name="tests.synthetic_emission",
+        module=ModuleType("tests.synthetic_emission"),
+        models_module=module,
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("synthetic/models.py")]
+
+    attribute_import = "import tests.synthetic_emission_attributes"
+    decorator_import = "import tests.synthetic_emission_decorators"
+    decorator = "@tests.synthetic_emission_decorators.marker_decorator('decorated')"
+    class_header = "class SyntheticEmissionThing(AbstractSyntheticEmissionThing):"
+    attribute = (
+        "synthetic_marker = tests.synthetic_emission_attributes.MarkerAttribute("
+        "'SyntheticEmissionThing', app_label='synthetic', extension_count=0)"
+    )
+
+    assert attribute_import in source
+    assert decorator_import in source
+    assert source.index(decorator_import) < source.index(decorator) < source.index(class_header)
+    assert (
+        source.index(attribute_import)
+        < source.index(attribute)
+        < source.index("class Meta(_SyntheticEmissionThingMeta)")
+    )
 
 
 def test_runtime_emits_only_models_marked_runtime(tmp_path: Path) -> None:
