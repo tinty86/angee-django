@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 SETTINGS = {
@@ -21,7 +22,13 @@ SETTINGS = {
 def settings(namespace: Mapping[str, Any]) -> dict[str, Any]:
     """Return environment-sensitive task settings."""
 
+    result: dict[str, Any] = {}
+    # Beat's schedule state file belongs in the stack's data dir, never in beat's
+    # workdir — a beat whose workdir is the project root would otherwise litter
+    # celerybeat-schedule* into the project source tree.
+    if data_dir := namespace.get("ANGEE_DATA_DIR"):
+        result["CELERY_BEAT_SCHEDULE_FILENAME"] = str(Path(data_dir) / "celerybeat-schedule")
     broker_url = os.environ.get("CELERY_BROKER_URL") or namespace.get("CELERY_BROKER_URL")
-    if not broker_url:
-        return {}
-    return {"CELERY_BROKER_URL": str(broker_url)}
+    if broker_url:
+        result["CELERY_BROKER_URL"] = str(broker_url)
+    return result

@@ -1467,3 +1467,28 @@ def test_addon_autoconfig_can_set_graphql_ide(
     Composer(settings).compose_settings()
 
     assert settings["ANGEE_GRAPHQL_IDE"] == "custom"
+
+
+def test_beat_schedule_file_lives_in_the_data_dir(tmp_path: Path) -> None:
+    """Beat's schedule state file derives from ANGEE_DATA_DIR, never the workdir.
+
+    A beat whose workdir is the project root (the process-mode dev stack) would
+    otherwise litter celerybeat-schedule* into the project source tree.
+    """
+
+    settings: dict[str, Any] = {
+        "INSTALLED_APPS": ("example.notes",),
+        "ANGEE_RUNTIME_DIR": tmp_path / "runtime",
+        "ANGEE_DATA_DIR": tmp_path / "data",
+    }
+    Composer(settings).compose_settings()
+
+    assert settings["CELERY_BEAT_SCHEDULE_FILENAME"] == str(tmp_path / "data" / "celerybeat-schedule")
+
+
+def test_beat_schedule_file_default_is_omitted_without_a_data_dir(tmp_path: Path) -> None:
+    """No ANGEE_DATA_DIR in the composing namespace -> no schedule filename setting."""
+
+    settings = _compose(tmp_path)
+
+    assert "CELERY_BEAT_SCHEDULE_FILENAME" not in settings
