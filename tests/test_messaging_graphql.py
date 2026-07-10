@@ -37,6 +37,7 @@ from tests.conftest import (
     _clear_model_tables,
     _create_missing_tables,
     execute_schema,
+    make_integration,
 )
 from tests.conftest import (
     File as StorageFile,
@@ -197,7 +198,8 @@ def test_console_resource_metadata_declares_thread_and_channel_surfaces() -> Non
     assert channel.roots.create_name is None
     assert channel.roots.update_name is None
     assert channel.roots.delete_name is None
-    assert channel.capabilities == ("list", "detail", "aggregate", "groups")
+    assert channel.roots.changes_name == "channelChanged"
+    assert channel.capabilities == ("list", "detail", "aggregate", "groups", "changes")
 
 
 def test_messaging_schema_does_not_expose_optional_imap_connect() -> None:
@@ -264,6 +266,72 @@ def test_message_and_thread_hasura_writes(messaging_graphql_tables: None) -> Non
     with system_context(reason="test.messaging.hasura_write.verify"):
         assert messaging_models.Thread.objects.get(sqid=thread.sqid).visibility == "public"
         assert not messaging_models.Message.objects.filter(sqid=message.sqid).exists()
+
+
+def test_message_channel_group_key_drills_down_with_public_id(
+    messaging_graphql_tables: None,
+) -> None:
+    """A relation group bucket key can be fed back into the public relation filter."""
+
+    admin = _platform_admin("msg-channel-group-admin")
+    channel = make_integration("msg-channel-group", model=Channel, backend_class="imap")
+    with system_context(reason="test.messaging.channel_group.seed"):
+        thread = messaging_models.Thread.objects.create(
+            subject="Channel thread",
+            channel=channel,
+            visibility="private",
+            created_by_id=admin.pk,
+        )
+        message = messaging_models.Message.objects.create(
+            thread=thread,
+            channel=channel,
+            subject="Channel grouped message",
+            status="synced",
+            sent_at=datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc),
+            created_by_id=admin.pk,
+        )
+    schema = _schema()
+
+    grouped = _data(
+        execute_schema(
+            schema,
+            """
+            query MessageChannelGroups($groupBy: [MessageTypeGroupBySpec!]!) {
+              messages_groups(group_by: $groupBy, limit: 10) {
+                key { channel_id channel__display_name }
+                aggregate { count }
+              }
+            }
+            """,
+            {
+                "groupBy": [
+                    {"field": "CHANNEL"},
+                    {"field": "CHANNEL__DISPLAY_NAME"},
+                ],
+            },
+            request=_request(admin),
+        )
+    )["messages_groups"]
+    bucket_channel_id = grouped[0]["key"]["channel_id"]
+
+    drilled = _data(
+        execute_schema(
+            schema,
+            """
+            query MessageChannelDrillDown($channel: String!) {
+              messages(where: {channel: {_eq: $channel}}) {
+                id
+                subject
+              }
+            }
+            """,
+            {"channel": bucket_channel_id},
+            request=_request(admin),
+        )
+    )["messages"]
+
+    assert bucket_channel_id == channel.sqid
+    assert drilled == [{"id": message.sqid, "subject": "Channel grouped message"}]
 
 
 def test_record_chatter_query_and_post(messaging_graphql_tables: None) -> None:
