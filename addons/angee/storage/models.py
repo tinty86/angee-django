@@ -84,6 +84,7 @@ from angee.storage.uploads import (
 
 _SHA256_HEX = re.compile(r"[a-f0-9]{64}")
 _STORAGE_CACHE_MAX_SIZE = 128
+_OBJECT_KEY_LEAF_MAX_BYTES = 240
 
 
 class UploadState(models.TextChoices):
@@ -257,11 +258,7 @@ class Drive(SqidMixin, AuditMixin, ArchiveMixin, AngeeModel):
         """
 
         digest = str(content_hash).lower()
-        try:
-            safe_name = get_valid_filename(posixpath.basename(str(filename)))
-        except SuspiciousFileOperation:
-            safe_name = ""
-        parts = [digest[:2], digest[2:4], digest, safe_name or "upload.bin"]
+        parts = [digest[:2], digest[2:4], digest, _object_key_leaf(filename)]
         prefix = str(self.prefix or "").strip("/")
         if prefix:
             parts.insert(0, prefix)
@@ -1234,3 +1231,35 @@ def _normalized_hash(value: str) -> str:
     if not _SHA256_HEX.fullmatch(digest):
         raise exceptions.UploadError("content_hash must be a SHA-256 hex digest")
     return digest
+
+
+def _clamp_utf8(value: str, max_bytes: int) -> str:
+    """Return ``value`` trimmed to at most ``max_bytes`` UTF-8 bytes."""
+
+    used = 0
+    chars: list[str] = []
+    for char in value:
+        size = len(char.encode("utf-8"))
+        if used + size > max_bytes:
+            break
+        chars.append(char)
+        used += size
+    return "".join(chars)
+
+
+def _object_key_leaf(filename: str) -> str:
+    """Return a backend path leaf that stays within common filesystem limits."""
+
+    try:
+        safe_name = get_valid_filename(posixpath.basename(str(filename)))
+    except SuspiciousFileOperation:
+        safe_name = ""
+    safe_name = safe_name or "upload.bin"
+    if len(safe_name.encode("utf-8")) <= _OBJECT_KEY_LEAF_MAX_BYTES:
+        return safe_name
+    stem, dot, suffix = safe_name.rpartition(".")
+    extension = f"{dot}{suffix}" if dot and stem else ""
+    extension_bytes = len(extension.encode("utf-8"))
+    if extension and extension_bytes < _OBJECT_KEY_LEAF_MAX_BYTES:
+        return f"{_clamp_utf8(stem, _OBJECT_KEY_LEAF_MAX_BYTES - extension_bytes)}{extension}"
+    return _clamp_utf8(safe_name, _OBJECT_KEY_LEAF_MAX_BYTES)

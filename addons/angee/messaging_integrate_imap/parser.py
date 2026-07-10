@@ -46,6 +46,7 @@ _EMAIL_PLATFORM = str(Handle.Platform.EMAIL)
 
 _MESSAGE_ID_RE = re.compile(r"<([^<>]+)>")
 _QUOTE_MARKER_RE = re.compile(r"^\s*(?:>\s?)+")
+_FILENAME_MAX_LENGTH = 512
 # An attribution line introduces the quote that follows it ("On …, X wrote:");
 # it is only treated as quoted when a quote line immediately follows, so an
 # ordinary sentence ending in a colon stays body text.
@@ -537,9 +538,16 @@ def _decoded_payload(message: MIMEPart) -> bytes | None:
 
 
 def _safe_filename(name: str) -> str:
-    """Return ``name`` with path separators and null bytes neutralised."""
+    """Return a storage-safe display filename for one MIME part."""
 
-    return _UNSAFE_FILENAME_RE.sub("_", name).strip()
+    safe = _UNSAFE_FILENAME_RE.sub("_", name).strip()
+    if len(safe) <= _FILENAME_MAX_LENGTH:
+        return safe
+    stem, dot, suffix = safe.rpartition(".")
+    extension = f"{dot}{suffix}" if dot and stem else ""
+    if extension and len(extension) < _FILENAME_MAX_LENGTH:
+        return f"{stem[: _FILENAME_MAX_LENGTH - len(extension)]}{extension}"
+    return safe[:_FILENAME_MAX_LENGTH]
 
 
 def _ensure_plain_body(body: ParsedPart | None) -> ParsedPart | None:

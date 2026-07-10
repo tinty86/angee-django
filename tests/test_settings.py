@@ -189,8 +189,7 @@ def test_notes_app_order_is_stable(tmp_path: Path) -> None:
         "django.contrib.sessions.apps.SessionsConfig",
         "angee.iam.apps.IAMConfig",
         # integrate depends on angee.tasks (its periodic bridge tick), pulling the
-        # queue seam ahead of every integration addon.
-        "procrastinate.contrib.django.apps.ProcrastinateConfig",
+        # task seam ahead of every integration addon.
         "angee.tasks",
         "angee.integrate.apps.IntegrateConfig",
         "angee.mcp",
@@ -302,6 +301,36 @@ def test_graphql_ide_default_is_debug_only(tmp_path: Path) -> None:
     Composer(debug_settings).compose_settings()
 
     assert debug_settings["ANGEE_GRAPHQL_IDE"] == "graphiql"
+
+
+def test_graphql_uses_channels_redis_when_redis_url_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A shared Redis channel layer replaces the dev-only in-memory layer."""
+
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+    settings = _compose(tmp_path)
+
+    assert settings["CHANNEL_LAYERS"]["default"] == {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": ["redis://127.0.0.1:6379/0"]},
+    }
+
+
+def test_tasks_use_celery_broker_url_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Celery uses the task broker URL injected by the stack."""
+
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/1")
+
+    settings = _compose(tmp_path)
+
+    assert settings["CELERY_BROKER_URL"] == "redis://127.0.0.1:6379/1"
+    assert settings["CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP"] is True
 
 
 def test_data_dir_is_host_owned_not_composed(tmp_path: Path) -> None:

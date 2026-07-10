@@ -35,6 +35,7 @@ export const enIntegrateMessages: Record<string, string> = {
   // VCS bridge page.
   "vcs.backendClass": "Backend",
   "vcs.discover": "Discover repositories",
+  "bridge.group.sync": "Sync",
 
   // Repositories page detail groups.
   "repositories.repository": "Repository",

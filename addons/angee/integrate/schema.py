@@ -49,6 +49,7 @@ from angee.integrate.models import Bridge, IntegrationStatus
 from angee.integrate.oauth import flow, state
 from angee.integrate.oauth.client import OAuthClientProtocol
 from angee.integrate.oauth.errors import CLIENT_NOT_CONFIGURED, INVALID_STATE, OAuthFlowError
+from angee.integrate.queue import queue_bridge_sync
 from angee.integrate.registry import bridge_models
 
 Vendor = apps.get_model("integrate", "Vendor")
@@ -1126,6 +1127,17 @@ class IntegrationLabelMixin:
         return cast(Any, self).display_label
 
 
+@strawberry.type
+class BridgeSyncStatusMixin:
+    """Project live sync status shared by all ``Bridge`` child resources."""
+
+    @strawberry_django.field(name="is_syncing", only=["id"])
+    def is_syncing(self) -> bool:
+        """Return whether a worker currently holds this bridge's live sync lock."""
+
+        return bool(cast(Any, self).is_syncing)
+
+
 @strawberry_django.type(Integration)
 class IntegrationType(IntegrationLabelMixin, AngeeNode):
     """Admin projection of an integration.
@@ -1355,28 +1367,18 @@ class IntegrationActionMutation:
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def sync_integration(self, id: PublicID) -> ActionResult:
-        """Run every bridge of one integration now (eager variant of the scheduler)."""
+        """Queue every bridge of one integration for sync now."""
 
-        ran = 0
-        errors = 0
-        items = 0
+        queued = 0
         with action_target(Integration, id, reason="integrate.graphql.sync_integration") as integration:
             now = timezone.now()
             for model in bridge_models(Bridge):
                 for bridge in model._default_manager.filter(pk=integration.pk).order_by("pk"):
-                    ran += 1
-                    try:
-                        result = bridge.run_sync(now=now)
-                    except Exception:  # noqa: BLE001 — run_sync recorded the bridge failure as telemetry.
-                        errors += 1
-                    else:
-                        items += result
-        if ran == 0:
+                    queue_bridge_sync(bridge, now=now)
+                    queued += 1
+        if queued == 0:
             return ActionResult(ok=True, message="No bridges to sync.")
-        return ActionResult(
-            ok=errors == 0,
-            message=f"Synced {items} item(s) across {ran} bridge(s); {errors} error(s).",
-        )
+        return ActionResult(ok=True, message=f"Queued {queued} bridge sync(s).")
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def test_connection(self, id: PublicID) -> ActionResult:
@@ -1426,7 +1428,7 @@ class WebhookActionMutation:
 
 
 @strawberry_django.type(VcsBridge)
-class VcsBridgeType(AngeeNode):
+class VcsBridgeType(BridgeSyncStatusMixin, AngeeNode):
     """Admin projection of a VCS bridge child model."""
 
     vendor: VendorType
@@ -1438,6 +1440,10 @@ class VcsBridgeType(AngeeNode):
     config: JSON
     last_sync_completed_at: auto
     last_sync_status: auto
+    last_sync_summary: JSON
+    sync_stage: auto
+    sync_error: auto
+    sync_progress: JSON
     created_at: auto
     updated_at: auto
 
@@ -1555,10 +1561,10 @@ _VCS_BRIDGE_RESOURCE = hasura_model_resource(
     VcsBridgeType,
     model=VcsBridge,
     name="vcs_bridges",
-    filterable=["id", "vendor", "backend_class", "status", "last_sync_status", "updated_at"],
+    filterable=["id", "vendor", "backend_class", "status", "last_sync_status", "sync_stage", "updated_at"],
     sortable=["vendor", "backend_class", "status", "last_sync_completed_at", "created_at", "updated_at"],
-    aggregatable=["id"],
-    groupable=["vendor", "vendor__display_name", "backend_class", "status", "last_sync_status"],
+    aggregatable=["id", "last_sync_items"],
+    groupable=["vendor", "vendor__display_name", "backend_class", "status", "last_sync_status", "sync_stage"],
     insert=False,
     update=False,
     delete=True,
@@ -1702,15 +1708,11 @@ class VCSActionMutation:
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def sync_vcs_bridge(self, id: PublicID) -> ActionResult:
-        """Refresh every repository's sources for one VCS bridge now."""
+        """Queue a refresh of every repository's sources for one VCS bridge."""
 
         with action_target(VcsBridge, id, reason="integrate.graphql.sync_vcs_bridge") as vcs:
-            now = timezone.now()
-            try:
-                result = vcs.run_sync(now=now)
-            except Exception as error:  # noqa: BLE001 — sync failure is the result, not a 500
-                return ActionResult(ok=False, message=f"Sync failed: {error}")
-        return ActionResult(ok=True, message=f"Synced {result} item(s).")
+            queue_bridge_sync(vcs, now=timezone.now())
+        return ActionResult(ok=True, message="Queued bridge sync.")
 
     @strawberry.mutation(permission_classes=_ADMIN_PERMISSION_CLASSES)
     def refresh_source(self, id: PublicID) -> ActionResult:
@@ -1814,7 +1816,10 @@ schemas = {
             WebhookActionMutation,
             VCSActionMutation,
         ],
-        "subscription": [changes(Integration, field="integrationChanged")],
+        "subscription": [
+            changes(Integration, field="integrationChanged"),
+            changes(VcsBridge, field="vcsBridgeChanged"),
+        ],
         "types": _CONSOLE_TYPES,
     },
 }

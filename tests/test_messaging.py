@@ -1530,6 +1530,16 @@ def test_ingest_is_idempotent_on_platform_external_id(channel: Any) -> None:
     assert thread.message_count == 1
 
 
+def test_email_identifier_and_subject_columns_allow_long_imap_values() -> None:
+    """IMAP Message-ID and Subject values can exceed 512 chars and land intact."""
+
+    assert Thread._meta.get_field("external_id").max_length == 4096
+    assert Thread._meta.get_field("subject").max_length == 4096
+    assert Thread._meta.get_field("subject_normalized").max_length == 4096
+    assert Message._meta.get_field("external_id").max_length == 4096
+    assert Message._meta.get_field("subject").max_length == 4096
+
+
 @pytest.mark.django_db(transaction=True)
 def test_identical_resync_does_not_churn_message_or_parts(channel: Any) -> None:
     """A second identical ingest rewrites nothing — no re-save, stable Part PKs (M3).

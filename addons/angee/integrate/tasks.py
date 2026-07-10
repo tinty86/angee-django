@@ -1,29 +1,35 @@
-"""Procrastinate task wrappers for the integrate bridge scheduler.
-
-The pure due-scan lives in :mod:`angee.integrate.scheduler`; this module is the
-queue seam that drives it. The periodic tick makes every *already-scheduled*
-bridge's ``poll_interval``/``next_sync_at`` cadence real without each bridge
-addon wiring its own dispatcher. A freshly created bridge has no ``next_sync_at``
-until its first sync records one — the eager ``syncIntegration`` mutation is that
-first sync and stays the on-demand path.
-"""
+"""Celery task wrappers for the integrate bridge scheduler."""
 
 from __future__ import annotations
 
-from procrastinate import RetryStrategy
-from procrastinate.contrib.django import app
+from typing import Any
+
+from celery import shared_task
 
 from angee.integrate import scheduler
+from angee.integrate.sync_runner import run_bridge_sync_job
 
 
-@app.periodic(cron="* * * * *", periodic_id="integrate.sync_due_bridges")
-@app.task(name="integrate.sync_due_bridges", retry=RetryStrategy(max_attempts=3, exponential_wait=30))
-def sync_due_bridges(_timestamp: int) -> None:
-    """Run every bridge row whose ``next_sync_at`` is due.
+@shared_task(
+    name="integrate.sync_bridge_now",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def sync_bridge_now(model_label: str, pk: int, timestamp: str | None = None) -> dict[str, Any]:
+    """Run one queued bridge sync task."""
 
-    The scan uses the wall clock rather than the injected periodic timestamp so a
-    tick delayed by queue backlog still picks up everything due by the time it
-    actually runs; per-bridge failures are recorded as telemetry by ``run_sync``.
-    """
+    return run_bridge_sync_job(model_label, pk, timestamp, require_queue_token=True)
 
-    scheduler.run_due_bridges()
+
+@shared_task(
+    name="integrate.sync_due_bridges",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def sync_due_bridges(timestamp: int | None = None) -> None:
+    """Queue every bridge row whose ``next_sync_at`` is due."""
+
+    del timestamp
+    scheduler.enqueue_due_bridges()

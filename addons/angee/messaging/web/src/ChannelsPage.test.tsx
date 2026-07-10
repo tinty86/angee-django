@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const pageMocks = vi.hoisted(() => ({
   resourceProps: null as Record<string, unknown> | null,
+  columnFields: [] as string[],
+  fieldNames: [] as string[],
   recordAction: vi.fn(),
   requestedSlot: "",
   slotEntries: [{ slot: "messaging.channel.toolbar", id: "demo", content: "Connect bridge" }],
@@ -17,8 +19,14 @@ vi.mock("@angee/ui", () => ({
       {label}
     </button>
   ),
-  Column: () => null,
-  Field: () => null,
+  Column: ({ field }: { field: string }) => {
+    pageMocks.columnFields.push(field);
+    return null;
+  },
+  Field: ({ name }: { name: string }) => {
+    pageMocks.fieldNames.push(name);
+    return null;
+  },
   Form: ({ children }: { children?: React.ReactNode }) => <section>{children}</section>,
   Group: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   List: ({ children }: { children?: React.ReactNode }) => <section>{children}</section>,
@@ -51,6 +59,8 @@ import { MESSAGING_CHANNEL_TOOLBAR_SLOT } from "./slots";
 describe("ChannelsPage", () => {
   beforeEach(() => {
     pageMocks.resourceProps = null;
+    pageMocks.columnFields = [];
+    pageMocks.fieldNames = [];
     pageMocks.recordAction.mockClear();
     pageMocks.requestedSlot = "";
   });
@@ -66,5 +76,11 @@ describe("ChannelsPage", () => {
     });
     expect(pageMocks.requestedSlot).toBe(MESSAGING_CHANNEL_TOOLBAR_SLOT);
     expect(screen.getByText("Connect bridge")).toBeTruthy();
+    expect(pageMocks.columnFields).toEqual(
+      expect.arrayContaining(["sync_stage", "last_sync_status", "last_sync_items", "last_sync_completed_at"]),
+    );
+    expect(pageMocks.fieldNames).toEqual(
+      expect.arrayContaining(["is_syncing", "sync_stage", "sync_error", "sync_progress", "last_sync_summary"]),
+    );
   });
 });

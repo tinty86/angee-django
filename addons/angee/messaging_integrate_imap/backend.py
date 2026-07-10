@@ -46,6 +46,7 @@ from imapclient.exceptions import IMAPClientAbortError
 
 from angee.integrate.credentials import CredentialKind
 from angee.integrate.net import is_unsafe_address, resolved_addresses
+from angee.integrate.sync import current_bridge_progress
 from angee.messaging.backends import ChannelBackend, ParsedMessage
 from angee.messaging_integrate_imap.parser import fallback_message, parse_message
 
@@ -139,6 +140,18 @@ class ImapChannelBackend(ChannelBackend):
         self.close()
         return []
 
+    def _report_progress(self, stage: str, message: str, **details: Any) -> None:
+        """Publish IMAP-specific progress into the generic bridge reporter."""
+
+        reporter = current_bridge_progress()
+        if reporter is None:
+            return
+        previous_details = {}
+        if isinstance(self.bridge.sync_progress, dict):
+            previous_details = dict(self.bridge.sync_progress.get("details") or {})
+        previous_details.update({"backend": self.key, **details})
+        reporter.report(stage, message=message, details=previous_details)
+
     # --- discovery ---
 
     def _discover(self) -> deque[_MailboxWork]:
@@ -148,7 +161,13 @@ class ImapChannelBackend(ChannelBackend):
         self._own_addresses = self._resolve_own_addresses()
         mailboxes = self.bridge.cursor.setdefault("mailboxes", {})
         plan: deque[_MailboxWork] = deque()
-        for name in self._select_mailboxes(client):
+        selected_mailboxes = self._select_mailboxes(client)
+        self._report_progress(
+            "discovering",
+            "Discovered IMAP mailboxes",
+            mailbox_count=len(selected_mailboxes),
+        )
+        for index, name in enumerate(selected_mailboxes, start=1):
             status = client.folder_status(name, [b"UIDVALIDITY", b"UIDNEXT"])
             uidvalidity = int(status[b"UIDVALIDITY"])
             uidnext = int(status[b"UIDNEXT"])
@@ -163,8 +182,26 @@ class ImapChannelBackend(ChannelBackend):
             uids = sorted(int(uid) for uid in client.search(criteria) if int(uid) > last_uid)
             if not uids:
                 mailboxes[name] = {"uidvalidity": uidvalidity, "last_uid": last_uid}
+                self._report_progress(
+                    "discovering",
+                    "Planned IMAP mailbox sync",
+                    mailbox=name,
+                    mailbox_index=index,
+                    mailbox_count=len(selected_mailboxes),
+                    queued_messages=0,
+                    total_queued=sum(len(item.uids) for item in plan),
+                )
                 continue
             plan.append(_MailboxWork(name=name, uidvalidity=uidvalidity, uids=uids))
+            self._report_progress(
+                "discovering",
+                "Planned IMAP mailbox sync",
+                mailbox=name,
+                mailbox_index=index,
+                mailbox_count=len(selected_mailboxes),
+                queued_messages=len(uids),
+                total_queued=sum(len(item.uids) for item in plan),
+            )
         return plan
 
     def _select_mailboxes(self, client: IMAPClient) -> list[str]:
@@ -208,6 +245,15 @@ class ImapChannelBackend(ChannelBackend):
         """Fetch and parse one chunk: pin the mailbox, size-screen, budgeted body pulls."""
 
         self._select(work.name)
+        self._report_progress(
+            "syncing",
+            "Fetching IMAP message batch",
+            mailbox=work.name,
+            batch_size=len(uids),
+            uid_start=uids[0] if uids else None,
+            uid_end=uids[-1] if uids else None,
+            remaining_in_mailbox=len(work.uids),
+        )
         config = self.bridge.config
         max_bytes = int(config.get("max_message_bytes") or _DEFAULT_MAX_MESSAGE_BYTES)
         batch_bytes = int(config.get("max_batch_bytes") or _DEFAULT_MAX_BATCH_BYTES)

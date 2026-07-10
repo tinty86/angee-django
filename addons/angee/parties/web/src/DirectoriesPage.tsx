@@ -25,6 +25,7 @@ export function DirectoriesPage(): React.ReactElement {
         <Column field="display_name" header={t("directory.name")} />
         <Column field="status" widget="statusBadge" />
         <Column field="backend_class" />
+        <Column field="sync_stage" />
         <Column field="last_sync_status" />
         <Column field="last_sync_items" />
         <Column field="last_sync_completed_at" />
@@ -35,6 +36,11 @@ export function DirectoriesPage(): React.ReactElement {
         <Field name="backend_class" readOnly />
         <Field name="config" readOnly />
         <Group label={t("directory.group.lastSync")} columns={2}>
+          <Field name="is_syncing" readOnly />
+          <Field name="sync_stage" readOnly />
+          <Field name="sync_error" readOnly />
+          <Field name="sync_progress" widget="json" readOnly />
+          <Field name="last_sync_summary" widget="json" readOnly />
           <Field name="last_sync_status" readOnly />
           <Field name="last_sync_items" readOnly />
           <Field name="last_sync_completed_at" readOnly />

@@ -32,6 +32,7 @@ from angee.messaging_integrate_imap.parser import (
 )
 from tests.conftest import _clear_model_tables, _create_missing_tables, make_integration
 from tests.test_messaging import (
+    Handle,
     MESSAGING_TEST_MODELS,
     Message,
     Part,
@@ -132,6 +133,27 @@ def test_missing_message_id_gets_stable_synthetic_id() -> None:
     assert _parse(first).external_id.startswith("sha256:")
     assert _parse(first).external_id != _parse(second).external_id
     assert _parse(first).external_id == synthetic_external_id(first)
+
+
+def test_overlong_message_id_is_preserved() -> None:
+    """A valid but long RFC Message-ID remains the message idempotency key."""
+
+    long_message_id = f"outlook-{'x' * 700}@example.com"
+    raw = _eml(
+        message_id=f"<{long_message_id}>",
+        extra_headers=(
+            f"In-Reply-To: <{long_message_id}>\r\n"
+            f"References: <root@example.com> <{long_message_id}>"
+        ),
+    )
+
+    parsed = _parse(raw)
+
+    assert parsed.external_id == long_message_id
+    assert parsed.in_reply_to == long_message_id
+    assert parsed.references == ("root@example.com", long_message_id)
+    assert len(parsed.external_id) > 512
+    assert parsed.metadata["headers"]["Message-ID"] == [f"<{long_message_id}>"]
 
 
 def test_malformed_date_falls_back_to_internal_date() -> None:
@@ -262,6 +284,41 @@ def test_multipart_with_attachment_and_inline_image() -> None:
         b"PLAINDATA",
     )
     assert (inline.disposition, inline.cid, inline.type) == ("inline", "logo@cid", "image/png")
+
+
+def test_attachment_filename_is_clamped_to_storage_limit() -> None:
+    """An absurd MIME filename should not abort attachment ingestion downstream."""
+
+    long_name = f"{'x' * 588}.pdf"
+    raw = (
+        "From: ada@example.com\r\n"
+        "To: bob@example.com\r\n"
+        "Subject: Long attachment name\r\n"
+        "Message-ID: <long-attachment@example.com>\r\n"
+        "Date: Thu, 02 Jul 2026 10:00:00 +0000\r\n"
+        "MIME-Version: 1.0\r\n"
+        'Content-Type: multipart/mixed; boundary="B1"\r\n'
+        "\r\n"
+        "--B1\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n"
+        "See attached.\r\n"
+        "--B1\r\n"
+        f'Content-Type: application/pdf; name="{long_name}"\r\n'
+        f'Content-Disposition: attachment; filename="{long_name}"\r\n'
+        "Content-Transfer-Encoding: base64\r\n"
+        "\r\n"
+        "UERGREFUQQ==\r\n"
+        "--B1--\r\n"
+    ).encode()
+    body = _parse(raw).body
+
+    attachment = body.children[1]
+
+    assert len(long_name) == 592
+    assert len(attachment.name) == 512
+    assert attachment.name.endswith(".pdf")
+    assert attachment.content == b"PDFDATA"
 
 
 def test_html_only_message_derives_a_plain_body() -> None:
@@ -929,6 +986,81 @@ def _wire_fake(monkeypatch: pytest.MonkeyPatch, account: FakeImapAccount) -> Non
 
 
 @pytest.mark.django_db(transaction=True)
+def test_channel_sync_preserves_overlong_message_id(
+    imap_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long but valid Message-ID lands unchanged as the message/thread key."""
+
+    del imap_tables
+    long_message_id = f"outlook-{'x' * 700}@example.com"
+    account = FakeImapAccount(
+        {
+            "INBOX": _folder(
+                _eml(message_id=f"<{long_message_id}>", subject="", body="No subject.\n")
+            )
+        }
+    )
+    _wire_fake(monkeypatch, account)
+    channel = _imap_channel(batch_size=1)
+
+    with system_context(reason="test imap long message-id"):
+        landed = channel.run_sync(now=datetime(2026, 7, 2, 12, 0, tzinfo=UTC))
+
+    assert landed == 1
+    message = Message._base_manager.get()
+    assert message.external_id == long_message_id
+    assert len(message.external_id) > 512
+    assert message.thread.external_id == f"msg:{long_message_id}"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_channel_sync_preserves_overlong_display_name_and_content_id(
+    imap_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Long RFC-5322 display names and Content-IDs land without truncation."""
+
+    del imap_tables
+    long_display_name = "Ada " + ("Lovelace " * 80).strip()
+    long_cid = f"inline-{'x' * 700}@example.com"
+    assert len(long_display_name) > 256
+    assert len(long_cid) > 256
+    assert Handle._meta.get_field("display_name").max_length >= 4096
+    assert Part._meta.get_field("cid").max_length >= 4096
+
+    account = FakeImapAccount(
+        {
+            "INBOX": _folder(
+                (
+                    f'From: "{long_display_name}" <ada@example.com>\r\n'
+                    "To: bob@example.com\r\n"
+                    "Subject: Wide headers\r\n"
+                    "Message-ID: <wide-headers@x>\r\n"
+                    "Date: Thu, 02 Jul 2026 10:00:00 +0000\r\n"
+                    "MIME-Version: 1.0\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-ID: <{long_cid}>\r\n"
+                    "\r\n"
+                    "<p>Inline body.</p>\r\n"
+                ).encode("utf-8")
+            )
+        }
+    )
+    _wire_fake(monkeypatch, account)
+    channel = _imap_channel(batch_size=1)
+
+    with system_context(reason="test imap wide headers"):
+        landed = channel.run_sync(now=datetime(2026, 7, 2, 12, 0, tzinfo=UTC))
+
+    assert landed == 1
+    handle = Handle._base_manager.get(value="ada@example.com")
+    part = Part._base_manager.get(message__external_id="wide-headers@x", type="text/html")
+    assert handle.display_name == long_display_name
+    assert part.cid == long_cid
+
+
+@pytest.mark.django_db(transaction=True)
 def test_channel_sync_lands_threads_parts_and_attachments(
     imap_tables: None,
     tmp_path: Path,
@@ -938,6 +1070,7 @@ def test_channel_sync_lands_threads_parts_and_attachments(
 
     del imap_tables
     reply_body = "Yes, confirmed!\n\n> Are we still on for Thursday?\n\n-- \nBob\n"
+    long_attachment_name = f"{'x' * 588}.txt"
     account = FakeImapAccount(
         {
             "INBOX": _folder(
@@ -951,25 +1084,25 @@ def test_channel_sync_lands_threads_parts_and_attachments(
                     body=reply_body,
                 ),
                 (
-                    b"From: carol@example.com\r\n"
-                    b"To: ada@example.com\r\n"
-                    b"Subject: Contract\r\n"
-                    b"Message-ID: <files@x>\r\n"
-                    b"Date: Thu, 02 Jul 2026 11:00:00 +0000\r\n"
-                    b"MIME-Version: 1.0\r\n"
-                    b'Content-Type: multipart/mixed; boundary="B1"\r\n'
-                    b"\r\n"
-                    b"--B1\r\n"
-                    b"Content-Type: text/plain; charset=utf-8\r\n"
-                    b"\r\n"
-                    b"Signed copy attached.\r\n"
-                    b"--B1\r\n"
-                    b"Content-Type: text/plain; name=contract.txt\r\n"
-                    b"Content-Disposition: attachment; filename=contract.txt\r\n"
-                    b"\r\n"
-                    b"AGREED TERMS\r\n"
-                    b"--B1--\r\n"
-                ),
+                    "From: carol@example.com\r\n"
+                    "To: ada@example.com\r\n"
+                    "Subject: Contract\r\n"
+                    "Message-ID: <files@x>\r\n"
+                    "Date: Thu, 02 Jul 2026 11:00:00 +0000\r\n"
+                    "MIME-Version: 1.0\r\n"
+                    'Content-Type: multipart/mixed; boundary="B1"\r\n'
+                    "\r\n"
+                    "--B1\r\n"
+                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    "\r\n"
+                    "Signed copy attached.\r\n"
+                    "--B1\r\n"
+                    f'Content-Type: text/plain; name="{long_attachment_name}"\r\n'
+                    f'Content-Disposition: attachment; filename="{long_attachment_name}"\r\n'
+                    "\r\n"
+                    "AGREED TERMS\r\n"
+                    "--B1--\r\n"
+                ).encode(),
             )
         }
     )
@@ -1007,8 +1140,11 @@ def test_channel_sync_lands_threads_parts_and_attachments(
     assert quoted.fragment_id == root_body.fragment_id
 
     attachment = Part._base_manager.select_related("file").get(message=files, file__isnull=False)
-    assert attachment.name == "contract.txt"
+    assert len(long_attachment_name) == 592
+    assert len(attachment.name) == 512
+    assert attachment.name.endswith(".txt")
     assert attachment.disposition == Part.Disposition.ATTACHMENT
+    assert attachment.file.filename == attachment.name
     assert attachment.file.size_bytes == len(b"AGREED TERMS")
 
     assert Participant._base_manager.filter(message=reply).count() == 2  # from + to
@@ -1017,6 +1153,13 @@ def test_channel_sync_lands_threads_parts_and_attachments(
     assert channel.cursor["mailboxes"]["INBOX"] == {"uidvalidity": 100, "last_uid": 3}
     assert channel.last_sync_status == "ok"
     assert channel.last_sync_items == 3
+    assert channel.sync_stage == Channel.SyncStage.COMPLETED
+    assert channel.sync_progress["stage"] == Channel.SyncStage.COMPLETED
+    assert channel.sync_progress["message"] == "Ingested message batch"
+    assert channel.sync_progress["details"]["backend"] == "ImapChannelBackend"
+    assert channel.sync_progress["details"]["mailbox"] == "INBOX"
+    assert channel.sync_progress["details"]["batch_size"] == 1
+    assert channel.sync_progress["details"]["landed"] == 3
     assert channel.next_sync_at is not None
 
 
@@ -1086,3 +1229,48 @@ def test_failed_run_never_persists_the_cursor(
     channel.refresh_from_db()
     assert channel.cursor == {}  # in-memory advance was never persisted
     assert channel.last_sync_status == "error"
+    assert channel.sync_stage == Channel.SyncStage.FAILED
+    assert channel.sync_error == "RuntimeError: ingest died"
+    assert channel.sync_progress["stage"] == Channel.SyncStage.FAILED
+    assert channel.sync_progress["details"]["backend"] == "imap"
+    assert channel.sync_progress["details"]["mailbox"] == "INBOX"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_failed_run_keeps_successfully_ingested_batch_cursor(
+    imap_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later batch failure resumes after already-landed messages."""
+
+    del imap_tables
+    account = FakeImapAccount(
+        {
+            "INBOX": _folder(
+                _eml(message_id="<a@x>", subject="A"),
+                _eml(message_id="<b@x>", subject="B"),
+                _eml(message_id="<c@x>", subject="C"),
+            )
+        }
+    )
+    _wire_fake(monkeypatch, account)
+    channel = _imap_channel(batch_size=2)
+    original_ingest = Message.objects.ingest
+    calls = 0
+
+    def fail_second_batch(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second batch died")
+        return original_ingest(*args, **kwargs)
+
+    monkeypatch.setattr(Message.objects, "ingest", fail_second_batch)
+    with system_context(reason="test imap partial sync"), pytest.raises(RuntimeError):
+        channel.run_sync(now=datetime(2026, 7, 2, 12, 0, tzinfo=UTC))
+
+    assert Message._base_manager.count() == 2
+    channel.refresh_from_db()
+    assert channel.cursor["mailboxes"]["INBOX"] == {"uidvalidity": 100, "last_uid": 2}
+    assert channel.last_sync_status == "error"
+    assert channel.sync_error == "RuntimeError: second batch died"

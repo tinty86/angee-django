@@ -47,6 +47,7 @@ from angee.base.fields import ImplClassField, SqidField, StateField
 from angee.base.mixins import AuditMixin, HistoryMixin, SqidMixin
 from angee.base.models import AngeeModel, public_id_for
 from angee.integrate.models import Bridge
+from angee.integrate.sync import current_bridge_progress
 from angee.messaging.backends import ChannelBackend
 from angee.messaging.managers import (
     FragmentManager,
@@ -825,6 +826,13 @@ class Channel(Bridge):
         backend = self.backend
         landed = 0
         previous: tuple[tuple[str, ...], Any] | None = None
+        reporter = current_bridge_progress()
+        if reporter is not None:
+            reporter.report(
+                str(self.SyncStage.SYNCING),
+                message="Starting channel sync",
+                details={"backend": type(backend).__name__, "landed": landed},
+            )
         try:
             while batch := backend.fetch_messages():
                 current = (tuple(parsed.external_id for parsed in batch), deepcopy(self.cursor))
@@ -834,6 +842,23 @@ class Channel(Bridge):
                     )
                 previous = current
                 landed += len(message_model.objects.ingest(batch, channel=self))
+                self.save(update_fields=["cursor", "updated_at"])
+                if reporter is not None:
+                    previous_details = {}
+                    if isinstance(self.sync_progress, dict):
+                        previous_details = dict(self.sync_progress.get("details") or {})
+                    previous_details.update(
+                        {
+                            "backend": type(backend).__name__,
+                            "batch_size": len(batch),
+                            "landed": landed,
+                        }
+                    )
+                    reporter.report(
+                        str(self.SyncStage.SYNCING),
+                        message="Ingested message batch",
+                        details=previous_details,
+                    )
         finally:
             backend.close()
         return landed
@@ -880,9 +905,9 @@ class Thread(SqidMixin, AuditMixin, AngeeModel):
     platform = StateField(choices_enum=Handle.Platform, default=Handle.Platform.EMAIL)
     modality = StateField(choices_enum=Modality, default=Modality.EMAIL_THREAD)
     visibility = StateField(choices_enum=Visibility, default=Visibility.PRIVATE)
-    external_id = models.CharField(max_length=512, blank=True, default="")
-    subject = models.CharField(max_length=512, blank=True, default="")
-    subject_normalized = models.CharField(max_length=512, blank=True, default="", db_index=True)
+    external_id = models.CharField(max_length=4096, blank=True, default="")
+    subject = models.CharField(max_length=4096, blank=True, default="")
+    subject_normalized = models.CharField(max_length=4096, blank=True, default="", db_index=True)
     message_count = models.PositiveIntegerField(default=0, db_index=True)
     last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
     metadata = models.JSONField(blank=True, default=dict)
@@ -1365,8 +1390,8 @@ class Message(SqidMixin, AuditMixin, AngeeModel, HistoryMixin):
         on_delete=models.SET_NULL,
         related_name="messages",
     )
-    external_id = models.CharField(max_length=512, blank=True, default="")
-    subject = models.CharField(max_length=512, blank=True, default="")
+    external_id = models.CharField(max_length=4096, blank=True, default="")
+    subject = models.CharField(max_length=4096, blank=True, default="")
     preview = models.CharField(max_length=512, blank=True, default="")
     sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
     received_at = models.DateTimeField(null=True, blank=True)
@@ -1748,7 +1773,7 @@ class Part(SqidMixin, AuditMixin, AngeeModel):
     type = models.CharField(max_length=128, default="text/plain")
     disposition = StateField(choices_enum=Disposition, default=Disposition.INLINE)
     role = StateField(choices_enum=PartRole, default=PartRole.BODY)
-    cid = models.CharField(max_length=256, blank=True, default="")
+    cid = models.CharField(max_length=4096, blank=True, default="")
     name = models.CharField(max_length=512, blank=True, default="")
     fragment = models.ForeignKey(
         "messaging.Fragment",
