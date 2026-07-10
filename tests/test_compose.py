@@ -12,7 +12,7 @@ import pytest
 from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import CommandError
-from django.db import models
+from django.db import OperationalError, models
 
 import angee.compose as compose_package
 import angee.compose.runtime as runtime_module
@@ -1321,6 +1321,196 @@ def test_build_emit_does_not_recheck_after_writing(
     Command()._handle_build({"check": False})
 
     assert calls == ["current", "emit"]
+
+
+def _provision_options(**overrides: Any) -> dict[str, Any]:
+    """Build a provision options dict with every flag defaulted off."""
+
+    options: dict[str, Any] = {
+        "demo": False,
+        "bootstrap_admin": False,
+        "force_rebac": False,
+        "wait_db": 60,
+    }
+    options.update(overrides)
+    return options
+
+
+def test_provision_plan_default_flags_covers_the_no_flag_lifecycle() -> None:
+    """The bare plan runs build→migrate→sync→load→schema with no optional steps."""
+
+    assert Command._provision_plan(_provision_options()) == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+        ["migrate", "--noinput"],
+        ["rebac", "sync", "--yes"],
+        ["resources", "load"],
+        ["schema"],
+    ]
+
+
+def test_provision_plan_demo_loads_demo_resources() -> None:
+    """``--demo`` appends ``--include-demo`` to the resources load step only."""
+
+    plan = Command._provision_plan(_provision_options(demo=True))
+
+    assert ["resources", "load", "--include-demo"] in plan
+    assert ["resources", "load"] not in plan
+
+
+def test_provision_plan_force_rebac_force_overwrites_the_sync() -> None:
+    """``--force-rebac`` appends ``--force-overwrite`` to the rebac sync step only."""
+
+    plan = Command._provision_plan(_provision_options(force_rebac=True))
+
+    assert ["rebac", "sync", "--yes", "--force-overwrite"] in plan
+    assert ["rebac", "sync", "--yes"] not in plan
+
+
+def test_provision_plan_bootstrap_admin_appends_a_final_step() -> None:
+    """``--bootstrap-admin`` appends ``bootstrap_admin`` as the last step."""
+
+    plan = Command._provision_plan(_provision_options(bootstrap_admin=True))
+
+    assert plan[-1] == ["bootstrap_admin"]
+    assert Command._provision_plan(_provision_options())[-1] != ["bootstrap_admin"]
+
+
+def test_provision_plan_combines_every_flag() -> None:
+    """All flags together yield the full demo + force + bootstrap plan."""
+
+    plan = Command._provision_plan(_provision_options(demo=True, force_rebac=True, bootstrap_admin=True))
+
+    assert plan == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+        ["migrate", "--noinput"],
+        ["rebac", "sync", "--yes", "--force-overwrite"],
+        ["resources", "load", "--include-demo"],
+        ["schema"],
+        ["bootstrap_admin"],
+    ]
+
+
+def test_provision_plan_builds_before_it_migrates() -> None:
+    """The composer must emit concrete models before migrations run against them."""
+
+    for options in (
+        _provision_options(),
+        _provision_options(demo=True, force_rebac=True, bootstrap_admin=True),
+    ):
+        plan = Command._provision_plan(options)
+        build = plan.index(["angee", "build"])
+        makemigrations = plan.index(["makemigrations"])
+        migrate = plan.index(["migrate", "--noinput"])
+        assert build < makemigrations < migrate
+
+
+def test_provision_runs_every_step_as_a_fresh_child_interpreter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each step spawns ``python <manage.py> <step>`` in order, streaming output."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], check: bool = False) -> SimpleNamespace:
+        calls.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("angee.compose.management.commands.angee.subprocess.run", fake_run)
+
+    command = Command()
+    monkeypatch.setattr(command, "_wait_for_database", lambda seconds: None)
+    command._handle_provision(_provision_options())
+
+    manage_py = Command._manage_py_path()
+    assert calls == [[sys.executable, manage_py, *step] for step in Command._provision_plan(_provision_options())]
+
+
+def test_provision_aborts_on_the_first_failed_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-zero child exit stops provision and names the failing step."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], check: bool = False) -> SimpleNamespace:
+        calls.append(argv)
+        returncode = 1 if argv[2:] == ["makemigrations"] else 0
+        return SimpleNamespace(returncode=returncode)
+
+    monkeypatch.setattr("angee.compose.management.commands.angee.subprocess.run", fake_run)
+
+    command = Command()
+    monkeypatch.setattr(command, "_wait_for_database", lambda seconds: None)
+
+    with pytest.raises(CommandError, match="step 'makemigrations' failed"):
+        command._handle_provision(_provision_options())
+
+    # Stops at the failing step: build, reconcile_permissions, makemigrations.
+    assert [argv[2:] for argv in calls] == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+    ]
+
+
+class _FakeConnection:
+    """Stand-in default connection that fails ``ensure_connection`` N times."""
+
+    def __init__(self, fail_times: int) -> None:
+        self.fail_times = fail_times
+        self.attempts = 0
+        self.closed = False
+
+    def ensure_connection(self) -> None:
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise OperationalError("connection refused")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_provision_wait_retries_then_closes_the_probe_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wait loop retries until the database answers, then closes the probe."""
+
+    connection = _FakeConnection(fail_times=2)
+    monkeypatch.setattr("angee.compose.management.commands.angee.connections", {"default": connection})
+    monkeypatch.setattr("angee.compose.management.commands.angee.time.sleep", lambda seconds: None)
+
+    Command()._wait_for_database(10)
+
+    assert connection.attempts == 3
+    assert connection.closed is True
+
+
+def test_provision_wait_times_out_with_the_last_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A database that never answers raises CommandError with the last error."""
+
+    connection = _FakeConnection(fail_times=99)
+    monkeypatch.setattr("angee.compose.management.commands.angee.connections", {"default": connection})
+    monkeypatch.setattr("angee.compose.management.commands.angee.time.sleep", lambda seconds: None)
+
+    with pytest.raises(CommandError, match="within 3s: connection refused"):
+        Command()._wait_for_database(3)
+
+    assert connection.attempts == 3
+
+
+def test_provision_manage_py_path_is_absolute() -> None:
+    """The child entrypoint is the resolved absolute ``manage.py`` path."""
+
+    manage_py = Command._manage_py_path()
+
+    assert Path(manage_py).is_absolute()
+    assert Path(manage_py) == Path(sys.argv[0]).resolve()
 
 
 def test_appgraph_annotates_roots_and_dependencies() -> None:
