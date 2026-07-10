@@ -1773,7 +1773,7 @@ class Part(SqidMixin, AuditMixin, AngeeModel):
     type = models.CharField(max_length=128, default="text/plain")
     disposition = StateField(choices_enum=Disposition, default=Disposition.INLINE)
     role = StateField(choices_enum=PartRole, default=PartRole.BODY)
-    cid = models.CharField(max_length=256, blank=True, default="")
+    cid = models.CharField(max_length=4096, blank=True, default="")
     name = models.CharField(max_length=512, blank=True, default="")
     fragment = models.ForeignKey(
         "messaging.Fragment",

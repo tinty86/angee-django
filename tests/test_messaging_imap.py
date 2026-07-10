@@ -32,6 +32,7 @@ from angee.messaging_integrate_imap.parser import (
 )
 from tests.conftest import _clear_model_tables, _create_missing_tables, make_integration
 from tests.test_messaging import (
+    Handle,
     MESSAGING_TEST_MODELS,
     Message,
     Part,
@@ -1011,6 +1012,52 @@ def test_channel_sync_preserves_overlong_message_id(
     assert message.external_id == long_message_id
     assert len(message.external_id) > 512
     assert message.thread.external_id == f"msg:{long_message_id}"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_channel_sync_preserves_overlong_display_name_and_content_id(
+    imap_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Long RFC-5322 display names and Content-IDs land without truncation."""
+
+    del imap_tables
+    long_display_name = "Ada " + ("Lovelace " * 80).strip()
+    long_cid = f"inline-{'x' * 700}@example.com"
+    assert len(long_display_name) > 256
+    assert len(long_cid) > 256
+    assert Handle._meta.get_field("display_name").max_length >= 4096
+    assert Part._meta.get_field("cid").max_length >= 4096
+
+    account = FakeImapAccount(
+        {
+            "INBOX": _folder(
+                (
+                    f'From: "{long_display_name}" <ada@example.com>\r\n'
+                    "To: bob@example.com\r\n"
+                    "Subject: Wide headers\r\n"
+                    "Message-ID: <wide-headers@x>\r\n"
+                    "Date: Thu, 02 Jul 2026 10:00:00 +0000\r\n"
+                    "MIME-Version: 1.0\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-ID: <{long_cid}>\r\n"
+                    "\r\n"
+                    "<p>Inline body.</p>\r\n"
+                ).encode("utf-8")
+            )
+        }
+    )
+    _wire_fake(monkeypatch, account)
+    channel = _imap_channel(batch_size=1)
+
+    with system_context(reason="test imap wide headers"):
+        landed = channel.run_sync(now=datetime(2026, 7, 2, 12, 0, tzinfo=UTC))
+
+    assert landed == 1
+    handle = Handle._base_manager.get(value="ada@example.com")
+    part = Part._base_manager.get(message__external_id="wide-headers@x", type="text/html")
+    assert handle.display_name == long_display_name
+    assert part.cid == long_cid
 
 
 @pytest.mark.django_db(transaction=True)

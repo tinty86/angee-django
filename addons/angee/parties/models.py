@@ -174,7 +174,7 @@ class Handle(SqidMixin, AuditMixin, AngeeModel):
     platform = StateField(choices_enum=Platform, default=Platform.EMAIL)
     value = models.CharField(max_length=512)
     external_id = models.CharField(max_length=512, blank=True, default="")
-    display_name = models.CharField(max_length=256, blank=True, default="")
+    display_name = models.CharField(max_length=4096, blank=True, default="")
     label = models.CharField(max_length=64, blank=True, default="")
     is_preferred = models.BooleanField(default=False)
     is_own = models.BooleanField(default=False, db_index=True)
