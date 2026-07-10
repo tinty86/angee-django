@@ -1580,13 +1580,18 @@ def test_project_env_file_loads_without_overriding_process_env(tmp_path: Path, m
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("YAMLCONF_SECRET_KEY", "from-process-env")
 
-    ProjectContract({})._read_project_env(tmp_path)
-
     import os
 
-    assert os.environ["DATABASE_URL"] == "postgres://angee:pw@127.0.0.1:5433/angee"
-    assert os.environ["YAMLCONF_SECRET_KEY"] == "from-process-env"
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    # read_env writes straight into os.environ (not via monkeypatch), so clean up
+    # directly — a trailing monkeypatch.delenv would record the leaked value as
+    # prior state and RESTORE it at teardown, poisoning later tests.
+    try:
+        ProjectContract({})._read_project_env(tmp_path)
+
+        assert os.environ["DATABASE_URL"] == "postgres://angee:pw@127.0.0.1:5433/angee"
+        assert os.environ["YAMLCONF_SECRET_KEY"] == "from-process-env"
+    finally:
+        os.environ.pop("DATABASE_URL", None)
 
 
 def test_project_env_file_is_optional(tmp_path: Path) -> None:
