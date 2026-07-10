@@ -1,13 +1,13 @@
 """Django config for the Angee money addon.
 
-Money needs a ``python`` seam only to surface one configuration fact at
-``manage.py check`` time: the reference currency setting. Following the framework
-canon (``angee.integrate`` registers its checks from ``ready()``), this registers
-a single settings check once per process.
+Money uses ``ready()`` for process-local framework seams: one settings check for
+the reference currency and one strawberry-django field-type registration for its
+owned value field.
 """
 
 from __future__ import annotations
 
+import decimal
 from collections.abc import Sequence
 
 from django.apps import AppConfig
@@ -24,10 +24,16 @@ class MoneyConfig(AppConfig):
     name = "angee.money"
 
     def ready(self) -> None:
-        """Register money's configuration checks after app population."""
+        """Register money-owned process hooks after app population."""
 
         super().ready()
         _register_checks()
+        # Phase-1 ready hook: defer the GraphQL/runtime imports until after app
+        # population, mirroring the sibling base-addon ready() seams.
+        from angee.graphql.field_types import register_field_type
+        from angee.money.fields import MoneyField
+
+        register_field_type(MoneyField, decimal.Decimal)
 
 
 def _register_checks() -> None:
