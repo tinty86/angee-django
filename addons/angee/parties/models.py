@@ -43,7 +43,7 @@ class Party(SqidMixin, AuditMixin, AngeeModel):
     runtime = True
 
     sqid = SqidField(real_field_name="id", prefix="pty_", min_length=8)
-    display_name = models.CharField(max_length=256)
+    display_name = models.TextField()
     notes = models.TextField(blank=True, default="")
     avatar = models.ForeignKey(
         "storage.File",
@@ -103,12 +103,12 @@ class Person(AngeeModel):
     runtime = True
     extends = "parties.Party"
 
-    name_prefix = models.CharField(max_length=64, blank=True, default="")
-    given_name = models.CharField(max_length=128, blank=True, default="")
-    additional_name = models.CharField(max_length=128, blank=True, default="")
-    family_name = models.CharField(max_length=128, blank=True, default="")
-    name_suffix = models.CharField(max_length=64, blank=True, default="")
-    nickname = models.CharField(max_length=128, blank=True, default="")
+    name_prefix = models.TextField(blank=True, default="")
+    given_name = models.TextField(blank=True, default="")
+    additional_name = models.TextField(blank=True, default="")
+    family_name = models.TextField(blank=True, default="")
+    name_suffix = models.TextField(blank=True, default="")
+    nickname = models.TextField(blank=True, default="")
     birthday = models.DateField(null=True, blank=True)
     anniversary = models.DateField(null=True, blank=True)
     user = models.OneToOneField(
@@ -135,7 +135,7 @@ class Organization(AngeeModel):
     runtime = True
     extends = "parties.Party"
 
-    legal_name = models.CharField(max_length=256, blank=True, default="")
+    legal_name = models.TextField(blank=True, default="")
     domain = models.CharField(max_length=255, blank=True, default="")
 
     objects = AngeeManager()
@@ -315,12 +315,12 @@ class Address(SqidMixin, AuditMixin, AngeeModel):
     )
     label = models.CharField(max_length=64, blank=True, default="")
     po_box = models.CharField(max_length=128, blank=True, default="")
-    extended = models.CharField(max_length=256, blank=True, default="")
+    extended = models.TextField(blank=True, default="")
     street = models.TextField(blank=True, default="")
-    city = models.CharField(max_length=128, blank=True, default="")
-    region = models.CharField(max_length=128, blank=True, default="")
+    city = models.TextField(blank=True, default="")
+    region = models.TextField(blank=True, default="")
     postal_code = models.CharField(max_length=32, blank=True, default="")
-    country = models.CharField(max_length=128, blank=True, default="")
+    country = models.TextField(blank=True, default="")
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     is_primary = models.BooleanField(default=False)
@@ -362,10 +362,10 @@ class Affiliation(SqidMixin, AuditMixin, AngeeModel):
         on_delete=models.SET_NULL,
         related_name="members",
     )
-    organization_name = models.CharField(max_length=256, blank=True, default="")
-    role = models.CharField(max_length=128, blank=True, default="")
-    title = models.CharField(max_length=128, blank=True, default="")
-    department = models.CharField(max_length=128, blank=True, default="")
+    organization_name = models.TextField(blank=True, default="")
+    role = models.TextField(blank=True, default="")
+    title = models.TextField(blank=True, default="")
+    department = models.TextField(blank=True, default="")
     started_at = models.DateField(null=True, blank=True)
     ended_at = models.DateField(null=True, blank=True)
     is_primary = models.BooleanField(default=False)
