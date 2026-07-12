@@ -107,7 +107,7 @@ def test_integration_groups_aggregate_runs_with_rebac_scope(
 
     admin = _platform_admin("conn-groups-admin")
     integration = make_integration("conn-groups")
-    vendor_pk = str(integration.vendor_id)
+    vendor_id = str(integration.vendor.sqid)
     console_schema = _schema()
 
     grouped = _data(
@@ -135,7 +135,7 @@ def test_integration_groups_aggregate_runs_with_rebac_scope(
     assert grouped == [
         {
             "key": {
-                "vendor_id": vendor_pk,
+                "vendor_id": vendor_id,
                 "vendor__display_name": "Conn-Groups",
                 "kind": "Integration",
                 "impl_class": "NONE",

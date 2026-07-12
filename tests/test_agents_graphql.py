@@ -395,16 +395,16 @@ def test_inference_model_groups_aggregate_runs_for_provider_and_capability(
         for row in grouped["byProvider"]
     }
     assert provider_groups == {
-        str(provider_a.pk): {
+        str(provider_a.sqid): {
             "key": {
-                "provider_id": str(provider_a.pk),
+                "provider_id": str(provider_a.sqid),
                 "provider__name": "Anthropic",
             },
             "aggregate": {"count": 2},
         },
-        str(provider_b.pk): {
+        str(provider_b.sqid): {
             "key": {
-                "provider_id": str(provider_b.pk),
+                "provider_id": str(provider_b.sqid),
                 "provider__name": "Manual",
             },
             "aggregate": {"count": 1},

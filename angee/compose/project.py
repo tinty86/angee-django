@@ -61,6 +61,7 @@ class ProjectContract:
 
         self._reset_settings()
         root = project_dir()
+        self._read_project_env(root)
         settings_module = self.env.str(PROJECT_SETTINGS_ENV, default=PROJECT_YAML_NAME)
 
         prepend_import_paths((root,))
@@ -71,6 +72,22 @@ class ProjectContract:
 
         prepend_import_paths((*self.namespace.get("ANGEE_ADDON_DIRS", ()), root))
         Composer(self.namespace).compose_settings()
+
+    def _read_project_env(self, root: Path) -> None:
+        """Load the project-root ``.env`` into the environment, process env winning.
+
+        django-environ's canonical `.env` seam: a gitignored project `.env` (the
+        stack's secrets file plus derived entries like ``DATABASE_URL``) supplies
+        env vars for host-run ``manage.py`` commands, so ``uv run manage.py …``
+        from the project root talks to the stack's database with the stack's
+        SECRET_KEY. ``read_env`` never overwrites the real process environment
+        (``overwrite=False``), so stack-managed services — whose env the operator
+        sets explicitly — are unaffected. A missing file is a silent no-op.
+        """
+
+        env_file = root / ".env"
+        if env_file.is_file():
+            self.env.read_env(env_file)
 
     def _reset_settings(self) -> None:
         """Remove previously composed Django settings from a reloaded module."""
@@ -161,7 +178,7 @@ class ProjectContract:
                     continue
                 try:
                     source_path = str(resolve_path(str(source)))
-                except (ImproperlyConfigured, OSError, TypeError, ValueError):
+                except ImproperlyConfigured, OSError, TypeError, ValueError:
                     source_path = str(source)
                 if source_path not in allowed_sources:
                     raise ImproperlyConfigured(f"Unexpected django-yamlconf source {source!r}")
