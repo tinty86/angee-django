@@ -25,6 +25,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.management import call_command
 from django.db import IntegrityError, connection, models, transaction
 from django.db.models.signals import post_save
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from rebac import (
     PermissionDenied,
@@ -35,6 +36,7 @@ from rebac import (
     to_subject_ref,
     write_relationships,
 )
+from rebac.actors import current_sudo_reason, is_sudo
 
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
@@ -80,6 +82,8 @@ from tests.conftest import (
 from tests.conftest import (
     File as StorageFile,
 )
+from tests.test_agents_graphql import AGENTS_GRAPHQL_MODELS, Agent
+from tests.test_integrate_vcs import VCS_TEST_MODELS
 
 
 class Directory(Integration, AbstractDirectory):
@@ -430,6 +434,24 @@ def messaging_tables() -> Iterator[None]:
         yield
     finally:
         _clear_model_tables(MESSAGING_TEST_MODELS)
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.fixture
+def messaging_agent_tables(transactional_db: Any) -> Iterator[None]:
+    """Create the messaging tables plus Agent tables for principal attribution tests."""
+
+    del transactional_db
+    models = tuple(dict.fromkeys(MESSAGING_TEST_MODELS + VCS_TEST_MODELS + AGENTS_GRAPHQL_MODELS))
+    created_models = _create_missing_tables(models)
+    call_command("rebac", "sync", verbosity=0)
+    try:
+        yield
+    finally:
+        _clear_model_tables(models)
         if created_models:
             with connection.schema_editor() as schema_editor:
                 for model in reversed(created_models):
@@ -1467,6 +1489,54 @@ def test_threaded_model_activity_completion_notifies_activity_followers(messagin
     assert notification.notification_status == "ready"
     assert notification.message.subtype is not None
     assert notification.message.subtype.key == "activity_done"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_agent_activity_completion_posts_system_message_with_service_user(
+    messaging_agent_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent completing an activity posts messaging-private logs as its service user."""
+
+    del messaging_agent_tables
+    user_model = get_user_model()
+    with system_context(reason="test.messaging.agent_activity.setup"):
+        owner = user_model.objects.create_user(
+            username="activity-agent-owner",
+            email="activity-agent-owner@example.com",
+        )
+        agent = Agent.objects.create(name="Activity Agent", owner=owner)
+        service_user_id = agent.user_id
+        ticket = ThreadedTicket.objects.create(title="Agent activity")
+        activity = ticket.activity_schedule(user=owner, summary="Close the loop", due_date=_AT.date())
+
+    post_context: dict[str, Any] = {}
+    original_post_to_thread = Message.objects.post_to_thread
+
+    def spy_post_to_thread(*args: Any, **kwargs: Any) -> Any:
+        post_context["is_sudo"] = is_sudo()
+        post_context["reason"] = current_sudo_reason()
+        return original_post_to_thread(*args, **kwargs)
+
+    monkeypatch.setattr(Message.objects, "post_to_thread", spy_post_to_thread)
+
+    with (
+        override_settings(
+            ANGEE_ACTOR_USER_RESOLVERS={"agents/agent": "angee.agents.actor_resolvers.agent_user_id"}
+        ),
+        actor_context(agent.principal_subject()),
+    ):
+        ticket.activity_feedback(activity, feedback="Handled by agent.")
+
+    message = Message._base_manager.get()
+    assert post_context == {"is_sudo": True, "reason": "messaging.activity.complete"}
+    assert message.created_by_id == service_user_id
+    assert message.message_type == Message.MessageKind.AUTO_COMMENT
+    assert message.subtype is not None
+    assert message.subtype.key == "activity_done"
+    assert Part._base_manager.select_related("fragment").get(message=message).fragment.text == (
+        "Activity done: Close the loop\n\nHandled by agent."
+    )
 
 
 @pytest.mark.django_db(transaction=True)

@@ -1228,7 +1228,8 @@ class ThreadActivityManager(AngeeManager.from_queryset(ThreadActivityQuerySet)):
         # system_context, the shared bookkeeping-write elevation pattern.
         with system_context(reason="messaging.activity.complete"):
             activity.save(update_fields=("status", "completed_at", "feedback", "updated_at"))
-        if post_message:
+            if not post_message:
+                return activity
             body = activity.completion_message()
             if feedback:
                 body = f"{body}\n\n{feedback}"
