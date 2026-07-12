@@ -2,21 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from django.core.management import call_command
 from django.db import connection
-from rebac import SubjectRef, system_context, to_object_ref
+from django.test import override_settings
+from fastmcp.exceptions import ToolError
+from rebac import SubjectRef, actor_context, system_context, to_object_ref
 from rebac.backends import backend
 
 from angee.agents.mcp_verifier import resolve_actor
 from angee.integrate.credentials import CredentialKind
+from angee.mcp.graphql import _CompiledTool
 from tests.conftest import IAM_CONNECTION_TEST_MODELS, INTEGRATE_TEST_MODELS, Credential, _clear_model_tables
 from tests.conftest import _create_missing_tables as _create_tables
 from tests.test_agents_graphql import AGENTS_GRAPHQL_MODELS, Agent, MCPServer, MCPTool, User
 from tests.test_integrate_vcs import VCS_TEST_MODELS
+
+
+def _test_actor_user_resolver(subject_id: str) -> int | None:
+    """Resolver used by the MCP species-gate test."""
+
+    return 123 if subject_id == "agent-1" else None
 
 
 @pytest.fixture()
@@ -167,3 +177,30 @@ def test_agent_mcp_m2m_reconciles_rebac_read_tuples(agents_console_tables: None)
         assert backend().check_access(subject=subject, action="read", resource=tool_ref).allowed
         agent.mcp_tools.remove(tool)
         assert not backend().check_access(subject=subject, action="read", resource=tool_ref).allowed
+
+
+def test_requires_user_actor_is_actor_species_not_attribution_user() -> None:
+    """Service-user attribution must not turn an agent actor into a user actor."""
+
+    tool = _CompiledTool(
+        name="requires_user",
+        description="requires user",
+        parameters={"type": "object", "properties": {}},
+        output_schema={"type": "object"},
+        schema_name="public",
+        document="query { noop }",
+        payload_field="noop",
+        node_type="Noop",
+        is_list=False,
+        leaves=(),
+        requires_user_actor=True,
+    )
+
+    with (
+        override_settings(
+            ANGEE_ACTOR_USER_RESOLVERS={"agents/agent": "tests.test_mcp._test_actor_user_resolver"}
+        ),
+        actor_context(SubjectRef.of("agents/agent", "agent-1")),
+        pytest.raises(ToolError, match="user actor"),
+    ):
+        asyncio.run(tool.run({}))

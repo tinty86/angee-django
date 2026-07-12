@@ -16,8 +16,9 @@ from typing import Any, cast
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import models, transaction
-from django.db.models.signals import class_prepared, m2m_changed
+from django.db.models.signals import class_prepared, m2m_changed, post_delete
 from django.utils import timezone
 from rebac import RelationshipTuple, SubjectRef, system_context, to_object_ref
 from rebac.relationships import delete_relationships, write_relationships
@@ -70,6 +71,14 @@ class MCPTransport(models.TextChoices):
 
 BUILTIN_MCP_ANGEE = "angee"
 """``MCPServer.config["builtin"]`` value for this process's built-in Angee MCP server."""
+
+
+def _update_field_names(update_fields: Any) -> set[str]:
+    """Normalize Django's ``update_fields`` save argument to field names."""
+
+    if isinstance(update_fields, str):
+        return {update_fields}
+    return {str(field) for field in update_fields}
 
 
 class AgentLifecycle(models.TextChoices):
@@ -481,6 +490,59 @@ class MCPTool(SqidMixin, AuditMixin, AngeeModel):
         return self.name
 
 
+class AgentManager(AngeeManager):
+    """Manager owning service-user lifecycle for agent principals."""
+
+    def service_username(self, agent: Any) -> str:
+        """Return the deterministic username for ``agent``'s service user."""
+
+        return f"agent-{agent.sqid}"
+
+    def sync_service_user(self, agent: Any) -> Any:
+        """Create or update ``agent``'s non-login service user.
+
+        The service row is system-owned attribution state, not actor-authored
+        profile data, so it is written elevated and keyed only by the agent's
+        stable sqid-derived username.
+        """
+
+        if agent.pk is None:
+            raise ValueError("Agent must be saved before syncing its service user.")
+        user_model = get_user_model()
+        username = self.service_username(agent)
+        defaults = {
+            "first_name": agent.name,
+            "last_name": "",
+            "email": "",
+            "kind": "service",
+        }
+        with system_context(reason="agents.service_user.sync"), transaction.atomic():
+            if agent.user_id:
+                user = user_model._base_manager.get(pk=agent.user_id)
+                changed: set[str] = set()
+                for field, value in {"username": username, **defaults}.items():
+                    if getattr(user, field) != value:
+                        setattr(user, field, value)
+                        changed.add(field)
+                if changed:
+                    user.save(update_fields=changed)
+                return user
+            user, _created = user_model._base_manager.update_or_create(username=username, defaults=defaults)
+            agent.user_id = user.pk
+            type(agent)._base_manager.filter(pk=agent.pk).update(user_id=user.pk)
+            return user
+
+    def deactivate_service_user(self, agent: Any, *, using: str | None = None) -> None:
+        """Deactivate ``agent``'s linked service user, leaving attribution FKs intact."""
+
+        if not agent.user_id:
+            return
+        user_model = get_user_model()
+        manager = user_model._base_manager.db_manager(using) if using else user_model._base_manager
+        with system_context(reason="agents.service_user.deactivate"):
+            manager.filter(pk=agent.user_id).update(is_active=False)
+
+
 class Agent(SqidMixin, AuditMixin, AngeeModel):
     """An agent definition (or, when ``is_template``, an agent template).
 
@@ -498,6 +560,14 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
     description = models.TextField(blank=True)
     is_template = models.BooleanField(default=False, db_index=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="agents")
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="agent",
+    )
+    """Non-login service user used for audit/revision attribution by this agent."""
     instructions = models.TextField(blank=True)
     """The agent's system instructions, rendered into AGENTS.md/CLAUDE.md."""
     model = models.ForeignKey(
@@ -579,7 +649,7 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         },
     )
 
-    objects = AngeeManager()
+    objects = AgentManager()
 
     class Meta:
         """Django model options for agents."""
@@ -593,6 +663,24 @@ class Agent(SqidMixin, AuditMixin, AngeeModel):
         """Return the agent's name."""
 
         return self.name
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Persist the agent and sync its service-user label.
+
+        Mirrors ``iam.User.save()``: the row save owns a small derived sync, and
+        the manager performs the system-owned dependent write.
+        """
+
+        creating = self._state.adding
+        update_fields = kwargs.get("update_fields")
+        should_check_name = creating or update_fields is None or "name" in _update_field_names(update_fields)
+        persisted_name = None
+        if not creating and should_check_name:
+            persisted_name = type(self)._base_manager.filter(pk=self.pk).values_list("name", flat=True).first()
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if creating or (should_check_name and persisted_name != self.name):
+                type(self).objects.sync_service_user(self)
 
     def principal_subject(self) -> SubjectRef:
         """Return this agent's own REBAC subject identity for actions it performs.
@@ -1116,8 +1204,20 @@ def _sync_agent_mcp_tools(
     )
 
 
+def _deactivate_agent_service_user(
+    sender: type[models.Model],
+    instance: models.Model,
+    using: str,
+    **kwargs: Any,
+) -> None:
+    """Deactivate an agent service user after every delete path Django supports."""
+
+    del sender, kwargs
+    type(instance).objects.deactivate_service_user(instance, using=using)
+
+
 def _connect_agent_mcp_reconcile(sender: type[models.Model], **kwargs: Any) -> None:
-    """Connect M2M reconcile handlers for each concrete Agent subclass."""
+    """Connect concrete Agent signal handlers."""
 
     del kwargs
     try:
@@ -1135,6 +1235,11 @@ def _connect_agent_mcp_reconcile(sender: type[models.Model], **kwargs: Any) -> N
         _sync_agent_mcp_tools,
         sender=getattr(sender, "mcp_tools").through,
         dispatch_uid=f"angee.agents.{sender._meta.label_lower}.mcp_tools.rebac",
+    )
+    post_delete.connect(
+        _deactivate_agent_service_user,
+        sender=sender,
+        dispatch_uid=f"angee.agents.{sender._meta.label_lower}.service_user.deactivate",
     )
 
 

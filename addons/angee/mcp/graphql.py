@@ -45,7 +45,7 @@ from pydantic import BaseModel
 from rebac import current_actor, system_context
 from strawberry.utils.str_converters import to_camel_case, to_snake_case
 
-from angee.base.actors import actor_user_id
+from angee.base.actors import actor_user_id, is_user_actor
 from angee.graphql.schema import GraphQLSchemas
 from mcp.types import ToolAnnotations
 
@@ -284,7 +284,7 @@ class _CompiledTool(Tool):
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Execute the operation and return the projected payload as structured content."""
 
-        if self.requires_user_actor and actor_user_id(current_actor()) is None:
+        if self.requires_user_actor and not is_user_actor(current_actor()):
             raise ToolError("This operation requires a user actor.")
         data = await execute_under_actor(self.schema_name, self.document, self._variables(arguments))
         payload = data.get(self.payload_field)

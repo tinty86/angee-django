@@ -360,6 +360,16 @@ This project runs **fail-closed**: `REBAC_STRICT_MODE=True` and
 `REBAC_SUPERUSER_BYPASS=False`, so every actor — superusers included — reaches
 data through REBAC, never a queryset bypass.
 
+- **One attribution vocabulary (the layered-principal rule).** Any column that
+  answers "who did this" — audit stamps, history users, revision authors — is an
+  FK to `AUTH_USER_MODEL`, never a species-specific FK and never a string
+  subject column. At the database layer, `user = service account = actor =
+  principal`: one table represents every principal, person or service (`kind`
+  lives on the row). Above that layer the words diverge on purpose — the REBAC
+  *actor* keeps its species (`agents/agent` is never collapsed into a user for
+  permission evaluation); attribution converges through `actor_user_id` and the
+  subject-type resolver registry. See the glossary's Principal/Actor/Service
+  account entries.
 - Bracket every server-side read/write in `system_context`/`asystem_context` and
   resolve the actor with `@rebac_subject`; a bare `Model.objects.create()` under
   an actor is denied.
@@ -488,6 +498,9 @@ Hard-won traps — the wise learn from others' mistakes (`docs/guidelines.md`).
   Do not hide independently-authorized `on_delete=CASCADE` children under an elevated
   parent cascade; dependent rows must derive delete through the parent in their own
   zed relation, like the workflows Step/Edge pattern.
+- **Instance `save()`/`delete()` overrides do not run on cascade or bulk queryset paths.**
+  Lifecycle side effects that must survive those paths belong on Django signals; Agent's
+  service-user deactivation is a `post_delete` receiver for this reason.
 - **Agent runtime auth is a `(runtime × provider × credential-kind)` fact, not provider-only.**
   The `AgentRuntime` an agent's `runtime_class` selects (`angee.agents.runtimes`) owns how a
   credential becomes container env *and* the synced secret payload (`auth_env` /
