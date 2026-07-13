@@ -8,7 +8,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
+from django.db import models
+from django.db.migrations.autodetector import MigrationAutodetector
 from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.state import ModelState, ProjectState
 
 from angee.addons import AddonContract, AddonMigration
 from angee.compose.migrations import RuntimeMigrations
@@ -416,3 +420,90 @@ class Migration(migrations.Migration):
         materializer.materialize()
 
     assert not (runtime_dir / "resources" / "migrations" / "0002_rename_legacy.py").exists()
+
+
+def _old_relationship_state() -> ProjectState:
+    from angee.parties.models import Relationship
+
+    relationship = ModelState.from_model(Relationship)
+    relationship.fields.pop("party")
+    relationship.fields.pop("other_party")
+    relationship.fields.pop("other_name")
+    relationship.fields["from_party"] = models.ForeignKey(
+        "parties.Party",
+        on_delete=models.CASCADE,
+        related_name="relationships",
+    )
+    relationship.fields["to_party"] = models.ForeignKey(
+        "parties.Party",
+        on_delete=models.CASCADE,
+        related_name="inbound_relationships",
+    )
+    relationship.options["ordering"] = ("from_party", "sqid")
+    relationship.options["constraints"] = [
+        models.UniqueConstraint(
+            fields=("from_party", "to_party", "kind"),
+            name="uq_relationship_edge",
+        ),
+        models.CheckConstraint(
+            condition=~models.Q(from_party=models.F("to_party")),
+            name="ck_relationship_distinct_parties",
+        ),
+    ]
+    state = ProjectState()
+    state.add_model(relationship)
+    return state
+
+
+def test_parties_relationship_migration_preserves_renamed_foreign_keys() -> None:
+    from angee.parties.models import Relationship
+
+    module = importlib.import_module("angee.parties.runtime_migrations.relationship_anchor")
+    old_state = _old_relationship_state()
+
+    assert module.applies(old_state) is True
+    migrated = module.Migration("probe", "parties").mutate_state(old_state)
+    relationship = migrated.models["parties", "relationship"]
+
+    assert "party" in relationship.fields
+    assert "other_party" in relationship.fields
+    assert "other_name" in relationship.fields
+    assert "from_party" not in relationship.fields
+    assert "to_party" not in relationship.fields
+    assert relationship.fields["other_party"].null is True
+    assert relationship.fields["other_party"].remote_field.on_delete is models.SET_NULL
+    assert relationship.options["ordering"] == ("party", "sqid")
+    assert {constraint.name for constraint in relationship.options["constraints"]} == {
+        "uq_relationship_edge",
+        "ck_relationship_distinct_parties",
+        "ck_relationship_has_other",
+    }
+
+    current = ProjectState()
+    current.add_model(ModelState.from_model(Relationship))
+    assert "parties" not in MigrationAutodetector(migrated, current)._detect_changes()
+
+
+def test_parties_relationship_migration_applies_only_to_exact_old_state() -> None:
+    from angee.parties.models import Relationship
+
+    module = importlib.import_module("angee.parties.runtime_migrations.relationship_anchor")
+    current = ProjectState()
+    current.add_model(ModelState.from_model(Relationship))
+    mixed = _old_relationship_state()
+    mixed.models["parties", "relationship"].fields["party"] = models.ForeignKey(
+        "parties.Party",
+        on_delete=models.CASCADE,
+        related_name="mixed_relationships",
+    )
+
+    assert module.applies(ProjectState()) is False
+    assert module.applies(current) is False
+    with pytest.raises(ImproperlyConfigured, match="partial Relationship field transition"):
+        module.applies(mixed)
+
+
+def test_parties_source_migration_is_not_discovered_as_an_app_migration() -> None:
+    loader = MigrationLoader(None, ignore_no_migrations=True)
+
+    assert ("parties", "relationship_anchor") not in loader.disk_migrations
