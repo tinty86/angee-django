@@ -90,6 +90,11 @@ def normalize_subject(subject: str) -> str:
 # non-stemming config keeps one language's stemmer from skewing every other.
 _SEARCH_CONFIG = "simple"
 
+# Postgres's to_tsvector rejects input over 1 MiB; vectorise at most this many
+# UTF-8 bytes of a fragment (half the limit — headroom for the vector itself).
+# The regression fixture was a 1.6 MB text part that failed every sync retry.
+_SEARCH_MAX_BYTES = 512 * 1024
+
 
 def _external_id_q(external_id: str) -> models.Q:
     """Return the indexed lookup predicate for one exact ``external_id``.
@@ -309,7 +314,8 @@ class FragmentManager(AngeeManager):
         """
 
         text = strip_null_bytes(text).strip()
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        encoded = text.encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()
         with transaction.atomic():
             fragment, created = self.get_or_create(
                 hash=digest,
@@ -318,8 +324,16 @@ class FragmentManager(AngeeManager):
             if created and connection.vendor == "postgresql":
                 # tsvector is a Postgres type; on other vendors (the SQLite test
                 # backend) the column stays NULL and full-text search is unavailable.
+                # Postgres rejects to_tsvector input over 1MiB ("string is too long
+                # for tsvector") and a text that size is a pathological payload, not
+                # prose — vectorise a bounded prefix; the row keeps the full text.
+                searchable: Any = "text"
+                if len(encoded) > _SEARCH_MAX_BYTES:
+                    searchable = models.Value(
+                        encoded[:_SEARCH_MAX_BYTES].decode("utf-8", errors="ignore")
+                    )
                 self.model._base_manager.filter(pk=fragment.pk).update(
-                    search=SearchVector("text", config=_SEARCH_CONFIG)
+                    search=SearchVector(searchable, config=_SEARCH_CONFIG)
                 )
         return fragment
 
@@ -1620,6 +1634,17 @@ class MessageQuerySet(AngeeQuerySet[Any]):
         query = SearchQuery(strip_null_bytes(term or "").strip(), config=_SEARCH_CONFIG)
         return cast(MessageQuerySet, self.filter(parts__fragment__search=query))
 
+    def involving_party(self, party: Any) -> MessageQuerySet:
+        """Return messages any of ``party``'s resolved handles participated in.
+
+        The person-timeline read: participants are Handle-keyed and ``Handle.party``
+        is the resolution-materialised owner, so one join answers "every message
+        exchanged with this party across channels". Distinct because one message may
+        carry the same party on several handles (from + cc).
+        """
+
+        return cast(MessageQuerySet, self.filter(participants__handle__party=party).distinct())
+
 
 class MessageManager(AngeeManager.from_queryset(MessageQuerySet)):  # type: ignore[misc]
     """Owns the message ingest write path (idempotent, null-safe, F()-counted)."""
@@ -1692,6 +1717,48 @@ class MessageManager(AngeeManager.from_queryset(MessageQuerySet)):  # type: igno
             .values_list("_order_at", "pk")
             .first()
         )
+
+    def timeline_for_party(
+        self,
+        party: Any,
+        *,
+        search: str = "",
+        limit: int = 50,
+        before: Any | None = None,
+    ) -> tuple[list[Any], int]:
+        """Return one newest-first page of the cross-channel feed exchanged with ``party``.
+
+        The person-timeline read: inbox messages (record chatter stays behind its
+        record gate) whose participants resolve to ``party``. Unlike
+        :meth:`for_record` this stays ACTOR-scoped — there is no record-level gate
+        in front of it, so per-row REBAC is the authorization — and therefore adds
+        no ``select_related`` over guarded relations (the GraphQL read path resolves
+        them the same way it does for the ``messages`` resource). Cursors on the
+        same ``(sent_at, pk)`` key as every other feed; returns the page
+        chronological ascending plus the total count.
+        """
+
+        limit = max(1, min(int(limit or 50), 200))
+        queryset = (
+            self.all()
+            .inbox()
+            .involving_party(party)
+            .annotate(_order_at=_MESSAGE_ORDER_ANNOTATION)
+        )
+        search = strip_null_bytes(search or "").strip()
+        for term in (item for item in _WS_RE.split(search) if item):
+            queryset = queryset.searching(term)
+        queryset = queryset.distinct()
+        count = int(queryset.count())
+        descending = ("-_order_at", "-pk")
+        if before not in (None, ""):
+            anchor = self._record_message_anchor(queryset, before)
+            if anchor is None:
+                return [], count
+            page = list(queryset.filter(_message_before(anchor)).order_by(*descending)[:limit])
+        else:
+            page = list(queryset.order_by(*descending)[:limit])
+        return sorted(page, key=_message_chronological_key), count
 
     def post_to_thread(
         self,
