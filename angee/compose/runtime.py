@@ -28,6 +28,7 @@ from django.utils.module_loading import module_has_submodule
 from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.models import AngeeModel
 from angee.base.transitions import revalidate_transition_metadata
+from angee.compose.migrations import RuntimeMigrations
 from angee.compose.permissions import extension_source_map
 from angee.compose.web import WebRuntime
 from angee.fs import GENERATED_SENTINEL, write_atomic
@@ -201,6 +202,23 @@ class Runtime:
         self.reset()
         self._write_sources()
 
+    def runtime_migrations(self) -> RuntimeMigrations:
+        """Return the addon migration materializer for this composed runtime."""
+
+        return RuntimeMigrations(
+            self.addons,
+            runtime_dir=self.runtime_dir,
+            runtime_module=self.runtime_module,
+            labels=self.labels,
+        )
+
+    def build(self) -> tuple[Path, ...]:
+        """Emit stale generated sources, then materialize addon migrations."""
+
+        if not self.is_current():
+            self.emit()
+        return self.runtime_migrations().materialize()
+
     def import_generated_models(self) -> None:
         """Import generated concrete model modules for all emitted labels."""
 
@@ -250,12 +268,13 @@ class Runtime:
         return not self._drift()
 
     def check(self) -> None:
-        """Raise when generated runtime sources differ from disk."""
+        """Raise for generated-source drift or pending addon migrations."""
 
         drift = self._drift()
         if drift:
             rendered = ", ".join(str(path) for path in drift)
             raise RuntimeError(f"generated runtime is stale: {rendered}")
+        self.runtime_migrations().check()
 
     def _drift(self) -> list[Path]:
         """Return generated source paths that differ from the rendered set."""

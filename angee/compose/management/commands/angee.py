@@ -81,8 +81,7 @@ class Command(BaseCommand):
                 runtime.check()
                 message = "angee build --check: ok"
             else:
-                if not runtime.is_current():
-                    runtime.emit()
+                runtime.build()
                 message = "angee build: ok"
         except RuntimeError as error:
             raise CommandError(str(error)) from error
