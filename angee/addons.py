@@ -21,6 +21,36 @@ ADDON_ENTRY_POINT_GROUP = "angee.addons"
 
 
 @dataclass(frozen=True, slots=True)
+class AddonMigration:
+    """One addon-owned Django migration materialized into a runtime app."""
+
+    name: str
+    app_label: str
+    module: str
+
+
+def _parse_migrations(raw: Any, *, marker: Path) -> tuple[AddonMigration, ...]:
+    """Parse ordered ``[[migrations]]`` declarations from one addon manifest."""
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ImproperlyConfigured(f"{marker}: migrations must be an array of tables")
+    migrations: list[AddonMigration] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, Mapping):
+            raise ImproperlyConfigured(f"{marker}: migrations[{index}] must be a table")
+        values: dict[str, str] = {}
+        for key in ("name", "app_label", "module"):
+            value = entry.get(key)
+            if not isinstance(value, str) or not value:
+                raise ImproperlyConfigured(f"{marker}: migrations[{index}] requires string {key}")
+            values[key] = value
+        migrations.append(AddonMigration(**values))
+    return tuple(migrations)
+
+
+@dataclass(frozen=True, slots=True)
 class AddonContract:
     """An addon's declarative contract, read from its co-located ``addon.toml``.
 
@@ -29,8 +59,9 @@ class AddonContract:
     ``urls``) so hatch-angee can compile it straight into the package's
     ``[project]``. The Angee-owned fields are only what pyproject lacks: the addon
     ``name`` (import id), the inter-addon ``depends_on`` graph, the freeform
-    ``category``, and the contribution seams — ``schemas``/``permissions`` (simple
-    strings) in ``[addon]``; ``web``/``mcp``/``resources`` as their own sections.
+    ``category``, and the contribution seams — ordered ``migrations`` plus
+    ``schemas``/``permissions`` (simple strings) in ``[addon]``;
+    ``web``/``mcp``/``resources`` as their own sections.
     The presence of the manifest *is* the addon marker, so an addon needs an
     ``apps.py`` only when it has a ``python`` seam to run (``ready()``). The
     contribution seams default to what the directory reveals (``schema.py``,
@@ -43,6 +74,7 @@ class AddonContract:
 
     name: str
     depends_on: tuple[str, ...] = ()
+    migrations: tuple[AddonMigration, ...] = ()
     schemas: str | None = None
     permissions: str | None = None
     web: str | None = None
@@ -142,6 +174,7 @@ def _read_addon_contract(marker: str) -> AddonContract | None:
     return AddonContract(
         name=addon.get("name", ""),
         depends_on=(raw_depends_on,) if isinstance(raw_depends_on, str) else tuple(raw_depends_on),
+        migrations=_parse_migrations(data.get("migrations"), marker=path),
         schemas=addon.get("schemas") or inferred.get("schemas"),
         permissions=addon.get("permissions") or inferred.get("permissions"),
         web=web.get("package") or inferred.get("web"),
