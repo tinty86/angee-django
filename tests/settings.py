@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "angee.tags",
     "angee.uom",
     "angee.messaging",
+    "angee.nexus",
     "angee.social",
     "angee.platform",
     "angee.platform_integrate_vcs",
