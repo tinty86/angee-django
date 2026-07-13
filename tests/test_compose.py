@@ -12,10 +12,11 @@ import pytest
 from django.apps import AppConfig, apps
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import CommandError
-from django.db import models
+from django.db import OperationalError, models
 
 import angee.compose as compose_package
 import angee.compose.runtime as runtime_module
+from angee.base.emission import ModelClassAttribute, ModelDecorator
 from angee.base.fields import StateField
 from angee.base.mixins import HistoryMixin, RevisionMixin
 from angee.base.models import AngeeManager, AngeeModel, role_anchor
@@ -424,6 +425,110 @@ def test_runtime_renders_model_attributes_from_mixins(tmp_path: Path) -> None:
     assert source.index("history = simple_history") < source.index("class Meta(_DecoratedHistoryThingMeta)")
 
 
+def test_runtime_walks_declared_emission_seams_for_history_and_revision(tmp_path: Path) -> None:
+    """History and revision mixins both ride declared emission seams."""
+
+    module = ModuleType("tests.declared_emission.models")
+    DeclaredEmissionThing = type(
+        "DeclaredEmissionThing",
+        (HistoryMixin, RevisionMixin, AngeeModel),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "revisioned_fields": ("body",),
+            "body": models.TextField(),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "declared"}),
+        },
+    )
+    module.DeclaredEmissionThing = DeclaredEmissionThing
+    app_config = SimpleNamespace(
+        label="declared",
+        name="tests.declared_emission",
+        module=ModuleType("tests.declared_emission"),
+        models_module=module,
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("declared/models.py")]
+
+    assert (
+        source.index("@reversion.register")
+        < source.index("class DeclaredEmissionThing")
+        < source.index("history = simple_history")
+        < source.index("class Meta(_DeclaredEmissionThingMeta)")
+    )
+
+
+def test_runtime_walks_synthetic_declared_emission_seams(tmp_path: Path) -> None:
+    """Unknown mixins emit through the same declared attribute/decorator seams."""
+
+    class SyntheticEmissionMixin(models.Model):
+        angee_model_decorators = (
+            ModelDecorator(
+                import_path="tests.synthetic_emission_decorators.marker_decorator",
+                args=("decorated",),
+            ),
+        )
+
+        @classmethod
+        def angee_model_attributes(
+            cls,
+            *,
+            app_label: str,
+            model_class: type[models.Model],
+            extension_bases: tuple[type[models.Model], ...],
+        ) -> tuple[ModelClassAttribute, ...]:
+            return (
+                ModelClassAttribute(
+                    name="synthetic_marker",
+                    import_path="tests.synthetic_emission_attributes.MarkerAttribute",
+                    args=(model_class.__name__,),
+                    kwargs=(("app_label", app_label), ("extension_count", len(extension_bases))),
+                ),
+            )
+
+        class Meta:
+            abstract = True
+            app_label = "tests"
+
+    module = ModuleType("tests.synthetic_emission.models")
+    SyntheticEmissionThing = type(
+        "SyntheticEmissionThing",
+        (SyntheticEmissionMixin, AngeeModel),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "synthetic"}),
+        },
+    )
+    module.SyntheticEmissionThing = SyntheticEmissionThing
+    app_config = SimpleNamespace(
+        label="synthetic",
+        name="tests.synthetic_emission",
+        module=ModuleType("tests.synthetic_emission"),
+        models_module=module,
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("synthetic/models.py")]
+
+    attribute_import = "import tests.synthetic_emission_attributes"
+    decorator_import = "import tests.synthetic_emission_decorators"
+    decorator = "@tests.synthetic_emission_decorators.marker_decorator('decorated')"
+    class_header = "class SyntheticEmissionThing(AbstractSyntheticEmissionThing):"
+    attribute = (
+        "synthetic_marker = tests.synthetic_emission_attributes.MarkerAttribute("
+        "'SyntheticEmissionThing', app_label='synthetic', extension_count=0)"
+    )
+
+    assert attribute_import in source
+    assert decorator_import in source
+    assert source.index(decorator_import) < source.index(decorator) < source.index(class_header)
+    assert (
+        source.index(attribute_import)
+        < source.index(attribute)
+        < source.index("class Meta(_SyntheticEmissionThingMeta)")
+    )
+
+
 def test_runtime_emits_only_models_marked_runtime(tmp_path: Path) -> None:
     """Only abstract source models declaring ``runtime = True`` are emitted."""
 
@@ -438,6 +543,52 @@ def test_runtime_emits_only_models_marked_runtime(tmp_path: Path) -> None:
 
     assert "class DecoratedRevisionThing" in source
     assert "class SkippedRuntimeThing" not in source
+
+
+def test_runtime_carries_catalogue_markers_on_emitted_concrete_model(tmp_path: Path) -> None:
+    """Catalogue declarations survive the abstract-source to concrete-runtime hop."""
+
+    module = ModuleType("tests.catalogue_emission.models")
+    CatalogueThing = type(
+        "CatalogueThing",
+        (AngeeModel,),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "catalogue": True,
+            "catalogue_tier": "install",
+            "name": models.CharField(max_length=32),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "catalogue"}),
+        },
+    )
+    CatalogueChild = type(
+        "CatalogueChild",
+        (AngeeModel,),
+        {
+            "__module__": module.__name__,
+            "runtime": True,
+            "extends": "catalogue.CatalogueThing",
+            "child_value": models.CharField(max_length=16),
+            "Meta": type("Meta", (), {"abstract": True, "app_label": "catalogue"}),
+        },
+    )
+    module.CatalogueThing = CatalogueThing
+    module.CatalogueChild = CatalogueChild
+    app_config = SimpleNamespace(
+        label="catalogue",
+        name="tests.catalogue_emission",
+        module=ModuleType("tests.catalogue_emission"),
+        models_module=module,
+    )
+
+    source = Runtime((app_config,), runtime_dir=tmp_path / "runtime").render_sources()[Path("catalogue/models.py")]
+    parent_body = source[source.index("class CatalogueThing") : source.index("class CatalogueChild")]
+    child_body = source[source.index("class CatalogueChild") :]
+
+    assert "catalogue = True" in parent_body
+    assert 'catalogue_tier = "install"' in parent_body
+    assert "catalogue = True" not in child_body
+    assert "catalogue_tier" not in child_body
 
 
 def test_runtime_renders_materialized_child_extension(tmp_path: Path) -> None:
@@ -1298,29 +1449,289 @@ def test_build_check_reports_command_error_when_runtime_is_stale(
         Command()._handle_build({"check": True})
 
 
-def test_build_emit_does_not_recheck_after_writing(
+def test_build_command_delegates_the_complete_write_lifecycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The build command leaves write integrity to the emit path."""
+    """The build command delegates source emission and migration writes to Runtime."""
 
     calls: list[str] = []
 
     class FakeRuntime:
-        def is_current(self) -> bool:
-            calls.append("current")
-            return False
-
-        def emit(self) -> None:
-            calls.append("emit")
-
-        def check(self) -> None:
-            calls.append("check")
+        def build(self) -> tuple[Path, ...]:
+            calls.append("build")
+            return ()
 
     monkeypatch.setattr(runtime_module.Runtime, "from_django", classmethod(lambda cls: FakeRuntime()))
 
     Command()._handle_build({"check": False})
 
-    assert calls == ["current", "emit"]
+    assert calls == ["build"]
+
+
+def test_runtime_build_emits_stale_sources_before_materializing(tmp_path: Path, monkeypatch) -> None:
+    runtime = runtime_for(tmp_path)
+    calls: list[str] = []
+    output = runtime.runtime_dir / "resources" / "migrations" / "0001_manual.py"
+
+    class FakeMigrations:
+        def materialize(self) -> tuple[Path, ...]:
+            calls.append("materialize")
+            return (output,)
+
+    monkeypatch.setattr(runtime, "is_current", lambda: False)
+    monkeypatch.setattr(runtime, "emit", lambda: calls.append("emit"))
+    monkeypatch.setattr(runtime, "runtime_migrations", lambda: FakeMigrations())
+
+    assert runtime.build() == (output,)
+    assert calls == ["emit", "materialize"]
+
+
+def test_runtime_build_materializes_when_sources_are_current(tmp_path: Path, monkeypatch) -> None:
+    runtime = runtime_for(tmp_path)
+    calls: list[str] = []
+
+    class FakeMigrations:
+        def materialize(self) -> tuple[Path, ...]:
+            calls.append("materialize")
+            return ()
+
+    monkeypatch.setattr(runtime, "is_current", lambda: True)
+    monkeypatch.setattr(runtime, "emit", lambda: calls.append("emit"))
+    monkeypatch.setattr(runtime, "runtime_migrations", lambda: FakeMigrations())
+
+    assert runtime.build() == ()
+    assert calls == ["materialize"]
+
+
+def test_runtime_check_validates_migrations_after_source_drift_is_clean(tmp_path: Path, monkeypatch) -> None:
+    runtime = runtime_for(tmp_path)
+    calls: list[str] = []
+
+    class FakeMigrations:
+        def check(self) -> None:
+            calls.append("migration_check")
+
+    monkeypatch.setattr(runtime, "_drift", lambda: [])
+    monkeypatch.setattr(runtime, "runtime_migrations", lambda: FakeMigrations())
+
+    runtime.check()
+
+    assert calls == ["migration_check"]
+
+
+def test_runtime_check_does_not_plan_migrations_while_sources_are_stale(tmp_path: Path, monkeypatch) -> None:
+    runtime = runtime_for(tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(runtime, "_drift", lambda: [Path("resources/models.py")])
+    monkeypatch.setattr(runtime, "runtime_migrations", lambda: calls.append("migration_check"))
+
+    with pytest.raises(RuntimeError, match="generated runtime is stale"):
+        runtime.check()
+
+    assert calls == []
+
+
+def test_emit_if_stale_never_constructs_runtime_migrations(tmp_path: Path, monkeypatch) -> None:
+    runtime = runtime_for(tmp_path)
+    monkeypatch.setattr(runtime, "_drift", lambda: [])
+    monkeypatch.setattr(
+        runtime,
+        "runtime_migrations",
+        lambda: pytest.fail("normal boot must not materialize migrations"),
+        raising=False,
+    )
+
+    assert runtime.emit_if_stale() is False
+
+
+def _provision_options(**overrides: Any) -> dict[str, Any]:
+    """Build a provision options dict with every flag defaulted off."""
+
+    options: dict[str, Any] = {
+        "demo": False,
+        "bootstrap_admin": False,
+        "force_rebac": False,
+        "wait_db": 60,
+    }
+    options.update(overrides)
+    return options
+
+
+def test_provision_plan_default_flags_covers_the_no_flag_lifecycle() -> None:
+    """The bare plan runs build→migrate→sync→load→schema with no optional steps."""
+
+    assert Command._provision_plan(_provision_options()) == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+        ["migrate", "--noinput"],
+        ["rebac", "sync", "--yes"],
+        ["resources", "load"],
+        ["schema"],
+    ]
+
+
+def test_provision_plan_demo_loads_demo_resources() -> None:
+    """``--demo`` appends ``--include-demo`` to the resources load step only."""
+
+    plan = Command._provision_plan(_provision_options(demo=True))
+
+    assert ["resources", "load", "--include-demo"] in plan
+    assert ["resources", "load"] not in plan
+
+
+def test_provision_plan_force_rebac_force_overwrites_the_sync() -> None:
+    """``--force-rebac`` appends ``--force-overwrite`` to the rebac sync step only."""
+
+    plan = Command._provision_plan(_provision_options(force_rebac=True))
+
+    assert ["rebac", "sync", "--yes", "--force-overwrite"] in plan
+    assert ["rebac", "sync", "--yes"] not in plan
+
+
+def test_provision_plan_bootstrap_admin_appends_a_final_step() -> None:
+    """``--bootstrap-admin`` appends ``bootstrap_admin`` as the last step."""
+
+    plan = Command._provision_plan(_provision_options(bootstrap_admin=True))
+
+    assert plan[-1] == ["bootstrap_admin"]
+    assert Command._provision_plan(_provision_options())[-1] != ["bootstrap_admin"]
+
+
+def test_provision_plan_combines_every_flag() -> None:
+    """All flags together yield the full demo + force + bootstrap plan."""
+
+    plan = Command._provision_plan(_provision_options(demo=True, force_rebac=True, bootstrap_admin=True))
+
+    assert plan == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+        ["migrate", "--noinput"],
+        ["rebac", "sync", "--yes", "--force-overwrite"],
+        ["resources", "load", "--include-demo"],
+        ["schema"],
+        ["bootstrap_admin"],
+    ]
+
+
+def test_provision_plan_builds_before_it_migrates() -> None:
+    """The composer must emit concrete models before migrations run against them."""
+
+    for options in (
+        _provision_options(),
+        _provision_options(demo=True, force_rebac=True, bootstrap_admin=True),
+    ):
+        plan = Command._provision_plan(options)
+        build = plan.index(["angee", "build"])
+        makemigrations = plan.index(["makemigrations"])
+        migrate = plan.index(["migrate", "--noinput"])
+        assert build < makemigrations < migrate
+
+
+def test_provision_runs_every_step_as_a_fresh_child_interpreter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each step spawns ``python <manage.py> <step>`` in order, streaming output."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], check: bool = False) -> SimpleNamespace:
+        calls.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("angee.compose.management.commands.angee.subprocess.run", fake_run)
+
+    command = Command()
+    monkeypatch.setattr(command, "_wait_for_database", lambda seconds: None)
+    command._handle_provision(_provision_options())
+
+    manage_py = Command._manage_py_path()
+    assert calls == [[sys.executable, manage_py, *step] for step in Command._provision_plan(_provision_options())]
+
+
+def test_provision_aborts_on_the_first_failed_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-zero child exit stops provision and names the failing step."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], check: bool = False) -> SimpleNamespace:
+        calls.append(argv)
+        returncode = 1 if argv[2:] == ["makemigrations"] else 0
+        return SimpleNamespace(returncode=returncode)
+
+    monkeypatch.setattr("angee.compose.management.commands.angee.subprocess.run", fake_run)
+
+    command = Command()
+    monkeypatch.setattr(command, "_wait_for_database", lambda seconds: None)
+
+    with pytest.raises(CommandError, match="step 'makemigrations' failed"):
+        command._handle_provision(_provision_options())
+
+    # Stops at the failing step: build, reconcile_permissions, makemigrations.
+    assert [argv[2:] for argv in calls] == [
+        ["angee", "build"],
+        ["reconcile_permissions"],
+        ["makemigrations"],
+    ]
+
+
+class _FakeConnection:
+    """Stand-in default connection that fails ``ensure_connection`` N times."""
+
+    def __init__(self, fail_times: int) -> None:
+        self.fail_times = fail_times
+        self.attempts = 0
+        self.closed = False
+
+    def ensure_connection(self) -> None:
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise OperationalError("connection refused")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_provision_wait_retries_then_closes_the_probe_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wait loop retries until the database answers, then closes the probe."""
+
+    connection = _FakeConnection(fail_times=2)
+    monkeypatch.setattr("angee.compose.management.commands.angee.connections", {"default": connection})
+    monkeypatch.setattr("angee.compose.management.commands.angee.time.sleep", lambda seconds: None)
+
+    Command()._wait_for_database(10)
+
+    assert connection.attempts == 3
+    assert connection.closed is True
+
+
+def test_provision_wait_times_out_with_the_last_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A database that never answers raises CommandError with the last error."""
+
+    connection = _FakeConnection(fail_times=99)
+    monkeypatch.setattr("angee.compose.management.commands.angee.connections", {"default": connection})
+    monkeypatch.setattr("angee.compose.management.commands.angee.time.sleep", lambda seconds: None)
+
+    with pytest.raises(CommandError, match="within 3s: connection refused"):
+        Command()._wait_for_database(3)
+
+    assert connection.attempts == 3
+
+
+def test_provision_manage_py_path_is_absolute() -> None:
+    """The child entrypoint is the resolved absolute ``manage.py`` path."""
+
+    manage_py = Command._manage_py_path()
+
+    assert Path(manage_py).is_absolute()
+    assert Path(manage_py) == Path(sys.argv[0]).resolve()
 
 
 def test_appgraph_annotates_roots_and_dependencies() -> None:
@@ -1371,3 +1782,42 @@ def test_appgraph_rejects_duplicate_dependencies(stub_contracts: None) -> None:
 
     with pytest.raises(ImproperlyConfigured, match="duplicate dependency 'angee.base'"):
         AppGraph().resolve([config])
+
+
+def test_project_env_file_loads_without_overriding_process_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The project-root .env seeds env vars for host runs; real process env wins.
+
+    The stack's gitignored `.env` (secrets plus derived DATABASE_URL) is what lets
+    a bare `uv run manage.py …` talk to the stack database; operator-managed
+    services set their env explicitly, so read_env must never overwrite it.
+    """
+
+    from angee.compose.project import ProjectContract
+
+    (tmp_path / ".env").write_text(
+        'DATABASE_URL="postgres://angee:pw@127.0.0.1:5433/angee"\nYAMLCONF_SECRET_KEY="from-env-file"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("YAMLCONF_SECRET_KEY", "from-process-env")
+
+    import os
+
+    # read_env writes straight into os.environ (not via monkeypatch), so clean up
+    # directly — a trailing monkeypatch.delenv would record the leaked value as
+    # prior state and RESTORE it at teardown, poisoning later tests.
+    try:
+        ProjectContract({})._read_project_env(tmp_path)
+
+        assert os.environ["DATABASE_URL"] == "postgres://angee:pw@127.0.0.1:5433/angee"
+        assert os.environ["YAMLCONF_SECRET_KEY"] == "from-process-env"
+    finally:
+        os.environ.pop("DATABASE_URL", None)
+
+
+def test_project_env_file_is_optional(tmp_path: Path) -> None:
+    """A project without .env composes exactly as before — silent no-op."""
+
+    from angee.compose.project import ProjectContract
+
+    ProjectContract({})._read_project_env(tmp_path)

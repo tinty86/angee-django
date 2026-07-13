@@ -290,7 +290,7 @@ def make_integration(
             "vendor": vendor,
             "credential": credential,
             "owner": user,
-            "status": "active",
+            "lifecycle": "active",
             **attrs,
         }
         field_names = {field.name for field in model._meta.fields}
@@ -762,6 +762,7 @@ def make_contract(**overrides: object) -> AddonContract:
     fields: dict[str, object] = {
         "name": "tests.addon",
         "depends_on": (),
+        "migrations": (),
         "schemas": None,
         "web": None,
         "web_codegen": None,

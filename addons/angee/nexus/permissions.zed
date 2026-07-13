@@ -1,0 +1,19 @@
+// Authorization schema for the nexus addon.
+// @rebac_package: nexus
+// @rebac_package_version: 0.1.0
+// @rebac_schema_revision: 1
+
+// A tie is derived bookkeeping about one party, so its access derives from that
+// party's row (the parties/directory → integration pattern): whoever may read
+// the party may read its rollup, whoever may write the party may set its
+// cadence. Rows are created/recomputed elevated (the periodic task), never via
+// user-facing create.
+definition nexus/tie {
+    relation party: parties/party // rebac:field=party
+    relation admin: angee/role // rebac:const=admin
+
+    permission create = admin->member
+    permission read   = party->read + admin->member
+    permission write  = party->write + admin->member
+    permission delete = admin->member
+}

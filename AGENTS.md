@@ -69,7 +69,7 @@ on top.
 ├── templates/              # Copier templates — project / stack / workspace / service kinds
 │   ├── projects/web/       # project template — scaffolds the host repo (owns the project root)
 │   ├── stacks/dev/         # dev Stack template — the `.angee/` overlay (`angee init --dev`)
-│   └── workspaces/dev/     # dev Workspace template (`angee ws create … --template dev`)
+│   └── workspaces/dev/     # dev Workspace template (created through the workspace workflow)
 ├── examples/notes-angee/   # the example project `angee dev` runs from the repo root
 │   ├── manage.py           # Django entrypoint (`uv run examples/notes-angee/manage.py …`)
 │   ├── settings.yaml       # project composition facts and project overrides
@@ -283,11 +283,12 @@ uv run examples/notes-angee/manage.py schema                  # write SDL
 uv run examples/notes-angee/manage.py schema --check           # SDL, after runtime load
 ```
 
-For an isolated branch, create a workspace and run the stack inside it. `angee
-dev` walks up to the nearest `.angee`, so it works from the workspace root too.
+For an isolated branch, load `.agents/skills/angee-workspace/SKILL.md` and
+follow its **Create Workspace** workflow to create the workspace with validated
+work-state. Then run the stack inside it. `angee dev` walks up to the nearest
+`.angee`, so it works from the workspace root too.
 
 ```sh
-angee ws create <name> --template dev --input base_ref=main   # branch from main
 cd .angee/workspaces/<name>
 angee dev
 angee ws status      # optional; defaults to the enclosing workspace
@@ -347,9 +348,12 @@ Durable project knowledge is checked in, not held in any agent's private memory
   in `docs/guidelines.md`).
 - **Shared agent methodology — reviewer agents, slash commands, skills, and
   workflows — lives in `.agents/`** (committed and public; see `.agents/README.md`).
-- **Agent work-state — plans, working notes, handovers — goes into `.work/`.**
+- **Agent work-state goes into `.work/`:** design specs: `.work/plans/specs/`;
+  plans: `.work/plans/`; notes: `.work/notes/`; handovers: `.work/handovers/`.
   `.work/` is a gitignored symlink to a separate, private work-state repo; it is
-  never mirrored to the public repo, and nothing in it is published.
+  never mirrored to the public repo, and nothing in it is published. Global
+  skill defaults such as `docs/superpowers/**` are overridden and forbidden in
+  this repository.
 - **Durable rules the team must inherit never live only in `.work/`.** A private
   note is invisible to teammates and to the next agent; capture the durable rule
   in the owning `docs/` guideline instead.

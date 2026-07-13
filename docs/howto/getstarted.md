@@ -226,7 +226,10 @@ cooperate:
 - **The framework gives agents a build step.** Inside the Host, an agent changes
   source models and addons, then runs `manage.py angee build` to compose them
   into the deterministic `runtime/` tree, followed by `makemigrations` /
-  `migrate` / `rebac sync` / `resources load` / `schema --check`. Because
+  `migrate` / `rebac sync` / `resources load` / `schema --check`. Bringing the
+  whole runtime up from a fresh checkout is the single `manage.py angee provision`
+  command, which owns that build→migrate→sync→load→schema chain end to end (the
+  dev and local stacks invoke it instead of restating the steps). Because
   everything is an addon and each fact has one owner, an agent's job is to find
   the owning level and change it there — never to re-derive or monkey-patch.
 

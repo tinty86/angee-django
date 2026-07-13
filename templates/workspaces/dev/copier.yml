@@ -33,9 +33,10 @@ _angee:
       type: str
       default: "../.."
       help: Where sibling repos live, relative to ANGEE_ROOT (the host's .angee/). Default "../.." resolves to the directory containing this angee-django checkout and its sibling repos.
-    playwright_browser:
+    work_state_path:
       type: str
-      default: chrome
+      required: true
+      help: Path to the shared private work-state Git repository.
   ensure:
     operator.port_pool.django:     { range: "8101-8199" }
     operator.port_pool.ui:         { range: "5175-5273" }
@@ -43,7 +44,6 @@ _angee:
     operator.port_pool.operator:   { range: "9001-9099" }
     operator.port_pool.postgres:   { range: "5433-5531" }
     operator.port_pool.redis:      { range: "6380-6478" }
-    operator.port_pool.playwright: { range: "9224-9322" }
     operator.port_pool.process_compose: { range: "10000-10999" }
     # Caddy edge host port — each workspace leases a distinct one so parallel
     # workspace stacks (and the base stack on :80) don't all contend for :80.
@@ -61,6 +61,11 @@ _angee:
       ref: "${inputs.base_ref}"
       branch: "${inputs.branch_prefix}/${name | slug}"
       subpath: .
+    work-state:
+      source: work-angee-django
+      kind: local
+      path: "${inputs.work_state_path}"
+      subpath: .work
   chain_root: .angee
   chain:
     - template: templates/stacks/dev
@@ -80,10 +85,7 @@ _angee:
         postgres_port:      "${alloc.postgres}"
         redis_port:         "${alloc.redis}"
         edge_port:          "${alloc.edge}"
-        playwright_port:    "${alloc.playwright}"
         process_compose_port: "${alloc.process_compose}"
-        playwright_user_data_dir: "${workspace.path}/.angee/data/chrome"
-        playwright_browser: "${inputs.playwright_browser}"
 
 topic:
   type: str
@@ -109,6 +111,6 @@ source_cache_path:
   type: str
   default: "../.."
 
-playwright_browser:
+work_state_path:
   type: str
-  default: chrome
+  help: Path to the shared private work-state Git repository.

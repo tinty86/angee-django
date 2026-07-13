@@ -3,9 +3,10 @@
 The concrete messaging/parties models are composed here the way the composer folds
 each abstract source model onto one runtime table, so the manager write path runs
 against real tables. The cases pin the ingest invariants the module docstring
-promises: idempotency on ``(platform, external_id)``, null-byte stripping, RFC-5322
-thread resolution, the monotonic/never-crashing counter bump, and quote-edge
-direction.
+promises: channel-scoped idempotency on ``(channel, external_id)``, null-byte
+stripping, RFC-5322 thread resolution (with fragment-backed titles), the
+monotonic/never-crashing counter bump, quote-edge direction, and positional read
+receipts.
 """
 
 from __future__ import annotations
@@ -20,9 +21,11 @@ import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldDoesNotExist
 from django.core.management import call_command
-from django.db import connection, models
+from django.db import IntegrityError, connection, models, transaction
 from django.db.models.signals import post_save
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from rebac import (
     PermissionDenied,
@@ -33,6 +36,7 @@ from rebac import (
     to_subject_ref,
     write_relationships,
 )
+from rebac.actors import current_sudo_reason, is_sudo
 
 from angee.base.mixins import AuditMixin, SqidMixin
 from angee.base.models import AngeeModel
@@ -56,10 +60,14 @@ from angee.messaging.models import ThreadedModelMixin
 from angee.messaging.models import ThreadFollower as AbstractThreadFollower
 from angee.messaging.models import ThreadNotification as AbstractThreadNotification
 from angee.messaging.models import TrackingValue as AbstractTrackingValue
+from angee.parties.models import Circle as AbstractCircle
+from angee.parties.models import CircleMember as AbstractCircleMember
 from angee.parties.models import Directory as AbstractDirectory
 from angee.parties.models import Folder as AbstractContactFolder
 from angee.parties.models import Handle as AbstractHandle
 from angee.parties.models import Party as AbstractParty
+from angee.parties.models import Relationship as AbstractRelationship
+from angee.parties.models import RelationshipKind as AbstractRelationshipKind
 from angee.social.models import MessagePublic, ThreadPublic
 from tests.chatterdemo.models import ChatterDoc, TrackedRecordChild, TrackedRecordParent
 from tests.conftest import (
@@ -78,6 +86,8 @@ from tests.conftest import (
 from tests.conftest import (
     File as StorageFile,
 )
+from tests.test_agents_graphql import AGENTS_GRAPHQL_MODELS, Agent
+from tests.test_integrate_vcs import VCS_TEST_MODELS
 
 
 class Directory(Integration, AbstractDirectory):
@@ -129,6 +139,58 @@ class Handle(AbstractHandle):
         app_label = "parties"
         db_table = "test_parties_handle"
         rebac_resource_type = "parties/handle"
+        rebac_id_attr = "sqid"
+
+
+class Circle(AbstractCircle):
+    """Concrete circle used by parties-schema imports across the suite."""
+
+    class Meta(AbstractCircle.Meta):
+        """Django model options for the canonical test circle."""
+
+        abstract = False
+        app_label = "parties"
+        db_table = "test_parties_circle"
+        rebac_resource_type = "parties/circle"
+        rebac_id_attr = "sqid"
+
+
+class CircleMember(AbstractCircleMember):
+    """Concrete circle membership used by parties-schema imports across the suite."""
+
+    class Meta(AbstractCircleMember.Meta):
+        """Django model options for the canonical test circle membership."""
+
+        abstract = False
+        app_label = "parties"
+        db_table = "test_parties_circle_member"
+        rebac_resource_type = "parties/circle_member"
+        rebac_id_attr = "sqid"
+
+
+class RelationshipKind(AbstractRelationshipKind):
+    """Concrete relationship kind used by parties-schema imports across the suite."""
+
+    class Meta(AbstractRelationshipKind.Meta):
+        """Django model options for the canonical test relationship kind."""
+
+        abstract = False
+        app_label = "parties"
+        db_table = "test_parties_relationship_kind"
+        rebac_resource_type = "parties/relationship_kind"
+        rebac_id_attr = "sqid"
+
+
+class Relationship(AbstractRelationship):
+    """Concrete relationship edge used by parties-schema imports across the suite."""
+
+    class Meta(AbstractRelationship.Meta):
+        """Django model options for the canonical test relationship."""
+
+        abstract = False
+        app_label = "parties"
+        db_table = "test_parties_relationship"
+        rebac_resource_type = "parties/relationship"
         rebac_id_attr = "sqid"
 
 
@@ -353,7 +415,7 @@ class ThreadedTicket(SqidMixin, AuditMixin, ThreadedModelMixin, AngeeModel):
         db_table = "test_messaging_threaded_ticket"
 
     def __str__(self) -> str:
-        """Return the ticket title for thread subjects."""
+        """Return the ticket title for the thread's title fragment."""
 
         return self.title
 
@@ -379,7 +441,7 @@ class BroadcastRoom(SqidMixin, AuditMixin, ThreadedModelMixin, AngeeModel):
         db_table = "test_messaging_broadcast_room"
 
     def __str__(self) -> str:
-        """Return the room title for thread subjects."""
+        """Return the room title for the thread's title fragment."""
 
         return self.title
 
@@ -393,6 +455,10 @@ MESSAGING_TEST_MODELS = (
     Folder,
     Party,
     Handle,
+    Circle,
+    CircleMember,
+    RelationshipKind,
+    Relationship,
     Fragment,
     Thread,
     ThreadAttachment,
@@ -428,6 +494,24 @@ def messaging_tables() -> Iterator[None]:
         yield
     finally:
         _clear_model_tables(MESSAGING_TEST_MODELS)
+        if created_models:
+            with connection.schema_editor() as schema_editor:
+                for model in reversed(created_models):
+                    schema_editor.delete_model(model)
+
+
+@pytest.fixture
+def messaging_agent_tables(transactional_db: Any) -> Iterator[None]:
+    """Create the messaging tables plus Agent tables for principal attribution tests."""
+
+    del transactional_db
+    models = tuple(dict.fromkeys(MESSAGING_TEST_MODELS + VCS_TEST_MODELS + AGENTS_GRAPHQL_MODELS))
+    created_models = _create_missing_tables(models)
+    call_command("rebac", "sync", verbosity=0)
+    try:
+        yield
+    finally:
+        _clear_model_tables(models)
         if created_models:
             with connection.schema_editor() as schema_editor:
                 for model in reversed(created_models):
@@ -531,7 +615,10 @@ def test_threaded_model_resolves_one_chatter_thread(messaging_tables: None) -> N
 
     assert first is not None
     assert first.pk == second.pk
-    assert first.subject == "Escalation"
+    # The record's label is interned as the thread's title fragment.
+    assert first.title is not None
+    assert first.title.text == "Escalation"
+    assert str(first) == "Escalation"
     assert ThreadAttachment._base_manager.count() == 1
     attachment = ThreadAttachment._base_manager.get()
     assert attachment.thread_id == first.pk
@@ -757,6 +844,85 @@ def test_threaded_record_delete_tears_down_chatter_graph(messaging_tables: None)
 
 
 @pytest.mark.django_db(transaction=True)
+def test_record_authorized_delete_tears_down_private_chatter_graph(messaging_tables: None) -> None:
+    """Deleting a permitted parent record removes its private chatter implementation rows."""
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test threaded model actor delete setup"):
+        owner = user_model.objects.create_user(username="actor-cascade-owner", email="actor-cascade-owner@example.com")
+        watcher = user_model.objects.create_user(
+            username="actor-cascade-watcher",
+            email="actor-cascade-watcher@example.com",
+        )
+        doc = ChatterDoc.objects.create(title="Actor cascade", status="open")
+        write_relationships(
+            [
+                RelationshipTuple(
+                    resource=to_object_ref(doc),
+                    relation="owner",
+                    subject=to_subject_ref(owner),
+                )
+            ]
+        )
+        doc.message_subscribe(user=watcher)
+        doc.message_post("Body to be collected by owner delete.")
+        doc.activity_schedule(user=watcher, summary="Follow up", due_date=_AT.date())
+
+    thread = doc.message_thread(create=False)
+    assert thread is not None
+    thread_pk = thread.pk
+    assert ThreadFollower._base_manager.filter(thread_id=thread_pk).exists()
+    assert ThreadActivity._base_manager.filter(thread_id=thread_pk).exists()
+
+    with actor_context(owner):
+        doc.delete()
+
+    assert not ChatterDoc._base_manager.filter(pk=doc.pk).exists()
+    assert not Thread._base_manager.filter(pk=thread_pk).exists()
+    assert not ThreadAttachment._base_manager.filter(object_id=doc.pk).exists()
+    assert not Message._base_manager.filter(thread_id=thread_pk).exists()
+    assert not ThreadFollower._base_manager.filter(thread_id=thread_pk).exists()
+    assert not ThreadActivity._base_manager.filter(thread_id=thread_pk).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_record_denied_delete_does_not_teardown_private_chatter_graph(messaging_tables: None) -> None:
+    """A record actor without delete permission cannot trigger the elevated chatter cascade."""
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test threaded model denied delete setup"):
+        writer = user_model.objects.create_user(
+            username="actor-cascade-writer",
+            email="actor-cascade-writer@example.com",
+        )
+        doc = ChatterDoc.objects.create(title="Denied actor cascade", status="open")
+        write_relationships(
+            [
+                RelationshipTuple(
+                    resource=to_object_ref(doc),
+                    relation="writer",
+                    subject=to_subject_ref(writer),
+                )
+            ]
+        )
+        message = doc.message_post("Body that must survive denied delete.")
+
+    thread = doc.message_thread(create=False)
+    assert thread is not None
+    thread_pk = thread.pk
+    message_pk = message.pk
+
+    with actor_context(writer), pytest.raises(PermissionDenied):
+        doc.delete()
+
+    assert ChatterDoc._base_manager.filter(pk=doc.pk).exists()
+    assert Thread._base_manager.filter(pk=thread_pk).exists()
+    assert Message._base_manager.filter(pk=message_pk).exists()
+
+
+@pytest.mark.django_db(transaction=True)
 def test_threaded_record_bulk_delete_tears_down_chatter_graph(messaging_tables: None) -> None:
     """A bulk ``QuerySet.delete()`` tears down the thread subtree too, not just the row (M1).
 
@@ -841,8 +1007,8 @@ def test_activity_agenda_lists_assignee_activities_across_records(messaging_tabl
 
     email_alpha = next(row for row in rows if row.summary == "Email Alpha")
     assert email_alpha.attachment.label == "Alpha"
-    assert email_alpha.attachment.target_model_label == "messaging.ThreadedTicket"
-    assert email_alpha.attachment.target_public_id == alpha.public_id
+    assert email_alpha.attachment.record_model_label == "messaging.ThreadedTicket"
+    assert email_alpha.attachment.record_public_id == alpha.public_id
 
 
 @pytest.mark.django_db(transaction=True)
@@ -913,7 +1079,7 @@ def test_activity_agenda_record_pointer_batches_without_per_row_fanout(messaging
         with system_context(reason="agenda n+1 measure"), CaptureQueriesContext(connection) as captured:
             rows = ThreadActivity.objects.agenda(assignee, window_start, window_end).with_record_pointers()
             for row in rows:
-                _ = (row.attachment.label, row.attachment.target_model_label, row.attachment.target_public_id)
+                _ = (row.attachment.label, row.attachment.record_model_label, row.attachment.record_public_id)
         return len(rows), len(captured.captured_queries)
 
     # Warm the process-cached ContentType so the flat comparison isolates the attachment batch.
@@ -944,14 +1110,14 @@ def test_threaded_model_create_autofollows_and_logs_author(messaging_tables: Non
 
     follower = ThreadFollower._base_manager.get()
     messages = list(Message._base_manager.select_related("subtype").order_by("id"))
-    notifications = list(ThreadNotification._base_manager.order_by("id"))
     creation_message, tracking_message = messages
     assert follower.user_id == user.pk
     assert creation_message.message_type == "notification"
     assert creation_message.subtype is not None
     assert creation_message.subtype.key == "record_created"
     assert creation_message.preview == "Threaded ticket created"
-    assert creation_message.thread_id == ticket.message_thread().pk
+    with actor_context(user):
+        assert creation_message.thread_id == ticket.message_thread().pk
     assert tracking_message.message_type == "auto_comment"
     assert tracking_message.subtype is not None
     assert tracking_message.subtype.key == "record_updated"
@@ -960,12 +1126,13 @@ def test_threaded_model_create_autofollows_and_logs_author(messaging_tables: Non
     assert tracking.field_name == "title"
     assert tracking.old_display == ""
     assert tracking.new_display == "Created case"
-    assert [notification.user_id for notification in notifications] == [user.pk, user.pk]
-    assert [notification.message_id for notification in notifications] == [
-        creation_message.pk,
-        tracking_message.pk,
-    ]
-    assert all(notification.is_read for notification in notifications)
+    # The creator is a plain inbox follower: read state is the positional receipt,
+    # not per-message flag rows, so the system writes fan out no delivery ledger
+    # rows and the author's receipt already sits at the latest message.
+    assert ThreadNotification._base_manager.count() == 0
+    follower.refresh_from_db()
+    assert follower.last_read_message_id == tracking_message.pk
+    assert not ThreadFollower.objects.unread_messages(creation_message.thread, user=user).exists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1064,7 +1231,13 @@ def test_threaded_model_post_autofollows_author(messaging_tables: None) -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_threaded_model_updates_comment_content(messaging_tables: None) -> None:
-    """A record chatter comment can be edited without creating another message."""
+    """Editing a comment rewrites its body in place and appends an edit-history entry.
+
+    Edits are data, not shadow rows: the message row survives, its body part is
+    re-pointed at the new content-addressed fragment, and ``edit_history`` gains a
+    newest-first entry carrying the prior body fragment's hash (the replaced text
+    lives on as an immutable fragment) — nothing lands in ``metadata`` anymore.
+    """
 
     del messaging_tables
     user_model = get_user_model()
@@ -1075,6 +1248,7 @@ def test_threaded_model_updates_comment_content(messaging_tables: None) -> None:
     with actor_context(user):
         message = ticket.message_post("Original body")
 
+    original_hash = Part._base_manager.select_related("fragment").get(message=message).fragment.hash
     notification_count = ThreadNotification._base_manager.count()
     with actor_context(user):
         edited = ticket.message_update_content(message, body="Updated body")
@@ -1084,7 +1258,12 @@ def test_threaded_model_updates_comment_content(messaging_tables: None) -> None:
     assert edited.pk == message.pk
     assert edited.status == "edited"
     assert edited.preview == "Updated body"
-    assert edited.metadata["edited_by_id"] == user.pk
+    (entry,) = edited.edit_history
+    assert entry["edited_by_id"] == str(user.pk)
+    assert entry["edited_at"]
+    assert entry["prev_fragment_hashes"] == [original_hash]
+    assert "edited_at" not in edited.metadata
+    assert "edited_by_id" not in edited.metadata
     assert Part._base_manager.select_related("fragment").get(message=edited).fragment.text == "Updated body"
     assert Message._base_manager.count() == 1
     assert ThreadNotification._base_manager.count() == notification_count
@@ -1123,7 +1302,13 @@ def test_threaded_model_rejects_system_message_updates(messaging_tables: None) -
 
 @pytest.mark.django_db(transaction=True)
 def test_threaded_model_post_notifies_matching_followers(messaging_tables: None) -> None:
-    """Posting a chatter message fans out unread notifications by follower subtype."""
+    """Posting fans out delivery rows to email-policy followers matching the subtype.
+
+    The notification table is a delivery ledger: only followers whose policy needs a
+    tracked delivery (``email``) get a row, filtered by their subtype keys. A plain
+    inbox follower gets no row at all — their read state is the positional receipt
+    and the feed itself is the notification — and a muted follower gets nothing.
+    """
 
     del messaging_tables
     user_model = get_user_model()
@@ -1132,10 +1317,12 @@ def test_threaded_model_post_notifies_matching_followers(messaging_tables: None)
         watcher = user_model.objects.create_user(username="notify-watcher", email="watcher@example.com")
         muted = user_model.objects.create_user(username="notify-muted", email="muted@example.com")
         activity_only = user_model.objects.create_user(username="notify-activity", email="activity@example.com")
+        inbox_watcher = user_model.objects.create_user(username="notify-inbox", email="inbox@example.com")
         ticket = ThreadedTicket.objects.create(title="Notification case")
-        ticket.message_subscribe(user=watcher, subtype_keys=("comment",))
+        ticket.message_subscribe(user=watcher, notification_policy="email", subtype_keys=("comment",))
         ticket.message_subscribe(user=muted, notification_policy="muted")
-        ticket.message_subscribe(user=activity_only, subtype_keys=("activity_done",))
+        ticket.message_subscribe(user=activity_only, notification_policy="email", subtype_keys=("activity_done",))
+        ticket.message_subscribe(user=inbox_watcher)
 
     with actor_context(author):
         message = ticket.message_post("Followers should see this.")
@@ -1145,17 +1332,24 @@ def test_threaded_model_post_notifies_matching_followers(messaging_tables: None)
     assert notification.thread_id == message.thread_id
     assert notification.attachment_id == ThreadAttachment._base_manager.get().pk
     assert notification.user_id == watcher.pk
-    assert notification.notification_type == "inbox"
+    assert notification.notification_type == "email"
     assert notification.notification_status == "ready"
-    assert notification.is_read is False
-    assert notification.read_at is None
+    assert notification.follower_id == ThreadFollower._base_manager.get(user=watcher).pk
     assert ThreadNotification._base_manager.filter(user=muted).count() == 0
     assert ThreadNotification._base_manager.filter(user=activity_only).count() == 0
+    # An inbox follower's read state is their receipt — never a ledger row.
+    assert ThreadNotification._base_manager.filter(user=inbox_watcher).count() == 0
+    assert ThreadFollower.objects.unread_count_for_record(ticket, user=inbox_watcher) == 1
 
 
 @pytest.mark.django_db(transaction=True)
-def test_threaded_model_notification_mark_read(messaging_tables: None) -> None:
-    """A recipient owns read state for their record-thread notifications."""
+def test_threaded_model_mark_read_advances_receipt(messaging_tables: None) -> None:
+    """A follower owns read state through their positional receipt, not flag rows.
+
+    Marking a record thread read advances the follower's ``last_read_message`` to the
+    latest message; nothing lands in the delivery ledger for an inbox follower, and a
+    second mark-read has nothing left to advance.
+    """
 
     del messaging_tables
     user_model = get_user_model()
@@ -1166,19 +1360,28 @@ def test_threaded_model_notification_mark_read(messaging_tables: None) -> None:
         ticket.message_subscribe(user=watcher)
 
     with actor_context(author):
-        ticket.message_post("Please read this.")
+        message = ticket.message_post("Please read this.")
 
-    assert ThreadNotification.objects.unread_count_for_record(ticket, user=watcher) == 1
-    assert ThreadNotification.objects.mark_read_for_record(ticket, user=watcher) == 1
-    notification = ThreadNotification._base_manager.get(user=watcher)
-    assert notification.is_read is True
-    assert notification.read_at is not None
-    assert ThreadNotification.objects.unread_count_for_record(ticket, user=watcher) == 0
+    assert ThreadFollower.objects.unread_count_for_record(ticket, user=watcher) == 1
+    with actor_context(watcher):
+        assert ThreadFollower.objects.mark_read_for_record(ticket, user=watcher) == 1
+    follower = ThreadFollower._base_manager.get(user=watcher)
+    assert follower.last_read_message_id == message.pk
+    assert ThreadFollower.objects.unread_count_for_record(ticket, user=watcher) == 0
+    # No per-message flag rows exist for an inbox follower; re-marking is a no-op.
+    assert ThreadNotification._base_manager.filter(user=watcher).count() == 0
+    with actor_context(watcher):
+        assert ThreadFollower.objects.mark_read_for_record(ticket, user=watcher) == 0
 
 
 @pytest.mark.django_db(transaction=True)
 def test_threaded_model_marks_one_message_done(messaging_tables: None) -> None:
-    """Odoo-style message done clears one unread notification for the actor."""
+    """Message done is positional: the receipt advances to that message, not a flag.
+
+    ``message_set_done`` moves the follower's ``last_read_message`` receipt to the
+    target, so everything at or before it in feed order counts read while later
+    messages stay unread — the IM semantics that replaced per-message flags.
+    """
 
     del messaging_tables
     user_model = get_user_model()
@@ -1195,20 +1398,19 @@ def test_threaded_model_marks_one_message_done(messaging_tables: None) -> None:
         second = ticket.message_post("Second unread message.")
         other_message = other_ticket.message_post("Other record message.")
 
-    assert ThreadNotification.objects.unread_count_for_record(ticket, user=watcher) == 2
-    assert ThreadNotification.objects.needaction_for_message(first, user=watcher) is True
+    assert ThreadFollower.objects.unread_count_for_record(ticket, user=watcher) == 2
+    assert ThreadFollower.objects.needaction_for_message(first, user=watcher) is True
     with system_context(reason="test threaded model message-done mark one"):
         assert ticket.message_set_done(first, user=watcher) == 1
-    assert ThreadNotification.objects.needaction_for_message(first, user=watcher) is False
-    assert ThreadNotification.objects.needaction_for_message(second, user=watcher) is True
-    assert ThreadNotification.objects.unread_count_for_record(ticket, user=watcher) == 1
+    assert ThreadFollower.objects.needaction_for_message(first, user=watcher) is False
+    assert ThreadFollower.objects.needaction_for_message(second, user=watcher) is True
+    assert ThreadFollower.objects.unread_count_for_record(ticket, user=watcher) == 1
 
-    first_notification = ThreadNotification._base_manager.get(message=first, user=watcher)
-    second_notification = ThreadNotification._base_manager.get(message=second, user=watcher)
-    assert first_notification.is_read is True
-    assert first_notification.read_at is not None
-    assert second_notification.is_read is False
-    assert second_notification.read_at is None
+    thread = ticket.message_thread(create=False)
+    follower = ThreadFollower._base_manager.get(thread=thread, user=watcher)
+    assert follower.last_read_message_id == first.pk
+    # The other record's receipt is untouched by this thread's done marker.
+    assert ThreadFollower.objects.unread_count_for_record(other_ticket, user=watcher) == 1
 
     with system_context(reason="test threaded model message-done guard"), pytest.raises(
         ValueError,
@@ -1234,7 +1436,8 @@ def test_threaded_model_post_notifies_direct_recipient_without_following(messagi
     notification = ThreadNotification._base_manager.get(user=recipient)
     assert notification.message_id == message.pk
     assert notification.follower_id is None
-    assert notification.is_read is False
+    assert notification.notification_type == "inbox"
+    assert notification.notification_status == "ready"
     assert ThreadFollower._base_manager.filter(user=recipient).count() == 0
 
 
@@ -1327,7 +1530,7 @@ def test_threaded_model_delivery_error_counts_for_author(messaging_tables: None)
 
 @pytest.mark.django_db(transaction=True)
 def test_threaded_model_activity_completion_notifies_activity_followers(messaging_tables: None) -> None:
-    """Activity completion messages notify followers subscribed to that subtype."""
+    """Activity completion delivers to email followers subscribed to that subtype."""
 
     del messaging_tables
     user_model = get_user_model()
@@ -1335,16 +1538,65 @@ def test_threaded_model_activity_completion_notifies_activity_followers(messagin
         author = user_model.objects.create_user(username="activity-author", email="activity-author@example.com")
         watcher = user_model.objects.create_user(username="activity-watcher", email="activity-watcher@example.com")
         ticket = ThreadedTicket.objects.create(title="Activity notification")
-        ticket.message_subscribe(user=watcher, subtype_keys=("activity_done",))
+        ticket.message_subscribe(user=watcher, notification_policy="email", subtype_keys=("activity_done",))
 
     with actor_context(author):
         activity = ticket.activity_schedule(user=author, summary="Call customer", due_date=_AT.date())
         ticket.activity_feedback(activity, feedback="Done.")
 
     notification = ThreadNotification._base_manager.select_related("message", "message__subtype").get(user=watcher)
-    assert notification.is_read is False
+    assert notification.notification_type == "email"
+    assert notification.notification_status == "ready"
     assert notification.message.subtype is not None
     assert notification.message.subtype.key == "activity_done"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_agent_activity_completion_posts_system_message_with_service_user(
+    messaging_agent_tables: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent completing an activity posts messaging-private logs as its service user."""
+
+    del messaging_agent_tables
+    user_model = get_user_model()
+    with system_context(reason="test.messaging.agent_activity.setup"):
+        owner = user_model.objects.create_user(
+            username="activity-agent-owner",
+            email="activity-agent-owner@example.com",
+        )
+        agent = Agent.objects.create(name="Activity Agent", owner=owner)
+        service_user_id = agent.user_id
+        ticket = ThreadedTicket.objects.create(title="Agent activity")
+        activity = ticket.activity_schedule(user=owner, summary="Close the loop", due_date=_AT.date())
+
+    post_context: dict[str, Any] = {}
+    original_post_to_thread = Message.objects.post_to_thread
+
+    def spy_post_to_thread(*args: Any, **kwargs: Any) -> Any:
+        post_context["is_sudo"] = is_sudo()
+        post_context["reason"] = current_sudo_reason()
+        return original_post_to_thread(*args, **kwargs)
+
+    monkeypatch.setattr(Message.objects, "post_to_thread", spy_post_to_thread)
+
+    with (
+        override_settings(
+            ANGEE_ACTOR_USER_RESOLVERS={"agents/agent": "angee.agents.actor_resolvers.agent_user_id"}
+        ),
+        actor_context(agent.principal_subject()),
+    ):
+        ticket.activity_feedback(activity, feedback="Handled by agent.")
+
+    message = Message._base_manager.get()
+    assert post_context == {"is_sudo": True, "reason": "messaging.activity.complete"}
+    assert message.created_by_id == service_user_id
+    assert message.message_type == Message.MessageKind.AUTO_COMMENT
+    assert message.subtype is not None
+    assert message.subtype.key == "activity_done"
+    assert Part._base_manager.select_related("fragment").get(message=message).fragment.text == (
+        "Activity done: Close the loop\n\nHandled by agent."
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1518,8 +1770,14 @@ def test_threaded_model_schedules_and_completes_activity(messaging_tables: None)
 
 
 @pytest.mark.django_db(transaction=True)
-def test_ingest_is_idempotent_on_platform_external_id(channel: Any) -> None:
-    """Re-syncing the same message resolves to the existing row, not a duplicate."""
+def test_ingest_dedup_is_channel_scoped(channel: Any) -> None:
+    """Message identity is (channel, external_id): re-sync dedups, a second channel does not.
+
+    Re-syncing the same provider event through the same channel resolves to the
+    existing row; the same external id reached through a *different* channel is a
+    second message row (one row per provider event per source), while the thread —
+    platform-scoped — merges both copies into the one conversation.
+    """
 
     parsed = _parsed("m1", sent_at=_AT)
     assert _ingest([parsed], channel=channel) == 1
@@ -1529,15 +1787,31 @@ def test_ingest_is_idempotent_on_platform_external_id(channel: Any) -> None:
     # Counters bump only for a newly created message, so a re-sync never inflates them.
     assert thread.message_count == 1
 
+    other_channel = make_integration("msgchan-b")
+    assert _ingest([parsed], channel=other_channel) == 1
+    rows = list(Message._base_manager.filter(external_id="m1").order_by("pk"))
+    assert len(rows) == 2
+    assert {row.channel_id for row in rows} == {channel.pk, other_channel.pk}
+    # Threads stay platform-scoped, so both copies land in the same conversation.
+    assert {row.thread_id for row in rows} == {thread.pk}
+    thread.refresh_from_db()
+    assert thread.message_count == 2
 
-def test_email_identifier_and_subject_columns_allow_long_imap_values() -> None:
-    """IMAP Message-ID and Subject values can exceed 512 chars and land intact."""
 
-    assert Thread._meta.get_field("external_id").max_length == 4096
-    assert Thread._meta.get_field("subject").max_length == 4096
-    assert Thread._meta.get_field("subject_normalized").max_length == 4096
-    assert Message._meta.get_field("external_id").max_length == 4096
-    assert Message._meta.get_field("subject").max_length == 4096
+def test_email_identity_columns_are_unbounded_and_subject_columns_are_gone() -> None:
+    """External ids are unbounded TextFields; subjects are fragments, not columns.
+
+    IMAP Message-IDs and Apple-Mail-length subjects must land intact: identity
+    indexes carry ``MD5(external_id)`` so the columns need no width cap, a message's
+    subject is its ``TITLE`` part's fragment, and a thread's title is a Fragment FK.
+    """
+
+    assert Thread._meta.get_field("external_id").max_length is None
+    assert Message._meta.get_field("external_id").max_length is None
+    assert Thread._meta.get_field("title").related_model is Fragment
+    for model, field_name in ((Thread, "subject"), (Thread, "subject_normalized"), (Message, "subject")):
+        with pytest.raises(FieldDoesNotExist):
+            model._meta.get_field(field_name)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1546,8 +1820,9 @@ def test_identical_resync_does_not_churn_message_or_parts(channel: Any) -> None:
 
     The prior sync stores a content digest in ``metadata``; an identical re-sync into
     the same thread hashes equal and short-circuits, so it neither re-saves the message
-    (which would emit a HistoryMixin row and advance ``updated_at``) nor tears down and
-    rebuilds the Part tree (which would churn Part primary keys and re-upsert Fragments).
+    (advancing ``updated_at``) nor tears down and rebuilds the Part tree (which would
+    churn Part primary keys and re-upsert Fragments) — and, since the fragment set is
+    unchanged, it appends no spurious ``edit_history`` entry.
     """
 
     parsed = _parsed("m1", sent_at=_AT)
@@ -1563,6 +1838,7 @@ def test_identical_resync_does_not_churn_message_or_parts(channel: Any) -> None:
 
     message.refresh_from_db()
     assert message.updated_at == first_updated_at
+    assert message.edit_history == []
     assert set(Part._base_manager.filter(message=message).values_list("pk", flat=True)) == part_pks
     assert Fragment._base_manager.count() == fragment_count
     assert Message._base_manager.filter(external_id="m1").count() == 1
@@ -1599,12 +1875,23 @@ def test_last_message_at_is_monotonic(channel: Any) -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_null_bytes_are_stripped_on_write(channel: Any) -> None:
-    """Null bytes in the subject are stripped before the write (Postgres rejects them)."""
+    """Null bytes are stripped before every write (Postgres rejects them).
+
+    The subject lands as the TITLE part's fragment and the normalized thread title
+    fragment; both, plus the body fragment and the preview, must be null-free.
+    """
 
     _ingest([_parsed("m1", subject="Hi\x00there", text="body\x00text", sent_at=_AT)], channel=channel)
     message = Message._base_manager.get(external_id="m1")
-    assert "\x00" not in message.subject
-    assert message.subject == "Hithere"
+    assert message.title() == "Hithere"
+    assert message.preview == "bodytext"
+    body_part = Part._base_manager.select_related("fragment").get(
+        message=message, role=Part.PartRole.BODY, fragment__isnull=False
+    )
+    assert body_part.fragment.text == "bodytext"
+    thread = Thread._base_manager.get()
+    assert thread.title is not None
+    assert thread.title.text == "Hithere"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1623,10 +1910,10 @@ def test_resync_rethreads_and_reconciles_both_thread_counters(channel: Any) -> N
 
     Message ``b`` references ``a`` but is ingested first, so ``a`` is not yet resolvable
     and ``b`` opens its own thread; ``a`` then opens another. Re-syncing ``b`` now resolves
-    ``a``'s thread through References, so ``b`` must leave its old thread (count → 0) and
-    join ``a``'s (count → 2, ``last_message_at`` advanced to ``b``'s later send time).
-    Before the fix both counters drift — the losing thread stays at 1 and the winner never
-    gains the message — because reconciliation was gated on ``created``.
+    ``a``'s thread through References, so ``b`` must leave its old thread and join
+    ``a``'s (count → 2, ``last_message_at`` advanced to ``b``'s later send time). The
+    emptied losing thread is a husk — no messages, no record attachment — so the
+    recount deletes it rather than leaving a zero-message row in the thread list.
     """
 
     b_sent = _AT + timedelta(days=1)
@@ -1643,11 +1930,10 @@ def test_resync_rethreads_and_reconciles_both_thread_counters(channel: Any) -> N
 
     assert Message._base_manager.get(external_id="b").thread_id == root_thread.pk
     root_thread.refresh_from_db()
-    orphan_thread.refresh_from_db()
     assert root_thread.message_count == 2
     assert root_thread.last_message_at == b_sent
-    assert orphan_thread.message_count == 0
-    assert orphan_thread.last_message_at is None
+    # The losing thread emptied out: the recount deletes the husk outright.
+    assert not Thread._base_manager.filter(pk=orphan_thread.pk).exists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1698,6 +1984,175 @@ def test_quote_edge_runs_from_earlier_to_later(channel: Any) -> None:
     new = Message._base_manager.get(external_id="new")
     edge = MessageEdge._base_manager.get(kind="quote")
     assert (edge.src_id, edge.dst_id) == (old.pk, new.pk)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_shared_title_fragment_mints_no_quote_edges(channel: Any) -> None:
+    """Messages sharing ONLY a title fragment get zero quote edges.
+
+    Titles and headers are envelope facts, not quoted prose: a subject repeated
+    across a thread dedups to one shared title fragment, and the quotation builder
+    must skip those roles rather than quote-linking the whole conversation.
+    """
+
+    _ingest(
+        [
+            _parsed("t1", subject="Same topic", text="First distinct body.", sent_at=_AT - timedelta(days=1)),
+            _parsed("t2", subject="Same topic", text="Second distinct body.", sent_at=_AT),
+        ],
+        channel=channel,
+    )
+    title_fragment_ids = set(
+        Part._base_manager.filter(role=Part.PartRole.TITLE).values_list("fragment_id", flat=True)
+    )
+    # The identical subject dedups to one shared title fragment across both messages…
+    assert len(title_fragment_ids) == 1
+    assert Part._base_manager.filter(role=Part.PartRole.TITLE).count() == 2
+    # …and that shared envelope fragment mints no quote edge.
+    assert MessageEdge._base_manager.filter(kind="quote").count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_long_subject_lands_intact_and_groups_replies(channel: Any) -> None:
+    """A 7,970-char subject lands intact and still groups its reply into one thread.
+
+    Apple Mail produces multi-KB subjects; the identity indexes carry MD5 digests,
+    so the unbounded value must land verbatim as the title part's fragment, resolve
+    a thread whose title fragment holds the normalized text, and group a ``Re:``
+    reply into the SAME thread through the title-fragment hash lookup.
+    """
+
+    subject = "R" * 7970
+    _ingest([_parsed("long1", subject=subject, sent_at=_AT)], channel=channel)
+    message = Message._base_manager.get(external_id="long1")
+    title_part = Part._base_manager.select_related("fragment").get(message=message, role=Part.PartRole.TITLE)
+    assert title_part.fragment.text == subject
+    assert message.title() == subject
+    thread = message.thread
+    assert thread is not None
+    assert thread.title is not None
+    assert thread.title.text == subject
+
+    _ingest([_parsed("long2", subject="Re: " + subject, sent_at=_AT + timedelta(hours=1))], channel=channel)
+    reply = Message._base_manager.get(external_id="long2")
+    assert reply.title() == "Re: " + subject
+    assert reply.thread_id == thread.pk
+    assert Thread._base_manager.count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_second_title_part_is_rejected(channel: Any) -> None:
+    """A message carries at most one TITLE part (the partial unique constraint)."""
+
+    _ingest([_parsed("m1", subject="Only title", sent_at=_AT)], channel=channel)
+    message = Message._base_manager.get(external_id="m1")
+    with system_context(reason="test second title part"):
+        fragment = Fragment.objects.upsert(text="Second title")
+        with pytest.raises(IntegrityError), transaction.atomic():
+            Part._base_manager.create(
+                message=message,
+                position=99,
+                type="text/plain",
+                role=Part.PartRole.TITLE,
+                fragment=fragment,
+            )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_fragment_upsert_survives_oversized_text(channel: Any) -> None:
+    """A text past the tsvector input bound still lands (vector prefix is bounded).
+
+    Regression: a 1.6 MB text part made ``to_tsvector`` reject the whole ingest
+    on Postgres ("string is too long for tsvector"), re-failing every sync
+    retry. SQLite skips the vector branch, so this asserts the write path; the
+    bounded-vector truth is verified live against Postgres.
+    """
+
+    del channel
+    huge = "word " * 400_000  # ~2 MB, well past _SEARCH_MAX_BYTES
+    with system_context(reason="test oversized fragment"):
+        fragment = Fragment.objects.upsert(text=huge)
+        again = Fragment.objects.upsert(text=huge)
+    assert fragment.pk is not None
+    assert again.pk == fragment.pk
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resync_with_changed_body_appends_edit_history(channel: Any) -> None:
+    """A provider re-sync whose fragment set changed appends an edit-history entry.
+
+    The message row survives and its parts are relinked; the entry records the prior
+    fragment hashes (the replaced text lives on as immutable content-addressed
+    fragments). A further identical sync appends nothing.
+    """
+
+    _ingest([_parsed("m1", text="Original provider body.", sent_at=_AT)], channel=channel)
+    message = Message._base_manager.get(external_id="m1")
+    assert message.edit_history == []
+    prior_body_hash = (
+        Part._base_manager.select_related("fragment")
+        .get(message=message, role=Part.PartRole.BODY, fragment__isnull=False)
+        .fragment.hash
+    )
+
+    _ingest([_parsed("m1", text="Edited provider body.", sent_at=_AT)], channel=channel)
+    message.refresh_from_db()
+    (entry,) = message.edit_history
+    assert prior_body_hash in entry["prev_fragment_hashes"]
+    assert entry["edited_at"]
+
+    _ingest([_parsed("m1", text="Edited provider body.", sent_at=_AT)], channel=channel)
+    message.refresh_from_db()
+    assert len(message.edit_history) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_read_receipts_anchor_unread_and_never_regress(messaging_tables: None) -> None:
+    """Unread is everything past the receipt; the receipt only ever advances.
+
+    A follower with no receipt sees the whole thread unread; marking read up to the
+    middle message leaves only later rows; acking an older message after a newer
+    receipt returns 0 without regressing; and the author's own post is never unread
+    for them (their receipt advances with each post).
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test receipts setup"):
+        author = user_model.objects.create_user(username="receipt-author", email="receipt-author@example.com")
+        watcher = user_model.objects.create_user(username="receipt-watcher", email="receipt-watcher@example.com")
+        ticket = ThreadedTicket.objects.create(title="Receipt case")
+        ticket.message_subscribe(user=watcher)
+
+    with actor_context(author):
+        first = ticket.message_post("First.")
+        second = ticket.message_post("Second.")
+        third = ticket.message_post("Third.")
+    thread = ticket.message_thread(create=False)
+    assert thread is not None
+
+    def unread_pks(user: Any) -> set[Any]:
+        return set(ThreadFollower.objects.unread_messages(thread, user=user).values_list("pk", flat=True))
+
+    # No receipt yet: the whole thread is unread for the watcher.
+    assert unread_pks(watcher) == {first.pk, second.pk, third.pk}
+
+    # Advance to the middle message: only later rows stay unread.
+    with actor_context(watcher):
+        assert ThreadFollower.objects.mark_read_up_to(thread, user=watcher, message=second) == 1
+    assert unread_pks(watcher) == {third.pk}
+
+    # A stale ack of an older message returns 0 and never regresses the receipt.
+    with actor_context(watcher):
+        assert ThreadFollower.objects.mark_read_up_to(thread, user=watcher, message=first) == 0
+    follower = ThreadFollower._base_manager.get(thread=thread, user=watcher)
+    assert follower.last_read_message_id == second.pk
+    assert unread_pks(watcher) == {third.pk}
+
+    # The author autofollowed and their receipt rode each post: nothing is unread.
+    assert unread_pks(author) == set()
+    author_follower = ThreadFollower._base_manager.get(thread=thread, user=author)
+    assert author_follower.last_read_message_id == third.pk
 
 
 def _grant(record: Any, relation: str, user: Any) -> None:
@@ -1785,6 +2240,7 @@ def _collecting_broadcasts(
     sent: list[tuple[Any, dict[str, Any]]] = []
     monkeypatch.setattr(publishing, "_broadcast", lambda model, payload: sent.append((model, payload)))
     monkeypatch.setattr(publishing.transaction, "on_commit", lambda callback: callback())
+    publishing.connect_change_broadcast_receiver()
     already_wired = {model: publishing.disconnect_publishers(model) for model in models}
     for model in models:
         publishing.connect_publishers(model)
@@ -1849,7 +2305,7 @@ def test_post_on_opted_in_host_emits_one_member_gated_thread_changed(
     """A post on an opted-in host emits one ``threadChanged``, gated to thread readers.
 
     F-stream end to end: ``BroadcastRoom`` opts in (``thread_broadcasts_changes = True``),
-    so a post fires ``post_save`` (part B) and ``_publish`` broadcasts one ``threadChanged``
+    so a post fires ``post_save`` (part B) and ``publish_change`` broadcasts one ``threadChanged``
     (part A). The event passes ``ChangeReadGate`` for a member holding ``thread.reader``
     and is dropped for a non-member — no existence or activity leak on the socket.
     """
@@ -1885,7 +2341,7 @@ def test_record_chatter_host_stays_silent_on_a_post(
 
     The F-stream default is ``thread_broadcasts_changes = False``, so a record-chatter
     thread (``ThreadedTicket``) never broadcasts: the bump-save change is inert for a
-    silent thread because ``_publish`` short-circuits on ``broadcasts_changes()``.
+    silent thread because ``publish_change`` short-circuits on ``broadcasts_changes()``.
     """
 
     del messaging_tables
@@ -2020,3 +2476,24 @@ def test_broadcasting_room_creator_socket_gated_by_membership(messaging_tables: 
         # Expelled through the mirror revoke verb: the socket goes dark again.
         room.message_unsubscribe(user=creator, revoke_read=True)
         assert ChangeReadGate(Thread, creator_subject).filter(change) is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_first_post_autofollow_seeds_the_author_receipt(messaging_tables: None) -> None:
+    """An author's FIRST post on an unfollowed record is never unread for them.
+
+    The write path's receipt advance runs before the post's autofollow can create
+    the membership row, so the autofollow seeds the fresh follower's receipt at
+    the just-posted message (the author-auto-read convention).
+    """
+
+    del messaging_tables
+    user_model = get_user_model()
+    with system_context(reason="test first-post receipt setup"):
+        author = user_model.objects.create_user(username="first-post-author", email="first-post@example.com")
+    with actor_context(author):
+        ticket = ThreadedTicket.objects.create(title="First post receipt")
+        message = ticket.message_post("Hello from an unfollowed record")
+        follower = ThreadFollower._base_manager.get(thread_id=message.thread_id, user=author)
+        assert follower.last_read_message_id == message.pk
+        assert ThreadFollower.objects.unread_messages(message.thread, user=author).count() == 0

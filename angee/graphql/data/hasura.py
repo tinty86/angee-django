@@ -37,6 +37,7 @@ from angee.base.models import (
     bind_actor,
     instance_from_public_id,
     public_data_id_field,
+    public_id_for,
     requires_angee_rebac_contract,
 )
 from angee.graphql.constants import PUBLIC_ID_FIELD_NAME
@@ -686,6 +687,7 @@ def _make_json_groups_field(  # noqa: PLR0913 - mirrors strawberry-django-hasura
                 )
             )
         spec = builder.translate_group_by(group_by)
+        public_relation_aliases = _public_relation_group_key_aliases(builder.model, spec)
         requested = hasura_grouping._requested_group_ops(info)
         having_dict = builder.translate_having(having, requested)
         order_terms = builder.translate_order_by(order_by, spec, requested)
@@ -701,7 +703,11 @@ def _make_json_groups_field(  # noqa: PLR0913 - mirrors strawberry-django-hasura
         )
         return [
             group_type(
-                key=builder.shape_group_key(group_key_type, row, spec),
+                key=builder.shape_group_key(
+                    group_key_type,
+                    _public_relation_group_key_row(row, public_relation_aliases),
+                    spec,
+                ),
                 aggregate=shape_aggregate_row(
                     aggregate_type,
                     row,
@@ -736,6 +742,44 @@ def _make_json_groups_field(  # noqa: PLR0913 - mirrors strawberry-django-hasura
             group_order_input,
         ],
     )
+
+
+def _public_relation_group_key_row(
+    row: dict[str, Any],
+    relation_aliases: Mapping[str, type[models.Model]],
+) -> dict[str, Any]:
+    """Return a key-shaping row whose direct relation axes use public ids."""
+
+    if not relation_aliases:
+        return row
+    shaped = dict(row)
+    for alias, related_model in relation_aliases.items():
+        value = shaped.get(alias)
+        if value in (None, ""):
+            continue
+        shaped[alias] = public_id_for(related_model, value)
+    return shaped
+
+
+def _public_relation_group_key_aliases(
+    model: type[models.Model],
+    spec: list[tuple[str, Any]],
+) -> dict[str, type[models.Model]]:
+    aliases: dict[str, type[models.Model]] = {}
+    for path, granularity in spec:
+        if granularity is not None or "__" in path:
+            continue
+        try:
+            field = model._meta.get_field(path)
+        except FieldDoesNotExist:
+            continue
+        if not is_to_one_relation(field):
+            continue
+        related_model = getattr(field, "related_model", None)
+        if not isinstance(related_model, type) or not issubclass(related_model, models.Model):
+            continue
+        aliases[_group_key_path(field, path)] = related_model
+    return aliases
 
 
 def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative builder.
@@ -820,7 +864,7 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
     active_json_paths = dict(json_paths or {})
     aggregate_builder_globals = build_hasura_resource.__globals__
     original_aggregate_builder = None
-    original_groups_field_builder = None
+    original_groups_field_builder = aggregate_builder_globals["make_groups_field"]
     if active_json_paths:
         # strawberry-django-aggregates supports JSON-path group axes, but the
         # strawberry-django-hasura facade has not exposed that knob yet. Keep
@@ -839,7 +883,11 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
             return _make_json_groups_field(json_paths=json_path_allowlist, **kwargs)
 
         aggregate_builder_globals["AggregateBuilder"] = _JsonPathAggregateBuilder
-        aggregate_builder_globals["make_groups_field"] = _make_json_path_groups_field
+    else:
+        def _make_json_path_groups_field(**kwargs: Any) -> tuple[Any, list[type]]:
+            return _make_json_groups_field(json_paths=active_json_paths, **kwargs)
+
+    aggregate_builder_globals["make_groups_field"] = _make_json_path_groups_field
     try:
         resource = build_hasura_resource(
             node,
@@ -864,8 +912,7 @@ def hasura_model_resource(  # noqa: PLR0913 - mirrors the upstream declarative b
             id_column=id_column,
         )
     finally:
-        if original_groups_field_builder is not None:
-            aggregate_builder_globals["make_groups_field"] = original_groups_field_builder
+        aggregate_builder_globals["make_groups_field"] = original_groups_field_builder
         if original_aggregate_builder is not None:
             aggregate_builder_globals["AggregateBuilder"] = original_aggregate_builder
     if lines is not None:

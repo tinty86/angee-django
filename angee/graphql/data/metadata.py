@@ -102,7 +102,7 @@ class DataGroupBucketFilterMetadata:
     value_key: str | None = None
     range_key: str | None = None
     lookup: str | None = None
-    null_lookup: str = "isNull"
+    null_lookup: str | None = "isNull"
     value_transform: str | None = None
     value_map: tuple[DataGroupBucketFilterValueMapMetadata, ...] = ()
 
@@ -657,6 +657,17 @@ def _default_sort(
     orderable = set(order_fields)
     sorts: list[DataDefaultSortMetadata] = []
     for term in model._meta.ordering:
+        if isinstance(term, models.expressions.OrderBy):
+            # An expression ordering (F(...).desc(nulls_last=True), say) carries a
+            # DB detail — NULL placement — the metadata does not need; expose the
+            # axis name and direction it wraps.
+            expression = term.expression
+            name = getattr(expression, "name", None)
+            if not isinstance(name, str):
+                raise ImproperlyConfigured(
+                    f"resource metadata for {model._meta.label} cannot expose computed default ordering {term!r}."
+                )
+            term = f"-{name}" if term.descending else name
         if not isinstance(term, str):
             raise ImproperlyConfigured(
                 f"resource metadata for {model._meta.label} cannot expose non-string default ordering {term!r}."

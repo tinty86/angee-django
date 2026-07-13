@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,7 +16,7 @@ from angee.integrate import queue as integrate_queue
 from angee.integrate import scheduler as integrate_scheduler
 from angee.integrate import tasks as integrate_tasks
 from angee.integrate.locks import bridge_advisory_lock
-from angee.integrate.models import Bridge, IntegrationStatus
+from angee.integrate.models import Bridge, IntegrationLifecycle, IntegrationRuntimeStatus
 from angee.integrate.registry import bridge_models
 from angee.integrate.scheduler import enqueue_due_bridges, run_due_bridges
 from angee.integrate.sync import current_bridge_progress
@@ -185,13 +186,14 @@ def test_run_due_bridges_persists_success_telemetry(scheduler_tables: None) -> N
     assert bridge.last_sync_summary["items"] == 7
     assert bridge.cursor == {"seen": 7}
     assert bridge.next_sync_at == now + timedelta(seconds=42)
-    assert integration.status == IntegrationStatus.ACTIVE
-    assert integration.last_used_status == "active"
+    assert integration.lifecycle == IntegrationLifecycle.ACTIVE
+    assert integration.runtime_status == IntegrationRuntimeStatus.OK
+    assert integration.last_used_status == "ok"
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: None) -> None:
-    """Failing syncs record bridge errors, reschedule, and push integration status."""
+def test_run_due_bridges_records_errors_on_integration_runtime_status(scheduler_tables: None) -> None:
+    """Failing syncs record bridge errors, reschedule, and push integration runtime status."""
 
     del scheduler_tables
     now = timezone.now()
@@ -217,7 +219,8 @@ def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: 
     assert bridge.sync_progress["stage"] == Bridge.SyncStage.FAILED
     assert bridge.sync_progress["error"] == "RuntimeError: vendor unavailable"
     assert bridge.next_sync_at == now + timedelta(seconds=17)
-    assert integration.status == IntegrationStatus.ERROR
+    assert integration.lifecycle == IntegrationLifecycle.ACTIVE
+    assert integration.runtime_status == IntegrationRuntimeStatus.ERROR
     assert integration.last_used_status == "error"
     assert integration.last_error == "RuntimeError: vendor unavailable"
     assert integration.last_error_at is not None
@@ -225,8 +228,8 @@ def test_run_due_bridges_records_errors_on_integration_status(scheduler_tables: 
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_due_bridges_success_recovers_bridge_and_integration_status(scheduler_tables: None) -> None:
-    """A healthy sync after an error clears the integration status."""
+def test_run_due_bridges_success_recovers_bridge_and_integration_runtime_status(scheduler_tables: None) -> None:
+    """A healthy sync after an error clears the integration runtime status."""
 
     del scheduler_tables
     first_now = timezone.now()
@@ -245,7 +248,7 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
     assert error_result == {"ran": 1, "errors": 1}
     bridge.refresh_from_db()
     integration.refresh_from_db()
-    assert integration.status == IntegrationStatus.ERROR
+    assert integration.runtime_status == IntegrationRuntimeStatus.ERROR
 
     second_now = first_now + timedelta(minutes=1)
     with system_context(reason="test integrate scheduler setup"):
@@ -261,8 +264,9 @@ def test_run_due_bridges_success_recovers_bridge_and_integration_status(schedule
     assert bridge.last_sync_status == "ok"
     assert bridge.last_sync_items == 5
     assert bridge.next_sync_at == second_now + timedelta(seconds=23)
-    assert integration.status == IntegrationStatus.ACTIVE
-    assert integration.last_used_status == "active"
+    assert integration.lifecycle == IntegrationLifecycle.ACTIVE
+    assert integration.runtime_status == IntegrationRuntimeStatus.OK
+    assert integration.last_used_status == "ok"
     assert integration.last_error == ""
     assert integration.last_error_at is None
 
@@ -308,6 +312,64 @@ def test_bridge_is_syncing_uses_live_lock_state(scheduler_tables: None) -> None:
             assert second_acquired is False
 
     assert bridge.is_syncing is False
+
+
+@contextmanager
+def _cross_process_locks() -> Iterator[None]:
+    """Report the lock backend as cross-process for one assertion block.
+
+    The suite's LocalLockBackend is process-local by design; the reconciliation
+    under test only engages against a backend whose locks other processes can
+    observe (Postgres advisory locks in deployment).
+    """
+
+    import angee.integrate.models as integrate_models
+
+    original = integrate_models.task_locks_are_cross_process
+    integrate_models.task_locks_are_cross_process = lambda: True
+    try:
+        yield
+    finally:
+        integrate_models.task_locks_are_cross_process = original
+
+
+@pytest.mark.django_db(transaction=True)
+def test_effective_sync_stage_reconciles_stale_records_against_the_lock(scheduler_tables: None) -> None:
+    """A live-ish persisted stage without the live lock reads as FAILED.
+
+    The persisted ``sync_stage`` is a progress report a crashed worker leaves
+    stale; the effective projection trusts the advisory lock instead, so the UI
+    never shows a phantom "syncing". ``queued`` legitimately holds no lock (the
+    task has not started) and passes through, as do the terminal stages. The
+    reconciliation only applies when the lock backend is cross-process — a
+    process-local backend (this suite's) cannot see a worker's lock, so the
+    column is trusted as-is there.
+    """
+
+    del scheduler_tables
+    with system_context(reason="test integrate scheduler setup"):
+        bridge = make_integration("stale-stage", model=SchedulerBridge)
+
+        # The suite's LocalLockBackend is process-local: no reconciliation.
+        bridge.sync_stage = bridge.SyncStage.SYNCING
+        assert bridge.effective_sync_stage == bridge.SyncStage.SYNCING
+
+    with _cross_process_locks():
+        bridge.sync_stage = bridge.SyncStage.SYNCING
+        assert bridge.effective_sync_stage == bridge.SyncStage.FAILED
+        with bridge_advisory_lock(bridge) as acquired:
+            assert acquired is True
+            assert bridge.effective_sync_stage == bridge.SyncStage.SYNCING
+        bridge.sync_stage = bridge.SyncStage.DISCOVERING
+        assert bridge.effective_sync_stage == bridge.SyncStage.FAILED
+        for stage in (
+            bridge.SyncStage.IDLE,
+            bridge.SyncStage.QUEUED,
+            bridge.SyncStage.COMPLETED,
+            bridge.SyncStage.FAILED,
+        ):
+            bridge.sync_stage = stage
+            assert bridge.effective_sync_stage == stage
 
 
 @pytest.mark.django_db(transaction=True)
