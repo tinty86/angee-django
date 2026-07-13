@@ -69,7 +69,7 @@ on top.
 ├── templates/              # Copier templates — project / stack / workspace / service kinds
 │   ├── projects/web/       # project template — scaffolds the host repo (owns the project root)
 │   ├── stacks/dev/         # dev Stack template — the `.angee/` overlay (`angee init --dev`)
-│   └── workspaces/dev/     # dev Workspace template (`angee ws create … --template dev`)
+│   └── workspaces/dev/     # dev Workspace template (created through the workspace workflow)
 ├── examples/notes-angee/   # the example project `angee dev` runs from the repo root
 │   ├── manage.py           # Django entrypoint (`uv run examples/notes-angee/manage.py …`)
 │   ├── settings.yaml       # project composition facts and project overrides
@@ -283,11 +283,14 @@ uv run examples/notes-angee/manage.py schema                  # write SDL
 uv run examples/notes-angee/manage.py schema --check           # SDL, after runtime load
 ```
 
-For an isolated branch, create a workspace and run the stack inside it. `angee
+For an isolated branch, load `.agents/skills/angee-workspace/SKILL.md` and
+follow its **Create Workspace** workflow to resolve and validate
+`work_state_path`, then create the workspace and run the stack inside it. `angee
 dev` walks up to the nearest `.angee`, so it works from the workspace root too.
 
 ```sh
-angee ws create <name> --template dev --input base_ref=main   # branch from main
+angee ws create <name> --template dev --input base_ref=main \
+  --input work_state_path="$work_state_path"   # branch from main
 cd .angee/workspaces/<name>
 angee dev
 angee ws status      # optional; defaults to the enclosing workspace
