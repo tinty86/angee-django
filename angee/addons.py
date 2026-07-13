@@ -69,7 +69,8 @@ class AddonContract:
     only overrides that default. ``permissions`` records the ``.zed`` contribution
     for the catalog — a remote catalog reads the manifest, never the addon's files —
     while the runtime still discovers the ``.zed`` by convention (adjacent to the
-    addon).
+    addon). Ordered ``[[migrations]]`` tables name addon-owned source modules that
+    explicit runtime builds may materialize into downstream Django migration apps.
     """
 
     name: str

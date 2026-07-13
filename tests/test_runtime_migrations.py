@@ -31,7 +31,7 @@ def runtime_migration_probe(tmp_path, monkeypatch, settings):
     for package in (
         tmp_path / "example",
         source_root,
-        source_root / "migrations",
+        source_root / "runtime_migrations",
         runtime_dir,
         runtime_dir / "resources",
         runtime_dir / "resources" / "migrations",
@@ -57,7 +57,7 @@ class Migration(migrations.Migration):
     ]
 """,
     )
-    source_path = source_root / "migrations" / "rename_legacy.py"
+    source_path = source_root / "runtime_migrations" / "rename_legacy.py"
     _write_module(
         source_path,
         """\
@@ -96,7 +96,13 @@ class Migration(migrations.Migration):
         name="example.demo",
         _addon_contract=AddonContract(
             name="example.demo",
-            migrations=(AddonMigration("rename_legacy", "resources", "migrations.rename_legacy"),),
+            migrations=(
+                AddonMigration(
+                    "rename_legacy",
+                    "resources",
+                    "runtime_migrations.rename_legacy",
+                ),
+            ),
         ),
     )
     materializer = RuntimeMigrations(
@@ -145,7 +151,7 @@ def test_applies_false_writes_nothing(runtime_migration_probe) -> None:
 def test_applicable_declarations_are_planned_sequentially(runtime_migration_probe) -> None:
     materializer, addon, _, runtime_dir, source_root = runtime_migration_probe
     _write_module(
-        source_root / "migrations" / "add_marker.py",
+        source_root / "runtime_migrations" / "add_marker.py",
         """\
 from django.db import migrations, models
 
@@ -169,8 +175,8 @@ class Migration(migrations.Migration):
     addon._addon_contract = AddonContract(
         name="example.demo",
         migrations=(
-            AddonMigration("rename_legacy", "resources", "migrations.rename_legacy"),
-            AddonMigration("add_marker", "resources", "migrations.add_marker"),
+            AddonMigration("rename_legacy", "resources", "runtime_migrations.rename_legacy"),
+            AddonMigration("add_marker", "resources", "runtime_migrations.add_marker"),
         ),
     )
     importlib.invalidate_caches()
@@ -268,11 +274,11 @@ def test_changed_materialized_body_fails_instead_of_becoming_history(runtime_mig
     "declaration, message",
     [
         (
-            AddonMigration("Bad-Name", "resources", "migrations.rename_legacy"),
+            AddonMigration("Bad-Name", "resources", "runtime_migrations.rename_legacy"),
             "migration name must be a lower-case Python identifier",
         ),
         (
-            AddonMigration("rename_legacy", "unknown", "migrations.rename_legacy"),
+            AddonMigration("rename_legacy", "unknown", "runtime_migrations.rename_legacy"),
             "unknown runtime migration target 'unknown'",
         ),
     ],
@@ -287,7 +293,7 @@ def test_rejects_invalid_declarations(runtime_migration_probe, declaration, mess
 
 def test_rejects_duplicate_declared_origins(runtime_migration_probe) -> None:
     materializer, addon, _, _, _ = runtime_migration_probe
-    declaration = AddonMigration("rename_legacy", "resources", "migrations.rename_legacy")
+    declaration = AddonMigration("rename_legacy", "resources", "runtime_migrations.rename_legacy")
     addon._addon_contract = AddonContract(
         name="example.demo",
         migrations=(declaration, declaration),
@@ -397,7 +403,7 @@ def test_rejects_run_before_cycle(runtime_migration_probe) -> None:
 def test_invalid_later_declaration_writes_no_earlier_plan(runtime_migration_probe) -> None:
     materializer, addon, _, runtime_dir, source_root = runtime_migration_probe
     _write_module(
-        source_root / "migrations" / "broken.py",
+        source_root / "runtime_migrations" / "broken.py",
         """\
 from django.db import migrations
 
@@ -410,8 +416,8 @@ class Migration(migrations.Migration):
     addon._addon_contract = AddonContract(
         name="example.demo",
         migrations=(
-            AddonMigration("rename_legacy", "resources", "migrations.rename_legacy"),
-            AddonMigration("broken", "resources", "migrations.broken"),
+            AddonMigration("rename_legacy", "resources", "runtime_migrations.rename_legacy"),
+            AddonMigration("broken", "resources", "runtime_migrations.broken"),
         ),
     )
     importlib.invalidate_caches()
@@ -507,3 +513,16 @@ def test_parties_source_migration_is_not_discovered_as_an_app_migration() -> Non
     loader = MigrationLoader(None, ignore_no_migrations=True)
 
     assert ("parties", "relationship_anchor") not in loader.disk_migrations
+
+
+def test_rejects_source_in_djangos_conventional_migrations_package(runtime_migration_probe) -> None:
+    materializer, addon, _, _, _ = runtime_migration_probe
+    addon._addon_contract = AddonContract(
+        name="example.demo",
+        migrations=(
+            AddonMigration("rename_legacy", "resources", "migrations.rename_legacy"),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="must live outside Django's conventional migrations package"):
+        materializer.materialize()

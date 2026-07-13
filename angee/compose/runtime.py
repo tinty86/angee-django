@@ -101,6 +101,8 @@ class Runtime:
       whole runtime. Every other entry point renders through it.
     - ``emit`` — write that map to ``runtime_dir`` during the explicit
       ``angee build`` pass (resets, prunes orphans).
+    - ``build`` — emit stale sources, then materialize applicable addon-owned
+      migrations onto the downstream Django graph.
     - ``is_current`` / ``check`` / ``_drift`` — disk vs the rendered map.
     - ``reset`` / ``clean`` — delete generated files behind the
       ``GENERATED_SENTINEL`` gate while preserving ``*/migrations/``.
@@ -167,7 +169,7 @@ class Runtime:
         through a ``permissions.extends.zed``) the merged effective zed under
         ``permissions/<package>.zed`` — see ``angee.compose.permissions``.
         Migrations themselves are never rendered here — Django's
-        ``makemigrations`` owns
+      addon materialization and Django's later ``makemigrations`` own
         ``runtime/<label>/migrations/`` (redirected via
         ``MIGRATION_MODULES``), and cleanup preserves it.
         """

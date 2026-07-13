@@ -31,12 +31,12 @@ name = "example.demo"
 [[migrations]]
 name = "rename_owner"
 app_label = "demo"
-module = "migrations.rename_owner"
+module = "runtime_migrations.rename_owner"
 
 [[migrations]]
 name = "backfill_owner"
 app_label = "demo"
-module = "example.demo.migrations.backfill_owner"
+module = "example.demo.runtime_migrations.backfill_owner"
 """,
         encoding="utf-8",
     )
@@ -45,8 +45,12 @@ module = "example.demo.migrations.backfill_owner"
 
     assert contract is not None
     assert contract.migrations == (
-        AddonMigration("rename_owner", "demo", "migrations.rename_owner"),
-        AddonMigration("backfill_owner", "demo", "example.demo.migrations.backfill_owner"),
+        AddonMigration("rename_owner", "demo", "runtime_migrations.rename_owner"),
+        AddonMigration(
+            "backfill_owner",
+            "demo",
+            "example.demo.runtime_migrations.backfill_owner",
+        ),
     )
 
 

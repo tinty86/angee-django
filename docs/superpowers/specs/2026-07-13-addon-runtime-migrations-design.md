@@ -77,7 +77,7 @@ An addon declares an ordered array of migrations in `addon.toml`:
 [[migrations]]
 name = "relationship_anchor"
 app_label = "parties"
-module = "migrations.relationship_anchor"
+module = "runtime_migrations.relationship_anchor"
 ```
 
 `AddonContract` exposes these as an ordered tuple of immutable
@@ -87,6 +87,11 @@ module = "migrations.relationship_anchor"
 - `app_label`: the emitted runtime app whose graph receives the migration;
 - `module`: a dotted module reference, relative to the contributing addon's
   import package unless already fully qualified.
+
+Source modules must live outside the addon's conventional `migrations` package;
+`runtime_migrations` is the recommended package name. Otherwise Django discovers
+the source file as an executable migration of the abstract addon app before the
+materializer can attach it to the downstream runtime graph.
 
 The global origin is `<addon_config.name>:<name>`, for example
 `angee.parties:relationship_anchor`. Declaration order is significant and is

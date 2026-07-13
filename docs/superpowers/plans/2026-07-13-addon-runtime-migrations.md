@@ -14,6 +14,7 @@
 - Follow the approved spec at `docs/superpowers/specs/2026-07-13-addon-runtime-migrations-design.md`.
 - Materialization runs only during explicit `angee build`; normal `emit_if_stale()` remains migration-write-free.
 - The complete source module is copied so local `RunPython`/`RunSQL` code remains self-contained.
+- Source modules live under `runtime_migrations/`, never Django's conventional `migrations/` package.
 - Existing materialized migrations are append-only and immutable; origin and SHA-256 drift fail loudly.
 - App and declaration order are deterministic; no timestamps, random identifiers, or filesystem iteration order enter output.
 - Planned writes happen only after every declaration and simulated state transition validates.
@@ -29,7 +30,7 @@
 - `angee/compose/migrations.py`: owns declaration validation, historical-state planning, graph attachment, integrity checks, deterministic footer rendering, and atomic materialization.
 - `angee/compose/runtime.py`: owns the explicit build/check integration and delegates migration details to `RuntimeMigrations`.
 - `angee/compose/management/commands/angee.py`: remains a thin CLI dispatcher and calls `Runtime.build()`.
-- `addons/angee/parties/migrations/relationship_anchor.py`: addon-owned ordinary Django migration for the first lossless transition.
+- `addons/angee/parties/runtime_migrations/relationship_anchor.py`: addon-owned ordinary Django migration for the first lossless transition.
 - `addons/angee/parties/addon.toml`: declares the parties migration origin, target, and module.
 - `tests/test_addons.py`: verifies manifest parsing and declaration order.
 - `tests/test_runtime_migrations.py`: focused materializer, graph, integrity, lifecycle, and parties acceptance tests.
@@ -73,12 +74,12 @@ name = "example.demo"
 [[migrations]]
 name = "rename_owner"
 app_label = "demo"
-module = "migrations.rename_owner"
+module = "runtime_migrations.rename_owner"
 
 [[migrations]]
 name = "backfill_owner"
 app_label = "demo"
-module = "example.demo.migrations.backfill_owner"
+module = "example.demo.runtime_migrations.backfill_owner"
 """,
         encoding="utf-8",
     )
@@ -87,8 +88,8 @@ module = "example.demo.migrations.backfill_owner"
 
     assert contract is not None
     assert contract.migrations == (
-        AddonMigration("rename_owner", "demo", "migrations.rename_owner"),
-        AddonMigration("backfill_owner", "demo", "example.demo.migrations.backfill_owner"),
+        AddonMigration("rename_owner", "demo", "runtime_migrations.rename_owner"),
+        AddonMigration("backfill_owner", "demo", "example.demo.runtime_migrations.backfill_owner"),
     )
 
 
@@ -197,7 +198,7 @@ In `tests/test_runtime_migrations.py`, create a helper that:
 2. creates a unique runtime package containing
    `resources/migrations/0001_legacy.py` with a `Legacy` model and `old_name` field;
 3. points `settings.MIGRATION_MODULES["resources"]` to that package;
-4. creates an `example.demo.migrations.rename_legacy` source module with a local
+4. creates an `example.demo.runtime_migrations.rename_legacy` source module with a local
    `RunPython` function, `RenameField`, `applies(ProjectState)`, and a trailing newline;
 5. returns a fake addon carrying `make_contract(migrations=(AddonMigration(...),))`.
 
@@ -564,15 +565,15 @@ git commit -m "feat(compose): materialize migrations during build"
 ### Task 5: Ship the lossless parties Relationship migration
 
 **Files:**
-- Create: `addons/angee/parties/migrations/__init__.py`
-- Create: `addons/angee/parties/migrations/relationship_anchor.py`
+- Create: `addons/angee/parties/runtime_migrations/__init__.py`
+- Create: `addons/angee/parties/runtime_migrations/relationship_anchor.py`
 - Modify: `addons/angee/parties/addon.toml:3-13`
 - Modify: `tests/test_runtime_migrations.py`
 
 **Interfaces:**
 - Produces declaration origin: `angee.parties:relationship_anchor`.
 - Targets runtime label: `parties`.
-- Source module: `angee.parties.migrations.relationship_anchor`.
+- Source module: `angee.parties.runtime_migrations.relationship_anchor`.
 - Applicability: old `from_party`/`to_party` state applies; complete new state and absent model skip; mixed state raises `ImproperlyConfigured`.
 
 - [ ] **Step 1: Write failing parties applicability and state-transition tests**
@@ -583,7 +584,7 @@ Test:
 
 ```python
 def test_parties_relationship_migration_preserves_renamed_foreign_keys() -> None:
-    module = importlib.import_module("angee.parties.migrations.relationship_anchor")
+    module = importlib.import_module("angee.parties.runtime_migrations.relationship_anchor")
     old_state = _old_relationship_state()
 
     assert module.applies(old_state) is True
@@ -625,7 +626,7 @@ Add to `addons/angee/parties/addon.toml` before `[resources]`:
 [[migrations]]
 name = "relationship_anchor"
 app_label = "parties"
-module = "migrations.relationship_anchor"
+module = "runtime_migrations.relationship_anchor"
 ```
 
 Create `relationship_anchor.py` with:
@@ -724,7 +725,7 @@ Expected: all parties acceptance tests pass.
 - [ ] **Step 5: Commit the first addon migration**
 
 ```bash
-git add addons/angee/parties/addon.toml addons/angee/parties/migrations tests/test_runtime_migrations.py
+git add addons/angee/parties/addon.toml addons/angee/parties/runtime_migrations tests/test_runtime_migrations.py
 git commit -m "feat(parties): preserve relationship fields on upgrade"
 ```
 
@@ -767,7 +768,7 @@ Update the owning code docstrings without duplicating field inventories.
 Run each command separately:
 
 ```bash
-uv run python -m ruff check angee/addons.py angee/compose addons/angee/parties/migrations tests/test_addons.py tests/test_compose.py tests/test_runtime_migrations.py --no-cache
+uv run python -m ruff check angee/addons.py angee/compose addons/angee/parties/runtime_migrations tests/test_addons.py tests/test_compose.py tests/test_runtime_migrations.py --no-cache
 uv run python -m mypy angee addons
 uv run python -m pytest tests/test_addons.py tests/test_compose.py tests/test_runtime_migrations.py
 ```

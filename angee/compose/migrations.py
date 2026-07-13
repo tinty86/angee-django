@@ -308,6 +308,12 @@ class RuntimeMigrations:
         module_name = declaration.module
         if not module_name.startswith(f"{addon.name}."):
             module_name = f"{addon.name}.{module_name}"
+        conventional = f"{addon.name}.migrations"
+        if module_name == conventional or module_name.startswith(f"{conventional}."):
+            raise RuntimeError(
+                f"{origin}: addon migration source must live outside Django's "
+                "conventional migrations package"
+            )
         try:
             return importlib.import_module(module_name)
         except Exception as error:
