@@ -526,3 +526,90 @@ def test_rejects_source_in_djangos_conventional_migrations_package(runtime_migra
 
     with pytest.raises(RuntimeError, match="must live outside Django's conventional migrations package"):
         materializer.materialize()
+
+
+def test_applies_error_is_reported_with_the_declaration_origin(runtime_migration_probe) -> None:
+    materializer, _, source_path, _, _ = runtime_migration_probe
+    source_path.write_text(
+        source_path.read_text(encoding="utf-8").replace(
+            'model = project_state.models.get(("resources", "legacy"))',
+            'raise ValueError("broken guard")',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    importlib.invalidate_caches()
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"example.demo:rename_legacy: applies\(project_state\) failed",
+    ):
+        materializer.materialize()
+
+
+def test_later_render_error_writes_no_earlier_plan(runtime_migration_probe) -> None:
+    materializer, addon, _, runtime_dir, source_root = runtime_migration_probe
+    _write_module(
+        source_root / "runtime_migrations" / "add_marker.py",
+        """\
+from django.db import migrations, models
+
+
+def applies(project_state):
+    model = project_state.models.get(("resources", "legacy"))
+    return model is not None and "new_name" in model.fields
+
+
+class Migration(migrations.Migration):
+    dependencies = []
+    operations = [
+        migrations.AddField(
+            model_name="legacy",
+            name="marker",
+            field=models.BooleanField(default=False),
+        ),
+    ]
+""".rstrip("\n"),
+    )
+    addon._addon_contract = AddonContract(
+        name="example.demo",
+        migrations=(
+            AddonMigration("rename_legacy", "resources", "runtime_migrations.rename_legacy"),
+            AddonMigration("add_marker", "resources", "runtime_migrations.add_marker"),
+        ),
+    )
+    importlib.invalidate_caches()
+
+    with pytest.raises(RuntimeError, match="source migration must end with a newline"):
+        materializer.materialize()
+
+    assert not (runtime_dir / "resources" / "migrations" / "0002_rename_legacy.py").exists()
+
+
+def test_materialized_origin_uses_app_config_name(runtime_migration_probe) -> None:
+    materializer, addon, _, _, _ = runtime_migration_probe
+    addon._addon_contract = AddonContract(
+        name="stale.manifest.name",
+        migrations=(
+            AddonMigration("rename_legacy", "resources", "runtime_migrations.rename_legacy"),
+        ),
+    )
+
+    (output,) = materializer.materialize()
+
+    assert 'Migration.angee_origin = "example.demo:rename_legacy"' in output.read_text(encoding="utf-8")
+
+
+def test_rejects_malformed_dependency_with_origin(runtime_migration_probe) -> None:
+    materializer, _, source_path, _, _ = runtime_migration_probe
+    source_path.write_text(
+        source_path.read_text(encoding="utf-8").replace("dependencies = []", "dependencies = [3]", 1),
+        encoding="utf-8",
+    )
+    importlib.invalidate_caches()
+
+    with pytest.raises(
+        RuntimeError,
+        match="example.demo:rename_legacy: invalid Django migration dependency 3",
+    ):
+        materializer.materialize()

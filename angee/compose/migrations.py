@@ -71,7 +71,7 @@ class RuntimeMigrations:
             if contract is None:
                 continue
             for declaration in contract.migrations:
-                origin = f"{contract.name}:{declaration.name}"
+                origin = f"{addon.name}:{declaration.name}"
                 if origin in declared_origins:
                     raise RuntimeError(f"duplicate addon runtime migration origin {origin}")
                 declared_origins.add(origin)
@@ -96,7 +96,10 @@ class RuntimeMigrations:
                 applies = getattr(module, "applies", None)
                 if not callable(applies):
                     raise RuntimeError(f"{origin}: source module must define applies(project_state)")
-                applicable = applies(state.clone())
+                try:
+                    applicable = applies(state.clone())
+                except Exception as error:
+                    raise RuntimeError(f"{origin}: applies(project_state) failed") from error
                 if not isinstance(applicable, bool):
                     raise RuntimeError(f"{origin}: applies(project_state) must return bool")
                 if not applicable:
@@ -179,8 +182,9 @@ class RuntimeMigrations:
         """Copy every applicable source migration after the plan validates."""
 
         plans = self.plan()
-        for plan in plans:
-            write_atomic(plan.output_path, self._render(plan))
+        rendered = tuple((plan, self._render(plan)) for plan in plans)
+        for plan, source in rendered:
+            write_atomic(plan.output_path, source)
         importlib.invalidate_caches()
         if plans:
             MigrationLoader(None, ignore_no_migrations=True)
@@ -225,7 +229,12 @@ class RuntimeMigrations:
         dependencies: list[tuple[str, str]] = []
         latest: list[tuple[tuple[str, str], tuple[str, str]]] = []
         for raw_dependency in raw_dependencies:
-            dependency = tuple(raw_dependency)
+            try:
+                dependency = tuple(raw_dependency)
+            except TypeError as error:
+                raise RuntimeError(
+                    f"{origin}: invalid Django migration dependency {raw_dependency!r}"
+                ) from error
             if len(dependency) != 2 or not all(isinstance(value, str) for value in dependency):
                 raise RuntimeError(f"{origin}: invalid Django migration dependency {raw_dependency!r}")
             node = (dependency[0], dependency[1])
